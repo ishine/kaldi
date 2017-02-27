@@ -325,7 +325,7 @@ class GruStreams : public UpdatableComponent {
               const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
 
     int DEBUG = 0;
-    float bptt = 1.0;
+    //float bptt = 1.0;
 
     int32 T = in.NumRows() / nstream_;
     int32 S = nstream_;
@@ -366,8 +366,8 @@ class GruStreams : public UpdatableComponent {
       CuSubMatrix<BaseFloat> d_h(DH.RowRange(t*S,S));
       CuSubMatrix<BaseFloat> d_rh(DRH_.RowRange(t*S,S));
 
-      if (ntruncated_bptt_size_ > 0)
-    	  bptt = t % ntruncated_bptt_size_ ? 1.0 : 0;
+      //if (ntruncated_bptt_size_ > 0)
+      // 	  bptt = t % ntruncated_bptt_size_ ? 1.0 : 0;
 
       //   backprop error from r(t+1), z(t+1), c(t+1), h(t+1) to h(t)
       d_h.AddMatMatElements(1.0, YZ.RowRange((t+1)*S, S), DH.RowRange((t+1)*S, S),1.0);

@@ -17,6 +17,8 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
+#include "nnet0/nnet-utils.h"
+
 #include "nnet0/nnet-model-sync.h"
 #include "nnet0/nnet-model-merge-function.h"
 
@@ -98,12 +100,9 @@ void
 NnetModelSync::GetWeight(Nnet *nnet)
 {
 	if (NULL == this->data_)
-	{
 		this->Init(nnet);
-	}
 
 	void *host_data_ = (void*)this->data_;
-
 	// device to host
 	nnet->WeightCopy(host_data_, NnetModelSync::kDstAddress, NnetModelSync::kCudaMemcpyDeviceToHost);
 }
@@ -113,7 +112,6 @@ NnetModelSync::SetWeight(Nnet *nnet)
 {
 	KALDI_ASSERT(this->data_ != NULL);
 
-	int32 pos = 0;
 	void *host_data_ = (void*)this->data_;
 	// host to device
 	nnet->WeightCopy(host_data_, NnetModelSync::kSrcAddress, NnetModelSync::kCudaMemcpyHostToDevice);

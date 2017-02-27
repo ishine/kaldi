@@ -321,14 +321,14 @@ private:
 		Lattice &den_lat = example->den_lat;
 		std::vector<int32> &state_times = example->state_times;
 
-		int num_frames, num_pdfs;
+		int num_frames; // num_pdfs;
 	    double lat_like; // total likelihood of the lattice
 	    double lat_ac_like; // acoustic likelihood weighted by posterior.
 	    double mmi_obj = 0.0, post_on_ali = 0.0;
 
 
 		num_frames = nnet_out_h.NumRows();
-		num_pdfs = nnet_out_h.NumCols();
+		//num_pdfs = nnet_out_h.NumCols();
 
 		if (this->kld_scale > 0)
 			si_nnet_out_h.AddMat(-1.0, soft_nnet_out_h);

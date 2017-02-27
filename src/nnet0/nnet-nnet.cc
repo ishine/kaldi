@@ -550,7 +550,6 @@ BaseFloat Nnet::ComputeConditionalLogprob(int32 current_word,
             std::unordered_map<std::string, float> &unk_penalty)
 {
     static ClassAffineTransform *class_affine = NULL;
-    static CBSoftmax *cb_softmax = NULL;
     static std::vector<int32> word2class;
     static std::vector<int32> class_boundary;
     static std::vector<int32> sortedclass_target_index(1,0), sortedclass_target_reindex(1,0);
@@ -562,8 +561,6 @@ BaseFloat Nnet::ComputeConditionalLogprob(int32 current_word,
         {
         	if (this->GetComponent(c).GetType() == Component::kClassAffineTransform)
         		class_affine = &(dynamic_cast<ClassAffineTransform&>(this->GetComponent(c)));
-        	else if (this->GetComponent(c).GetType() == Component::kCBSoftmax)
-        		cb_softmax = &(dynamic_cast<CBSoftmax&>(this->GetComponent(c)));
         }
 
     	int i,j = 0;
@@ -659,7 +656,7 @@ void Nnet::SetClassBoundary(std::string classboundary_file)
 
     std::vector<int32> class_boundary;
 	class_boundary.resize(classinfo.Dim());
-	int32 num_class = class_boundary.size()-1;
+	//int32 num_class = class_boundary.size()-1;
     for (int i = 0; i < classinfo.Dim(); i++)
     	class_boundary[i] = classinfo(i);
 
