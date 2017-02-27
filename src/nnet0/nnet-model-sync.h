@@ -82,6 +82,18 @@ class ModelMergeFunction;
 
 class NnetModelSync{
 public:
+	typedef enum {
+		kDstAddress = 0x0,
+		kSrcAddress = 0x1,
+	} AddressType;
+
+	typedef enum {
+		kCudaMemcpyHostToHost = 0x0,
+		kCudaMemcpyHostToDevice,
+		kCudaMemcpyDeviceToHost,
+		kCudaMemcpyDeviceToDevice,
+	} cudaMemcpyKind;
+
 	NnetModelSync(Nnet *nnet, const NnetParallelOptions *opts=NULL):
 		initialized_(false),data_(NULL),free_data_(NULL),dim_(0),nnet(nnet),
 		opts_(opts),p_merge_func_(NULL)
