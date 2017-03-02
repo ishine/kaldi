@@ -24,6 +24,7 @@
 #include "nnet0/nnet-compute-sequential-parallel.h"
 #include "nnet0/nnet-compute-ctc-parallel.h"
 #include "nnet0/nnet-compute-lstm-lm-parallel.h"
+#include "nnet0/nnet-compute-chain-parallel.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -222,6 +223,20 @@ struct SeqLabelNnetExample : NnetExample
 
 
 	bool PrepareData(std::vector<NnetExample*> &examples);
+};
+
+struct ChainNnetExample: NnetExample
+{
+	typedef kaldi::nnet3::SequentialNnetChainExampleReader SequentialNnetChainExampleReader;
+	typedef kaldi::nnet3::NnetChainExample NnetChainExample;
+
+	SequentialNnetChainExampleReader *example_reader;
+	NnetChainExample chain_eg;
+
+    ChainNnetExample(SequentialNnetChainExampleReader *example_reader)
+    :NnetExample(NULL), example_reader(example_reader) {}
+
+    bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
 struct LstmNnetExample: NnetExample

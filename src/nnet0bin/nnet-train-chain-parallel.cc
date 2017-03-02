@@ -1,4 +1,4 @@
-// nnet0/nnet-train-ctc-parallel.cc
+// nnet0/nnet-train-chain-parallel.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -19,14 +19,12 @@
 
 #include "nnet0/nnet-trnopts.h"
 #include "nnet0/nnet-nnet.h"
-#include "nnet0/nnet-loss.h"
 #include "nnet0/nnet-randomizer.h"
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
 #include "base/timer.h"
 #include "cudamatrix/cu-device.h"
-#include "nnet0/nnet-compute-parallel.h"
-#include "nnet0/nnet-compute-ctc-parallel.h"
+#include "nnet0/nnet-compute-chain-parallel.h"
 
 int main(int argc, char *argv[]) {
   using namespace kaldi;
@@ -35,11 +33,12 @@ int main(int argc, char *argv[]) {
   
   try {
     const char *usage =
-        "Perform one iteration of Neural Network training by mini-batch Stochastic Gradient Descent.\n"
-        "This version use pdf-posterior as targets, prepared typically by ali-to-post.\n"
-        "Usage:  nnet-train-ctc-parallel [options] <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
+        "Train nnet0+chain one iteration of Neural Network training by mini-batch Stochastic Gradient Descent.\n"
+        "Minibatches are to be created by nnet3-chain-merge-egs in the input pipeline.\n"
+    	"This training program is multi-threaded (best to use it with a GPU).\n"
+        "Usage:  nnet-train-chain-parallel [options] <denominator-fst-in> <feature-rspecifier> <model-in> [<model-out>]\n"
         "e.g.: \n"
-        " nnet-train-ctc-parallel scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
+        " nnet-train-chain-parallel den.fst 'ark:nnet3-merge-egs 1.cegs ark:-|' nnet.init nnet.iter1\n";
 
     ParseOptions po(usage);
 
@@ -52,7 +51,7 @@ int main(int argc, char *argv[]) {
     NnetParallelOptions parallel_opts;
     parallel_opts.Register(&po);
 
-    NnetCtcUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    NnetChainUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -62,8 +61,9 @@ int main(int argc, char *argv[]) {
       exit(1);
     }
 
-    std::string feature_rspecifier = po.GetArg(1),
-      targets_rspecifier = po.GetArg(2),
+    std::string
+	  den_fst_rxfilename = po.GetArg(1),
+	  feature_rspecifier = po.GetArg(2),
       model_filename = po.GetArg(3);
         
     std::string target_model_filename;
@@ -83,27 +83,21 @@ int main(int argc, char *argv[]) {
 
 
     Nnet nnet;
-    NnetStats *stats;
+    NnetChainStats stats;
+
+    fst::StdVectorFst den_fst;
+    ReadFstKaldi(den_fst_rxfilename, &den_fst);
 
     Timer time;
     double time_now = 0;
     KALDI_LOG << "TRAINING STARTED";
 
-
-    if (opts.objective_function == "xent"){
-    	stats = new NnetStats;
-    	NnetCEUpdateParallel(&opts, model_filename, feature_rspecifier,
-    			targets_rspecifier, &nnet, stats);
-    }
-    else if (opts.objective_function == "ctc"){
-    	stats = new NnetCtcStats;
-    	NnetCtcUpdateParallel(&opts, model_filename, feature_rspecifier,
-    			//targets_rspecifier, &nnet, (NnetCtcStats*)(stats));
-    			targets_rspecifier, &nnet, dynamic_cast<NnetCtcStats*>(stats));
-    }
-    else
-    	KALDI_ERR << "Unknown objective function code : " << opts.objective_function;
-
+    NnetChainUpdateParallel(&opts,
+    		&den_fst,
+    		model_filename,
+    		feature_rspecifier,
+    		&nnet,
+    		&stats);
 
     if (!opts.crossvalidate) {
       nnet.Write(target_model_filename, opts.binary);
@@ -113,7 +107,7 @@ int main(int argc, char *argv[]) {
     time_now = time.Elapsed();
 
 
-    stats->Print(&opts, time_now);
+    stats.Print(&opts, time_now);
 
 #if HAVE_CUDA==1
     CuDevice::Instantiate().PrintProfile();

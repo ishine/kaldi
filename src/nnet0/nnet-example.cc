@@ -493,6 +493,16 @@ bool SeqLabelNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     return true;
 }
 
+bool ChainNnetExample::PrepareData(std::vector<NnetExample*> &examples)
+{
+	utt = example_reader->Key();
+	chain_eg = example_reader->Value();
+
+	examples.resize(1);
+	examples[0] = this;
+	return true;
+}
+
 bool LstmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 {
 	examples.resize(1);
