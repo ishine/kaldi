@@ -1578,7 +1578,7 @@ void CuMatrixBase<Real>::AddVecVec(
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
     Timer tim;
-    CU_SAFE_CALL(cublas_ger(GetCublasHandle(), m, n, alpha,
+    CU_SAFE_CALL(cublas_ger(GetLocalCublasHandle(), m, n, alpha,
                  y.Data(), 1, x.Data(), 1, data_, Stride()));
 
     CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
@@ -3379,7 +3379,7 @@ void CuMatrixBase<Real>::CopyColFromVec(const CuVectorBase<Real> &v,
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
     Timer tim;
-    cublas_copy(GetCublasHandle(),
+    cublas_copy(GetLocalCublasHandle(),
                 v.Dim(), v.Data(), 1,
                 this->data_ + col, this->stride_);
     CU_SAFE_CALL(cudaGetLastError());

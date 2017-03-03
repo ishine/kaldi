@@ -833,7 +833,13 @@ class CuMatrixBase {
                MatrixIndexT num_rows,
                MatrixIndexT num_cols,
                MatrixIndexT stride):
-  data_(data), num_cols_(num_cols), num_rows_(num_rows), stride_(stride){}
+  data_(data), num_cols_(num_cols), num_rows_(num_rows), stride_(stride)
+  {
+#if HAVE_CUDA == 1
+	  handle_ = NULL;
+	  cuda_stream_ = NULL;
+#endif
+  }
 
   Real *data_;       ///< GPU data pointer (or regular matrix data pointer,
   ///< if either CUDA was not compiled in or we could not

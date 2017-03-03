@@ -203,6 +203,7 @@ private:
 		  // the meaning is following:
 		  // 'multitask,<type1>,<dim1>,<weight1>,...,<typeN>,<dimN>,<weightN>'
 		  multitask.InitFromString(objective_function);
+          stats_->multitask.InitFromString(objective_function);
 		}
 
 	    Timer time, mpi_time;
@@ -425,7 +426,7 @@ private:
 		 }else if (objective_function == "mse"){
 			//KALDI_LOG << mse.Report();
 			stats_->mse.Add(&mse);
-		 }else if (0 == opts->objective_function.compare(0, 9, "multitask")) {
+		 }else if (0 == objective_function.compare(0, 9, "multitask")) {
 			 stats_->multitask.Add(&multitask);
          }else {
 			 KALDI_ERR<< "Unknown objective function code : " << objective_function;

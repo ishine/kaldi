@@ -219,19 +219,25 @@ private:
 
 		while((example = repository_->ProvideExample()) != NULL) {
 
-			int size = 0, minibatch = 0, utt_frame_num = 0;
+			int size = 0, minibatch = 0, utt_frame_num = 0, utt_len, offset;
 			chain_example = dynamic_cast<ChainNnetExample*>(example);
 			const kaldi::nnet3::NnetIo &io = chain_example->chain_eg.inputs[0];
+	        const kaldi::nnet3::NnetChainSupervision &sup = chain_example->chain_eg.outputs[0];
 
 			size = io.indexes.size();
 			minibatch = io.indexes[size-1].n + 1;
-			KALDI_ASSERT(num_stream == minibatch);
+			num_stream = minibatch;
+            new_utt_flags.resize(num_stream, 1);
+            //KALDI_WARN << "utterances per example not equal with number of stream, force set stream " << minibatch; 
 			utt_frame_num = size/minibatch;
+			utt_len = sup.supervision.frames_per_sequence;
+            offset = -io.indexes[0].t;
 
+            cu_feat_utts.Resize(io.features.NumRows(), io.features.NumCols(), kUndefined);
 			io.features.CopyToMat(&cu_feat_utts);
 
 			// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
-			int frames = num_stream*utt_frame_num/skip_frames;
+			int frames = num_stream*utt_len;
 			cu_feat_mat.Resize(frames, feat_dim, kUndefined);
 			nnet_out.Resize(frames, out_dim, kUndefined);
 			nnet_diff.Resize(frames, out_dim, kUndefined);
@@ -259,9 +265,9 @@ private:
 			for (s = 0; s < num_stream; s++) {
 				for (t = 0; t < len; t++) {
 					if (t + targets_delay < len)
-						indexes[t*num_stream+s] = s*utt_frame_num + (t+targets_delay)*skip_frames;
+						indexes[t*num_stream+s] = s*utt_frame_num+offset + (t+targets_delay)*skip_frames;
 					else
-						indexes[t*num_stream+s] = s*utt_frame_num + (len-1)*skip_frames;
+						indexes[t*num_stream+s] = s*utt_frame_num+offset + (len-1)*skip_frames;
 					//feat_mat_host.CopyRows()Row(t*num_stream+s).CopyFromVec(feat_utts.Row(frame_idx));
 				}
 			}
@@ -278,7 +284,6 @@ private:
 	        // forward pass
 	        nnet.Propagate(feats_transf, &nnet_out);
 
-	        const kaldi::nnet3::NnetChainSupervision &sup = chain_example->chain_eg.outputs[0];
 	        BaseFloat tot_objf, tot_l2_term, tot_weight;
 
 	        // get mmi objective function derivative, and xent soft supervision label
@@ -289,6 +294,7 @@ private:
 									 (use_xent ? xent_deriv : NULL));
 			objf_info_["mmi"].UpdateStats("mmi", opts->print_interval, num_minibatch,
 													tot_weight, tot_objf, tot_l2_term);
+            mmi_deriv->Scale(-1.0);
 
 			// this block computes the cross-entropy objective.
 			if (use_xent) {
