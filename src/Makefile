@@ -167,9 +167,9 @@ cudamatrix: base util thread matrix
 nnet: base util hmm tree thread matrix cudamatrix
 nnet2: base util matrix thread lat gmm hmm tree transform cudamatrix
 nnet3: base util matrix thread lat gmm hmm tree transform cudamatrix chain fstext
-nnet0: base nnet2 util matrix cudamatrix
 lm: base util thread matrix fstext nnet0
 chain: lat hmm tree fstext matrix cudamatrix util thread base
+nnet0: base nnet2 nnet3 chain util matrix cudamatrix
 ivector: base util matrix thread transform tree gmm
 #3)Dependencies for optional parts of Kaldi
 onlinebin: base matrix util feat tree gmm transform sgmm2 fstext hmm lm decoder lat cudamatrix nnet nnet2 online thread

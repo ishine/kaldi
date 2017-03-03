@@ -190,7 +190,7 @@ private:
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
 
-		chain::DenominatorGraph den_graph(den_fst, nnet.OutputDim());
+		chain::DenominatorGraph den_graph(*den_fst, nnet.OutputDim());
 
         bool use_xent = (opts->chain_config.xent_regularize != 0.0);
 
@@ -205,13 +205,13 @@ private:
 
         std::vector<int> new_utt_flags(num_stream, 1);
 	    CuMatrix<BaseFloat> cu_feat_mat, cu_feat_utts;
-		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
+		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff, xent_logsoftmax;
 		CuSubMatrix<BaseFloat> *mmi_nnet_out, *xent_nnet_out, *mmi_deriv, *xent_deriv;
 
 	    ChainNnetExample *chain_example = NULL;
 	    NnetExample		*example = NULL;
 	    Timer time;
-	    double time_now = 0;
+	    //double time_now = 0;
 
 		int32 feat_dim = nnet.InputDim();
 		int32 out_dim = nnet.OutputDim();
@@ -221,7 +221,7 @@ private:
 
 			int size = 0, minibatch = 0, utt_frame_num = 0;
 			chain_example = dynamic_cast<ChainNnetExample*>(example);
-			const kaldi::nnet3::NnetIo &io = chain_example->chain_eg.inputs;
+			const kaldi::nnet3::NnetIo &io = chain_example->chain_eg.inputs[0];
 
 			size = io.indexes.size();
 			minibatch = io.indexes[size-1].n + 1;
@@ -241,10 +241,11 @@ private:
 				xent_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.ColRange(out_dim/2, out_dim/2));
 				mmi_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.ColRange(0, out_dim/2));
 				xent_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.ColRange(out_dim/2, out_dim/2));
+                xent_logsoftmax.Resize(frames, out_dim/2, kUndefined);
 			} else {
-				mmi_nnet_out = &nnet_out;
+				mmi_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.ColRange(0, out_dim));
+				mmi_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.ColRange(0, out_dim));
 				xent_nnet_out = NULL;
-				mmi_deriv= &nnet_diff;
 				xent_deriv = NULL;
 			}
 
@@ -272,7 +273,7 @@ private:
 			nnet_transf.Feedforward(cu_feat_mat, &feats_transf);
 
 	        // for streams with new utterance, history states need to be reset
-	        nnet.ResetLstmStreams(new_utt_flags);
+	        nnet.ResetLstmStreams(new_utt_flags, batch_size);
 
 	        // forward pass
 	        nnet.Propagate(feats_transf, &nnet_out);
@@ -292,13 +293,13 @@ private:
 			// this block computes the cross-entropy objective.
 			if (use_xent) {
 				// log softmax
-				CuMatrix<BaseFloat> logsoftmax = *xent_nnet_out;
-				logsoftmax.Add(1e-20); // avoid log(0)
-				logsoftmax.ApplyLog(); // log(y)
+                xent_logsoftmax.CopyFromMat(*xent_nnet_out);
+				xent_logsoftmax.Add(1e-20); // avoid log(0)
+				xent_logsoftmax.ApplyLog(); // log(y)
 
 				// at this point, xent_deriv is posteriors derived from the numerator
 				// computation.  note, xent_objf has a factor of '.supervision.weight'
-				BaseFloat xent_objf = TraceMatMat(logsoftmax, *xent_deriv, kTrans); // sum(t*log(y))
+				BaseFloat xent_objf = TraceMatMat(xent_logsoftmax, *xent_deriv, kTrans); // sum(t*log(y))
 				objf_info_["xent"].UpdateStats("xent", opts->print_interval, num_minibatch,
 				                                        			tot_weight, xent_objf);
 

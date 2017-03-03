@@ -25,7 +25,7 @@ BINFILES = nnet-train-frmshuff \
 	nnet-train-lstm-streams-parallel nnet-train-lstm-streams-asgd \
 	nnet-forward-parallel nnet-train-ctc-parallel nnet-train-lstm-streams-parallel-mpi \
 	nnet-train-lstm-lm-parallel nnet-train-lstm-lm-parallel-mpi nnet-lstm-sentence-ppl \
-	nnet-forward-evaluate-parallel
+	nnet-train-chain-parallel
 
 OBJFILES =
 
@@ -33,7 +33,8 @@ OBJFILES =
 
 TESTFILES =
 
-ADDLIBS = ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a \
+ADDLIBS = ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a ../nnet3/kaldi-nnet3.a ../chain/kaldi-chain.a \
+		  ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a ../fstext/kaldi-fstext.a \
           ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../util/kaldi-util.a \
           ../matrix/kaldi-matrix.a ../thread/kaldi-thread.a ../base/kaldi-base.a 
 
