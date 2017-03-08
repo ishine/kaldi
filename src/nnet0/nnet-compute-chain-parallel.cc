@@ -207,6 +207,7 @@ private:
 	    CuMatrix<BaseFloat> cu_feat_mat, cu_feat_utts;
 		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff, xent_logsoftmax;
 		CuSubMatrix<BaseFloat> *mmi_nnet_out, *xent_nnet_out, *mmi_deriv, *xent_deriv;
+        Matrix<BaseFloat> feat_mat_host, feat_utts;
 
 	    ChainNnetExample *chain_example = NULL;
 	    NnetExample		*example = NULL;
@@ -235,10 +236,12 @@ private:
 
             cu_feat_utts.Resize(io.features.NumRows(), io.features.NumCols(), kUndefined);
 			io.features.CopyToMat(&cu_feat_utts);
+            //io.features.SwapFullMatrix(&feat_utts);
 
 			// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
 			int frames = num_stream*utt_len;
 			cu_feat_mat.Resize(frames, feat_dim, kUndefined);
+			//feat_mat_host.Resize(frames, feat_dim, kUndefined);
 			nnet_out.Resize(frames, out_dim, kUndefined);
 			nnet_diff.Resize(frames, out_dim, kUndefined);
 
@@ -268,7 +271,7 @@ private:
 						indexes[t*num_stream+s] = s*utt_frame_num+offset + (t+targets_delay)*skip_frames;
 					else
 						indexes[t*num_stream+s] = s*utt_frame_num+offset + (len-1)*skip_frames;
-					//feat_mat_host.CopyRows()Row(t*num_stream+s).CopyFromVec(feat_utts.Row(frame_idx));
+					//feat_mat_host.Row(t*num_stream+s).CopyFromVec(feat_utts.Row(indexes[t*num_stream+s]));
 				}
 			}
 
