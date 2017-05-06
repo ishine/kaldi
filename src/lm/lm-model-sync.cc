@@ -127,10 +127,19 @@ void LmModelSync::SetWeight(Nnet *nnet, int32 thread_idx, int32 buffer_idx)
 	nnet->WeightCopy(host_data_, LmModelSync::kSrcAddress, LmModelSync::kCudaMemcpyHostToDevice);
 }
 
+void LmModelSync::InnerMachineSyncStatus(int32 status)
+{
+    if (status == 0) {
+	    inner_mutex_.Lock();
+	    num_finished_++;
+	    inner_mutex_.Unlock();
+    }
+}
+
 void LmModelSync::CrossMachineSyncStatus(int status)
 {
 	int total_status = 0;
-	if (left_merge_ <= 1 && !is_lastmerge_)
+	if ((left_merge_ <= 1 && !is_lastmerge_) || status == 0)
 	{
 		MPI_Barrier(MPI_COMM_WORLD);
 		MPI_Allreduce(&status, (void*)(&total_status), 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
@@ -152,6 +161,22 @@ void LmModelSync::CrossMachineSync()
 
 void LmModelSync::ThreadSync(int32 thread_idx, int status)
 {
+	Timer synctm, tm;
+	// internal machine thread sync status
+	if (status == 0 ) 
+        InnerMachineSyncStatus(status);
+	while (true)
+	{
+		this->barrier_.Wait();
+		if (num_finished_ == 0 || num_finished_ == num_threads_)
+			break;
+        else if (status == 1) {
+            is_lastmerge_ = true;
+            return;
+        }
+	}
+
+	// cross machine process sync status
 	if (opts_->num_procs > 1)
 	{
         if (thread_idx == 0)
@@ -161,8 +186,6 @@ void LmModelSync::ThreadSync(int32 thread_idx, int status)
 		if (this->is_lastmerge_ && status == 1)
 			return;
 	}
-
-	Timer tm;
 
 	tm.Reset();
 	this->barrier_.Wait();
@@ -184,19 +207,19 @@ void LmModelSync::ThreadSync(int32 thread_idx, int status)
 
 	//KALDI_VLOG(2) << "THREAD_Reduce: " << tm.Elapsed();
 
-	tm.Reset();
 	// cross machine reduce
 	if (opts_->num_procs > 1)
 	{
 	    this->barrier_.Wait();
 
+	    tm.Reset();
         if (thread_idx == 0)
 		    CrossMachineSync();
+	    KALDI_VLOG(1) << "CrossMachineSync MPI_AllReduce: " << tm.Elapsed();
         num_jobs *= opts_->num_procs;
 
 	    this->barrier_.Wait();
 	}
-	//KALDI_VLOG(1) << "MPI_Reduce: " << tm.Elapsed();
 
 	tm.Reset();
 	// model merge ...
@@ -218,6 +241,7 @@ void LmModelSync::ThreadSync(int32 thread_idx, int status)
 	//KALDI_VLOG(2) << "THREAD_Merge: " << tm.Elapsed();
 
     if (thread_idx == 0) left_merge_--;
+	KALDI_VLOG(1) << "ThreadSync total : " << synctm.Elapsed();
 }
 
 /*

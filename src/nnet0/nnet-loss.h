@@ -169,11 +169,18 @@ class CBXent {
 	  class_frame_zt_ptr_ = class_frame_zt_ptr;
   }
 
-  void SetConstClassZt(Vector<BaseFloat> &classzt) {
+  void SetConstClassZt(const Vector<BaseFloat> &classzt) {
 	  int size = classzt.Dim();
 	  const_class_zt_.resize(size);
 	  for (int i = 0; i < size; i++)
 		  const_class_zt_[i] = classzt(i);
+  }
+
+  void GetConstZtMean(Vector<BaseFloat> &const_class_zt) {
+	  int size = class_zt_mean_.size();
+	  const_class_zt.Resize(size);
+	  for (int i = 0; i < size; i++)
+		  const_class_zt(i) = (class_frames_[i] == 0 ? 0 : class_zt_mean_[i]/class_frames_[i]);
   }
 
  private:
@@ -230,8 +237,8 @@ class CBXent {
   // constant normalizing
   CuVector<BaseFloat> *frame_zt_ptr_;
   std::vector<CuSubVector<BaseFloat>* > *class_frame_zt_ptr_;
-  std::vector<double> class_zt_mean_;
-  std::vector<double> class_zt_variance_;
+  std::vector<BaseFloat> class_zt_mean_;
+  std::vector<BaseFloat> class_zt_variance_;
   std::vector<double> class_frames_;
   // minbatch buffer
   std::vector<int> class_counts_;

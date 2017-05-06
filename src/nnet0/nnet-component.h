@@ -283,7 +283,7 @@ inline void Component::Backpropagate(const CuMatrixBase<BaseFloat> &in,
     }
   } else {
     // Allocate target buffer
-    in_diff->Resize(out_diff.NumRows(), input_dim_, kSetZero, kStrideEqualNumCols); // reset
+    in_diff->Resize(out_diff.NumRows(), input_dim_, kUndefined, kStrideEqualNumCols); // reset
     // Asserts on the dims
     KALDI_ASSERT((in.NumRows() == out.NumRows()) &&
                  (in.NumRows() == out_diff.NumRows()) &&

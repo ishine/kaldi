@@ -137,7 +137,16 @@ int main(int argc, char *argv[]) {
 
 
     if (parallel_opts.myid == 0 && !opts.crossvalidate) {
-      nnet.Write(target_model_filename, opts.binary);
+       nnet.Write(target_model_filename, opts.binary);
+       if (opts.zt_mean_filename != "")
+       {
+           Vector<BaseFloat> class_zt;
+           stats.cbxent.GetConstZtMean(class_zt);
+           Output out;
+           out.Open(opts.zt_mean_filename, false, false);
+           class_zt.Write(out.Stream(), false);
+           out.Close();
+       }
     }
 
     KALDI_LOG << "TRAINING FINISHED; ";

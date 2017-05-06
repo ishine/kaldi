@@ -294,9 +294,19 @@ class ParallelComponentMultiTask : public UpdatableComponent {
 		  CuSubMatrix<BaseFloat> tgt(in_diff->ColRange(input_offset[name].first, input_offset[name].second));
 		  //
 		  CuMatrix<BaseFloat> tgt_aux;
-		  nnet_[name].Backpropagate(src, &tgt_aux);
+		  nnet_[name].Backpropagate(src, &tgt_aux, false);
 		  tgt.AddMat(error_scale[name], tgt_aux);
     }
+  }
+
+  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
+      for (auto it = nnet_.begin(); it != nnet_.end(); ++it)
+          it->second.Gradient();
+  }
+
+  void UpdateGradient() {
+      for (auto it = nnet_.begin(); it != nnet_.end(); ++it)
+          it->second.UpdateGradient();
   }
 
   void Update(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {

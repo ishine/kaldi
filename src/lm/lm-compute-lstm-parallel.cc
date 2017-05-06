@@ -66,7 +66,8 @@ private:
 	std::string feature_transform,
 				model_filename,
 				classboundary_file,
-				si_model_filename;
+				si_model_filename,
+				zt_mean_filename;
 
 	ExamplesRepository *repository_;
     LmStats *stats_;
@@ -109,6 +110,7 @@ private:
 				feature_transform = opts->feature_transform;
 				classboundary_file = opts->class_boundary;
 				si_model_filename = opts->si_model_filename;
+				zt_mean_filename = opts->zt_mean_filename;
 
 				num_threads = parallel_opts->num_threads;
 				crossvalidate = opts->crossvalidate;
@@ -177,12 +179,21 @@ private:
 
 	    nnet.SetTrainOptions(*trn_opts);
 
+	    // using activations directly: remove cbsoftmax, if use constant class zt
+	    if (zt_mean_filename != "" && crossvalidate) {
+	    	if (nnet.GetComponent(nnet.NumComponents()-1).GetType() == kaldi::nnet0::Component::kCBSoftmax) {
+	    		KALDI_LOG << "Removing cbsoftmax from the nnet " << model_filename;
+	    		nnet.RemoveComponent(nnet.NumComponents()-1);
+			} else {
+			  KALDI_LOG << "The nnet was without cbsoftmax " << model_filename;
+			}
+	    }
+
 		TrainlmUtil util;
 	    ClassAffineTransform *class_affine = NULL;
 	    WordVectorTransform *word_transf = NULL;
 	    CBSoftmax *cb_softmax = NULL;
-	    for (int32 c = 0; c < nnet.NumComponents(); c++)
-	    {
+	    for (int32 c = 0; c < nnet.NumComponents(); c++) {
 	    	if (nnet.GetComponent(c).GetType() == Component::kClassAffineTransform)
 	    		class_affine = &(dynamic_cast<ClassAffineTransform&>(nnet.GetComponent(c)));
 	    	else if (nnet.GetComponent(c).GetType() == Component::kWordVectorTransform)
@@ -191,8 +202,7 @@ private:
 	    		cb_softmax = &(dynamic_cast<CBSoftmax&>(nnet.GetComponent(c)));
 	    }
 
-	    if (classboundary_file != "")
-	    {
+	    if (classboundary_file != "") {
 		    Input in;
 		    Vector<BaseFloat> classinfo;
 		    in.OpenTextMode(classboundary_file);
@@ -200,6 +210,14 @@ private:
 		    in.Close();
 		    util.SetClassBoundary(classinfo, class_boundary_, word2class_);
 	    }
+
+	    Vector<BaseFloat> class_zt;
+		if (zt_mean_filename != "" && crossvalidate) {
+			Input in;
+			in.OpenTextMode(zt_mean_filename);
+			class_zt.Read(in.Stream(), false);
+			in.Close();
+		}
 
 	    if (opts->dropout_retention > 0.0) {
 	      nnet_transf.SetDropoutRetention(opts->dropout_retention);
@@ -211,8 +229,7 @@ private:
 	    }
 
 	    Nnet si_nnet;
-	    if (this->kld_scale > 0)
-	    {
+	    if (this->kld_scale > 0) {
 	    	si_nnet.Read(si_model_filename);
 	    }
 
@@ -222,13 +239,17 @@ private:
         nnet0::Xent xent;
 	    nnet0::Mse mse;
 
-        if (NULL != class_affine)
-        {
+        if (NULL != class_affine) {
 	        class_affine->SetClassBoundary(class_boundary_);
-	        cb_softmax->SetClassBoundary(class_boundary_);
 	        cbxent.SetClassBoundary(class_boundary_);
 	        cbxent.SetVarPenalty(opts->var_penalty);
-	        cbxent.SetZt(cb_softmax->GetZt(), cb_softmax->GetZtPatches());
+	        if (crossvalidate)
+	        	cbxent.SetConstClassZt(class_zt);
+        }
+
+        if (NULL != cb_softmax) {
+        	cb_softmax->SetClassBoundary(class_boundary_);
+        	cbxent.SetZt(cb_softmax->GetZt(), cb_softmax->GetZtPatches());
         }
 
 		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
@@ -347,12 +368,14 @@ private:
 	        // for streams with new utterance, history states need to be reset
 	        nnet.ResetLstmStreams(new_utt_flags);
 
-			if (NULL != class_affine)
-			{
+			if (NULL != class_affine) {
 				// sort output class id
 				util.SortUpdateClass(target, sorted_target, sortedclass_target,
 						sortedclass_target_index, sortedclass_target_reindex, frame_mask, sorted_frame_mask, word2class_);
 				class_affine->SetUpdateClassId(sortedclass_target, sortedclass_target_index, sortedclass_target_reindex);
+			}
+
+			if (NULL != cb_softmax) {
 				cb_softmax->SetUpdateClassId(sortedclass_target);
 			}
 
@@ -362,7 +385,7 @@ private:
 
 	        // forward pass
 	        featmat.CopyColFromVec(feat, 0);
-            	words.CopyFromMat(featmat);
+            words.CopyFromMat(featmat);
 
 	        nnet.Propagate(words, &nnet_out);
 

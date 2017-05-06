@@ -48,6 +48,7 @@ struct LstmlmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
 	std::string class_boundary;
 	int32 num_class;
 	BaseFloat var_penalty;
+	std::string zt_mean_filename;
 
 	LstmlmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
     	: NnetLstmUpdateOptions(trn_opts, rnd_opts, parallel_opts), class_boundary(""), num_class(0), var_penalty(0) { }
@@ -60,6 +61,7 @@ struct LstmlmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
   		  po->Register("class-boundary", &class_boundary, "The fist index of each class(and final class class) in class based language model");
   		  po->Register("num-class", &num_class, "The number of class that the language model output");
   		  po->Register("var-penalty", &var_penalty, "The penalty of the variance regularization approximation item");
+  		  po->Register("zt-mean-filename", &zt_mean_filename, "The (in/out) file name of penalty of the variance regularization approximation item");
   	  }
 };
 

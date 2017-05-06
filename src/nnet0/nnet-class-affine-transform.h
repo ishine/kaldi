@@ -211,6 +211,13 @@ class ClassAffineTransform : public UpdatableComponent {
     	}
     }
 
+    // class
+    clen = output_dim_ - class_boundary_.back();
+    input_patches_.push_back(new CuSubMatrix<BaseFloat>(input_sorted_.RowRange(0, input_sorted_.NumRows())));
+	updateclass_linearity_.push_back(class_linearity_.back());
+	updateclass_bias_.push_back(class_bias_.back());
+	output_patches_.push_back(new CuSubMatrix<BaseFloat>(out->ColRange(class_boundary_.back(), clen)));
+
     SetStream(input_patches_, streamlist_);
    	SetStream(output_patches_, streamlist_);
     SetStream(updateclass_linearity_, streamlist_);
@@ -224,13 +231,6 @@ class ClassAffineTransform : public UpdatableComponent {
     ResetStream(output_patches_);
     ResetStream(updateclass_linearity_);
     ResetStream(updateclass_bias_);
-
-    // class
-    clen = output_dim_ - class_boundary_.back();
-    CuSubMatrix<BaseFloat> *output_class = new CuSubMatrix<BaseFloat>(out->ColRange(class_boundary_.back(), clen));
-    output_class->AddMatMat(1.0, input_sorted_, kNoTrans, *class_linearity_[num_class_], kTrans, 1.0);
-
-    delete output_class;
   }
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
@@ -267,26 +267,35 @@ class ClassAffineTransform : public UpdatableComponent {
 	    		beg = i;
 	    	}
 	    }
+
+        updateclass_linearity_.resize(out_diff_patches_.size());
 	    SetStream(in_diff_patches_, streamlist_);
-	    SetStream(updateclass_linearity_, streamlist_);
 	    SetStream(out_diff_patches_, streamlist_);
+	    SetStream(updateclass_linearity_, streamlist_);
 
 	    AddMatMatStreamed(static_cast<BaseFloat>(1.0f), in_diff_patches_, out_diff_patches_, kNoTrans,
 	    												updateclass_linearity_, kNoTrans, static_cast<BaseFloat>(0.0f));
 
 	    ResetStream(in_diff_patches_);
-	    ResetStream(updateclass_linearity_);
 	    ResetStream(out_diff_patches_);
+	    ResetStream(updateclass_linearity_);
 
 	    // class
 	    clen = output_dim_ - class_boundary_.back();
 	    CuSubMatrix<BaseFloat> *out_diff_class = new CuSubMatrix<BaseFloat>(out_diff.ColRange(class_boundary_.back(), clen));
 	    input_diff_sorted_.AddMatMat(1.0, *out_diff_class, kNoTrans, *class_linearity_[num_class_], kNoTrans, 1.0);
+        //out_diff_class->SetZero();
+        //delete out_diff_class;
 
+        // restore input
         CuArray<int32> idx(sortedclass_id_reindex_);
 	    in_diff->CopyRows(input_diff_sorted_, idx);
 
-        delete out_diff_class;
+        // for last class gradient
+	    updateclass_linearity_corr_.push_back(class_linearity_corr_.back());
+	    updateclass_bias_corr_.push_back(class_bias_corr_.back());
+	    updateclass_linearity_.push_back(class_linearity_.back());
+	    out_diff_patches_.push_back(out_diff_class);
   }
 
   void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
@@ -302,9 +311,6 @@ class ClassAffineTransform : public UpdatableComponent {
 		local_lrate = -lr;
 		local_lrate_bias = -lr_bias;
 
-	    // compute gradient (incl. momentum)
-	    // linearity_corr_.AddMatMat(1.0, diff, kTrans, input, kNoTrans, mmt);
-	    // bias_corr_.AddRowSumMat(1.0, diff, mmt);
 
 	    SetStream(updateclass_linearity_corr_, streamlist_);
 	   	SetStream(out_diff_patches_, streamlist_);

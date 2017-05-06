@@ -415,6 +415,7 @@ void CBXent::Eval() {
 		MulElementsStreamed(*class_frame_zt_ptr_, class_frame_weights_);
         //KALDI_ASSERT(KALDI_ISFINITE(frame_zt_ptr_->Sum()));
 		logzt = VecSumStreamed(*class_frame_zt_ptr_, &class_zt_sum);
+        logzt -= class_zt_sum.back();
 		for (int i = 0; i < class_counts_.size(); i++)
 		{
 			class_frames_[class_id_[i]] += class_counts_[i];
@@ -424,7 +425,7 @@ void CBXent::Eval() {
             //class_zt_sum[i] /= (-class_counts_[i]);
 		}
 
-		// 2beta*(log(zt) - log(zt)/n)
+		// 2beta*(log(zt) - log(zt)/n)+1
 		AddStreamed(*class_frame_zt_ptr_, class_zt_sum);
 		MulElementsStreamed(*class_frame_zt_ptr_, class_frame_weights_); // weighting after sub zt mean
 		frame_zt = *frame_zt_ptr_; //backup for compute variance
@@ -437,11 +438,24 @@ void CBXent::Eval() {
   CopyFromMatStreamed(class_netout_, class_diff_);
   if (var_penalty_ != 0)
   {
-	  MulRowsVecStreamed(class_diff_, *class_frame_zt_ptr_); // constant normalizing
+	  // y*(2beta*(log(zt) - log(zt)/n)+1)
+	  // MulRowsVecStreamed(class_diff_, *class_frame_zt_ptr_); // constant normalizing contain last class output
+
+      // except last class output
+      int n = class_diff_.size()-1;
+      std::vector<CuSubMatrix<BaseFloat>* > class_diff_zt(n, NULL);
+      std::vector<CuSubVector<BaseFloat>* > class_frame_zt(n, NULL);
+      for (int i = 0; i < n; i++) {
+            class_diff_zt[i] = class_diff_[i];
+            class_frame_zt[i] = (*class_frame_zt_ptr_)[i]; 
+       }
+	   MulRowsVecStreamed(class_diff_zt, class_frame_zt); // constant normalizing except last class output
+        
 	  // compute logzt variance
 	  frame_zt_ptr_->CopyFromVec(frame_zt);
 	  MulElementsStreamed(*class_frame_zt_ptr_, *class_frame_zt_ptr_);
 	  logzt_variance = VecSumStreamed(*class_frame_zt_ptr_, &class_zt_sum);
+      logzt_variance -= class_zt_sum.back(); // except last class
 	  for (int i = 0; i < class_counts_.size(); i++)
 		  class_zt_variance_[class_id_[i]] += class_zt_sum[i];
   }
@@ -451,14 +465,17 @@ void CBXent::Eval() {
   // for constant class zt
   if (const_class_zt_.size() == class_boundary_.size())
   {
-	  std::vector<BaseFloat> class_zt(class_netout_.size());
-      /* 
-	  for (int i = 0; i < class_netout_.size(); i++)
-		  class_zt[i] = const_class_zt_[class_id_[i]];
-      ApplyCeilingStreamed(class_netout_, class_zt);
-      */
-	  for (int i = 0; i < class_netout_.size(); i++)
+      // last class output
+      CuSubMatrix<BaseFloat> *tmp = class_netout_.back();
+      CuMatrix<BaseFloat> last_netout(*tmp);
+      tmp->ApplyLogSoftMaxPerRow(last_netout);
+
+      int n = class_netout_.size();
+	  std::vector<BaseFloat> class_zt(n);
+
+	  for (int i = 0; i < n; i++)
 		  class_zt[i] = -const_class_zt_[class_id_[i]];
+      class_zt[n-1] = 0;
 	  AddStreamed(class_netout_, class_zt);
 	  ApplyExpStreamed(class_netout_);
   }
@@ -505,7 +522,7 @@ void CBXent::Eval() {
                     << static_cast<int>(frames_progress_/100/3600) << "(1h words) of "
                     << static_cast<int>(frames_/100/3600) << "(1h words)]: "
                     << (loss_progress_-entropy_progress_)/frames_progress_ << " (Xent) "
-					<< "("<<logzt_progress_/(2*frames_progress_)<<", "<<logzt_variance_progress_/(2*frames_progress_)<<")"
+					<< "("<<logzt_progress_/frames_progress_<<", "<<logzt_variance_progress_/frames_progress_<<")"
 					<< " (logzt[mean,variance]) "
                     << ppl_progress_ << " (PPL) "
 					<< correct_progress_*100/frames_progress_ << "% (Facc)";
@@ -538,7 +555,7 @@ void CBXent::GetTargetWordPosterior(Vector<BaseFloat> &tgt)
 std::string CBXent::Report() {
   std::ostringstream oss;
   oss << "AvgLoss: " << (loss_-entropy_)/frames_ << " (Xent), "
-	  << "("<< logzt_/(2*frames_)<<", "<<logzt_variance_/(2*frames_)<<")"
+	  << "("<< logzt_/frames_<<", "<<logzt_variance_/frames_<<")"
 	  << " (Logzt[mean,variance]), "
       << "Perplexity: " << ppl_ << " (PPL), "
       << "[AvgXent " << loss_/frames_
@@ -648,9 +665,9 @@ void CBXent::Merge(int myid, int root)
 		addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->logzt_variance_));
 		MPI_Reduce(addr, (void*)(&this->logzt_variance_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
 		addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->class_zt_variance_.front()));
-		MPI_Reduce(addr, (void*)(&this->class_zt_variance_.front()), this->class_zt_variance_.size(), MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+		MPI_Reduce(addr, (void*)(&this->class_zt_variance_.front()), this->class_zt_variance_.size(), MPI_FLOAT, MPI_SUM, root, MPI_COMM_WORLD);
 		addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->class_zt_mean_.front()));
-		MPI_Reduce(addr, (void*)(&this->class_zt_mean_.front()), this->class_zt_mean_.size(), MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+		MPI_Reduce(addr, (void*)(&this->class_zt_mean_.front()), this->class_zt_mean_.size(), MPI_FLOAT, MPI_SUM, root, MPI_COMM_WORLD);
 		addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->class_frames_.front()));
 		MPI_Reduce(addr, (void*)(&this->class_frames_.front()), this->class_frames_.size(), MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
 	}

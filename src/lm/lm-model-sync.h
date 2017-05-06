@@ -87,7 +87,7 @@ public:
 
 	LmModelSync(Nnet *nnet, const NnetParallelOptions *opts=NULL):
 		initialized_(false),is_lastmerge_(false),data_(NULL),free_data_(NULL),gradient_data_(NULL),
-		dim_(0),num_threads_(opts->num_threads),left_merge_(opts->num_merge),
+		dim_(0),num_threads_(opts->num_threads),left_merge_(opts->num_merge),num_finished_(0),
 		mmt_(opts->global_momentum),learnrate_(opts->global_learnrate),nnet(nnet),opts_(opts)
 
 	{
@@ -120,6 +120,8 @@ public:
 	void ThreadSync(int32 thread_idx, int status);
 
 	void CrossMachineSyncStatus(int32 status);
+
+	void InnerMachineSyncStatus(int32 status);
 
 	bool isLastMerge() { return is_lastmerge_;}
 
@@ -168,6 +170,7 @@ private:
 	int32 dim_;
 	int32 num_threads_;
 	int32 left_merge_;
+	int32 num_finished_;
 	BaseFloat mmt_;
 	BaseFloat learnrate_;
 	Nnet *nnet;
@@ -176,6 +179,7 @@ private:
 	Barrier barrier_;
 	Mutex model_mutex_;
 	Mutex stats_mutex_;
+	Mutex inner_mutex_;
 	std::vector<BaseFloat*>	thread_data_;
 	std::vector<BaseFloat*> thread_free_data_;
 

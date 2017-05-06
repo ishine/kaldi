@@ -414,7 +414,7 @@ public:
         Gradient(input, diff);
 
         BaseFloat lr = opts_.learn_rate ;
-        filters_grad_.Scale(1.0/(out_fmap_x_len_ * out_fmap_y_len_));
+        //filters_grad_.Scale(1.0/(out_fmap_x_len_ * out_fmap_y_len_));
         bias_grad_.Scale(1.0/(out_fmap_x_len_ * out_fmap_y_len_));
         filters_.AddMat(-lr*learn_rate_coef_, filters_grad_);
         bias_.AddVec(-lr*bias_learn_rate_coef_, bias_grad_);
@@ -456,7 +456,7 @@ public:
     void UpdateGradient(){
         const BaseFloat lr = opts_.learn_rate;
         //filters_grad_.Scale(1.0/(out_fmap_x_len_ * out_fmap_y_len_));
-        //bias_grad_.Scale(1.0/(out_fmap_x_len_ * out_fmap_y_len_));
+        bias_grad_.Scale(1.0/(out_fmap_x_len_ * out_fmap_y_len_));
         filters_.AddMat(-lr*learn_rate_coef_, filters_grad_);
         bias_.AddVec(-lr*bias_learn_rate_coef_, bias_grad_);
     }    
