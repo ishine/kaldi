@@ -546,9 +546,7 @@ void Nnet::SetSeqLengths(const std::vector<int32> &sequence_lengths) {
 BaseFloat Nnet::ComputeConditionalLogprob(int32 current_word,
 		    const std::vector<int32>  &history_words,
 		    const std::vector<CuMatrixBase<BaseFloat> >  &context_in,
-		    std::vector<CuMatrix<BaseFloat> >  &context_out,
-            int32 unk_sym,
-            std::unordered_map<std::string, float> &unk_penalty)
+		    std::vector<CuMatrix<BaseFloat> >  &context_out)
 {
     static ClassAffineTransform *class_affine = NULL;
     static std::vector<int32> word2class;
@@ -624,7 +622,7 @@ void Nnet::DumpContext(std::vector<CuMatrix<BaseFloat> >  &context)
 	    if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
 	      LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
 	      KALDI_ASSERT(idx < context.size());
-	      comp.GetLstmContext(&context[idx]);
+	      comp.GetLstmContext(context[idx]);
 	      idx++;
 	    }
 	}

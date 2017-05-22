@@ -105,9 +105,7 @@ class Nnet {
   BaseFloat ComputeConditionalLogprob(int32 current_word,
 		    const std::vector<int32>  &history_words,
 		    const std::vector<CuMatrixBase<BaseFloat> >  &context_in,
-		    std::vector<CuMatrix<BaseFloat> >  &context_out,
-			int32 unk_sym,
-			std::unordered_map<std::string, float> &unk_penalty);
+		    std::vector<CuMatrix<BaseFloat> >  &context_out);
 
   void SetClassBoundary(std::string classboundary_file);
 

@@ -33,7 +33,7 @@ struct KaldiNNlmWrapperOpts {
   std::string unk_symbol;
   std::string eos_symbol;
 
-  KaldiNNlmWrapperOpts() : unk_symbol("<unk>"), eos_symbol("<s>") {}
+  KaldiNNlmWrapperOpts() : unk_symbol("<unk>"), eos_symbol("</s>") {}
 
   void Register(OptionsItf *opts) {
     opts->Register("unk-symbol", &unk_symbol, "Symbol for out-of-vocabulary "
@@ -59,7 +59,7 @@ class KaldiNNlmWrapper {
 		  	  	  	  const std::vector<CuMatrixBase<BaseFloat> > &context_in,
 					  std::vector<CuMatrix<BaseFloat> > *context_out);
 
-  void SetUnkPenalty(const std::string &filename);
+  inline int32 GetWordId(int32 wid) { return word_to_lmwordid_[wid];}
 
  private:
   kaldi::nnet0::Nnet nnlm_;

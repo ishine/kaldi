@@ -27,15 +27,12 @@ namespace kaldi {
 
 KaldiNNlmWrapper::KaldiNNlmWrapper(
     const KaldiNNlmWrapperOpts &opts,
-    const std::string &unk_prob_rspecifier,
     const std::string &word_symbol_table_rxfilename,
 	const std::string &lm_word_symbol_table_rxfilename,
     const std::string &nnlm_rxfilename,
 	const std::string &classboundary_file) {
 
   this->unk_sym = opts.unk_symbol;
-  if (unk_prob_rspecifier != "")
-	  this->SetUnkPenalty(unk_prob_rspecifier);
 
   nnlm_.Read(nnlm_rxfilename);
   nnlm_.SetClassBoundary(classboundary_file);
@@ -87,30 +84,9 @@ BaseFloat KaldiNNlmWrapper::GetLogProb(
     const std::vector<CuMatrixBase<BaseFloat> > &context_in,
     std::vector<CuMatrix<BaseFloat> > *context_out) {
 
-  std::vector<int32> lm_wseq(wseq.size());
-  for (int32 i = 0; i < lm_wseq.size(); ++i) {
-    KALDI_ASSERT(wseq[i] < label_to_lmwordid_.size());
-    lm_wseq[i] = label_to_lmwordid_[wseq[i]];
-  }
-
-  return nnlm_.ComputeConditionalLogprob(label_to_lmwordid_[word], lm_wseq,
-                                          context_in, *context_out,
-										  unk_sym, this->unk_penalty);
+  return nnlm_.ComputeConditionalLogprob(word, wseq,
+                                          context_in, *context_out);
 }
-
-void KaldiNNlmWrapper::SetUnkPenalty(const std::string &filename)
-{
-	  SequentialBaseFloatReader unk_reader(filename);
-	  for (; !unk_reader.Done(); unk_reader.Next()) {
-	    std::string key = unk_reader.Key();
-	    float prob = unk_reader.Value();
-	    unk_reader.FreeCurrent();
-	    unk_penalty[key] = log(prob);
-	  }
-}
-
-
-
 
 NNlmDeterministicFst::NNlmDeterministicFst(int32 max_ngram_order,
                                              KaldiNNlmWrapper *nnlm) {
@@ -120,14 +96,14 @@ NNlmDeterministicFst::NNlmDeterministicFst(int32 max_ngram_order,
 
   // Uses empty history for <s>.
   std::vector<Label> bos;
-  std::vector<float> bos_context(nnlm->GetHiddenLayerSize(), 1.0);
+  //std::vector<float> bos_context(nnlm->GetHiddenLayerSize(), 1.0);
   state_to_wseq_.push_back(bos);
   state_to_context_.push_back(bos_context);
   wseq_to_state_[bos] = 0;
   start_state_ = 0;
 }
 
-fst::StdArc::Weight RnnlmDeterministicFst::Final(StateId s) {
+fst::StdArc::Weight NNlmDeterministicFst::Final(StateId s) {
   // At this point, we should have created the state.
   KALDI_ASSERT(static_cast<size_t>(s) < state_to_wseq_.size());
 
@@ -137,9 +113,12 @@ fst::StdArc::Weight RnnlmDeterministicFst::Final(StateId s) {
   return Weight(-logprob);
 }
 
-bool RnnlmDeterministicFst::GetArc(StateId s, Label ilabel, fst::StdArc *oarc) {
+bool NNlmDeterministicFst::GetArc(StateId s, Label ilabel, fst::StdArc *oarc) {
   // At this point, we should have created the state.
   KALDI_ASSERT(static_cast<size_t>(s) < state_to_wseq_.size());
+
+  // map to nnlm wordlist
+  ilabel = nnlm_->GetWordId(ilabel);
 
   std::vector<Label> wseq = state_to_wseq_[s];
   std::vector<CuMatrix<BaseFloat> > new_context(nnlm_->GetLMNumHiddenLayer());
@@ -176,6 +155,17 @@ bool RnnlmDeterministicFst::GetArc(StateId s, Label ilabel, fst::StdArc *oarc) {
   oarc->weight = Weight(-logprob);
 
   return true;
+}
+
+void KaldiNNlmWrapper::SetUnkPenalty(const std::string &filename)
+{
+	  SequentialBaseFloatReader unk_reader(filename);
+	  for (; !unk_reader.Done(); unk_reader.Next()) {
+	    std::string key = unk_reader.Key();
+	    float prob = unk_reader.Value();
+	    unk_reader.FreeCurrent();
+	    unk_penalty[key] = log(prob);
+	  }
 }
 
 }  // namespace kaldi

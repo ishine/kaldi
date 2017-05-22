@@ -353,9 +353,9 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 	  prev_nnet_state_.CopyFromMat(context);
   }
 
-  void GetLstmContext(CuMatrix<BaseFloat> *context)
+  void GetLstmContext(CuMatrix<BaseFloat> &context)
   {
-	  *context = prev_nnet_state_;
+	  context = prev_nnet_state_;
   }
 
   void UpdateLstmStreamsState(const std::vector<int32> &update_state_flag) {
