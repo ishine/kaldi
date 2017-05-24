@@ -543,48 +543,49 @@ void Nnet::SetSeqLengths(const std::vector<int32> &sequence_lengths) {
   }
 }
 
-void Nnet::SplitLstmLm(Nnet &hidden_net,
-		CuMatrix<BaseFloat> &out_linearity, CuVector<BaseFloat> &out_bias,
-		CuMatrix<BaseFloat> &class_linearity, CuVector<BaseFloat> &class_bias,
-		int num_class) {
+void Nnet::SplitLstmLm(CuMatrix<BaseFloat> &out_linearity, CuVector<BaseFloat> &out_bias,
+		CuMatrix<BaseFloat> &class_linearity, CuVector<BaseFloat> &class_bias, int num_class) {
 
-	ClassAffineTransform  class_affine;
+	ClassAffineTransform  *class_affine;
 	std::vector<int32> class_boundary;
-	int32 c, out_dim;
-	// word vecotor and lstm layer network
+	int32 c, out_dim, tag;
 	for (c = 0; c < this->NumComponents(); c++) {
-		if (this->GetComponent(c).GetType() != Component::kClassAffineTransform) {
-			hidden_net.AppendComponent(&this->GetComponent(c));
-		}
-		else {
-			// output affine layer
+		if (this->GetComponent(c).GetType() == Component::kClassAffineTransform) {
+			// output class affine layer
 			class_affine = &(dynamic_cast<ClassAffineTransform&>(this->GetComponent(c)));
+            tag = c;
 			break;
 		}
 	}
 
 	out_dim = this->OutputDim();
-	CuSubMatrix<BaseFloat> mat(class_affine.GetLinearity().RowRange(0, out_dim-num_class));
-	CuSubVector<BaseFloat> bias(class_affine.GetBias().Range(0, out_dim-num_class));
+	CuSubMatrix<BaseFloat> mat(class_affine->GetLinearity().RowRange(0, out_dim-num_class));
+	CuSubVector<BaseFloat> bias(class_affine->GetBias().Range(0, out_dim-num_class));
 
 	out_linearity.Resize(mat.NumRows(), mat.NumCols());
 	out_bias.Resize(bias.Dim());
 	out_linearity.CopyFromMat(mat);
 	out_bias.CopyFromVec(bias);
 
-	CuSubMatrix<BaseFloat> cmat(class_affine.GetLinearity().RowRange(out_dim-num_class, num_class));
-	CuSubVector<BaseFloat> cbias(class_affine.GetBias().Range(out_dim-num_class, num_class));
+	CuSubMatrix<BaseFloat> cmat(class_affine->GetLinearity().RowRange(out_dim-num_class, num_class));
+	CuSubVector<BaseFloat> cbias(class_affine->GetBias().Range(out_dim-num_class, num_class));
 
 	class_linearity.Resize(cmat.NumRows(), cmat.NumCols());
 	class_bias.Resize(cbias.Dim());
 	class_linearity.CopyFromMat(cmat);
 	class_bias.CopyFromVec(cbias);
 
+    // remove ClassAffineTransform, ClassSoftmax layer
+	// retain word vecotor and lstm layer
+    for (c = this->NumComponents()-1; c >= tag; c--) {
+        this->RemoveComponent(c);
+    }
+
 	/*
 	// class network
 	AffineTransform c_affine;
-	CuSubMatrix<BaseFloat> cmat(class_affine.GetLinearity().RowRange(out_dim-num_class, num_class));
-	CuSubVector<BaseFloat> cbias(class_affine.GetBias().Range(out_dim-num_class, num_class));
+	CuSubMatrix<BaseFloat> cmat(class_affine->GetLinearity().RowRange(out_dim-num_class, num_class));
+	CuSubVector<BaseFloat> cbias(class_affine->GetBias().Range(out_dim-num_class, num_class));
 	c_affine.SetLinearity(cmat);
 	c_affine.SetBias(cbias);
 	class_net.AppendComponent(&c_affine);
@@ -595,11 +596,12 @@ void Nnet::SplitLstmLm(Nnet &hidden_net,
 void Nnet::RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
 		const std::vector<Matrix<BaseFloat> > &cell)
 {
+	KALDI_ASSERT(recurrent.size() == cell.size());
 	int idx = 0;
 	for (int32 c=0; c < NumComponents(); c++) {
 	    if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
 	      LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
-	      KALDI_ASSERT(idx < context.size());
+	      KALDI_ASSERT(idx < recurrent.size());
 	      comp.SetLstmContext(recurrent[idx], cell[idx]);
 	      idx++;
 	    }
@@ -609,26 +611,31 @@ void Nnet::RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
 void Nnet::SaveContext(std::vector<Matrix<BaseFloat> > &recurrent,
 		std::vector<Matrix<BaseFloat> > &cell)
 {
+	KALDI_ASSERT(recurrent.size() == cell.size());
 	int idx = 0;
 	for (int32 c=0; c < NumComponents(); c++) {
 	    if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
 	      LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
-	      KALDI_ASSERT(idx < context.size());
+	      KALDI_ASSERT(idx < recurrent.size());
 	      comp.GetLstmContext(recurrent[idx], cell[idx]);
 	      idx++;
 	    }
 	}
 }
 
-int32 Nnet::GetLMNumHiddenLayer()
+void Nnet::GetHiddenLstmLayerRCInfo(std::vector<int> &recurrent, std::vector<int> &cell)
 {
-	int num = 0;
+    int rd, cd;
+    recurrent.resize(0);
+    cell.resize(0);
 	for (int32 c=0; c < NumComponents(); c++) {
 	    if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
-	      num++;
+	      LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
+	      comp.GetRCDim(rd, cd);
+          recurrent.push_back(rd);
+          cell.push_back(cd);
 	    }
 	}
-	return num;
 }
 
 void Nnet::Init(const std::string &file) {

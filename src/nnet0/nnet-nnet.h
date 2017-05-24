@@ -102,17 +102,15 @@ class Nnet {
 
 
   /// for lstm language model rescore
-  void SplitLstmLm(Nnet &hidden_net,
-  		CuMatrix<BaseFloat> &out_linearity, CuVector<BaseFloat> &out_bias,
-  		CuMatrix<BaseFloat> &class_linearity, CuVector<BaseFloat> &class_bias,
-		int num_class);
+  void SplitLstmLm(CuMatrix<BaseFloat> &out_linearity, CuVector<BaseFloat> &out_bias,
+  		CuMatrix<BaseFloat> &class_linearity, CuVector<BaseFloat> &class_bias, int num_class);
 
-  void Nnet::RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
+  void RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
   		const std::vector<Matrix<BaseFloat> > &cell);
-  void Nnet::SaveContext(std::vector<Matrix<BaseFloat> > &recurrent,
+  void SaveContext(std::vector<Matrix<BaseFloat> > &recurrent,
     		std::vector<Matrix<BaseFloat> > &cell);
 
-  int32 GetLMNumHiddenLayer();
+ void GetHiddenLstmLayerRCInfo(std::vector<int> &recurrent, std::vector<int> &cell);
 
   /// Access to forward pass buffers
   const std::vector<CuMatrix<BaseFloat> >& PropagateBuffer() const {

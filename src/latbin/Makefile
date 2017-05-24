@@ -4,6 +4,9 @@ all:
 EXTRA_CXXFLAGS = -Wno-sign-compare
 include ../kaldi.mk
 
+LDFLAGS += $(CUDA_LDFLAGS)
+LDLIBS += $(CUDA_LDLIBS)
+
 BINFILES = lattice-best-path lattice-prune lattice-equivalent lattice-to-nbest \
            lattice-lmrescore lattice-scale lattice-union lattice-to-post \
            lattice-determinize lattice-oracle lattice-rmali \
@@ -20,7 +23,7 @@ BINFILES = lattice-best-path lattice-prune lattice-equivalent lattice-to-nbest \
            lattice-minimize lattice-limit-depth lattice-depth-per-frame \
            lattice-confidence lattice-determinize-phone-pruned \
            lattice-determinize-phone-pruned-parallel lattice-expand-ngram \
-           lattice-lmrescore-const-arpa lattice-lmrescore-rnnlm nbest-to-prons \
+           lattice-lmrescore-const-arpa lattice-lmrescore-rnnlm lattice-lmrescore-lstmlm nbest-to-prons \
            lattice-arc-post lattice-determinize-non-compact lattice-boost-ali-ctc
 
 OBJFILES =
@@ -29,7 +32,7 @@ OBJFILES =
 
 TESTFILES =
 
-ADDLIBS = ../lat/kaldi-lat.a ../lm/kaldi-lm.a ../fstext/kaldi-fstext.a \
+ADDLIBS = ../lat/kaldi-lat.a ../lm/kaldi-lm.a ../nnet0/kaldi-nnet0.a ../cudamatrix/kaldi-cudamatrix.a ../fstext/kaldi-fstext.a \
           ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../util/kaldi-util.a \
           ../thread/kaldi-thread.a ../matrix/kaldi-matrix.a \
           ../base/kaldi-base.a

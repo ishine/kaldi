@@ -32,8 +32,6 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
 	const std::string &lm_word_symbol_table_rxfilename,
     const std::string &nnlm_rxfilename) {
 
-  nnlm_.Read(nnlm_rxfilename);
-
   // class boundary
   if (opts.class_boundary == "")
 	  KALDI_ERR<< "The lm class boundary file '" << opts.class_boundary << "' is empty.";
@@ -67,14 +65,28 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
 		  word2class_[i] = ++j;
   }
 
+  // load lstm lm 
+  nnlm_.Read(nnlm_rxfilename);
+
+  // get rc information
+  nnlm_.GetHiddenLstmLayerRCInfo(recurrent_dim_, cell_dim_);
+
   // split net to lstm hidden part and output part
-  nnlm_.SplitLstmLm(hidden_net_, out_linearity_, out_bias_,
+  nnlm_.SplitLstmLm(out_linearity_, out_bias_,
 		  class_linearity_, class_bias_, class_boundary_.size()-1);
 
   // nstream utterance parallelization
   num_stream_ = opts.num_stream;
   std::vector<int> new_utt_flags(num_stream_, 0);
-  hidden_net_.ResetLstmStreams(new_utt_flags);
+  nnlm_.ResetLstmStreams(new_utt_flags);
+
+  // init rc context buffer
+  his_recurrent_.resize(recurrent_dim_.size());
+  for (int i = 0; i < recurrent_dim_.size(); i++)  
+    his_recurrent_[i].Resize(num_stream_, recurrent_dim_[i], kUndefined);
+  his_cell_.resize(cell_dim_.size());
+  for (int i = 0; i < cell_dim_.size(); i++)  
+    his_cell_[i].Resize(num_stream_, cell_dim_[i], kUndefined);
 
   // Reads symbol table.
   fst::SymbolTable *word_symbols = NULL;
@@ -134,7 +146,7 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 	in_words_.Resize(num_stream_, kUndefined);
 	in_words_mat_.Resize(num_stream_, 1, kUndefined);
 	words_.Resize(num_stream_, kUndefined);
-	hidden_out_.Resize(num_stream_, hidden_net_.OutputDim(), kUndefined);
+	hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
 	out_linear_patches_.clear();
 	class_linear_patches_.clear();
 	hidden_out_patches_.clear();
@@ -146,7 +158,7 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 		out_linear_patches_.push_back(out_linearity_.Row(curt_words[i]));
 		class_linear_patches_.push_back(class_linearity_.Row(word2class_[curt_words[i]]));
 		his = context_in[i];
-		hidden_out_patches_.push_back(his->his_recurrent.back());
+		hidden_out_patches_.push_back(&his->his_recurrent.back());
 	}
 
 	// get current words log probility
@@ -160,13 +172,8 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 
 	// restore history
 	int num_layers = context_in[0]->his_recurrent.size();
-	his_recurrent_.resize(num_layers);
 	his_cell_.resize(num_layers);
 	for (i = 0; i < num_layers; i++) {
-		int dim = context_in[0]->his_recurrent[i].Dim();
-		his_recurrent_[i].Resize(num_stream_, dim, kUndefined);
-		dim = context_in[0]->his_cell[i].Dim();
-		his_cell_[i].Resize(num_stream_, dim, kUndefined);
 		for (j = 0; j < num_stream_; j++) {
 			his_recurrent_[i].Row(j).CopyFromVec(context_in[j]->his_recurrent[i]);
 			his_cell_[i].Row(j).CopyFromVec(context_in[j]->his_cell[i]);
@@ -175,11 +182,11 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 
 	in_words_mat_.CopyColFromVec(in_words_, 0);
 	words_.CopyFromMat(in_words_mat_);
-	this->hidden_net_.RestoreContext(his_recurrent_, his_cell_);
-	this->hidden_net_.Propagate(words_, hidden_out_);
+	nnlm_.RestoreContext(his_recurrent_, his_cell_);
+	nnlm_.Propagate(words_, &hidden_out_);
 
 	// save current words history
-	this->hidden_net_.SaveContext(his_recurrent_, his_cell_);
+	nnlm_.SaveContext(his_recurrent_, his_cell_);
 	for (i = 0; i < num_layers; i++) {
 		for (j = 0; j < num_stream_; j++) {
 			context_out[j]->his_recurrent[i] = his_recurrent_[i].Row(j);
@@ -193,13 +200,14 @@ BaseFloat KaldiNNlmWrapper::GetLogProb(int32 curt_word,
 	in_words_.Resize(1, kUndefined);
 	in_words_mat_.Resize(1, 1, kUndefined);
 	words_.Resize(1, kUndefined);
-	hidden_out_.Resize(1, hidden_net_.OutputDim(), kUndefined);
+	hidden_out_.Resize(1, nnlm_.OutputDim(), kUndefined);
 
 	BaseFloat logprob;
 	int i, cid = word2class_[curt_word];
 	CuSubVector<BaseFloat> linear_vec(out_linearity_.Row(curt_word));
 	CuSubVector<BaseFloat> class_linear_vec(class_linearity_.Row(cid));
 	CuVector<BaseFloat> &hidden_out_vec = context_in->his_recurrent.back();
+
 	BaseFloat prob = VecVec(hidden_out_vec, linear_vec) + out_bias_(curt_word);
 	BaseFloat classprob = VecVec(hidden_out_vec, class_linear_vec) + class_bias_(cid);
 	logprob = prob + classprob - class_constant_[cid] - class_constant_.back();
@@ -210,21 +218,19 @@ BaseFloat KaldiNNlmWrapper::GetLogProb(int32 curt_word,
 
 	// restore history
 	int num_layers = context_in->his_recurrent.size();
-	his_recurrent_.resize(num_layers);
 	his_cell_.resize(num_layers);
 	for (i = 0; i < num_layers; i++) {
-		int dim = context_in->his_recurrent[i].Dim();
-		his_recurrent_[i].Resize(1, dim, kUndefined);
-		dim = context_in->his_cell[i].Dim();
-		his_cell_.Resize(1, dim, kUndefined);
 		his_recurrent_[i].Row(0).CopyFromVec(context_in->his_recurrent[i]);
 		his_cell_[i].Row(0).CopyFromVec(context_in->his_cell[i]);
 	}
-	this->hidden_net_.RestoreContext(his_recurrent_, his_cell_);
-	this->hidden_net_.Propagate(words_, &hidden_out_);
+	nnlm_.RestoreContext(his_recurrent_, his_cell_);
+	nnlm_.Propagate(words_, &hidden_out_);
 
 	// save current words history
-	this->hidden_net_.SaveContext(his_recurrent_, his_cell_);
+	if (context_out == NULL)
+        return logprob;
+
+	nnlm_.SaveContext(his_recurrent_, his_cell_);
 	for (i = 0; i < num_layers; i++) {
 		context_out->his_recurrent[i] = his_recurrent_[i].Row(0);
 		context_out->his_cell[i] = his_cell_[i].Row(0);
@@ -242,14 +248,14 @@ NNlmDeterministicFst::NNlmDeterministicFst(int32 max_ngram_order,
 
   // Uses empty history for <s>.
   std::vector<Label> bos;
-  LstmLmHistroy* bos_context = new bos_context;
+  LstmLmHistroy* bos_context = new LstmLmHistroy(nnlm_->GetRDim(), nnlm_->GetCDim(), kSetZero);
   state_to_wseq_.push_back(bos);
   state_to_context_.push_back(bos_context);
   wseq_to_state_[bos] = 0;
   start_state_ = 0;
 }
 
-virtual NNlmDeterministicFst::~NNlmDeterministicFst() {
+NNlmDeterministicFst::~NNlmDeterministicFst() {
 	for (int i = 0; i < state_to_context_.size(); i++) {
 		delete state_to_context_[i];
 		state_to_context_[i] = NULL;
@@ -274,7 +280,7 @@ bool NNlmDeterministicFst::GetArc(StateId s, Label ilabel, fst::StdArc *oarc) {
   int32 curt_word = nnlm_->GetWordId(ilabel);
   std::vector<Label> wseq = state_to_wseq_[s];
 
-  LstmLmHistroy *new_context = new LstmLmHistroy;
+  LstmLmHistroy *new_context = new LstmLmHistroy(nnlm_->GetRDim(), nnlm_->GetCDim(), kUndefined);
 
   BaseFloat logprob = nnlm_->GetLogProb(curt_word, state_to_context_[s], new_context);
 

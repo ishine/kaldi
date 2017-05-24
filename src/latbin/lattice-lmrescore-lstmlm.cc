@@ -45,16 +45,18 @@ int main(int argc, char *argv[]) {
         "                     ark:in.lats lstmlm ark:out.lats\n";
 
     ParseOptions po(usage);
-    int32 max_ngram_order = 3;
+    int32 max_ngram_order = 5;
     BaseFloat lm_scale = 1.0;
+    std::string use_gpu="no";
 
     po.Register("lm-scale", &lm_scale, "Scaling factor for language model "
                 "costs; frequently 1.0 or -1.0");
     po.Register("max-ngram-order", &max_ngram_order, "If positive, limit the "
                 "rnnlm context to the given number, -1 means we are not going "
                 "to limit it.");
+    po.Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA"); 
 
-    KaldiRnnlmWrapperOpts opts;
+    KaldiNNlmWrapperOpts opts;
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -70,18 +72,23 @@ int main(int argc, char *argv[]) {
     if (po.NumArgs() == 5) {
       unk_prob_rspecifier = "";
       word_symbols_rxfilename = po.GetArg(1);
-      word_symbols_rxfilename = po.GetArg(2);
+      lstmlm_word_symbols_rxfilename = po.GetArg(2);
       lats_rspecifier = po.GetArg(3);
       lstmlm_rxfilename = po.GetArg(4);
       lats_wspecifier = po.GetArg(5);
     } else if (po.NumArgs() == 6) {
       unk_prob_rspecifier = po.GetArg(1);
       word_symbols_rxfilename = po.GetArg(2);
-      word_symbols_rxfilename = po.GetArg(3);
+      lstmlm_word_symbols_rxfilename = po.GetArg(3);
       lats_rspecifier = po.GetArg(4);
       lstmlm_rxfilename = po.GetArg(5);
       lats_wspecifier = po.GetArg(6);
     }
+
+    //Select the GPU
+#if HAVE_CUDA==1
+    CuDevice::Instantiate().SelectGpuId(use_gpu);
+#endif
 
     // Reads the language model.
     KaldiNNlmWrapper lstmlm(opts, unk_prob_rspecifier, word_symbols_rxfilename,

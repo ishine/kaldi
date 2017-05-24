@@ -26,10 +26,21 @@
 #include "base/kaldi-common.h"
 #include "fstext/deterministic-fst.h"
 #include "util/common-utils.h"
+#include "nnet0/nnet-nnet.h"
 
 namespace kaldi {
 
 struct LstmLmHistroy {
+    LstmLmHistroy(std::vector<int> &rdim, std::vector<int> &cdim,
+                    MatrixResizeType resize_type = kSetZero) {
+        his_recurrent.resize(rdim.size());
+        for (int i = 0; i < rdim.size(); i++)
+            his_recurrent[i].Resize(rdim[i], resize_type);
+        his_cell.resize(cdim.size());
+        for (int i = 0; i < cdim.size(); i++)
+            his_cell[i].Resize(cdim[i], resize_type);
+    }
+
 	std::vector<CuVector<BaseFloat> > his_recurrent; //  each hidden lstm layer recurrent history
 	std::vector<CuVector<BaseFloat> > his_cell; //  each hidden lstm layer cell history
 };
@@ -64,10 +75,11 @@ class KaldiNNlmWrapper {
 					const std::string &lm_word_symbol_table_rxfilename,
                     const std::string &nnlm_rxfilename);
 
-  int32 GetLMNumHiddenLayer() const { return nnlm_.GetLMNumHiddenLayer(); }
-
   int32 GetEos() const { return eos_; }
   int32 GetUnk() const { return unk_; }
+
+  std::vector<int> &GetRDim() { return recurrent_dim_; }
+  std::vector<int> &GetCDim() { return cell_dim_; }
 
   void GetLogProbParallel(const std::vector<int> &curt_words,
   										 const std::vector<LstmLmHistroy*> &context_in,
@@ -80,13 +92,15 @@ class KaldiNNlmWrapper {
   inline int32 GetWordId(std::string word) { return word_to_lmwordid_[word];}
 
  private:
-  kaldi::nnet0::Nnet nnlm_, hidden_net_;
+  nnet0::Nnet nnlm_;
   std::vector<std::string> label_to_word_;
   std::vector<int> class_boundary_;
   std::vector<BaseFloat> class_constant_;
   std::vector<int> word2class_;
   std::unordered_map<std::string, int32> word_to_lmwordid_;
   std::unordered_map<int32, int32> label_to_lmwordid_;
+  std::vector<int> recurrent_dim_;
+  std::vector<int> cell_dim_;
   int32 unk_;
   int32 eos_;
 

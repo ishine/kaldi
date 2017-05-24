@@ -345,8 +345,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       "\n  DR  " + MomentStatistics(DR);
   }
 
-  void SetLstmContext(const Matrix<BaseFloat> &recurrent, const Matrix<BaseFloat> &cell)
-  {
+  void SetLstmContext(const Matrix<BaseFloat> &recurrent, const Matrix<BaseFloat> &cell) {
 	  KALDI_ASSERT(nstream_ == recurrent.NumRows());
 	  KALDI_ASSERT(nstream_ == cell.NumRows());
 
@@ -356,8 +355,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 	  yc.CopyFromMat(cell);
   }
 
-  void GetLstmContext(Matrix<BaseFloat> &recurrent, Matrix<BaseFloat> &cell)
-  {
+  void GetLstmContext(Matrix<BaseFloat> &recurrent, Matrix<BaseFloat> &cell) {
 		KALDI_ASSERT(nstream_ == recurrent.NumRows());
 		KALDI_ASSERT(nstream_ == cell.NumRows());
 
@@ -365,6 +363,11 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 		yr.CopyToMat(&recurrent);
 		CuSubMatrix<BaseFloat> yc(prev_nnet_state_.ColRange(4*ncell_, ncell_));
 		yc.CopyToMat(&cell);
+  }
+
+  void GetRCDim(int &r, int &c) {
+        r = nrecur_;
+        c = ncell_;
   }
 
   void UpdateLstmStreamsState(const std::vector<int32> &update_state_flag) {
