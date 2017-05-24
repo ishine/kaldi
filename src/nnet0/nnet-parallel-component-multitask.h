@@ -381,6 +381,10 @@ class ParallelComponentMultiTask : public UpdatableComponent {
 		  nnet_["lstm"].ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
   }
 
+  std::unordered_map<std::string, Nnet> &GetNnet() {
+	  return nnet_;
+  }
+
  private:
   void check()
   {

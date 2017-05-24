@@ -210,7 +210,6 @@ class ClassAffineTransform : public UpdatableComponent {
     		beg = i;
     	}
     }
-
     // class
     clen = output_dim_ - class_boundary_.back();
     input_patches_.push_back(new CuSubMatrix<BaseFloat>(input_sorted_.RowRange(0, input_sorted_.NumRows())));

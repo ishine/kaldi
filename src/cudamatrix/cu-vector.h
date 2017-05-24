@@ -260,6 +260,7 @@ class CuVectorBase {
 
   inline cudaStream_t GetLocalCudaStream()
   {
+      return NULL; // cudastream cause memory leaky[unsloved];
 	  if (cuda_stream_ == NULL)
 		  cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamNonBlocking);
 		  //cudaStreamCreate(&cuda_stream_);

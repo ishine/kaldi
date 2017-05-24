@@ -403,7 +403,6 @@ private:
 					// backpropagate
 					nnet.Backpropagate(nnet_diff, NULL, true);
 					update_frames += num_frames;
-
 					if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&
 							update_frames + num_frames > parallel_opts->merge_size && !model_sync->isLastMerge())
 					{

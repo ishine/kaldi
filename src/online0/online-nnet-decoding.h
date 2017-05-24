@@ -190,14 +190,12 @@ public:
 				while (decodable_->NumFramesReady() >= decoder_->NumFramesDecoded() + batch_size)
 				{
 					decoder_->Decode(decodable_);
-                /*
 					if (decoder_->PartialTraceback(&out_fst))
 					{
 						fst::GetLinearSymbolSequence(out_fst, static_cast<std::vector<int32> *>(0), 
                                                             &word_ids, static_cast<LatticeArc::Weight*>(0));
 						PrintPartialResult(word_ids, &word_syms_, false);
 					}
-                */
 				}
 
 

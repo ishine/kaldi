@@ -215,7 +215,7 @@ void LmModelSync::ThreadSync(int32 thread_idx, int status)
 	    tm.Reset();
         if (thread_idx == 0)
 		    CrossMachineSync();
-	    KALDI_VLOG(1) << "CrossMachineSync MPI_AllReduce: " << tm.Elapsed();
+	    KALDI_VLOG(2) << "CrossMachineSync MPI_AllReduce: " << tm.Elapsed();
         num_jobs *= opts_->num_procs;
 
 	    this->barrier_.Wait();
@@ -233,15 +233,15 @@ void LmModelSync::ThreadSync(int32 thread_idx, int status)
 	cblas_Xaxpy(len, learnrate_, cur_model, 1, gradient, 1);
 
 	// CBM: W(t) = W(t-1) + delta(t)
-	//cblas_Xaxpy(this->dim_, 1.0, this->gradient_data_, 1, this->nnet_data_, 1);
+	cblas_Xaxpy(len, 1.0, gradient, 1, last_model, 1);
 	// NBM: W(t) = W(t-1) + delta(t) + mmt*delta(t)
-	cblas_Xaxpy(len, 1.0+mmt_, gradient, 1, last_model, 1);
+	//cblas_Xaxpy(len, 1.0+mmt_, gradient, 1, last_model, 1);
 
 	this->barrier_.Wait();
 	//KALDI_VLOG(2) << "THREAD_Merge: " << tm.Elapsed();
 
     if (thread_idx == 0) left_merge_--;
-	KALDI_VLOG(1) << "ThreadSync total : " << synctm.Elapsed();
+	KALDI_VLOG(2) << "ThreadSync total : " << synctm.Elapsed();
 }
 
 /*

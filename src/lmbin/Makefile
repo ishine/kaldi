@@ -11,7 +11,7 @@ LDLIBS += $(MPICH_LDLIBS)
 BINFILES = arpa2fst arpa-to-const-arpa \
 			lm-train-lstm-parallel lm-train-lstm-parallel-mpi \
 			seqlabel-train-lstm-parallel slu-train-lstm-parallel \
-			lm-lstm-sentence-ppl
+			lm-lstm-sentence-ppl lm-multi-lstm-sentence-ppl
 
 OBJFILES =
 
