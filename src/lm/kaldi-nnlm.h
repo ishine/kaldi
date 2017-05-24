@@ -29,16 +29,29 @@
 
 namespace kaldi {
 
+struct LstmLmHistroy {
+	std::vector<CuVector<BaseFloat> > his_recurrent; //  each hidden lstm layer recurrent history
+	std::vector<CuVector<BaseFloat> > his_cell; //  each hidden lstm layer cell history
+};
+
 struct KaldiNNlmWrapperOpts {
   std::string unk_symbol;
   std::string eos_symbol;
+  std::string class_boundary;
+  std::string class_constant;
+  int32 num_stream;
 
-  KaldiNNlmWrapperOpts() : unk_symbol("<unk>"), eos_symbol("</s>") {}
+  KaldiNNlmWrapperOpts() : unk_symbol("<unk>"), eos_symbol("</s>"),
+		  class_boundary(""), class_constant(""), num_stream(1) {}
 
   void Register(OptionsItf *opts) {
     opts->Register("unk-symbol", &unk_symbol, "Symbol for out-of-vocabulary "
                    "words in neural network language model.");
     opts->Register("eos-symbol", &eos_symbol, "End of sentence symbol in "
+                   "neural network language model.");
+    opts->Register("class-boundary", &class_boundary, "The fist index of each class(and final class class) in class based language model");
+    opts->Register("class-constant", &class_constant, "The constant zt<sum(exp(yi))> of each class(and final class class) in class based language model");
+    opts->Register("num-stream", &num_stream, "Number of utterance process in parallel in "
                    "neural network language model.");
   }
 };
@@ -54,24 +67,50 @@ class KaldiNNlmWrapper {
   int32 GetLMNumHiddenLayer() const { return nnlm_.GetLMNumHiddenLayer(); }
 
   int32 GetEos() const { return eos_; }
+  int32 GetUnk() const { return unk_; }
 
-  BaseFloat GetLogProb(int32 word, const std::vector<int32> &wseq,
-		  	  	  	  const std::vector<CuMatrixBase<BaseFloat> > &context_in,
-					  std::vector<CuMatrix<BaseFloat> > *context_out);
+  void GetLogProbParallel(const std::vector<int> &curt_words,
+  										 const std::vector<LstmLmHistroy*> &context_in,
+  										 std::vector<LstmLmHistroy*> &context_out,
+  										 std::vector<BaseFloat> &logprob);
 
-  inline int32 GetWordId(int32 wid) { return word_to_lmwordid_[wid];}
+  BaseFloat GetLogProb(int32 curt_words, LstmLmHistroy* context_in, LstmLmHistroy* context_out);
+
+  inline int32 GetWordId(int32 wid) { return label_to_lmwordid_[wid];}
+  inline int32 GetWordId(std::string word) { return word_to_lmwordid_[word];}
 
  private:
-  kaldi::nnet0::Nnet nnlm_;
+  kaldi::nnet0::Nnet nnlm_, hidden_net_;
   std::vector<std::string> label_to_word_;
+  std::vector<int> class_boundary_;
+  std::vector<BaseFloat> class_constant_;
+  std::vector<int> word2class_;
   std::unordered_map<std::string, int32> word_to_lmwordid_;
   std::unordered_map<int32, int32> label_to_lmwordid_;
-  std::unordered_map<std::string, float> unk_penalty;
+  int32 unk_;
   int32 eos_;
-  std::string unk_sym;
 
+  int num_stream_;
+  CuMatrix<BaseFloat> out_linearity_;
+  CuVector<BaseFloat> out_bias_;
+  CuMatrix<BaseFloat> class_linearity_;
+  CuVector<BaseFloat> class_bias_;
+
+  Vector<BaseFloat> in_words_;
+  Matrix<BaseFloat> in_words_mat_;
+  CuMatrix<BaseFloat> words_;
+  CuMatrix<BaseFloat> hidden_out_;
+  std::vector<CuVector<BaseFloat>* > hidden_out_patches_;
+  std::vector<CuSubVector<BaseFloat> > out_linear_patches_;
+  std::vector<CuSubVector<BaseFloat> > class_linear_patches_;
+
+  std::vector<Matrix<BaseFloat> > his_recurrent_; // hidden lstm layers recurrent history
+  std::vector<Matrix<BaseFloat> > his_cell_;	// hidden lstm layers cell history
   KALDI_DISALLOW_COPY_AND_ASSIGN(KaldiNNlmWrapper);
 };
+
+
+
 
 class NNlmDeterministicFst
     : public fst::DeterministicOnDemandFst<fst::StdArc> {
@@ -82,6 +121,7 @@ class NNlmDeterministicFst
 
   // Does not take ownership.
   NNlmDeterministicFst(int32 max_ngram_order, KaldiNNlmWrapper *nnlm);
+  virtual ~NNlmDeterministicFst();
 
   // We cannot use "const" because the pure virtual function in the interface is
   // not const.
@@ -102,7 +142,7 @@ class NNlmDeterministicFst
 
   KaldiNNlmWrapper *nnlm_;
   int32 max_ngram_order_;
-  std::vector<std::vector<CuMatrix<BaseFloat> > > state_to_context_;
+  std::vector<LstmLmHistroy* > state_to_context_;
 };
 
 }  // namespace kaldi

@@ -345,17 +345,26 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       "\n  DR  " + MomentStatistics(DR);
   }
 
-  void SetLstmContext(const CuMatrixBase<BaseFloat> &context)
+  void SetLstmContext(const Matrix<BaseFloat> &recurrent, const Matrix<BaseFloat> &cell)
   {
-	  KALDI_ASSERT(prev_nnet_state_.NumRows() == context.NumRows());
-	  KALDI_ASSERT(prev_nnet_state_.NumCols() == context.NumCols());
+	  KALDI_ASSERT(nstream_ == recurrent.NumRows());
+	  KALDI_ASSERT(nstream_ == cell.NumRows());
 
-	  prev_nnet_state_.CopyFromMat(context);
+	  CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_, nrecur_));
+	  yr.CopyFromMat(recurrent);
+	  CuSubMatrix<BaseFloat> yc(prev_nnet_state_.ColRange(4*ncell_, ncell_));
+	  yc.CopyFromMat(cell);
   }
 
-  void GetLstmContext(CuMatrix<BaseFloat> &context)
+  void GetLstmContext(Matrix<BaseFloat> &recurrent, Matrix<BaseFloat> &cell)
   {
-	  context = prev_nnet_state_;
+		KALDI_ASSERT(nstream_ == recurrent.NumRows());
+		KALDI_ASSERT(nstream_ == cell.NumRows());
+
+		CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_, nrecur_));
+		yr.CopyToMat(&recurrent);
+		CuSubMatrix<BaseFloat> yc(prev_nnet_state_.ColRange(4*ncell_, ncell_));
+		yc.CopyToMat(&cell);
   }
 
   void UpdateLstmStreamsState(const std::vector<int32> &update_state_flag) {

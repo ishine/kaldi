@@ -102,15 +102,15 @@ class Nnet {
 
 
   /// for lstm language model rescore
-  BaseFloat ComputeConditionalLogprob(int32 current_word,
-		    const std::vector<int32>  &history_words,
-		    const std::vector<CuMatrixBase<BaseFloat> >  &context_in,
-		    std::vector<CuMatrix<BaseFloat> >  &context_out);
+  void SplitLstmLm(Nnet &hidden_net,
+  		CuMatrix<BaseFloat> &out_linearity, CuVector<BaseFloat> &out_bias,
+  		CuMatrix<BaseFloat> &class_linearity, CuVector<BaseFloat> &class_bias,
+		int num_class);
 
-  void SetClassBoundary(std::string classboundary_file);
-
-  void RestoreContext(const std::vector<CuMatrixBase<BaseFloat> >  &context);
-  void DumpContext(std::vector<CuMatrix<BaseFloat> >  &context);
+  void Nnet::RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
+  		const std::vector<Matrix<BaseFloat> > &cell);
+  void Nnet::SaveContext(std::vector<Matrix<BaseFloat> > &recurrent,
+    		std::vector<Matrix<BaseFloat> > &cell);
 
   int32 GetLMNumHiddenLayer();
 
