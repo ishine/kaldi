@@ -415,7 +415,7 @@ void CBXent::Eval() {
 		MulElementsStreamed(*class_frame_zt_ptr_, class_frame_weights_);
         //KALDI_ASSERT(KALDI_ISFINITE(frame_zt_ptr_->Sum()));
 		logzt = VecSumStreamed(*class_frame_zt_ptr_, &class_zt_sum);
-        logzt -= class_zt_sum.back();
+        //logzt -= class_zt_sum.back(); //except last class output
 		for (int i = 0; i < class_counts_.size(); i++)
 		{
 			class_frames_[class_id_[i]] += class_counts_[i];
@@ -439,8 +439,9 @@ void CBXent::Eval() {
   if (var_penalty_ != 0)
   {
 	  // y*(2beta*(log(zt) - log(zt)/n)+1)
-	  // MulRowsVecStreamed(class_diff_, *class_frame_zt_ptr_); // constant normalizing contain last class output
+	  MulRowsVecStreamed(class_diff_, *class_frame_zt_ptr_); // constant normalizing contain last class output
 
+	  /*
       // except last class output
       int n = class_diff_.size()-1;
       std::vector<CuSubMatrix<BaseFloat>* > class_diff_zt(n, NULL);
@@ -450,12 +451,13 @@ void CBXent::Eval() {
             class_frame_zt[i] = (*class_frame_zt_ptr_)[i]; 
        }
 	   MulRowsVecStreamed(class_diff_zt, class_frame_zt); // constant normalizing except last class output
+	   */
         
 	  // compute logzt variance
 	  frame_zt_ptr_->CopyFromVec(frame_zt);
 	  MulElementsStreamed(*class_frame_zt_ptr_, *class_frame_zt_ptr_);
 	  logzt_variance = VecSumStreamed(*class_frame_zt_ptr_, &class_zt_sum);
-      logzt_variance -= class_zt_sum.back(); // except last class
+      //logzt_variance -= class_zt_sum.back(); // except last class
 	  for (int i = 0; i < class_counts_.size(); i++)
 		  class_zt_variance_[class_id_[i]] += class_zt_sum[i];
   }
@@ -464,18 +466,19 @@ void CBXent::Eval() {
 
   // for constant class zt
   if (const_class_zt_.size() == class_boundary_.size())
-  {
+  {	  /*
       // last class output
       CuSubMatrix<BaseFloat> *tmp = class_netout_.back();
       CuMatrix<BaseFloat> last_netout(*tmp);
       tmp->ApplyLogSoftMaxPerRow(last_netout);
+      */
 
       int n = class_netout_.size();
-	  std::vector<BaseFloat> class_zt(n);
+	  std::vector<BaseFloat> class_zt(n, 0);
 
 	  for (int i = 0; i < n; i++)
 		  class_zt[i] = -const_class_zt_[class_id_[i]];
-      class_zt[n-1] = 0;
+      //class_zt[n-1] = 0;  // last class output
 	  AddStreamed(class_netout_, class_zt);
 	  ApplyExpStreamed(class_netout_);
   }
