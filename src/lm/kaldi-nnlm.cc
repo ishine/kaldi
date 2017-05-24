@@ -172,7 +172,6 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 
 	// restore history
 	int num_layers = context_in[0]->his_recurrent.size();
-	his_cell_.resize(num_layers);
 	for (i = 0; i < num_layers; i++) {
 		for (j = 0; j < num_stream_; j++) {
 			his_recurrent_[i].Row(j).CopyFromVec(context_in[j]->his_recurrent[i]);
@@ -183,6 +182,8 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 	in_words_mat_.CopyColFromVec(in_words_, 0);
 	words_.CopyFromMat(in_words_mat_);
 	nnlm_.RestoreContext(his_recurrent_, his_cell_);
+
+    // forward propagate
 	nnlm_.Propagate(words_, &hidden_out_);
 
 	// save current words history
@@ -218,7 +219,6 @@ BaseFloat KaldiNNlmWrapper::GetLogProb(int32 curt_word,
 
 	// restore history
 	int num_layers = context_in->his_recurrent.size();
-	his_cell_.resize(num_layers);
 	for (i = 0; i < num_layers; i++) {
 		his_recurrent_[i].Row(0).CopyFromVec(context_in->his_recurrent[i]);
 		his_cell_[i].Row(0).CopyFromVec(context_in->his_cell[i]);
