@@ -102,8 +102,8 @@ class Nnet {
 
 
   /// for lstm language model rescore
-  void SplitLstmLm(CuMatrix<BaseFloat> &out_linearity, CuVector<BaseFloat> &out_bias,
-  		CuMatrix<BaseFloat> &class_linearity, CuVector<BaseFloat> &class_bias, int num_class);
+  void SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_bias,
+  		Matrix<BaseFloat> &class_linearity, Vector<BaseFloat> &class_bias, int num_class);
 
   void RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
   		const std::vector<Matrix<BaseFloat> > &cell);

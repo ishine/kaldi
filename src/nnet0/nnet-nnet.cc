@@ -543,8 +543,8 @@ void Nnet::SetSeqLengths(const std::vector<int32> &sequence_lengths) {
   }
 }
 
-void Nnet::SplitLstmLm(CuMatrix<BaseFloat> &out_linearity, CuVector<BaseFloat> &out_bias,
-		CuMatrix<BaseFloat> &class_linearity, CuVector<BaseFloat> &class_bias, int num_class) {
+void Nnet::SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_bias,
+		Matrix<BaseFloat> &class_linearity, Vector<BaseFloat> &class_bias, int num_class) {
 
 	ClassAffineTransform  *class_affine;
 	std::vector<int32> class_boundary;

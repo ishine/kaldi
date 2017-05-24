@@ -147,26 +147,23 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 	in_words_mat_.Resize(num_stream_, 1, kUndefined);
 	words_.Resize(num_stream_, kUndefined);
 	hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
-	out_linear_patches_.clear();
-	class_linear_patches_.clear();
-	hidden_out_patches_.clear();
-
-	LstmLmHistroy *his;
-	int i, j, cid;
-	for (i = 0; i < num_stream_; i++) {
-		in_words_(i) = curt_words[i];
-		out_linear_patches_.push_back(out_linearity_.Row(curt_words[i]));
-		class_linear_patches_.push_back(class_linearity_.Row(word2class_[curt_words[i]]));
-		his = context_in[i];
-		hidden_out_patches_.push_back(&his->his_recurrent.back());
-	}
 
 	// get current words log probility
+	LstmLmHistroy *his;
+	int i, j, wid, cid;
 	logprob.resize(num_stream_);
 	for (i = 0; i < num_stream_; i++) {
-		cid = word2class_[curt_words[i]];
-		BaseFloat prob = VecVec(*hidden_out_patches_[i], out_linear_patches_[i]) + out_bias_(curt_words[i]);
-		BaseFloat classprob = VecVec(*hidden_out_patches_[i], class_linear_patches_[i]) + class_bias_(cid);
+		wid = curt_words[i];
+		in_words_(i) = wid;
+		cid = word2class_[wid];
+		his = context_in[i];
+
+		SubVector<BaseFloat> linear_vec(out_linearity_.Row(wid));
+		SubVector<BaseFloat> class_linear_vec(class_linearity_.Row(cid));
+		Vector<BaseFloat> &hidden_out_vec = his->his_recurrent.back();
+
+		BaseFloat prob = VecVec(hidden_out_vec, linear_vec) + out_bias_(wid);
+		BaseFloat classprob = VecVec(hidden_out_vec, class_linear_vec) + class_bias_(cid);
 		logprob[i] = prob+classprob-class_constant_[cid]-class_constant_.back();
 	}
 
@@ -205,9 +202,9 @@ BaseFloat KaldiNNlmWrapper::GetLogProb(int32 curt_word,
 
 	BaseFloat logprob;
 	int i, cid = word2class_[curt_word];
-	CuSubVector<BaseFloat> linear_vec(out_linearity_.Row(curt_word));
-	CuSubVector<BaseFloat> class_linear_vec(class_linearity_.Row(cid));
-	CuVector<BaseFloat> &hidden_out_vec = context_in->his_recurrent.back();
+	SubVector<BaseFloat> linear_vec(out_linearity_.Row(curt_word));
+	SubVector<BaseFloat> class_linear_vec(class_linearity_.Row(cid));
+	Vector<BaseFloat> &hidden_out_vec = context_in->his_recurrent.back();
 
 	BaseFloat prob = VecVec(hidden_out_vec, linear_vec) + out_bias_(curt_word);
 	BaseFloat classprob = VecVec(hidden_out_vec, class_linear_vec) + class_bias_(cid);

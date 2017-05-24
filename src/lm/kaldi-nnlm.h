@@ -41,8 +41,8 @@ struct LstmLmHistroy {
             his_cell[i].Resize(cdim[i], resize_type);
     }
 
-	std::vector<CuVector<BaseFloat> > his_recurrent; //  each hidden lstm layer recurrent history
-	std::vector<CuVector<BaseFloat> > his_cell; //  each hidden lstm layer cell history
+	std::vector<Vector<BaseFloat> > his_recurrent; //  each hidden lstm layer recurrent history
+	std::vector<Vector<BaseFloat> > his_cell; //  each hidden lstm layer cell history
 };
 
 struct KaldiNNlmWrapperOpts {
@@ -93,33 +93,30 @@ class KaldiNNlmWrapper {
 
  private:
   nnet0::Nnet nnlm_;
-  std::vector<std::string> label_to_word_;
+  std::vector<int> word2class_;
   std::vector<int> class_boundary_;
   std::vector<BaseFloat> class_constant_;
-  std::vector<int> word2class_;
-  std::unordered_map<std::string, int32> word_to_lmwordid_;
+  std::vector<std::string> label_to_word_;
   std::unordered_map<int32, int32> label_to_lmwordid_;
+  std::unordered_map<std::string, int32> word_to_lmwordid_;
   std::vector<int> recurrent_dim_;
   std::vector<int> cell_dim_;
   int32 unk_;
   int32 eos_;
 
   int num_stream_;
-  CuMatrix<BaseFloat> out_linearity_;
-  CuVector<BaseFloat> out_bias_;
-  CuMatrix<BaseFloat> class_linearity_;
-  CuVector<BaseFloat> class_bias_;
+  Matrix<BaseFloat> out_linearity_;
+  Vector<BaseFloat> out_bias_;
+  Matrix<BaseFloat> class_linearity_;
+  Vector<BaseFloat> class_bias_;
 
   Vector<BaseFloat> in_words_;
   Matrix<BaseFloat> in_words_mat_;
   CuMatrix<BaseFloat> words_;
   CuMatrix<BaseFloat> hidden_out_;
-  std::vector<CuVector<BaseFloat>* > hidden_out_patches_;
-  std::vector<CuSubVector<BaseFloat> > out_linear_patches_;
-  std::vector<CuSubVector<BaseFloat> > class_linear_patches_;
 
-  std::vector<Matrix<BaseFloat> > his_recurrent_; // hidden lstm layers recurrent history
-  std::vector<Matrix<BaseFloat> > his_cell_;	// hidden lstm layers cell history
+  std::vector<Matrix<BaseFloat> > his_recurrent_; // current hidden lstm layers recurrent history
+  std::vector<Matrix<BaseFloat> > his_cell_;	// current hidden lstm layers cell history
   KALDI_DISALLOW_COPY_AND_ASSIGN(KaldiNNlmWrapper);
 };
 
