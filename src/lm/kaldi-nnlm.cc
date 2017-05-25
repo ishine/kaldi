@@ -136,19 +136,17 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
 		  label_to_lmwordid_[i] = unk_;
   }
 
+  in_words_.Resize(num_stream_, kUndefined);
+  in_words_mat_.Resize(num_stream_, 1, kUndefined);
+  words_.Resize(num_stream_, kUndefined);
+  hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
 }
 
 void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 										 const std::vector<LstmLmHistroy*> &context_in,
 										 std::vector<LstmLmHistroy*> &context_out,
 										 std::vector<BaseFloat> &logprob) {
-	KALDI_ASSERT(curt_words.size() == num_stream_);
-	in_words_.Resize(num_stream_, kUndefined);
-	in_words_mat_.Resize(num_stream_, 1, kUndefined);
-	words_.Resize(num_stream_, kUndefined);
-	hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
-
-	// get current words log probility
+	// get current words log probility (CPU done)
 	LstmLmHistroy *his;
 	int i, j, wid, cid;
 	logprob.resize(num_stream_);
@@ -167,6 +165,7 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 		logprob[i] = prob+classprob-class_constant_[cid]-class_constant_.back();
 	}
 
+	// next produce and save current word rc information (recommend GPU)
 	// restore history
 	int num_layers = context_in[0]->his_recurrent.size();
 	for (i = 0; i < num_layers; i++) {
@@ -176,9 +175,10 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 		}
 	}
 
+	nnlm_.RestoreContext(his_recurrent_, his_cell_);
+
 	in_words_mat_.CopyColFromVec(in_words_, 0);
 	words_.CopyFromMat(in_words_mat_);
-	nnlm_.RestoreContext(his_recurrent_, his_cell_);
 
     // forward propagate
 	nnlm_.Propagate(words_, &hidden_out_);
@@ -195,12 +195,9 @@ void KaldiNNlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 
 BaseFloat KaldiNNlmWrapper::GetLogProb(int32 curt_word,
 		LstmLmHistroy *context_in, LstmLmHistroy *context_out) {
-	in_words_.Resize(1, kUndefined);
-	in_words_mat_.Resize(1, 1, kUndefined);
-	words_.Resize(1, kUndefined);
-	hidden_out_.Resize(1, nnlm_.OutputDim(), kUndefined);
 
-	BaseFloat logprob;
+	// get current words log probility (CPU done)
+	BaseFloat logprob = 0.0;
 	int i, cid = word2class_[curt_word];
 	SubVector<BaseFloat> linear_vec(out_linearity_.Row(curt_word));
 	SubVector<BaseFloat> class_linear_vec(class_linearity_.Row(cid));
@@ -210,10 +207,10 @@ BaseFloat KaldiNNlmWrapper::GetLogProb(int32 curt_word,
 	BaseFloat classprob = VecVec(hidden_out_vec, class_linear_vec) + class_bias_(cid);
 	logprob = prob + classprob - class_constant_[cid] - class_constant_.back();
 
-	in_words_(0) = curt_word;
-	in_words_mat_.CopyColFromVec(in_words_, 0);
-	words_.CopyFromMat(in_words_mat_);
+	if (context_out == NULL)
+        return logprob;
 
+	// next produce and save current word rc information (recommend GPU)
 	// restore history
 	int num_layers = context_in->his_recurrent.size();
 	for (i = 0; i < num_layers; i++) {
@@ -221,12 +218,15 @@ BaseFloat KaldiNNlmWrapper::GetLogProb(int32 curt_word,
 		his_cell_[i].Row(0).CopyFromVec(context_in->his_cell[i]);
 	}
 	nnlm_.RestoreContext(his_recurrent_, his_cell_);
+
+	in_words_(0) = curt_word;
+	in_words_mat_.CopyColFromVec(in_words_, 0);
+	words_.CopyFromMat(in_words_mat_);
+
+	// forward propagate
 	nnlm_.Propagate(words_, &hidden_out_);
 
 	// save current words history
-	if (context_out == NULL)
-        return logprob;
-
 	nnlm_.SaveContext(his_recurrent_, his_cell_);
 	for (i = 0; i < num_layers; i++) {
 		context_out->his_recurrent[i] = his_recurrent_[i].Row(0);
