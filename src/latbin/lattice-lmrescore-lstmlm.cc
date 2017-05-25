@@ -40,19 +40,19 @@ int main(int argc, char *argv[]) {
         "\n"
         "Usage: lattice-lmrescore-lstmlm [options] [unk_prob_rspecifier]  \\\n"
         "             <word-symbol-table-rxfilename> <lstmlm-word-symbol-table-rxfilename> \\\n"
-        "             <lattice-rspecifier>  <rnnlm-rxfilename> <lattice-wspecifier> \n"
+        "             <lattice-rspecifier>  <lstmlm-rxfilename> <lattice-wspecifier> \n"
         " e.g.: lattice-lmrescore-lstmlm --lm-scale=-1.0 words.txt lstmlm_words.txt \\\n"
         "                     ark:in.lats lstmlm ark:out.lats\n";
 
     ParseOptions po(usage);
-    int32 max_ngram_order = 5;
+    int32 max_ngram_order = 3;
     BaseFloat lm_scale = 1.0;
     std::string use_gpu="no";
 
     po.Register("lm-scale", &lm_scale, "Scaling factor for language model "
                 "costs; frequently 1.0 or -1.0");
     po.Register("max-ngram-order", &max_ngram_order, "If positive, limit the "
-                "rnnlm context to the given number, -1 means we are not going "
+                "lstmlm context to the given number, -1 means we are not going "
                 "to limit it.");
     po.Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA"); 
 
@@ -98,6 +98,7 @@ int main(int argc, char *argv[]) {
     SequentialCompactLatticeReader compact_lattice_reader(lats_rspecifier);
     CompactLatticeWriter compact_lattice_writer(lats_wspecifier);
 
+    Timer tm;
     int32 n_done = 0, n_fail = 0;
     for (; !compact_lattice_reader.Done(); compact_lattice_reader.Next()) {
       std::string key = compact_lattice_reader.Key();
@@ -113,13 +114,15 @@ int main(int argc, char *argv[]) {
         fst::ScaleLattice(fst::GraphLatticeScale(1.0 / lm_scale), &clat);
         ArcSort(&clat, fst::OLabelCompare<CompactLatticeArc>());
 
-        // Wraps the rnnlm into FST. We re-create it for each lattice to prevent
+        // Wraps the lstmlm into FST. We re-create it for each lattice to prevent
         // memory usage increasing with time.
         NNlmDeterministicFst lstmlm_fst(max_ngram_order, &lstmlm);
 
+        tm.Reset();
         // Composes lattice with language model.
         CompactLattice composed_clat;
         ComposeCompactLatticeDeterministic(clat, &lstmlm_fst, &composed_clat);
+        KALDI_VLOG(1) << "Rescore lattice time for utterance " << key << " : " << tm.Elapsed() << " s.";
 
         // Determinizes the composed lattice.
         Lattice composed_lat;

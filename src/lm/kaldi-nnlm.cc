@@ -90,13 +90,11 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
 
   // Reads symbol table.
   fst::SymbolTable *word_symbols = NULL;
-  if (!(word_symbols =
-        fst::SymbolTable::ReadText(word_symbol_table_rxfilename))) {
-    KALDI_ERR << "Could not read symbol table from file "
-        << word_symbol_table_rxfilename;
+  if (!(word_symbols = fst::SymbolTable::ReadText(word_symbol_table_rxfilename))) {
+    KALDI_ERR << "Could not read symbol table from file " << word_symbol_table_rxfilename;
   }
   label_to_word_.resize(word_symbols->NumSymbols());
-  for (int32 i = 0; i < label_to_word_.size() - 1; ++i) {
+  for (int32 i = 0; i < word_symbols->NumSymbols(); i++) {
     label_to_word_[i] = word_symbols->Find(i);
     if (label_to_word_[i] == "") {
       KALDI_ERR << "Could not find word for integer " << i << "in the word "
@@ -105,14 +103,13 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
     }
   }
 
+  // Reads lstm lmsymbol table.
   fst::SymbolTable *lm_word_symbols = NULL;
-  if (!(lm_word_symbols =
-       fst::SymbolTable::ReadText(lm_word_symbol_table_rxfilename))) {
-	KALDI_ERR << "Could not read symbol table from file "
-          << lm_word_symbol_table_rxfilename;
+  if (!(lm_word_symbols = fst::SymbolTable::ReadText(lm_word_symbol_table_rxfilename))) {
+	KALDI_ERR << "Could not read symbol table from file " << lm_word_symbol_table_rxfilename;
   }
 
-  for (int i = 0; i < word_symbols->NumSymbols(); ++i)
+  for (int i = 0; i < lm_word_symbols->NumSymbols(); i++)
 	  word_to_lmwordid_[lm_word_symbols->Find(i)] = i;
 
   auto it = word_to_lmwordid_.find(opts.unk_symbol);
@@ -127,7 +124,8 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
 
   //map label id to language model word id
   unk_ = word_to_lmwordid_[opts.unk_symbol];
-  for (int i = 0; i < label_to_word_.size(); ++i)
+  label_to_lmwordid_.resize(label_to_word_.size());
+  for (int i = 0; i < label_to_word_.size(); i++)
   {
 	  auto it = word_to_lmwordid_.find(label_to_word_[i]);
 	  if (it != word_to_lmwordid_.end())

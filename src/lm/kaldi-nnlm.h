@@ -97,7 +97,7 @@ class KaldiNNlmWrapper {
   std::vector<int> class_boundary_;
   std::vector<BaseFloat> class_constant_;
   std::vector<std::string> label_to_word_;
-  std::unordered_map<int32, int32> label_to_lmwordid_;
+  std::vector<int32> label_to_lmwordid_;
   std::unordered_map<std::string, int32> word_to_lmwordid_;
   std::vector<int> recurrent_dim_;
   std::vector<int> cell_dim_;
