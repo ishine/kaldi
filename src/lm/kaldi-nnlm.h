@@ -47,17 +47,20 @@ struct LstmLmHistroy {
 
 struct KaldiNNlmWrapperOpts {
   std::string unk_symbol;
+  std::string sos_symbol;
   std::string eos_symbol;
   std::string class_boundary;
   std::string class_constant;
   int32 num_stream;
 
-  KaldiNNlmWrapperOpts() : unk_symbol("<unk>"), eos_symbol("</s>"),
+  KaldiNNlmWrapperOpts() : unk_symbol("<unk>"), sos_symbol("<s>"), eos_symbol("</s>"),
 		  class_boundary(""), class_constant(""), num_stream(1) {}
 
   void Register(OptionsItf *opts) {
     opts->Register("unk-symbol", &unk_symbol, "Symbol for out-of-vocabulary "
                    "words in neural network language model.");
+    opts->Register("sos-symbol", &sos_symbol, "Start of sentence symbol in "
+                   "neural network language model.");
     opts->Register("eos-symbol", &eos_symbol, "End of sentence symbol in "
                    "neural network language model.");
     opts->Register("class-boundary", &class_boundary, "The fist index of each class(and final class class) in class based language model");
@@ -76,6 +79,7 @@ class KaldiNNlmWrapper {
                     const std::string &nnlm_rxfilename);
 
   int32 GetEos() const { return eos_; }
+  int32 GetSos() const { return sos_; }
   int32 GetUnk() const { return unk_; }
 
   std::vector<int> &GetRDim() { return recurrent_dim_; }
@@ -102,6 +106,7 @@ class KaldiNNlmWrapper {
   std::vector<int> recurrent_dim_;
   std::vector<int> cell_dim_;
   int32 unk_;
+  int32 sos_;
   int32 eos_;
 
   int num_stream_;

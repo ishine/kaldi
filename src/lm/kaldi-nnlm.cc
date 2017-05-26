@@ -103,7 +103,7 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
     }
   }
 
-  // Reads lstm lmsymbol table.
+  // Reads lstm lm symbol table.
   fst::SymbolTable *lm_word_symbols = NULL;
   if (!(lm_word_symbols = fst::SymbolTable::ReadText(lm_word_symbol_table_rxfilename))) {
 	KALDI_ERR << "Could not read symbol table from file " << lm_word_symbol_table_rxfilename;
@@ -116,6 +116,11 @@ KaldiNNlmWrapper::KaldiNNlmWrapper(
   if (it == word_to_lmwordid_.end())
 	  KALDI_WARN << "Could not find symbol " << opts.unk_symbol
 	  	  	  	  << " for out-of-vocabulary " << lm_word_symbol_table_rxfilename;
+  it = word_to_lmwordid_.find(opts.sos_symbol);
+  if (it == word_to_lmwordid_.end())
+  	  KALDI_ERR << "Could not find start of sentence symbol " << opts.sos_symbol
+  	  	  	  	  << " in " << lm_word_symbol_table_rxfilename;
+  sos_ = it->second;
   it = word_to_lmwordid_.find(opts.eos_symbol);
   if (it == word_to_lmwordid_.end())
   	  KALDI_ERR << "Could not find end of sentence symbol " << opts.eos_symbol
@@ -244,6 +249,8 @@ NNlmDeterministicFst::NNlmDeterministicFst(int32 max_ngram_order,
   // Uses empty history for <s>.
   std::vector<Label> bos;
   LstmLmHistroy* bos_context = new LstmLmHistroy(nnlm_->GetRDim(), nnlm_->GetCDim(), kSetZero);
+  nnlm_->GetLogProb(nnlm_->GetSos(), bos_context, bos_context);
+
   state_to_wseq_.push_back(bos);
   state_to_context_.push_back(bos_context);
   wseq_to_state_[bos] = 0;
