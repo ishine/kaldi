@@ -236,6 +236,7 @@ class ParallelComponentMultiTask : public UpdatableComponent {
     
   std::string Info() const { 
     std::ostringstream os;
+    os << "\n";
     for (auto it = nnet_.begin(); it != nnet_.end(); ++it) {
       os << "nested_network #" << it->first << "{\n" << it->second.Info() << "}\n";
     }

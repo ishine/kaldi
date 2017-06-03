@@ -108,11 +108,14 @@ struct NnetChainStats: NnetStats {
     NnetChainStats() { }
 
     void Add(unordered_map<std::string, ChainInfo, StringHasher> &objf_info) {
-        auto iter = objf_info_.begin(), end = objf_info_.end();
+        auto iter = objf_info.begin(), end = objf_info.end();
         for (; iter != end; ++iter) {
         	std::string name = iter->first;
         	ChainInfo &info = iter->second;
-        	info.Add(objf_info[name]);
+            if (objf_info_.find(name) != objf_info_.end())
+        	    objf_info_[name].Add(info);
+            else    
+                objf_info_[name] = info;
         }
     }
 
