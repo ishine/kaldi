@@ -200,7 +200,7 @@ private:
 
         int32 num_stream = opts->num_stream;
         int32 targets_delay = opts->targets_delay;
-        int32 batch_size= opts->batch_size;
+        //int32 batch_size= opts->batch_size;
         int32 skip_frames = opts->skip_frames;
 
         std::vector<int> new_utt_flags(num_stream, 1);
@@ -235,7 +235,9 @@ private:
             offset = -io.indexes[0].t;
 
             cu_feat_utts.Resize(io.features.NumRows(), io.features.NumCols(), kUndefined);
+            //feat_utts.Resize(io.features.NumRows(), io.features.NumCols(), kUndefined);
 			io.features.CopyToMat(&cu_feat_utts);
+			//io.features.CopyToMat(&feat_utts);
             //io.features.SwapFullMatrix(&feat_utts);
 
 			// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
@@ -277,18 +279,24 @@ private:
 
 			CuArray<int32> idx(indexes);
 			cu_feat_mat.CopyRows(cu_feat_utts, idx);
+            //Matrix<BaseFloat> feat_mat(cu_feat_mat.NumRows(), cu_feat_mat.NumCols());
+            //feat_mat.CopyFromMat(cu_feat_mat);
 
 			// apply optional feature transform
 			nnet_transf.Feedforward(cu_feat_mat, &feats_transf);
+            //feat_mat.CopyFromMat(feats_transf);
 
 	        // for streams with new utterance, history states need to be reset
-	        nnet.ResetLstmStreams(new_utt_flags, batch_size);
+	        nnet.ResetLstmStreams(new_utt_flags);
 
 	        // forward pass
 	        nnet.Propagate(feats_transf, &nnet_out);
+            //mmi_nnet_out->ApplyLog();
+
+            //feat_mat.Resize(nnet_out.NumRows(), nnet_out.NumCols());
+            //feat_mat.CopyFromMat(nnet_out);
 
 	        BaseFloat tot_objf, tot_l2_term, tot_weight;
-
 	        // get mmi objective function derivative, and xent soft supervision label
 			kaldi::chain::ComputeChainObjfAndDeriv(opts->chain_config, den_graph,
 									 sup.supervision, *mmi_nnet_out,
@@ -298,12 +306,14 @@ private:
 			objf_info_["mmi"].UpdateStats("mmi", opts->print_interval, num_minibatch,
 													tot_weight, tot_objf, tot_l2_term);
             mmi_deriv->Scale(-1.0);
+            //feat_mat_host.Resize(xent_deriv->NumRows(), xent_deriv->NumCols(), kUndefined);
+            //feat_mat_host.CopyFromMat(*xent_deriv);
 
 			// this block computes the cross-entropy objective.
 			if (use_xent) {
 				// log softmax
                 xent_logsoftmax.CopyFromMat(*xent_nnet_out);
-				xent_logsoftmax.Add(1e-20); // avoid log(0)
+				//xent_logsoftmax.Add(1e-20); // avoid log(0)
 				xent_logsoftmax.ApplyLog(); // log(y)
 
 				// at this point, xent_deriv is posteriors derived from the numerator
@@ -312,10 +322,10 @@ private:
 				objf_info_["xent"].UpdateStats("xent", opts->print_interval, num_minibatch,
 				                                        			tot_weight, xent_objf);
 
+				// xent derivative
+				xent_deriv->AddMat(-1.0, *xent_nnet_out);
 				// cross entropy regularization,
 				xent_deriv->Scale(-1.0 * opts->chain_config.xent_regularize);
-				// log softmax derivative
-				xent_deriv->AddMat(1.0, *xent_nnet_out);
 			}
 
 			// weighting ...
