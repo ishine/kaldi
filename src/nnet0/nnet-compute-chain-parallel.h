@@ -52,11 +52,12 @@ struct NnetChainUpdateOptions : public NnetUpdateOptions {
     int32 num_stream;
     int32 batch_size; // batch truncated size
     int32 targets_delay;
+    int32 context_left;
     int32 print_interval;
 
     NnetChainUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
     	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), apply_deriv_weights(true),
-		  num_stream(4), batch_size(0), targets_delay(0), print_interval(100) { }
+		  num_stream(4), batch_size(0), targets_delay(0), context_left(-1), print_interval(100) { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -69,6 +70,7 @@ struct NnetChainUpdateOptions : public NnetUpdateOptions {
 			po->Register("num-stream", &num_stream, "LSTM BPTT multi-stream training");
 			po->Register("batch-size", &batch_size, "LSTM BPTT batch size");
 			po->Register("targets-delay", &targets_delay, "LSTM BPTT targets delay");
+			po->Register("context-left", &context_left, "using number of frames as left context, -1 denote according the chunk egs.");
 
 		    po->Register("print-interval", &print_interval, "Interval (measured in "
 		                   "minibatches) after which we print out objective function "

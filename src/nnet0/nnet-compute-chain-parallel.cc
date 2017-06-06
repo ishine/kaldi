@@ -202,6 +202,7 @@ private:
         int32 targets_delay = opts->targets_delay;
         //int32 batch_size= opts->batch_size;
         int32 skip_frames = opts->skip_frames;
+        int32 context_left = opts->context_left;
 
         std::vector<int> new_utt_flags(num_stream, 1);
 	    CuMatrix<BaseFloat> cu_feat_mat, cu_feat_utts;
@@ -238,6 +239,10 @@ private:
 			utt_len = sup.supervision.frames_per_sequence;
 			offset = -io.indexes[0].t;
 			ctx_left = offset/skip_frames;
+			if (context_left > ctx_left)
+				KALDI_WARN << "egs left context is " << ctx_left << ", it will be force use the small one";
+			ctx_left = (ctx_left > context_left && context_left != -1) ? context_left : ctx_left;
+
 			nbptt_truncated = utt_len;
             KALDI_ASSERT(utt_frame_num-offset >=  (utt_len+targets_delay)*skip_frames);
 
