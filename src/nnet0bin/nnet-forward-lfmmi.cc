@@ -135,8 +135,6 @@ int main(int argc, char *argv[]) {
     nnet_transf.SetDropoutRetention(1.0);
     nnet.SetDropoutRetention(1.0);
 
-    kaldi::int64 tot_t = 0;
-
     SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
     BaseFloatMatrixWriter feature_writer(feature_wspecifier);
 
@@ -175,7 +173,6 @@ int main(int argc, char *argv[]) {
 
     Timer time;
     double time_now = 0;
-    int32 num_done = 0;
 
     while (true)
 	{
@@ -197,8 +194,8 @@ int main(int argc, char *argv[]) {
 
 			while (!feature_reader.Done())
 			{
-				std::string key = feature_reader.Key();
-				Matrix<BaseFloat> &mat = feature_reader.Value();
+				const std::string key = feature_reader.Key();
+				const Matrix<BaseFloat> &mat = feature_reader.Value();
 				// forward the features through a feature-transform,
 				nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
 
@@ -221,6 +218,7 @@ int main(int argc, char *argv[]) {
 				utt_copied[s] = false;
 				utt_curt[s] = 0;
 
+                feature_reader.Next();
 				break;
 			}
 		}
@@ -285,7 +283,7 @@ int main(int argc, char *argv[]) {
 			   // feat shifting & padding
 			   if (copy_posterior) {
 				   for (int k = 0; k < skip_frames; k++) {
-						if (utt_curt[s] < len[s]) {
+						if (utt_curt[s] < lent[s]) {
 							utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row((t+his_left)*num_stream+s));
 							utt_curt[s]++;
 						}
