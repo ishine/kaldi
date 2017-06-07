@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
 
     std::vector<Matrix<BaseFloat> > utt_feats(num_stream);
     std::vector<int> utt_curt(num_stream, 0);
-    std::vector<bool> utt_copied(num_stream, 0);
+    std::vector<bool> utt_copied(num_stream, false);
 
     // bptt batch buffer
     int32 feat_dim = nnet.InputDim();
