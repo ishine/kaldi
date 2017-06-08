@@ -285,19 +285,22 @@ private:
 				}
 			}
 
-			num_done += minibatch; // number stream of short utterances for a minibatch
-			num_minibatch++; // num_minibatches_processed_
 			num_frames = out_frames;
 
+	// sweep each frame
 	for (int n = 0; n < sweep_frames.size(); n++) {
+
+			num_done += minibatch; // number stream of short utterances for a minibatch
+			num_minibatch++; // num_minibatches_processed_
+
 			// rearrange utterance
 			int s, t, len = in_frames/num_stream, his_len = ctx_left+targets_delay;
 			// sweep each frame
-			offset = (offset-ctx_left*skip_frames+sweep_frames[n]);
+			int cur_offset = (offset-ctx_left*skip_frames+sweep_frames[n]);
 			std::vector<int32> indexes(in_frames);
 			for (t = 0; t < len; t++) {
 				for (s = 0; s < num_stream; s++) {
-					indexes[t*num_stream+s] = s*utt_frame_num+offset + t*skip_frames;
+					indexes[t*num_stream+s] = s*utt_frame_num + cur_offset + t*skip_frames;
 				}
 			}
 
