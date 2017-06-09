@@ -218,7 +218,7 @@ private:
 	    ChainNnetExample *chain_example = NULL;
 	    NnetExample		*example = NULL;
 	    Timer time;
-	    //double time_now = 0;
+	    double time_now = 0;
 
 		int32 feat_dim = nnet.InputDim();
 		int32 out_dim = nnet.OutputDim();
@@ -286,6 +286,13 @@ private:
 			}
 
 			num_frames = out_frames;
+            // report the speed
+            if ((num_done/minibatch) % 5 == 0) {
+              time_now = time.Elapsed();
+              KALDI_VLOG(1) << "After " << num_done << " utterances chunk: time elapsed = "
+                            << time_now/60 << " min; processed " << total_frames/time_now
+                            << " frames per second.";
+            }
 
 	// sweep each frame
 	for (int n = 0; n < sweep_frames.size(); n++) {
