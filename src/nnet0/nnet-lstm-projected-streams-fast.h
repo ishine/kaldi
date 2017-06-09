@@ -611,7 +611,8 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     for (int t = T; t >= 1; t--) {
 
       if (ntruncated_bptt_size_ > 0)
-    	  bptt = t % ntruncated_bptt_size_ ? 1.0 : 0;
+    	  bptt = (t<T && (T-t)%ntruncated_bptt_size_==0) ? 0.0 : 1.0;
+    	  //bptt = t%ntruncated_bptt_size_==0 ? 0.0 : 1.0;
       // r
       //   Version 1 (precise gradients):
       //   backprop error from g(t+1), i(t+1), f(t+1), o(t+1) to r(t)

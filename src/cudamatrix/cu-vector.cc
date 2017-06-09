@@ -97,7 +97,7 @@ void AddVecStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des,
 		    int32 dim = des[i]->Dim();
 		    Real *data = des[i]->Data();
 		    const Real *src_data = src[i]->Data();
-		    cublasSetStream(des[i]->GetLocalCublasHandle(), des[i]->GetLocalCudaStream());
+		    //cublasSetStream(des[i]->GetLocalCublasHandle(), des[i]->GetLocalCudaStream());
 		    if (beta != 1.0) cuda_scal(des[i]->GetLocalCublasHandle(), dim, beta, data, 1);
 		    if (alpha != 0.0) cuda_axpy(des[i]->GetLocalCublasHandle(), dim, alpha, src_data, 1, data, 1);
 	    }

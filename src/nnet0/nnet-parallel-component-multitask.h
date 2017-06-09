@@ -247,6 +247,7 @@ class ParallelComponentMultiTask : public UpdatableComponent {
                        
   std::string InfoGradient() const {
     std::ostringstream os;
+    os << "\n";
     for (auto it = nnet_.begin(); it != nnet_.end(); ++it) {
       os << "nested_gradient #" << it->first << "{\n" << it->second.InfoGradient() << "}\n";
     }
@@ -257,6 +258,7 @@ class ParallelComponentMultiTask : public UpdatableComponent {
 
   std::string InfoPropagate() const {
     std::ostringstream os;
+    os << "\n";
     for (auto it = nnet_.begin(); it != nnet_.end(); ++it) {
       os << "nested_propagate #" << it->first << "{\n" << it->second.InfoPropagate() << "}\n";
     }
@@ -265,6 +267,7 @@ class ParallelComponentMultiTask : public UpdatableComponent {
 
   std::string InfoBackPropagate() const {
     std::ostringstream os;
+    os << "\n";
     for (auto it = nnet_.begin(); it != nnet_.end(); ++it) {
       os << "nested_backpropagate #" << it->first << "{\n" <<  it->second.InfoBackPropagate() << "}\n";
     }

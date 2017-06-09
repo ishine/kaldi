@@ -256,8 +256,10 @@ bool DenominatorComputation::Backward(
   Beta(frames_per_sequence_);
   for (int32 t = frames_per_sequence_ - 1; t >= 0; t--) {
     BetaDashGeneralFrame(t);
-    if (GetVerboseLevel() >= 1 || t == 0)
+    /* memory leaky unknow reason
+    if (GetVerboseLevel() >= 2 || t == 0)
       BetaGeneralFrameDebug(t);
+    */
     Beta(t);
     if (t % kMaxDerivTimeSteps == 0) {
       // commit the derivative stored in exp_nnet_output_transposed_ by adding

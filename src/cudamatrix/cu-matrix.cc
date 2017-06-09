@@ -2559,7 +2559,7 @@ void AddMatMatStreamed(const Real alpha, std::vector<CuSubMatrix<Real>* > &C,
 		  n = ((transA==kTrans)? A[i]->NumCols() : A[i]->NumRows());
 		  k = ((transB==kTrans)? B[i]->NumCols() : B[i]->NumRows());
 
-		  cublasSetStream(B[i]->GetLocalCublasHandle(), B[i]->GetLocalCudaStream());
+		  //cublasSetStream(B[i]->GetLocalCublasHandle(), B[i]->GetLocalCudaStream());
 		  cublas_gemm(B[i]->GetLocalCublasHandle(),
 						(transB==kTrans? CUBLAS_OP_T:CUBLAS_OP_N),
 						(transA==kTrans? CUBLAS_OP_T:CUBLAS_OP_N),
