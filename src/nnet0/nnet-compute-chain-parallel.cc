@@ -209,8 +209,7 @@ private:
 
         std::vector<int> new_utt_flags(num_stream, 1);
 	    CuMatrix<BaseFloat> cu_feat_mat, cu_feat_utts;
-		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff,
-							nnet_real_out, nnet_real_diff, xent_logsoftmax;
+		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff, xent_logsoftmax;
 		CuSubMatrix<BaseFloat> *mmi_nnet_out = NULL, *xent_nnet_out = NULL,
 								*mmi_deriv = NULL, *xent_deriv = NULL;
         Matrix<BaseFloat> feat_mat_host, feat_utts;
@@ -218,7 +217,7 @@ private:
 	    ChainNnetExample *chain_example = NULL;
 	    NnetExample		*example = NULL;
 	    Timer time;
-	    //double time_now = 0;
+	    double time_now = 0;
 
 		int32 feat_dim = nnet.InputDim();
 		int32 out_dim = nnet.OutputDim();
@@ -257,35 +256,33 @@ private:
 
 			// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
 			int in_frames = (ctx_left+targets_delay+utt_len)*num_stream;
-			cu_feat_mat.Resize(in_frames, feat_dim, kUndefined);
-			nnet_real_out.Resize(in_frames, out_dim, kUndefined);
-			nnet_real_diff.Resize(in_frames, out_dim, kSetZero);
-			//feat_mat_host.Resize(frames, feat_dim, kUndefined);
-			int out_frames = utt_len*num_stream;
-			nnet_out.Resize(out_frames, out_dim, kUndefined);
-			nnet_diff.Resize(out_frames, out_dim, kUndefined);
+			int row_start = (ctx_left+targets_delay)*num_stream, chunk_frames = in_frames-row_start;
 
 			if (reset) {
+				cu_feat_mat.Resize(in_frames, feat_dim, kUndefined);
+				nnet_out.Resize(in_frames, out_dim, kUndefined);
+				nnet_diff.Resize(in_frames, out_dim, kSetZero);
 				if (mmi_nnet_out) delete mmi_nnet_out;
 				if (xent_nnet_out) delete xent_nnet_out;
 				if (mmi_deriv) delete mmi_deriv;
 				if (xent_deriv) delete xent_deriv;
 
 				if (use_xent) {
-					mmi_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.ColRange(0, out_dim/2));
-					xent_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.ColRange(out_dim/2, out_dim/2));
-					mmi_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.ColRange(0, out_dim/2));
-					xent_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.ColRange(out_dim/2, out_dim/2));
-					xent_logsoftmax.Resize(out_frames, out_dim/2, kUndefined);
+					// except row_start histroy
+					mmi_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.Range(row_start, chunk_frames, 0, out_dim/2));
+					xent_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.Range(row_start, chunk_frames, out_dim/2, out_dim/2));
+					mmi_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.Range(row_start, chunk_frames, 0, out_dim/2));
+					xent_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.Range(row_start, chunk_frames, out_dim/2, out_dim/2));
+					xent_logsoftmax.Resize(chunk_frames, out_dim/2, kUndefined);
 				} else {
-					mmi_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.ColRange(0, out_dim));
-					mmi_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.ColRange(0, out_dim));
+					mmi_nnet_out = new CuSubMatrix<BaseFloat>(nnet_out.Range(row_start, chunk_frames, 0, out_dim));
+					mmi_deriv = new CuSubMatrix<BaseFloat>(nnet_diff.Range(row_start, chunk_frames, 0, out_dim));
 					xent_nnet_out = NULL;
 					xent_deriv = NULL;
 				}
 			}
 
-			num_frames = out_frames;
+			num_frames = chunk_frames;
 
 	// sweep each frame
 	for (int n = 0; n < sweep_frames.size(); n++) {
@@ -314,9 +311,7 @@ private:
 	        nnet.ResetLstmStreams(new_utt_flags, nbptt_truncated);
 
 	        // forward pass
-	        nnet.Propagate(feats_transf, &nnet_real_out);
-	        // remove history output
-	        nnet_out.CopyFromMat(nnet_real_out.RowRange(his_len*num_stream, out_frames));
+	        nnet.Propagate(feats_transf, &nnet_out);
             //mmi_nnet_out->ApplyLog();
 
 	        BaseFloat tot_objf, tot_l2_term, tot_weight;
@@ -357,22 +352,18 @@ private:
 			        xent_deriv->MulRowsVec(cu_deriv_weights);
 			}
 
-			// remove history error
-			nnet_real_diff.RowRange(his_len*num_stream, out_frames).CopyFromMat(nnet_diff);
-
 		        // backward pass
 				if (!crossvalidate) {
 					// backpropagate
 
-                    if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient")
-                    {
+                    if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient") {
                         nnet.ResetGradient();
                         model_sync->reset_gradient_[thread_idx] = false;
                         //KALDI_VLOG(1) << "Reset Gradient";
                     }
 
 					if (parallel_opts->num_threads > 1 && update_frames >= opts->update_frames) {
-						nnet.Backpropagate(nnet_real_diff, NULL, false);
+						nnet.Backpropagate(nnet_diff, NULL, false);
 						nnet.Gradient();
 
 						//t2 = time.Elapsed();
@@ -391,7 +382,7 @@ private:
 						update_frames = 0;
 
 					} else {
-						nnet.Backpropagate(nnet_real_diff, NULL, true);
+						nnet.Backpropagate(nnet_diff, NULL, true);
 					}
 
 					//multi-machine
