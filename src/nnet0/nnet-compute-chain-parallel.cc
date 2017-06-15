@@ -261,6 +261,7 @@ private:
 			int row_start = (ctx_left+targets_delay)*num_stream, chunk_frames = in_frames-row_start;
 
 			if (reset) {
+                KALDI_LOG << "egs left context: " << offset << ", actually: " << row_start/num_stream << " frames.";
 				cu_feat_mat.Resize(in_frames, feat_dim, kUndefined);
 				nnet_out.Resize(in_frames, out_dim, kUndefined);
 				nnet_diff.Resize(in_frames, out_dim, kSetZero);

@@ -211,8 +211,8 @@ int main(int argc, char *argv[]) {
 				new_utt_flags[s] = 1;  // a new utterance feeded to this stream
 
 				frame_num_utt[s] = lent[s]/skip_frames;
-				//frame_num_utt[s] += lent[s]%skip_frames > sweep_frames[0] ? 1 : 0;
-				//lent[s] = lent[s] > frame_num_utt[s]*skip_frames ? frame_num_utt[s]*skip_frames : lent[s];
+				frame_num_utt[s] += lent[s]%skip_frames > sweep_frames[0] ? 1 : 0;
+				lent[s] = lent[s] > frame_num_utt[s]*skip_frames ? frame_num_utt[s]*skip_frames : lent[s];
 				int32 utt_frames = copy_posterior ? lent[s] : frame_num_utt[s];
 				utt_feats[s].Resize(utt_frames, out_dim, kUndefined);
 				utt_copied[s] = false;

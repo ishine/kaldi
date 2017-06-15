@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
         "Extract Neural Networks with specified output name in multitask task(and possibly change binary/text format)\n"
         "Usage:  nnet-extract [options] <model-in> <model-out>\n"
         "e.g.:\n"
-        " nnet-remove-last --binary=false --output-name=mmi nnet.in nnet.out\n";
+        " nnet-extract --binary=false --output-name=mmi nnet.in nnet.out\n";
     
     ParseOptions po(usage);
     
