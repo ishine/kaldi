@@ -32,6 +32,8 @@
 #include "nnet0/nnet-lstm-projected-streams-simple.h"
 #include "nnet0/nnet-lstm-streams.h"
 #include "nnet0/nnet-gru-streams.h"
+#include "nnet0/nnet-gru-projected-streams.h"
+#include "nnet0/nnet-gru-projected-streams-fast.h"
 #include "nnet0/nnet-class-affine-transform.h"
 #include "nnet0/nnet-parallel-component-multitask.h"
 
@@ -509,7 +511,13 @@ void Nnet::ResetLstmStreams(const std::vector<int32> &stream_reset_flag, int32 n
     else if (GetComponent(c).GetType() == Component::kGruStreams) {
     	GruStreams& comp = dynamic_cast<GruStreams&>(GetComponent(c));
       comp.ResetGRUStreams(stream_reset_flag, ntruncated_bptt_size);
-    }    
+    }else if(GetComponent(c).GetType() == Component::kGruProjectedStreams){
+        GruProjectedStreams& comp = dynamic_cast<GruProjectedStreams&>(GetComponent(c));
+        comp.ResetGRUProjectedStreams(stream_reset_flag, ntruncated_bptt_size);
+    }else if (GetComponent(c).GetType() == Component::kGruProjectedStreamsFast) {
+        GruProjectedStreamsFast& comp = dynamic_cast<GruProjectedStreamsFast&>(GetComponent(c));
+        comp.ResetGRUProjectedStreamsFast(stream_reset_flag, ntruncated_bptt_size);
+    }   
     else if (GetComponent(c).GetType() == Component::kParallelComponentMultiTask) {
       ParallelComponentMultiTask& comp = dynamic_cast<ParallelComponentMultiTask&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);

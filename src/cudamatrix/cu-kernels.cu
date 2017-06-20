@@ -263,6 +263,30 @@ static void _apply_exp(Real* mat, MatrixDim d) {
 
 template<typename Real>
 __global__
+static void _apply_fixed(Real* mat, Real resolution, MatrixDim d) {
+  int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
+  int32_cuda j = blockIdx.y * blockDim.y + threadIdx.y;
+  int32_cuda index = i + j * d.stride ;
+ 
+  if(i < d.cols && j < d.rows){
+ 
+     Real tmp ;
+ 
+     if(mat[index] > 0.0){
+           tmp = int(mat[index]/resolution)*resolution;
+     }else{
+           tmp = int((mat[index]-resolution)/resolution)*resolution;
+     }
+     if((mat[index]-tmp)/resolution > 0.5){
+         mat[index] = tmp + resolution ;
+     }else{
+         mat[index] = tmp ;
+     }
+  }
+}
+
+template<typename Real>
+__global__
 static void _scale_diag_packed(Real* mat, Real value, int dim) {
   int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
   int32_cuda index = ((i + 1) * (i + 2) / 2) - 1;
@@ -1123,6 +1147,31 @@ static void _vec_apply_log(Real* v, Real* flag, int dim) {
     v[i] = log(v[i]);
   }
 }
+
+template<typename Real>
+ __global__
+ static void _vec_apply_fixed(Real* v, Real resolution, int dim){
+   int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
+   Real tmp;
+ 
+   if(i < dim){
+ 
+     tmp = int(v[i]/resolution) * resolution;
+     if(v[i] > 0){
+         if((v[i] - tmp) >= 0.5*resolution)
+           v[i] = tmp + resolution;
+         else
+           v[i] = tmp ;
+ 
+     }else{
+         if((tmp - v[i]) >= 0.5 * resolution)
+             v[i] = tmp - resolution ;
+         else
+            v[i] = tmp;
+ 
+    }
+   }
+ }
 
 template<typename Real>
 __global__
@@ -3498,6 +3547,10 @@ void cudaF_apply_log(dim3 Gr, dim3 Bl, float* mat, MatrixDim d) {
   _apply_log<<<Gr,Bl>>>(mat,d);
 }
 
+void cudaF_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, MatrixDim d){
+  _apply_fixed<<<Gr,Bl>>>(mat, resolution, d);
+ }
+
 void cudaF_mul_elements(dim3 Gr, dim3 Bl, float* mat, const float* A,
                         MatrixDim dst_d, int src_stride) {
   _mul_elements<<<Gr,Bl>>>(mat,A,dst_d,src_stride);
@@ -3773,6 +3826,9 @@ void cudaF_vec_apply_log(int Gr, int Bl, float* v, float* flag, int dim) {
   _vec_apply_log<<<Gr,Bl>>>(v,flag,dim);
 }
 
+void cudaF_vec_apply_fixed(int Gr, int Bl, float* v, float resolution, int dim){
+   _vec_apply_fixed<<<Gr,Bl>>>(v, resolution, dim);
+}
 void cudaF_invert_elements(dim3 Gr, dim3 Bl, float* data, MatrixDim d) {
   _invert_elements<<<Gr,Bl>>>(data, d);
 }
@@ -4060,6 +4116,10 @@ void cudaD_apply_pow_abs(dim3 Gr, dim3 Bl, double* mat, double power,
 void cudaD_apply_heaviside(dim3 Gr, dim3 Bl, double* mat, MatrixDim d) {
   _apply_heaviside<<<Gr,Bl>>>(mat, d);
 }
+
+void cudaD_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, MatrixDim d){
+  _apply_fixed<<<Gr,Bl>>>(mat, resolution, d);
+ }
 
 void cudaD_copy_cols(dim3 Gr, dim3 Bl, double* dst, const double* src,
                      const MatrixIndexT_cuda* reorder, MatrixDim dst_dim,
@@ -5276,6 +5336,11 @@ void cudaF_row_sum_reduce(size_t Gr, size_t Bl, float alpha, float *y, const flo
 void cudaF_col_sum_reduce(size_t Gr, size_t Bl, float alpha, float *y, const float *x, MatrixDim d, float beta, cudaStream_t s) {
  _col_sum_reduce<<<Gr,Bl,0,s>>>(alpha,y,x,beta,d); 
 }
+
+void cudaD_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int dim){
+   _vec_apply_fixed<<<Gr,Bl>>>(v, resolution, dim);
+}
+
 
 void cudaF_row_max_id(size_t Gr, size_t Bl, int32_cuda *vec_id, const float *x, MatrixDim d, cudaStream_t s) { 
 _row_max_id<<<Gr,Bl,0,s>>>(vec_id,x,d); 

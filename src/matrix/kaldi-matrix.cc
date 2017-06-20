@@ -1610,6 +1610,19 @@ Real MatrixBase<Real>::Max() const {
 }
 
 template<typename Real>
+Real MatrixBase<Real>::MaxAbs() const {
+
+    KALDI_ASSERT(num_rows_ > 0 && num_cols_ > 0);
+    Real ans= abs(*data_);
+    for (MatrixIndexT r = 0; r < num_rows_; r++)
+        for (MatrixIndexT c = 0; c < num_cols_; c++)
+            if (fabs(data_[c + stride_*r]) > ans)
+                ans = fabs(data_[c + stride_*r]);
+    return ans;
+
+}
+
+template<typename Real>
 Real MatrixBase<Real>::Min() const {
   KALDI_ASSERT(num_rows_ > 0 && num_cols_ > 0);
   Real ans= *data_;
@@ -2040,6 +2053,14 @@ void MatrixBase<Real>::ApplyHeaviside() {
       data[j] = (data[j] > 0 ? 1.0 : 0.0);
   }
 }
+
+template<typename Real>
+ void MatrixBase<Real>::ApplyFixed(Real resolution){
+     for(MatrixIndexT i = 0; i < num_rows_; i++){
+         Row(i).ApplyFixed(resolution);
+     }
+ 
+ }
 
 template<typename Real>
 void MatrixBase<Real>::Heaviside(const MatrixBase<Real> &src) {

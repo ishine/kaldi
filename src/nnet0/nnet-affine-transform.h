@@ -1,6 +1,7 @@
 	// nnet0/nnet-affine-transform.h
 
 // Copyright 2011-2014  Brno University of Technology (author: Karel Vesely)
+// Copyright 2016-2017  AISpeech (author: Tao Xu)
 
 // See ../../COPYING for clarification regarding multiple authors
 //
@@ -43,9 +44,9 @@ class AffineTransform : public UpdatableComponent {
  public:
   AffineTransform(int32 dim_in, int32 dim_out) 
     : UpdatableComponent(dim_in, dim_out), 
-      linearity_(dim_out, dim_in), bias_(dim_out),
+      linearity_(dim_out, dim_in), bias_(dim_out), linearity_fix_point_(dim_out, dim_in),
       linearity_corr_(dim_out, dim_in), bias_corr_(dim_out),
-      learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0) 
+      learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0), fix_point_(0) 
   { }
   ~AffineTransform()
   { }
@@ -58,6 +59,7 @@ class AffineTransform : public UpdatableComponent {
     float bias_mean = -2.0, bias_range = 2.0, param_stddev = 0.1, param_range = 0.0;
     float learn_rate_coef = 1.0, bias_learn_rate_coef = 1.0;
     float max_norm = 0.0;
+    int32 fix_point = 0;
     // parse config
     std::string token; 
     while (!is.eof()) {
@@ -69,6 +71,7 @@ class AffineTransform : public UpdatableComponent {
       else if (token == "<LearnRateCoef>") ReadBasicType(is, false, &learn_rate_coef);
       else if (token == "<BiasLearnRateCoef>") ReadBasicType(is, false, &bias_learn_rate_coef);
       else if (token == "<MaxNorm>") ReadBasicType(is, false, &max_norm);
+      else if (token == "<FixPoint>") ReadBasicType(is, false, &fix_point);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                      << " (ParamStddev|BiasMean|BiasRange|LearnRateCoef|BiasLearnRateCoef)";
       is >> std::ws; // eat-up whitespace
@@ -87,6 +90,7 @@ class AffineTransform : public UpdatableComponent {
       }
     }
     linearity_ = mat;
+    linearity_fix_point_ = mat;
     //
     Vector<BaseFloat> vec(output_dim_);
     for (int32 i=0; i<output_dim_; i++) {
@@ -113,9 +117,18 @@ class AffineTransform : public UpdatableComponent {
       ExpectToken(is, binary, "<MaxNorm>");
       ReadBasicType(is, binary, &max_norm_);
     }
+    if ('<' == Peek(is, binary)) {
+      ExpectToken(is, binary, "<FixPoint>");
+      ReadBasicType(is, binary, &fix_point_);
+    }
     // weights
     linearity_.Read(is, binary);
     bias_.Read(is, binary);
+
+    if(fix_point_){
+        linearity_fix_point_.CopyFromMat(linearity_);
+        linearity_fix_point_.ApplyFixed(0.0625);
+    }
 
     KALDI_ASSERT(linearity_.NumRows() == output_dim_);
     KALDI_ASSERT(linearity_.NumCols() == input_dim_);
@@ -129,8 +142,13 @@ class AffineTransform : public UpdatableComponent {
     WriteBasicType(os, binary, bias_learn_rate_coef_);
     WriteToken(os, binary, "<MaxNorm>");
     WriteBasicType(os, binary, max_norm_);
+    WriteToken(os, binary, "<FixPoint>");
+    WriteBasicType(os, binary, fix_point_);
     // weights
-    linearity_.Write(os, binary);
+    if(fix_point_)
+        linearity_fix_point_.Write(os, binary);
+    else
+        linearity_.Write(os, binary);
     bias_.Write(os, binary);
   }
 
@@ -147,6 +165,7 @@ class AffineTransform : public UpdatableComponent {
   
   std::string Info() const {
     return std::string("\n  linearity") + MomentStatistics(linearity_) +
+    "\n" + std::string("\n  linearity_fix_point") + MomentStatistics(linearity_fix_point_) +
            "\n  bias" + MomentStatistics(bias_);
   }
   std::string InfoGradient() const {
@@ -160,10 +179,19 @@ class AffineTransform : public UpdatableComponent {
 
 
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
-    // precopy bias
-    out->AddVecToRows(1.0, bias_, 0.0);
-    // multiply by weights^t
-    out->AddMatMat(1.0, in, kNoTrans, linearity_, kTrans, 1.0);
+    if(fix_point_){
+        BaseFloat max = in.MaxAbs();
+        in.Scale(1.0/max);
+        in.ApplyFixed(0.0078125);
+        out->AddVecToRows(1.0, bias_, 0.0);
+        out->AddMatMat(max, in, kNoTrans, linearity_fix_point_, kTrans, 1.0);
+    }else{
+        
+        // precopy bias
+        out->AddVecToRows(1.0, bias_, 0.0);
+        // multiply by weights^t
+        out->AddMatMat(1.0, in, kNoTrans, linearity_, kTrans, 1.0);
+    }
   }
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
@@ -222,6 +250,15 @@ class AffineTransform : public UpdatableComponent {
 	        scl.InvertElements();
 	        linearity_.MulRowsVec(scl); // shink to sphere!
 	      }
+          if(fix_point_){
+              bias_.ApplyFloor(-8.0);
+              bias_.ApplyCeiling(8.0);
+              linearity_.ApplyFloor(-8.0);
+              linearity_.ApplyCeiling(8.0);
+              linearity_fix_point_.CopyFromMat(linearity_);
+              linearity_fix_point_.ApplyFixed(0.0625);
+          }
+
   }
 
   void Update(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
@@ -259,6 +296,14 @@ class AffineTransform : public UpdatableComponent {
       scl.ApplyFloor(1.0);
       scl.InvertElements();
       linearity_.MulRowsVec(scl); // shink to sphere!
+    }
+    if(fix_point_){
+        bias_.ApplyFloor(-8.0);
+        bias_.ApplyCeiling(8.0);
+        linearity_.ApplyFloor(-8.0);
+        linearity_.ApplyCeiling(8.0);
+        linearity_fix_point_.CopyFromMat(linearity_);
+        linearity_fix_point_.ApplyFixed(0.0625);
     }
   }
 
@@ -418,6 +463,7 @@ protected:
   CuMatrix<BaseFloat> linearity_;
   CuVector<BaseFloat> bias_;
 
+  CuMatrix<BaseFloat> linearity_fix_point_;
   CuMatrix<BaseFloat> linearity_corr_;
   CuVector<BaseFloat> bias_corr_;
 
@@ -427,6 +473,7 @@ protected:
 
   BaseFloat local_lrate;
   BaseFloat local_lrate_bias;
+  int32 fix_point_ ;
 
 };
 

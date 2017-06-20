@@ -448,6 +448,7 @@ class CuMatrixBase {
   void ApplyFloor(Real floor_val);
   void ApplyCeiling(Real ceiling_val);
   void ApplyExp();
+  void ApplyFixed(Real resolution);
   /// Softmax nonlinearity
   /// Y = Softmax(X) : Yij = e^Xij / sum_k(e^Xik), done to each row
   /// for each row, the max value is first subtracted for good numerical stability
@@ -702,6 +703,7 @@ class CuMatrixBase {
 
   Real Sum() const;
   Real Max() const;
+  Real MaxAbs() const;
   Real Min() const;
 
   /// Return the trace. If check_square = true, will crash if matrix is not square.
@@ -793,7 +795,7 @@ class CuMatrixBase {
 
   inline cudaStream_t GetLocalCudaStream()
   {
-      return NULL; // cudastream cause memory leaky[unsloved];
+      //return NULL; // cudastream cause memory leaky[unsloved];
 	  if (cuda_stream_ == NULL)
 		  cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamNonBlocking);
 		  //cudaStreamCreate(&cuda_stream_);

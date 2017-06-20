@@ -892,6 +892,32 @@ Real VectorBase<Real>::ApplyLogSoftMax() {
   return max + sum;
 }
 
+template<typename Real>
+void VectorBase<Real>::ApplyFixed(Real resolution, int32 mode){
+   if(0 == mode){
+     for(int i = 0; i < dim_; i++){
+         Real tmp = int(data_[i]/resolution)*resolution ;
+         if(data_[i] > 0.0){
+
+            if((data_[i] - tmp) > 0.5*resolution)
+                data_[i] = tmp + resolution;
+            else
+                data_[i] = tmp ;
+         }else{
+            if((tmp - data_[i]) > 0.5 * resolution)            
+                data_[i] = tmp - resolution ;
+            else
+                data_[i] = tmp ;
+         }
+     }
+    }else if(1 == mode){
+      for(int i = 0; i < dim_; i++){
+        data_[i] = (data_[i]/resolution)*resolution;
+      }
+    }
+}
+
+
 #ifdef HAVE_MKL
 template<>
 void VectorBase<float>::Tanh(const VectorBase<float> &src) {

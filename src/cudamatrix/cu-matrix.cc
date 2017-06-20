@@ -3521,6 +3521,26 @@ void CuMatrixBase<Real>::ApplyCeiling(Real ceiling_val) {
   }
 }
 
+template<typename Real>
+void CuMatrixBase<Real>::ApplyFixed(Real resolution) {
+ 
+ #if HAVE_CUDA == 1
+     if(CuDevice::Instantiate().Enabled()) {
+         Timer tim;
+        dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+         dim3 dimGrid(n_blocks(NumCols(), CU2DBLOCK), n_blocks(NumRows(), CU2DBLOCK));
+ 
+         cuda_apply_fixed(dimGrid, dimBlock, data_, resolution, Dim());
+         CU_SAFE_CALL(cudaGetLastError());
+         CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+     }else
+ #endif
+     {
+         Mat().ApplyFixed(resolution);
+ 
+     }
+ }
+
 
 template<typename Real>
 void VectorBase<Real>::CopyRowsFromMat(const CuMatrixBase<Real> &mat) {
@@ -4043,6 +4063,20 @@ Real CuMatrixBase<Real>::Max() const {
   }
 }
 
+template<typename Real>
+Real CuMatrixBase<Real>::MaxAbs() const{
+
+    Timer tim;
+    Matrix<Real> tmp(NumRows(), NumCols(), kUndefined);
+    CopyToMat(&tmp);
+    Real ans = tmp.MaxAbs();
+#if HAVE_CUDA == 1
+    if (CuDevice::Instantiate().Enabled()) {
+        CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+    }
+#endif
+    return ans;
+}
 
 template<typename Real>
 Real CuMatrixBase<Real>::Min() const {
