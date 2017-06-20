@@ -205,6 +205,10 @@ inline void cuda_apply_floor(dim3 Gr, dim3 Bl, float* mat, float floor_val,
                              MatrixDim dim) {
   cudaF_apply_floor(Gr, Bl, mat, floor_val, dim);
 }
+inline void cuda_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, 
+                             MatrixDim d) {
+  cudaF_apply_fixed(Gr, Bl, mat,resolution, d);
+}
 inline void cuda_apply_ceiling(dim3 Gr, dim3 Bl, float* mat, float ceiling_val,
                                MatrixDim dim, cudaStream_t s=NULL) {
   cudaF_apply_ceiling(Gr, Bl, mat, ceiling_val, dim, s);
@@ -873,6 +877,10 @@ inline void cuda_apply_floor(dim3 Gr, dim3 Bl, double* mat, double floor_val,
                              MatrixDim dim) {
   cudaD_apply_floor(Gr, Bl, mat, floor_val, dim);
 }
+inline void cuda_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, 
+                             MatrixDim d) {
+  cudaD_apply_fixed(Gr, Bl, mat,resolution, d);
+}
 inline void cuda_apply_ceiling(dim3 Gr, dim3 Bl, double* mat,
                                double ceiling_val, MatrixDim dim, cudaStream_t s=NULL) {
   cudaD_apply_ceiling(Gr, Bl, mat, ceiling_val, dim, s);
@@ -1191,6 +1199,9 @@ inline void cuda_vec_apply_ceiling(int Gr, int Bl, double* v, double floor_val,
 }
 inline void cuda_vec_apply_exp(int Gr, int Bl, double* v, int dim) {
   cudaD_vec_apply_exp(Gr, Bl, v, dim);
+}
+inline void cuda_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int dim) {
+  cudaD_vec_apply_fixed(Gr, Bl, v, resolution, dim);
 }
 inline void cuda_vec_apply_log(int Gr, int Bl, double* v, double* flag,
                                int dim) {

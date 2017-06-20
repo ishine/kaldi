@@ -1578,7 +1578,7 @@ void CuMatrixBase<Real>::AddVecVec(
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
     Timer tim;
-    CU_SAFE_CALL(cublas_ger(GetCublasHandle(), m, n, alpha,
+    CU_SAFE_CALL(cublas_ger(GetLocalCublasHandle(), m, n, alpha,
                  y.Data(), 1, x.Data(), 1, data_, Stride()));
 
     CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
@@ -3379,7 +3379,7 @@ void CuMatrixBase<Real>::CopyColFromVec(const CuVectorBase<Real> &v,
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
     Timer tim;
-    cublas_copy(GetCublasHandle(),
+    cublas_copy(GetLocalCublasHandle(),
                 v.Dim(), v.Data(), 1,
                 this->data_ + col, this->stride_);
     CU_SAFE_CALL(cudaGetLastError());
@@ -3520,6 +3520,26 @@ void CuMatrixBase<Real>::ApplyCeiling(Real ceiling_val) {
     Mat().ApplyCeiling(ceiling_val);
   }
 }
+
+template<typename Real>
+void CuMatrixBase<Real>::ApplyFixed(Real resolution) {
+ 
+ #if HAVE_CUDA == 1
+     if(CuDevice::Instantiate().Enabled()) {
+         Timer tim;
+        dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+         dim3 dimGrid(n_blocks(NumCols(), CU2DBLOCK), n_blocks(NumRows(), CU2DBLOCK));
+ 
+         cuda_apply_fixed(dimGrid, dimBlock, data_, resolution, Dim());
+         CU_SAFE_CALL(cudaGetLastError());
+         CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+     }else
+ #endif
+     {
+         Mat().ApplyFixed(resolution);
+ 
+     }
+ }
 
 
 template<typename Real>
@@ -4043,6 +4063,20 @@ Real CuMatrixBase<Real>::Max() const {
   }
 }
 
+template<typename Real>
+Real CuMatrixBase<Real>::MaxAbs() const{
+
+    Timer tim;
+    Matrix<Real> tmp(NumRows(), NumCols(), kUndefined);
+    CopyToMat(&tmp);
+    Real ans = tmp.MaxAbs();
+#if HAVE_CUDA == 1
+    if (CuDevice::Instantiate().Enabled()) {
+        CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+    }
+#endif
+    return ans;
+}
 
 template<typename Real>
 Real CuMatrixBase<Real>::Min() const {

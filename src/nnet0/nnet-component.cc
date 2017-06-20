@@ -44,6 +44,8 @@
 #include "nnet0/nnet-lstm-projected-streams.h"
 #include "nnet0/nnet-lstm-streams.h"
 #include "nnet0/nnet-gru-streams.h"
+#include "nnet0/nnet-gru-projected-streams.h"
+#include "nnet0/nnet-gru-projected-streams-fast.h"
 #include "nnet0/nnet-lstm-projected-streams-fast.h"
 #include "nnet0/nnet-lstm-projected-streams-simple.h"
 #include "nnet0/nnet-blstm-projected-streams.h"
@@ -80,6 +82,8 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kBLstmProjectedStreams,"<BLstmProjectedStreams>"},
   { Component::kBLstmStreams,"<BLstmStreams>"},
   { Component::kGruStreams,"<GruStreams>"},
+  { Component::kGruProjectedStreams, "<GruProjectedStreams>"},
+  { Component::kGruProjectedStreamsFast, "<GruProjectedStreamsFast>"},
   { Component::kSoftmax,"<Softmax>" },
   { Component::kBlockSoftmax,"<BlockSoftmax>" },
   { Component::kSigmoid,"<Sigmoid>" },
@@ -186,6 +190,12 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kGruStreams :
       ans = new GruStreams(input_dim, output_dim);
+      break;
+    case Component::kGruProjectedStreams:
+      ans = new GruProjectedStreams(input_dim, output_dim);
+      break;
+    case Component::kGruProjectedStreamsFast:
+      ans = new GruProjectedStreamsFast(input_dim, output_dim);
       break;
     case Component::kSoftmax :
       ans = new Softmax(input_dim, output_dim);

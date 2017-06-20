@@ -256,7 +256,7 @@ private:
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 
 		//double t1, t2, t3, t4;
-		int32 update_frames = 0, num_frames = 0, num_done = 0;
+		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0;
 		kaldi::int64 total_frames = 0;
 
 		int32 num_stream = opts->num_stream;
@@ -430,6 +430,20 @@ private:
 
 				// increase time counter
 		        total_frames += num_frames;
+
+		        // track training process
+			    if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0)
+				{
+                    int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
+					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump)
+					{
+						char name[512];
+						num_dump++;
+						sprintf(name, "%s_%d_%ld", model_filename.c_str(), num_dump, total_frames);
+						nnet.Write(string(name), true);
+					}
+				}
+
 		        fflush(stderr);
 		        fsync(fileno(stderr));
 		}

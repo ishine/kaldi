@@ -168,6 +168,9 @@ class VectorBase {
   /// If power is negative and the input value is zero, the output is set zero.
   void ApplyPowAbs(Real power, bool include_sign=false);
 
+    
+  void ApplyFixed(Real resolution, int32 mode=0);
+
   /// Compute the p-th norm of the vector.
   Real Norm(Real p) const;
 
