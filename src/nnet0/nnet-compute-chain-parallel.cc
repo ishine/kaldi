@@ -196,10 +196,11 @@ private:
         std::vector<int32> sweep_frames;
         if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
         	KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+        bool sweep_loop = opts->sweep_loop;
 
 		//double t1, t2, t3, t4;
 		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0, num_minibatch = 0;
-		kaldi::int64 total_frames = 0;
+		kaldi::int64 total_frames = 0, loop_start = 0;
 
         int32 num_stream = opts->num_stream;
         int32 targets_delay = opts->targets_delay;
@@ -295,7 +296,7 @@ private:
             }
 
 	// sweep each frame
-	for (int n = 0; n < sweep_frames.size(); n++) {
+	for (int n = loop_start; n < sweep_frames.size(); n++) {
 
 			num_done += minibatch; // number stream of short utterances for a minibatch
 			num_minibatch++; // num_minibatches_processed_
@@ -450,6 +451,12 @@ private:
 
 		        fflush(stderr);
 		        fsync(fileno(stderr));
+
+                // loop sweep each utterance.
+                if (sweep_loop) {
+                   loop_start = (loop_start+1)%sweep_frames.size();
+                   break;
+                }
 			} //sweep frames
 		}
 
