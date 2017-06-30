@@ -193,14 +193,11 @@ private:
 		chain::DenominatorGraph den_graph(*den_fst, nnet.OutputDim());
 
         bool use_xent = (opts->chain_config.xent_regularize != 0.0);
-        std::vector<int32> sweep_frames;
-        if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
-        	KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
-        bool sweep_loop = opts->sweep_loop;
+        std::vector<int> sweep_frames;
 
 		//double t1, t2, t3, t4;
 		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0, num_minibatch = 0;
-		kaldi::int64 total_frames = 0, loop_start = 0;
+		kaldi::int64 total_frames = 0;
 
         int32 num_stream = opts->num_stream;
         int32 targets_delay = opts->targets_delay;
@@ -233,6 +230,7 @@ private:
 			chain_example = dynamic_cast<ChainNnetExample*>(example);
 			const kaldi::nnet3::NnetIo &io = chain_example->chain_eg.inputs[0];
 	        const kaldi::nnet3::NnetChainSupervision &sup = chain_example->chain_eg.outputs[0];
+	        sweep_frames = chain_example->sweep_frames;
 
 			size = io.indexes.size();
 			minibatch = io.indexes[size-1].n + 1;
@@ -295,8 +293,8 @@ private:
                             << " frames per second.";
             }
 
-	// sweep each frame
-	for (int n = loop_start; n < sweep_frames.size(); n++) {
+      // sweep each frame
+      for (int n = 0; n < sweep_frames.size(); n++) {
 
 			num_done += minibatch; // number stream of short utterances for a minibatch
 			num_minibatch++; // num_minibatches_processed_
@@ -451,12 +449,6 @@ private:
 
 		        fflush(stderr);
 		        fsync(fileno(stderr));
-
-                // loop sweep each utterance.
-                if (sweep_loop) {
-                   loop_start = (loop_start+1)%sweep_frames.size();
-                   break;
-                }
 			} //sweep frames
 		}
 
@@ -523,25 +515,47 @@ void NnetChainUpdateParallel(const NnetChainUpdateOptions *opts,
 		TrainChainParallelClass c(opts, &model_sync,
 								den_fst,
 								model_filename,
-								&repository, stats); {
-
-			kaldi::nnet3::SequentialNnetChainExampleReader example_reader(feature_rspecifier);
+								&repository, stats);
+		{
 
 			// The initialization of the following class spawns the threads that
 			// process the examples.  They get re-joined in its destructor.
 			MultiThreader<TrainChainParallelClass> mc(opts->parallel_opts->num_threads, c);
+
+
+			// prepare sample
 			NnetExample *example;
 			std::vector<NnetExample*> examples;
-			for (; !example_reader.Done(); example_reader.Next()) {
-					example = new ChainNnetExample(&example_reader);
-					if (example->PrepareData(examples)) {
-						for (int i = 0; i < examples.size(); i++)
-							repository.AcceptExample(examples[i]);
-						if (examples[0] != example)
+	        std::vector<int> sweep_frames, loop_frames;
+	        bool sweep_loop = opts->sweep_loop;
+	        if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+	        	KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+
+			int nloop = opts->sweep_loop ? opts->skip_frames : 1;
+			int idx;
+			loop_frames = sweep_frames;
+			// loop sweep skip frames
+			for (int i = 0; i < nloop; i++) {
+				kaldi::nnet3::SequentialNnetChainExampleReader example_reader(feature_rspecifier);
+				idx = i;
+
+				// 1 loop feature
+				for (; !example_reader.Done(); example_reader.Next()) {
+						if (opts->sweep_loop) {
+							loop_frames.resize(1);
+							loop_frames[0] = sweep_frames[idx];
+							idx = (idx+1)%nloop;
+						}
+						example = new ChainNnetExample(&example_reader, loop_frames);
+						if (example->PrepareData(examples)) {
+							for (int i = 0; i < examples.size(); i++)
+								repository.AcceptExample(examples[i]);
+							if (examples[0] != example)
+								delete example;
+						}
+						else
 							delete example;
-					}
-					else
-						delete example;
+				}
 			}
 			repository.ExamplesDone();
 	  }

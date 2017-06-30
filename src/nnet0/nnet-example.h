@@ -232,9 +232,10 @@ struct ChainNnetExample: NnetExample
 
 	SequentialNnetChainExampleReader *example_reader;
 	NnetChainExample chain_eg;
+	std::vector<int> sweep_frames;
 
-    ChainNnetExample(SequentialNnetChainExampleReader *example_reader)
-    :NnetExample(NULL), example_reader(example_reader) {}
+    ChainNnetExample(SequentialNnetChainExampleReader *example_reader, std::vector<int> sweep_frames)
+    :NnetExample(NULL), example_reader(example_reader), sweep_frames(sweep_frames) {}
 
     bool PrepareData(std::vector<NnetExample*> &examples);
 };
