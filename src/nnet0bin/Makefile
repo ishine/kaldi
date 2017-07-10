@@ -25,7 +25,8 @@ BINFILES = nnet-train-frmshuff \
 	nnet-train-lstm-streams-parallel nnet-train-lstm-streams-asgd \
 	nnet-forward-parallel nnet-train-ctc-parallel nnet-train-lstm-streams-parallel-mpi \
 	nnet-train-lstm-lm-parallel nnet-train-lstm-lm-parallel-mpi nnet-lstm-sentence-ppl \
-	nnet-train-kaka-parallel nnet-remove-last nnet-extract nnet-forward-lfmmi
+	nnet-train-kaka-parallel nnet-remove-last nnet-extract nnet-forward-lfmmi \
+	nnet-train-chain-parallel-mpi
 
 OBJFILES =
 

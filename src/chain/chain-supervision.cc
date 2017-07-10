@@ -156,8 +156,8 @@ bool PhoneLatticeToProtoSupervision(const SupervisionOptions &opts,
   std::vector<int32> state_times;
   int32 num_frames = CompactLatticeStateTimes(lat, &state_times),
       factor = opts.frame_subsampling_factor,
-    //num_frames_subsampled = (num_frames + factor - 1) / factor;
-    num_frames_subsampled = num_frames / factor;
+    num_frames_subsampled = (num_frames + factor - 1) / factor;
+    //num_frames_subsampled = num_frames / factor;
   for (int32 state = 0; state < num_states; state++)
     proto_supervision->fst.AddState();
   proto_supervision->fst.SetStart(lat.Start());
@@ -183,10 +183,10 @@ bool PhoneLatticeToProtoSupervision(const SupervisionOptions &opts,
       int32 t_begin = std::max<int32>(0, (state_time - opts.left_tolerance)),
               t_end = std::min<int32>(num_frames,
                                       (next_state_time + opts.right_tolerance)),
- //t_begin_subsampled = (t_begin + factor - 1)/ factor,
- t_begin_subsampled = t_begin / factor,
-   //t_end_subsampled = (t_end + factor - 1)/ factor;
-   t_end_subsampled = t_end / factor;
+ t_begin_subsampled = (t_begin + factor - 1)/ factor,
+ //t_begin_subsampled = t_begin / factor,
+   t_end_subsampled = (t_end + factor - 1)/ factor;
+   //t_end_subsampled = t_end / factor;
     for (int32 t_subsampled = t_begin_subsampled;
          t_subsampled < t_end_subsampled; t_subsampled++)
       proto_supervision->allowed_phones[t_subsampled].push_back(phone);

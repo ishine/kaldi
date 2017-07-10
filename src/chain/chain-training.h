@@ -112,7 +112,7 @@ struct ChainTrainingOptions {
                            be used in the cross-entropy regularization code.  This value
                            is also used in computing the cross-entropy objective value.
 */
-void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
+bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                               const DenominatorGraph &den_graph,
                               const Supervision &supervision,
                               const CuMatrixBase<BaseFloat> &nnet_output,

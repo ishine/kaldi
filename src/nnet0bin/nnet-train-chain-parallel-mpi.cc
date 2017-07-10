@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
     }
 
     //mpi
-    {
+    //
     	NnetParallelUtil util;
 	    std::string scpfile;
 	    feature_rspecifier = util.AddSuffix(feature_rspecifier, parallel_opts.myid);
@@ -105,12 +105,11 @@ int main(int argc, char *argv[]) {
 	    fgetpos(stderr, &pos);
 	    fd = dup(fileno(stderr));
 	    FILE * logfile = freopen(logfn.c_str(), "w", stderr);
-	    if (NULL == logfile)
-	    {
+	    if (NULL == logfile) {
 	    	KALDI_ERR << "log path must be specified [--log-file]";
 	    }
 	    setvbuf(logfile, NULL, _IONBF, 0);
-    }
+
 
     using namespace kaldi;
     using namespace kaldi::nnet0;

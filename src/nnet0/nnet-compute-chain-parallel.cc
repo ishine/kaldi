@@ -326,11 +326,16 @@ private:
 
 	        BaseFloat tot_objf, tot_l2_term, tot_weight;
 	        // get mmi objective function derivative, and xent soft supervision label
-			kaldi::chain::ComputeChainObjfAndDeriv(opts->chain_config, den_graph,
+			bool ok = kaldi::chain::ComputeChainObjfAndDeriv(opts->chain_config, den_graph,
 									 sup.supervision, *mmi_nnet_out,
 									 &tot_objf, &tot_l2_term, &tot_weight,
 									 mmi_deriv,
 									 (use_xent ? xent_deriv : NULL));
+            if (!ok) {
+               KALDI_WARN << "ComputeChainObjfAndDeriv return " << std::boolalpha << ok 
+                            << ", and drop the minibatch " << num_minibatch;
+               continue;
+            }
 			objf_info_["mmi"].UpdateStats("mmi", opts->print_interval, num_minibatch,
 													tot_weight, tot_objf, tot_l2_term);
             mmi_deriv->Scale(-1.0);
@@ -527,24 +532,26 @@ void NnetChainUpdateParallel(const NnetChainUpdateOptions *opts,
 			NnetExample *example;
 			std::vector<NnetExample*> examples;
 	        std::vector<int> sweep_frames, loop_frames;
-	        bool sweep_loop = opts->sweep_loop;
 	        if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 	        	KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
 
-			int nloop = opts->sweep_loop ? opts->skip_frames : 1;
+            int nframes = sweep_frames.size();
+			int nloop = opts->sweep_loop ? nframes : 1;
 			int idx;
 			loop_frames = sweep_frames;
 			// loop sweep skip frames
 			for (int i = 0; i < nloop; i++) {
 				kaldi::nnet3::SequentialNnetChainExampleReader example_reader(feature_rspecifier);
 				idx = i;
+	        	KALDI_LOG << "Total sweep " << nloop << " times feature scplist, " << " now sweep NO." << i;
 
 				// 1 loop feature
 				for (; !example_reader.Done(); example_reader.Next()) {
-						if (opts->sweep_loop) {
+						//if (opts->sweep_loop) 
+						{
 							loop_frames.resize(1);
 							loop_frames[0] = sweep_frames[idx];
-							idx = (idx+1)%nloop;
+							idx = (idx+1)%nframes;
 						}
 						example = new ChainNnetExample(&example_reader, loop_frames);
 						if (example->PrepareData(examples)) {

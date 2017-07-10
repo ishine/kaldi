@@ -25,7 +25,7 @@
 namespace kaldi {
 namespace chain {
 
-void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
+bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                               const DenominatorGraph &den_graph,
                               const Supervision &supervision,
                               const CuMatrixBase<BaseFloat> &nnet_output,
@@ -80,6 +80,7 @@ void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                << ", setting objective function to " << default_objf
                << " per frame.";
     *objf  = default_objf * *weight;
+    return false;
   }
 
   // This code helps us see how big the derivatives are, on average,
@@ -108,6 +109,7 @@ void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
     if (nnet_output_deriv)
       nnet_output_deriv->AddMat(-1.0 * scale, nnet_output);
   }
+  return true;
 }
 
 
