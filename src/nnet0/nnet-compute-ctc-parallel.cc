@@ -517,19 +517,41 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
 	    MultiThreader<TrainCtcParallelClass> mc(opts->parallel_opts->num_threads, c);
+
+		// prepare sample
 	    NnetExample *example;
 	    std::vector<NnetExample*> examples;
+	    std::vector<int> sweep_frames, loop_frames;
+		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+		for (int i = 0; i < sweep_frames.size(); i++) {
+			if (sweep_frames[i] >= opts->skip_frames)
+				KALDI_ERR << "invalid sweep frames indexes";
+		}
+
+		int nframes = sweep_frames.size();
+		int idx = 0;
+		loop_frames = sweep_frames;
+		// loop sweep skip frames
 	    for (; !feature_reader.Done(); feature_reader.Next()) {
-	    		example = new CTCNnetExample(&feature_reader, &targets_reader, &model_sync, stats, opts);
-				if (example->PrepareData(examples))
-				{
-					for (int i = 0; i < examples.size(); i++)
-						repository.AcceptExample(examples[i]);
-					if (examples[0] != example)
-						delete example;
-				}
-				else
-					delete example;
+	    	if (!opts->sweep_loop) {
+	    		loop_frames.resize(1);
+	    		loop_frames[0] = sweep_frames[idx];
+	    		idx = (idx+1)%nframes;
+	    	}
+
+	    	example = new CTCNnetExample(&feature_reader, &targets_reader,
+	    			&model_sync, loop_frames, stats, opts);
+
+	    	if (example->PrepareData(examples)) {
+	    		for (int i = 0; i < examples.size(); i++) {
+	    			repository.AcceptExample(examples[i]);
+	    		}
+	    		if (examples[0] != example)
+	    			delete example;
+	    	}
+	    	else
+	    		delete example;
 	    }
 	    repository.ExamplesDone();
 	  }
@@ -560,20 +582,42 @@ void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
 	    MultiThreader<TrainCtcParallelClass> mc(opts->parallel_opts->num_threads, c);
+
+
+		// prepare sample
 	    NnetExample *example;
 	    std::vector<NnetExample*> examples;
-	    for (; !feature_reader.Done(); feature_reader.Next()) {
-				example = new DNNNnetExample(&feature_reader, &targets_reader, &weights_reader, &model_sync, stats, opts);
-				if (example->PrepareData(examples))
-				{
-					for (int i = 0; i < examples.size(); i++)
-						repository.AcceptExample(examples[i]);
-					if (examples[0] != example)
-						delete example;
-				}
-				else
-					delete example;
+	    std::vector<int> sweep_frames, loop_frames;
+		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+		for (int i = 0; i < sweep_frames.size(); i++) {
+			if (sweep_frames[i] >= opts->skip_frames)
+				KALDI_ERR << "invalid sweep frames indexes";
+		}
 
+		int nframes = sweep_frames.size();
+		int idx = 0;
+		loop_frames = sweep_frames;
+		// loop sweep skip frames
+	    for (; !feature_reader.Done(); feature_reader.Next()) {
+	    	if (!opts->sweep_loop) {
+	    		loop_frames.resize(1);
+	    		loop_frames[0] = sweep_frames[idx];
+	    		idx = (idx+1)%nframes;
+	    	}
+
+	    	example = new DNNNnetExample(&feature_reader, &targets_reader,
+	    			&weights_reader, &model_sync, loop_frames, stats, opts);
+
+	    	if (example->PrepareData(examples)) {
+	    		for (int i = 0; i < examples.size(); i++) {
+	    			repository.AcceptExample(examples[i]);
+	    		}
+	    		if (examples[0] != example)
+	    			delete example;
+	    	}
+	    	else
+	    		delete example;
 	    }
 	    repository.ExamplesDone();
 	  }

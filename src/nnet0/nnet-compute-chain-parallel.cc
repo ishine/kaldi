@@ -532,7 +532,6 @@ void NnetChainUpdateParallel(const NnetChainUpdateOptions *opts,
 			// process the examples.  They get re-joined in its destructor.
 			MultiThreader<TrainChainParallelClass> mc(opts->parallel_opts->num_threads, c);
 
-
 			// prepare sample
 			NnetExample *example;
 			std::vector<NnetExample*> examples;
