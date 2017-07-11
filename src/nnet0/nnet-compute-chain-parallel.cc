@@ -344,12 +344,17 @@ private:
 			if (use_xent) {
 				// log softmax
                 xent_logsoftmax.CopyFromMat(*xent_nnet_out);
-				//xent_logsoftmax.Add(1e-20); // avoid log(0)
+				xent_logsoftmax.Add(1e-20); // avoid log(0)
 				xent_logsoftmax.ApplyLog(); // log(y)
 
 				// at this point, xent_deriv is posteriors derived from the numerator
 				// computation.  note, xent_objf has a factor of '.supervision.weight'
 				BaseFloat xent_objf = TraceMatMat(xent_logsoftmax, *xent_deriv, kTrans); // sum(t*log(y))
+                if (xent_objf - xent_objf != 0) { //nan
+                    KALDI_WARN << "Xent objective function is nan" 
+                            << ", and drop the minibatch " << num_minibatch;
+                    continue;
+                }
 				objf_info_["xent"].UpdateStats("xent", opts->print_interval, num_minibatch,
 				                                        			tot_weight, xent_objf);
 
