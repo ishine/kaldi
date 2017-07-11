@@ -56,6 +56,7 @@ struct NnetUpdateOptions {
     std::string use_gpu;
     std::string si_model_filename;
     std::string sweep_frames_str;
+    bool  sweep_loop;
 
 
     int32 length_tolerance;
@@ -68,7 +69,7 @@ struct NnetUpdateOptions {
 
     NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
     	: binary(true),crossvalidate(false),randomize(true),use_psgd(false),kld_scale(-1.0),skip_frames(1),sweep_time(1), dump_time(0),
-		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),
+		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),sweep_loop(false),
 		  length_tolerance(5),update_frames(-1),dropout_retention(0.0),
 		  trn_opts(trn_opts),rnd_opts(rnd_opts),parallel_opts(parallel_opts){ }
 
@@ -100,6 +101,8 @@ struct NnetUpdateOptions {
 
 	      po->Register("sweep-time", &sweep_time, "Sweep times for each utterance in skip frames training(Deprecated, use --sweep-frames instead)");
 	      po->Register("sweep-frames", &sweep_frames_str, "Sweep frames indexes for each utterance in skip frames training, e.g. 0:1 for skip_frames = 2");
+	      po->Register("sweep-loop", &sweep_loop, "Sweep all frames indexes for each utterance in skip frames training if true, "
+	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
 
 	      po->Register("update-frames",&update_frames, "Every update-frames frames each client exchange gradient");
 
