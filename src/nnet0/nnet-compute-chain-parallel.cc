@@ -557,7 +557,8 @@ void NnetChainUpdateParallel(const NnetChainUpdateOptions *opts,
 							loop_frames[0] = sweep_frames[idx];
 							idx = (idx+1)%nframes;
 						}
-						example = new ChainNnetExample(&example_reader, loop_frames);
+						example = new ChainNnetExample(&example_reader);
+                        example->SetSweepFrames(loop_frames);
 						if (example->PrepareData(examples)) {
 							for (int i = 0; i < examples.size(); i++)
 								repository.AcceptExample(examples[i]);

@@ -36,10 +36,14 @@ struct NnetExample{
 
 	std::string utt;
 	Matrix<BaseFloat> input_frames;
+	std::vector<int32> sweep_frames;
 
 	NnetExample(SequentialBaseFloatMatrixReader *feature_reader):
 		feature_reader(feature_reader){}
 
+    void SetSweepFrames(const std::vector<int32> &frames) {
+        sweep_frames = frames;
+    }
 	virtual ~NnetExample(){}
 
 	virtual bool PrepareData(std::vector<NnetExample*> &examples) = 0;
@@ -49,7 +53,6 @@ struct NnetExample{
 
 struct DNNNnetExample : NnetExample
 {
-
 
 	RandomAccessPosteriorReader *targets_reader;
 	RandomAccessBaseFloatVectorReader *weights_reader;
@@ -61,19 +64,18 @@ struct DNNNnetExample : NnetExample
 
 	Posterior targets;
 	Vector<BaseFloat> frames_weights;
-	std::vector<int32> sweep_frames;
 
 	DNNNnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 					RandomAccessPosteriorReader *targets_reader,
 					RandomAccessBaseFloatVectorReader *weights_reader,
 					NnetModelSync *model_sync,
 					NnetStats *stats,
-					std::vector<int32> &sweep_frames,
 					const NnetUpdateOptions *opts):
 	NnetExample(feature_reader), targets_reader(targets_reader), weights_reader(weights_reader),
-	model_sync(model_sync), sweep_frames(sweep_frames), stats(stats), opts(opts)
+	model_sync(model_sync), stats(stats), opts(opts)
 	{}
 
+    
 	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
@@ -86,17 +88,14 @@ struct CTCNnetExample : NnetExample
 	const NnetUpdateOptions *opts;
 
 	std::vector<int32> targets;
-	std::vector<int32> sweep_frames;
 
 	CTCNnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 					RandomAccessInt32VectorReader *targets_reader,
-
 					NnetModelSync *model_sync,
-					std::vector<int32> &sweep_frames,
 					NnetCtcStats *stats,
 					const NnetUpdateOptions *opts):
 	NnetExample(feature_reader), targets_reader(targets_reader),
-	model_sync(model_sync), sweep_frames(sweep_frames), stats(stats), opts(opts)
+	model_sync(model_sync), stats(stats), opts(opts)
 	{ }
 
 
@@ -115,8 +114,6 @@ struct SequentialNnetExample : NnetExample
 	std::vector<int32> num_ali;
 	Lattice den_lat;
 	std::vector<int32> state_times;
-	std::vector<int32> sweep_frames;
-
 
 	SequentialNnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 							RandomAccessLatticeReader *den_lat_reader,
@@ -205,10 +202,9 @@ struct ChainNnetExample: NnetExample
 
 	SequentialNnetChainExampleReader *example_reader;
 	NnetChainExample chain_eg;
-	std::vector<int> sweep_frames;
 
-    ChainNnetExample(SequentialNnetChainExampleReader *example_reader, std::vector<int> sweep_frames)
-    :NnetExample(NULL), example_reader(example_reader), sweep_frames(sweep_frames) {}
+    ChainNnetExample(SequentialNnetChainExampleReader *example_reader)
+    :NnetExample(NULL), example_reader(example_reader){}
 
     bool PrepareData(std::vector<NnetExample*> &examples);
 };

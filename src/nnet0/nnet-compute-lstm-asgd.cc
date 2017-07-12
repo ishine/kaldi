@@ -556,8 +556,8 @@ void NnetLstmUpdateAsgd(const NnetLstmUpdateOptions *opts,
 	    	}
 
 	    	example = new DNNNnetExample(&feature_reader, &targets_reader,
-	    			&weights_reader, &model_sync, loop_frames, stats, opts);
-
+	    			&weights_reader, &model_sync, stats, opts);
+            example->SetSweepFrames(loop_frames);
 	    	if (example->PrepareData(examples)) {
 	    		for (int i = 0; i < examples.size(); i++) {
 	    			repository.AcceptExample(examples[i]);
