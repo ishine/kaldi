@@ -147,7 +147,84 @@ class Splice: public Component {
   CuArray<int32> frame_offsets_;
 };
 
+/**
+ * Sub-Sample the input matrix
+ */
+class SubSample : public Component {
+ public:
+	SubSample(int32 dim_in, int32 dim_out)
+    : Component(dim_in, dim_out), skip_frames_(1)
+  { }
+  ~SubSample()
+  { }
 
+  Component* Copy() const { return new SubSample(*this); }
+  ComponentType GetType() const { return kSubSample; }
+
+  void InitData(std::istream &is) {
+    // parse config
+    std::string token;
+    while (!is.eof()) {
+      ReadToken(is, false, &token);
+      /**/ if (token == "<SkipFrames>") ReadBasicType(is, false, &skip_frames_);
+      else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
+                     << " (SkipFrames)";
+      is >> std::ws; // eat-up whitespace
+    }
+
+    KALDI_ASSERT(input_dim_ == output_dim_*skip_frames_);
+  }
+
+  void ReadData(std::istream &is, bool binary) {
+    // optional learning-rate coefs
+    if ('<' == Peek(is, binary)) {
+      ExpectToken(is, binary, "<SkipFrames>");
+      ReadBasicType(is, binary, &skip_frames_);
+    }
+
+    KALDI_ASSERT(input_dim_ == output_dim_*skip_frames_);
+  }
+
+  void WriteData(std::ostream &os, bool binary) const {
+	  WriteToken(os, binary, "<SkipFrames>");
+	  WriteBasicType(os, binary, skip_frames_);
+  }
+
+  void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
+	    KALDI_ASSERT(in.NumRows() == out->NumRows()*skip_frames_);
+
+	    int rows = out->NumRows();
+	    if (in2out_.Dim() != rows) {
+	    	std::vector<const BaseFloat*> indexes(rows);
+	    	for (int i = 0; i < rows; i++)
+	    		indexes[i] = in.RowData(i*skip_frames_);
+	    	in2out_.CopyFromVec(indexes);
+	    }
+
+	    out->CopyRows(in2out_);
+  }
+
+  void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
+                        const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
+	  	  KALDI_ASSERT(out_diff.NumRows() == in_diff->NumRows()*skip_frames_);
+
+	  	in_diff->SetZero();
+		int rows = out_diff.NumRows();
+		if (out2in_.Dim() != rows) {
+			std::vector<BaseFloat*> indexes(rows);
+			for (int i = 0; i < rows; i++)
+				indexes[i] = in_diff->RowData(i*skip_frames_);
+			out2in_.CopyFromVec(indexes);
+		}
+
+		out_diff.CopyToRows(out2in_);
+  }
+
+ private:
+   int skip_frames_;
+   CuArray<const BaseFloat*> in2out_;
+   CuArray<BaseFloat*> out2in_;
+};
 
 /**
  * Rearrange the matrix columns according to the indices in copy_from_indices_

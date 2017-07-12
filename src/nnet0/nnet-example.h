@@ -37,12 +37,14 @@ struct NnetExample{
 	std::string utt;
 	Matrix<BaseFloat> input_frames;
 	std::vector<int32> sweep_frames;
+	bool inner_skipframes;
 
 	NnetExample(SequentialBaseFloatMatrixReader *feature_reader):
-		feature_reader(feature_reader){}
+		feature_reader(feature_reader), inner_skipframes(false){}
 
-    void SetSweepFrames(const std::vector<int32> &frames) {
+    void SetSweepFrames(const std::vector<int32> &frames, bool inner = false) {
         sweep_frames = frames;
+        inner_skipframes = inner;
     }
 	virtual ~NnetExample(){}
 

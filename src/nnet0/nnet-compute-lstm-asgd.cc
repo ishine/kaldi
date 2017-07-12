@@ -174,6 +174,7 @@ private:
 	      nnet_transf.SetDropoutRetention(opts->dropout_retention);
 	      nnet.SetDropoutRetention(opts->dropout_retention);
 	    }
+
 	    if (crossvalidate) {
 	      nnet_transf.SetDropoutRetention(1.0);
 	      nnet.SetDropoutRetention(1.0);
@@ -181,9 +182,7 @@ private:
 
 	    Nnet si_nnet;
 	    if (this->kld_scale > 0)
-	    {
 	    	si_nnet.Read(si_model_filename);
-	    }
 
 	    model_sync->Initialize(&nnet);
 
@@ -194,21 +193,30 @@ private:
 
 	    Xent xent;
 	    Mse mse;
+        MultiTaskLoss multitask;
+        if (0 == objective_function.compare(0, 9, "multitask")) {
+          // objective_function contains something like :
+          // 'multitask,xent,2456,1.0,mse,440,0.001'
+          //
+          // the meaning is following:
+          // 'multitask,<type1>,<dim1>,<weight1>,...,<typeN>,<dimN>,<weightN>'
+          multitask.InitFromString(objective_function);
+        }
 
-		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
-		//CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
+		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out, nnet_diff;
+		CuMatrix<BaseFloat> si_nnet_out;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
 
 		//double t1, t2, t3, t4;
-		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0;
+		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0, minibatch = 0;
 		kaldi::int64 total_frames = 0;
 
 		int32 num_stream = opts->num_stream;
 		int32 batch_size = opts->batch_size;
 		int32 targets_delay = opts->targets_delay;
-		int32 skip_frames = 1;
+		int32 skip_frames = opts->skip_frames;
 
 	    //  book-keeping for multi-streams
 	    std::vector<std::string> keys(num_stream);
@@ -216,7 +224,6 @@ private:
 	    std::vector<Posterior> targets(num_stream);
 	    std::vector<int> curt(num_stream, 0);
 	    std::vector<int> lent(num_stream, 0);
-	    std::vector<int> skip_beg(num_stream, 1);
 	    std::vector<int> new_utt_flags(num_stream, 0);
 
 	    // bptt batch buffer
@@ -234,16 +241,9 @@ private:
 	        // if any, feed the exhausted stream with a new utterance, update book-keeping infos
 	        for (int s = 0; s < num_stream; s++) {
 	            // this stream still has valid frames
-	            if (curt[s] < lent[s] + targets_delay*skip_frames && curt[s] > 0) {
+	            if (curt[s] < lent[s] + targets_delay && curt[s] > 0) {
 	                new_utt_flags[s] = 0;
 	                continue;
-	            }
-	            // the next skip sub-utterance
-	            if (skip_beg[s] < skip_frames && curt[s] > 0) {
-	            	curt[s] = skip_beg[s];
-	            	skip_beg[s]++;
-	            	new_utt_flags[s] = 1;
-	            	continue;
 	            }
 			
 	            // else, this stream exhausted, need new utterance
@@ -267,8 +267,7 @@ private:
 	                //feats[s] = mat;
 	                targets[s] = target;
 	                curt[s] = 0;
-	                skip_beg[s] = 1;
-	                lent[s] = feats[s].NumRows();
+	                lent[s] = target.size();
 	                new_utt_flags[s] = 1;  // a new utterance feeded to this stream
 	                delete example;
 	                break;
@@ -278,13 +277,15 @@ private:
 	        // we are done if all streams are exhausted
 	        int done = 1;
 	        for (int s = 0; s < num_stream; s++) {
-	            if (curt[s]  < lent[s] + targets_delay*skip_frames) done = 0;  // this stream still contains valid data, not exhausted
+	            if (curt[s]  < lent[s] + targets_delay) done = 0;  // this stream still contains valid data, not exhausted
 	        }
 
 	        if (done) break;
 
 	        if (feat.NumCols() != feats[0].NumCols()) {
-	        	feat.Resize(batch_size * num_stream, feats[0].NumCols(), kSetZero);
+	        	minibatch = batch_size * num_stream;
+	        	if (opts->skip_inner) minibatch *= skip_frames;
+	        	feat.Resize(minibatch, feats[0].NumCols(), kSetZero);
 	        }
 
 	        // fill a multi-stream bptt batch
@@ -294,40 +295,44 @@ private:
 	        for (int t = 0; t < batch_size; t++) {
 	            for (int s = 0; s < num_stream; s++) {
 	                // frame_mask & targets padding
-	                if (curt[s] < targets_delay*skip_frames) {
+	                if (curt[s] < targets_delay) {
 	                	frame_mask(t * num_stream + s) = 0;
 	                	target[t * num_stream + s] = targets[s][0];
 	                }
-	                else if (curt[s] < lent[s] + targets_delay*skip_frames) {
+	                else if (curt[s] < lent[s] + targets_delay) {
 	                    frame_mask(t * num_stream + s) = 1;
-	                    target[t * num_stream + s] = targets[s][curt[s]-targets_delay*skip_frames];
+	                    target[t * num_stream + s] = targets[s][curt[s]-targets_delay];
 	                } else {
 	                    frame_mask(t * num_stream + s) = 0;
 	                    target[t * num_stream + s] = targets[s][lent[s]-1];
 	                }
-	                // feat shifting & padding
-	                if (curt[s] < lent[s]) {
-	                    feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]));
-	                } else {
-	                	int last = (lent[s]-skip_beg[s])/skip_frames*skip_frames+skip_beg[s]-1; // lent[s]-1
-	                    feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(last));
-	                }
 
-	                curt[s] += skip_frames;
+	                // feat shifting & padding
+	                int nframes = opts->skip_inner ? skip_frames : 1;
+	                for (int i = 0; i < nframes; i++) {
+	                	if (curt[s] < lent[s]) {
+							feat.Row((t*nframes+i) * num_stream + s).CopyFromVec(feats[s].Row(curt[s]*nframes+i));
+						} else {
+							int last = feats[s].NumRows()-1;
+							feat.Row((t*nframes+i) * num_stream + s).CopyFromVec(feats[s].Row(last));
+						}
+	                }
+	                curt[s]++;
 	            }
 	        }
 
-	                num_frames = feat.NumRows();
-	                // report the speed
-	                if (num_done % 5000 == 0) {
-	                  time_now = time.Elapsed();
-	                  KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
-	                                << time_now/60 << " min; processed " << total_frames/time_now
-	                                << " frames per second.";
-	                }
+			num_frames = feat.NumRows();
+			// report the speed
+			if (num_done % 5000 == 0) {
+			  time_now = time.Elapsed();
+			  KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
+							<< time_now/60 << " min; processed " << total_frames/time_now
+							<< " frames per second.";
+			}
 
 	        // apply optional feature transform
 	        //nnet_transf.Feedforward(CuMatrix<BaseFloat>(feat), &feats_transf);
+			nnet_in.CopyFromMat(feat);
 
 	        // for streams with new utterance, history states need to be reset
 	        nnet.ResetLstmStreams(new_utt_flags);
@@ -335,14 +340,41 @@ private:
 	        // forward pass
 	        nnet.Propagate(CuMatrix<BaseFloat>(feat), &nnet_out);
 
-	        // evaluate objective function we've chosen
-	        if (objective_function == "xent") {
-	            xent.Eval(frame_mask, nnet_out, target, &nnet_diff);
-	        //} else if (objective_function == "mse") {     // not supported yet
-	        //    mse.Eval(frame_mask, nnet_out, targets_batch, &obj_diff);
-	        } else {
-	            KALDI_ERR << "Unknown objective function code : " << objective_function;
-	        }
+            CuMatrix<BaseFloat> tgt_mat;
+            if (this->kld_scale > 0) {
+                si_nnet.ResetLstmStreams(new_utt_flags);
+                si_nnet.Propagate(nnet_in, &si_nnet_out);
+                // convert posterior to matrix,
+                PosteriorToMatrix(target, nnet.OutputDim(), &tgt_mat);
+                tgt_mat.Scale(1-this->kld_scale);
+                tgt_mat.AddMat(this->kld_scale, si_nnet_out);
+            }
+
+            // evaluate objective function we've chosen
+            if (objective_function == "xent") {
+                // gradients re-scaled by weights in Eval,
+                if (this->kld_scale > 0)
+                    xent.Eval(frame_mask, nnet_out, tgt_mat, &nnet_diff);
+                else
+                    xent.Eval(frame_mask, nnet_out, target, &nnet_diff);
+            }
+            /*
+            else if (objective_function == "mse") {
+                // gradients re-scaled by weights in Eval,
+                if (this->kld_scale > 0)
+                    mse.Eval(frame_mask, nnet_out, tgt_mat, &nnet_diff);
+                else
+                    mse.Eval(frame_mask, nnet_out, target, &nnet_diff);
+            }*/
+            else if (0 == objective_function.compare(0, 9, "multitask")) {
+                  // gradients re-scaled by weights in Eval,
+                if (this->kld_scale > 0)
+                    multitask.Eval(frame_mask, nnet_out, tgt_mat, &nnet_diff);
+                else
+                    multitask.Eval(frame_mask, nnet_out, target, &nnet_diff);
+            } else {
+                KALDI_ERR<< "Unknown objective function code : " << objective_function;
+            }
 
 
 		        // backward pass
@@ -454,7 +486,9 @@ private:
 		 }else if (objective_function == "mse"){
 			//KALDI_LOG << mse.Report();
 			stats_->mse.Add(&mse);
-		 }else {
+		 }else if (0 == objective_function.compare(0, 9, "multitask")) {
+             stats_->multitask.Add(&multitask);
+         }else {
 			 KALDI_ERR<< "Unknown objective function code : " << objective_function;
 		 }
 
@@ -529,6 +563,9 @@ void NnetLstmUpdateAsgd(const NnetLstmUpdateOptions *opts,
 		      weights_reader.Open(opts->frame_weights);
 		    }
 
+            if (opts->objective_function.compare(0, 9, "multitask") == 0)
+                stats->multitask.InitFromString(opts->objective_function);
+
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
 	    MultiThreader<TrainLstmAsgdClass> mc(opts->parallel_opts->num_threads, c);
@@ -557,7 +594,7 @@ void NnetLstmUpdateAsgd(const NnetLstmUpdateOptions *opts,
 
 	    	example = new DNNNnetExample(&feature_reader, &targets_reader,
 	    			&weights_reader, &model_sync, stats, opts);
-            example->SetSweepFrames(loop_frames);
+            example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
 	    		for (int i = 0; i < examples.size(); i++) {
 	    			repository.AcceptExample(examples[i]);

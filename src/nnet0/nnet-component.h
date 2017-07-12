@@ -88,6 +88,7 @@ class Component {
     kBlockLinearity,
     kAddShift,
     kRescale,
+	kSubSample,
     
     kKlHmm = 0x0800,
     kSentenceAveragingComponent, /* deprecated */

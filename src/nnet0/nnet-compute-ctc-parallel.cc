@@ -210,7 +210,7 @@ private:
 		int32 frame_limit = opts->max_frames;
 		int32 targets_delay = opts->targets_delay;
 		int32 batch_size = opts->batch_size;
-        int32 skip_frames = 1;
+        int32 skip_frames = opts->skip_frames;
 
 	    std::vector< Matrix<BaseFloat> > feats_utt(num_stream);  // Feature matrix of every utterance
 	    std::vector< std::vector<int> > labels_utt(num_stream);  // Label vector of every utterance
@@ -228,7 +228,7 @@ private:
 	    Timer time;
 	    double time_now = 0;
 
-		int32 cur_stream_num = 0;
+		int32 cur_stream_num = 0, num_skip;
 		int32 feat_dim = nnet.InputDim();
 
 	    while (num_stream) {
@@ -267,7 +267,7 @@ private:
 				feats_utt[s].Resize(feats_transf.NumRows(), feats_transf.NumCols());
 				feats_transf.CopyToMat(&feats_utt[s]);
 		        //feats_utt[s] = mat;
-		        frame_num_utt.push_back((mat.NumRows()+skip_frames-1)/skip_frames);
+		        frame_num_utt.push_back(mat.NumRows());
 		        num_frames += mat.NumRows();
 
 				s++;
@@ -278,7 +278,8 @@ private:
 				example = repository_->ProvideExample();
 			}
 
-			max_frame_num = (max_frame_num+skip_frames-1)/skip_frames;
+			num_skip = opts->skip_inner ? skip_frames : 1;
+			targets_delay *=  num_skip;
 			cur_stream_num = s;
 			new_utt_flags.resize(cur_stream_num, 1);
 
@@ -286,8 +287,8 @@ private:
 			feat_mat_host.Resize(cur_stream_num * max_frame_num, feat_dim, kSetZero);
 			if (this->objective_function == "xent")
 			{
-				frame_mask_host.Resize(cur_stream_num * max_frame_num, kSetZero);
-				target.resize(cur_stream_num * max_frame_num);
+				target.resize(cur_stream_num * max_frame_num/num_skip);
+				frame_mask_host.Resize(cur_stream_num * max_frame_num/num_skip, kSetZero);
 			}
 
 			for (int s = 0; s < cur_stream_num; s++) {
@@ -295,17 +296,17 @@ private:
 			  for (int r = 0; r < frame_num_utt[s]; r++) {
 				  //feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(mat_tmp.Row(r));
 				  if (r + targets_delay < frame_num_utt[s]) {
-					  feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(feats_utt[s].Row((r+targets_delay)*skip_frames));
+					  feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(feats_utt[s].Row(r+targets_delay));
 				  }
 				  else{
-					  int last = (frame_num_utt[s]-1)*skip_frames; // frame_num_utt[s]-1
+					  int last = (frame_num_utt[s]-1); // frame_num_utt[s]-1
 					  feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(feats_utt[s].Row(last));
 				  }
 				  //ce label
-				  if (this->objective_function == "xent")
+				  if (this->objective_function == "xent" && r%num_skip == 0)
 				  {
-					  target[r*cur_stream_num + s] = targets_utt[s][r*skip_frames];
-					  frame_mask_host(r*cur_stream_num + s) = 1;
+					  target[r*cur_stream_num/num_skip + s] = targets_utt[s][r];
+					  frame_mask_host(r*cur_stream_num/num_skip + s) = 1;
 				  }
 			  }
 			}
@@ -542,7 +543,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 	    	example = new CTCNnetExample(&feature_reader, &targets_reader,
 	    			&model_sync, stats, opts);
-            example->SetSweepFrames(loop_frames);
+            example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
 	    		for (int i = 0; i < examples.size(); i++) {
 	    			repository.AcceptExample(examples[i]);

@@ -86,7 +86,6 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	        // split feature
 	        int32 skip_frames = opts->skip_frames;
 	        int32 sweep_time = opts->sweep_time;
-	        int32 lent, cur;
 
 	        if (sweep_time>skip_frames)
 	        {
@@ -110,19 +109,27 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	        examples.resize(sweep_frames.size());
 
 	        DNNNnetExample *example = NULL;
-	        for (int i = 0; i < sweep_frames.size(); i++)
-	        {
+	        int32 lent, feat_lent, cur,
+				utt_len = input_frames.NumRows();
+	        for (int i = 0; i < sweep_frames.size(); i++) {
 	        	example = new DNNNnetExample(feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
 	        	example->utt = utt;
-	        	lent = input_frames.NumRows()/skip_frames;
-	        	lent += input_frames.NumRows()%skip_frames > sweep_frames[i] ? 1 : 0;
-	        	example->input_frames.Resize(lent, input_frames.NumCols());
+	        	lent = utt_len/skip_frames;
+	        	lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+	        	feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
+	        	example->input_frames.Resize(feat_lent, input_frames.NumCols());
 	        	example->targets.resize(lent);
 	        	example->frames_weights.Resize(lent);
+
 	        	cur = sweep_frames[i];
-	        	for (int j = 0; j < example->input_frames.NumRows(); j++)
-	        	{
+	        	for (int j = 0; j < feat_lent; j++) {
 	        		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+	        		cur = this->inner_skipframes ? cur+1 : cur += skip_frames;
+	        		if (cur >= utt_len) cur = utt_len-1;
+	        	}
+
+	        	cur = sweep_frames[i];
+	        	for (int j = 0; j < lent; j++) {
 	        		example->targets[j] = targets[cur];
 	        		example->frames_weights(j) = frames_weights(cur);
 	        		cur += skip_frames;
@@ -155,7 +162,6 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     // split feature
     int32 skip_frames = opts->skip_frames;
     int32 sweep_time = opts->sweep_time;
-    int32 lent, cur;
 
     if (sweep_time>skip_frames)
     {
@@ -179,20 +185,23 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     examples.resize(sweep_frames.size());
 
     CTCNnetExample *example = NULL;
-    for (int i = 0; i < sweep_frames.size(); i++)
-    {
+    int32 lent, feat_lent, cur,
+		utt_len = input_frames.NumRows();
+    for (int i = 0; i < sweep_frames.size(); i++) {
     	example = new CTCNnetExample(feature_reader, targets_reader, model_sync, stats, opts);
     	example->utt = utt;
     	example->targets = targets;
 
-    	lent = input_frames.NumRows()/skip_frames;
-    	lent += input_frames.NumRows()%skip_frames > sweep_frames[i] ? 1 : 0;
-    	example->input_frames.Resize(lent, input_frames.NumCols());
+    	lent = utt_len/skip_frames;
+    	lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+    	feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
+    	example->input_frames.Resize(feat_lent, input_frames.NumCols());
+
     	cur = sweep_frames[i];
-    	for (int j = 0; j < example->input_frames.NumRows(); j++)
-    	{
+    	for (int j = 0; j < feat_lent; j++) {
     		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
-    		cur += skip_frames;
+    		cur = this->inner_skipframes ? cur+1 : cur += skip_frames;
+    		if (cur >= utt_len) cur = utt_len-1;
     	}
 
     	examples[i] = example;
@@ -282,36 +291,38 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 
 		        // split feature
-		      int32 lent, cur;
 		      examples.resize(1);
 
-		        if (skip_frames <= 1)
-		        {
-		        	examples[0] = this;
-		        	return true;
-		        }
+				if (skip_frames <= 1)
+				{
+					examples[0] = this;
+					return true;
+				}
 
-		        SequentialNnetExample *example = NULL;
-		        for (int i = 0; i < 1; i++)
-		        {
-		        	example = new SequentialNnetExample(feature_reader, den_lat_reader, num_ali_reader, model_sync, stats, opts);
-		        	example->utt = utt;
-		        	example->den_lat = den_lat;
-		        	example->num_ali = num_ali;
-		        	example->state_times = state_times;
+				SequentialNnetExample *example = NULL;
+				int32 lent, feat_lent, cur,
+					utt_len = input_frames.NumRows();
+				for (int i = 0; i < 1; i++) {
+					example = new SequentialNnetExample(feature_reader, den_lat_reader, num_ali_reader, model_sync, stats, opts);
+					example->utt = utt;
+					example->den_lat = den_lat;
+					example->num_ali = num_ali;
+					example->state_times = state_times;
 
-		        	lent = input_frames.NumRows()/skip_frames;
-		        	lent += input_frames.NumRows()%skip_frames > sweep_frames[i] ? 1 : 0;
-		        	example->input_frames.Resize(lent, input_frames.NumCols());
-		        	cur = sweep_frames[i];
-		        	for (int j = 0; j < example->input_frames.NumRows(); j++)
-		        	{
-		        		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
-		        		cur += skip_frames;
-		        	}
+					lent = utt_len/skip_frames;
+					lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+					feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
+					example->input_frames.Resize(feat_lent, input_frames.NumCols());
 
-		        	examples[i] = example;
-		        }
+					cur = sweep_frames[i];
+					for (int j = 0; j < feat_lent; j++) {
+						example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+						cur = this->inner_skipframes ? cur+1 : cur += skip_frames;
+						if (cur >= utt_len) cur = utt_len-1;
+					}
+
+					examples[i] = example;
+				}
 
 		      return true;
 }
