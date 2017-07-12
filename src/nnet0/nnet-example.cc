@@ -124,7 +124,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	        	cur = sweep_frames[i];
 	        	for (int j = 0; j < feat_lent; j++) {
 	        		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
-	        		cur = this->inner_skipframes ? cur+1 : cur += skip_frames;
+	        		cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
 	        		if (cur >= utt_len) cur = utt_len-1;
 	        	}
 
@@ -200,7 +200,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     	cur = sweep_frames[i];
     	for (int j = 0; j < feat_lent; j++) {
     		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
-    		cur = this->inner_skipframes ? cur+1 : cur += skip_frames;
+    		cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
     		if (cur >= utt_len) cur = utt_len-1;
     	}
 
@@ -317,7 +317,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 					cur = sweep_frames[i];
 					for (int j = 0; j < feat_lent; j++) {
 						example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
-						cur = this->inner_skipframes ? cur+1 : cur += skip_frames;
+						cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
 						if (cur >= utt_len) cur = utt_len-1;
 					}
 

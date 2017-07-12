@@ -286,6 +286,7 @@ private:
 	        	minibatch = batch_size * num_stream;
 	        	if (opts->skip_inner) minibatch *= skip_frames;
 	        	feat.Resize(minibatch, feats[0].NumCols(), kSetZero);
+	        	nnet_in.Resize(minibatch, feats[0].NumCols(), kSetZero);
 	        }
 
 	        // fill a multi-stream bptt batch
@@ -321,7 +322,7 @@ private:
 	            }
 	        }
 
-			num_frames = feat.NumRows();
+			num_frames = batch_size*num_stream;
 			// report the speed
 			if (num_done % 5000 == 0) {
 			  time_now = time.Elapsed();
@@ -338,7 +339,7 @@ private:
 	        nnet.ResetLstmStreams(new_utt_flags);
 
 	        // forward pass
-	        nnet.Propagate(CuMatrix<BaseFloat>(feat), &nnet_out);
+	        nnet.Propagate(nnet_in, &nnet_out);
 
             CuMatrix<BaseFloat> tgt_mat;
             if (this->kld_scale > 0) {

@@ -171,8 +171,6 @@ class SubSample : public Component {
                      << " (SkipFrames)";
       is >> std::ws; // eat-up whitespace
     }
-
-    KALDI_ASSERT(input_dim_ == output_dim_*skip_frames_);
   }
 
   void ReadData(std::istream &is, bool binary) {
@@ -181,8 +179,6 @@ class SubSample : public Component {
       ExpectToken(is, binary, "<SkipFrames>");
       ReadBasicType(is, binary, &skip_frames_);
     }
-
-    KALDI_ASSERT(input_dim_ == output_dim_*skip_frames_);
   }
 
   void WriteData(std::ostream &os, bool binary) const {
@@ -206,7 +202,7 @@ class SubSample : public Component {
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
                         const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
-	  	  KALDI_ASSERT(out_diff.NumRows() == in_diff->NumRows()*skip_frames_);
+	  	  KALDI_ASSERT(in_diff->NumRows() == out_diff.NumRows()*skip_frames_);
 
 	  	in_diff->SetZero();
 		int rows = out_diff.NumRows();
@@ -218,6 +214,10 @@ class SubSample : public Component {
 		}
 
 		out_diff.CopyToRows(out2in_);
+  }
+
+  int32 GetSubSampleRate() {
+    return skip_frames_;
   }
 
  private:
