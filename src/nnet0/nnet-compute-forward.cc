@@ -73,6 +73,7 @@ public:
 		int32 num_stream = opts->num_stream;
 		int32 batch_size = opts->batch_size;
 		int32 skip_frames = opts->skip_frames;
+        bool  skip_inner = opts->skip_inner;
 
 
 		Nnet nnet_transf;
@@ -114,6 +115,9 @@ public:
 		if (sweep_frames[0] > opts->skip_frames || sweep_frames.size() > 1)
 			KALDI_ERR << "invalid sweep frame index";
 
+        int in_skip = opts->skip_inner ? 1 : skip_frames,
+        out_skip = opts->skip_inner ? skip_frames : 1;
+
 	    CuMatrix<BaseFloat>  cufeat, feats_transf, nnet_out;
 
 	    std::vector<std::string> keys(num_stream);
@@ -131,11 +135,9 @@ public:
 	    // bptt batch buffer
 	    int32 feat_dim = nnet.InputDim();
 	    int32 out_dim = nnet.OutputDim();
-	    Vector<BaseFloat> frame_mask(batch_size * num_stream, kSetZero);
 	    Matrix<BaseFloat> feat, nnet_out_host;
-	    if (batch_size * num_stream > 0)
-	    {
-	    	feat.Resize(batch_size * num_stream, feat_dim, kSetZero);
+	    if (batch_size * num_stream > 0) {
+	    	feat.Resize(out_skip * batch_size * num_stream, feat_dim, kSetZero);
 	    	nnet_out_host.Resize(batch_size * num_stream, out_dim, kSetZero);
 	    }
 
@@ -211,10 +213,9 @@ public:
 		        if (done) break;
 
 		        // fill a multi-stream bptt batch
-		        // * frame_mask: 0 indicates padded frames, 1 indicates valid frames
 		        // * target: padded to batch_size
 		        // * feat: first shifted to achieve targets delay; then padded to batch_size
-		        for (int t = 0; t < batch_size; t++) {
+		        for (int t = 0; t < batch_size * out_skip; t++) {
 		           for (int s = 0; s < num_stream; s++) {
 		               // feat shifting & padding
 		               if (curt[s] + time_shift*skip_frames < lent[s]) {
@@ -225,7 +226,7 @@ public:
 		                   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(last));
 		               }
 
-		               curt[s]+=skip_frames;
+		               curt[s] += in_skip;
 		           }
 		       }
 
@@ -265,8 +266,7 @@ public:
 		       for (int t = 0; t < batch_size; t++) {
 		           for (int s = 0; s < num_stream; s++) {
 		               // feat shifting & padding
-		        	   if (opts->copy_posterior)
-		        	   {
+		        	   if (opts->copy_posterior) {
 		        		   for (int k = 0; k < skip_frames; k++){
 		        		   		if (utt_curt[s] < lent[s]) {
 		        		   			utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
@@ -274,8 +274,7 @@ public:
 		        		   		}
 		        		   }
 		        	   }
-		        	   else
-		        	   {
+		        	   else {
 		        		   if (utt_curt[s] < frame_num_utt[s]) {
 		        			   utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
 		        			   utt_curt[s]++;
@@ -304,12 +303,13 @@ public:
 	    	{
 				int32 len = mat.NumRows()/skip_frames, cur = 0;
 				len += mat.NumRows()%skip_frames > sweep_frames[0] ? 1 : 0;
+                len *= out_skip;
 				feat.Resize(len, mat.NumCols(), kUndefined);
 
 				for (int32 i = 0; i < len; i++)
 				{
 					feat.Row(i).CopyFromVec(mat.Row(cur+time_shift*skip_frames));
-					cur += skip_frames;
+					cur += in_skip;
 				}
 
 				cufeat = feat; // push it to gpu,

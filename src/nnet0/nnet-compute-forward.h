@@ -44,12 +44,14 @@ struct NnetForwardOptions {
     int32 skip_frames;
     int32 sweep_time;
     std::string sweep_frames_str;
+    bool  skip_inner;
 
     const PdfPriorOptions *prior_opts;
 
     NnetForwardOptions(const PdfPriorOptions *prior_opts)
     	:feature_transform(""),no_softmax(false),apply_log(false),copy_posterior(true),use_gpu("no"),num_threads(1),
-		 	 	 	 	 	 	 time_shift(0),batch_size(20),num_stream(0),dump_interval(0), skip_frames(1), sweep_time(1), sweep_frames_str("0"), prior_opts(prior_opts)
+		 	 	 	 	 	 	 time_shift(0),batch_size(20),num_stream(0),dump_interval(0), 
+                                 skip_frames(1), sweep_time(1), sweep_frames_str("0"), skip_inner(false), prior_opts(prior_opts)
     {
 
     }
@@ -66,13 +68,12 @@ struct NnetForwardOptions {
     	po->Register("num-threads", &num_threads, "Number of threads(GPUs) to use");
 
 
-        //<jiayu>
     	po->Register("time-shift", &time_shift, "LSTM : repeat last input frame N-times, discrad N initial output frames.");
         po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
         po->Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
         po->Register("dump-interval", &dump_interval, "---LSTM--- num utts between model dumping [ 0 == disabled ]");
         po->Register("skip-frames", &skip_frames, "LSTM model skip frames for next input");
-        //</jiayu>
+        po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
 
         sweep_time = skip_frames;
         po->Register("sweep-time", &sweep_time, "Sweep times for each utterance in skip frames training(Deprecated, use --sweep-frames instead)");

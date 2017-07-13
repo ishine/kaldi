@@ -65,6 +65,7 @@ int main(int argc, char *argv[]) {
     int32 skip_frames = 1;
     int32 num_stream = 1;
     std::string sweep_frames_str("0");
+    bool skip_inner = false;
     po.Register("targets_delay", &targets_delay, "LSTM : repeat last input frame N-times, discrad N initial output frames.");
 
     po.Register("extra-left-context", &extra_left_context,
@@ -81,6 +82,7 @@ int main(int argc, char *argv[]) {
     po.Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
     po.Register("copy-posterior", &copy_posterior, "Copy posterior for skip frames output");
 	po.Register("sweep-frames", &sweep_frames_str, "Sweep frames index for each utterance in skip frames decoding, e.g. 0:1");
+    po.Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
 
     po.Read(argc, argv);
 
@@ -138,10 +140,13 @@ int main(int argc, char *argv[]) {
     SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
     BaseFloatMatrixWriter feature_writer(feature_wspecifier);
 
+    int in_skip = skip_inner ? 1 : skip_frames,
+        out_skip = skip_inner ? skip_frames : 1;
 	int ctx_left = extra_left_context/skip_frames,
 		chunk = frames_per_chunk/skip_frames,
-		his_left = ctx_left + targets_delay,
-		chunk_size = ctx_left + chunk + targets_delay;
+		his_left = ctx_left + targets_delay;
+    int out_frames = (ctx_left + chunk + targets_delay)*num_stream;
+    int in_frames = out_frames*out_skip;
 
     CuMatrix<BaseFloat>  feats_transf, nnet_out;
 
@@ -161,9 +166,9 @@ int main(int argc, char *argv[]) {
     int32 feat_dim = nnet.InputDim();
     int32 out_dim = nnet.OutputDim();
     Matrix<BaseFloat> feat, nnet_out_host;
-    if (chunk_size * num_stream > 0) {
-    	feat.Resize(chunk_size * num_stream, feat_dim, kSetZero);
-    	nnet_out_host.Resize(chunk_size * num_stream, out_dim, kSetZero);
+    if (out_frames > 0) {
+    	feat.Resize(in_frames, feat_dim, kSetZero);
+    	nnet_out_host.Resize(out_frames, out_dim, kSetZero);
     }
 
 
@@ -231,10 +236,10 @@ int main(int argc, char *argv[]) {
 
 		if (done) break;
 
-		int len = ctx_left + chunk + targets_delay, utt_idx;
+		int len = (ctx_left + chunk + targets_delay)*out_skip, utt_idx;
 		for (int t = 0; t < len; t++) {
 		   for (int s = 0; s < num_stream; s++) {
-			   utt_idx = curt[s] + (t-ctx_left)*skip_frames;
+			   utt_idx = curt[s] + (t-ctx_left)*in_skip;
 			   if (utt_idx < 0) utt_idx = 0;
 			   if (utt_idx > lent[s]-1) utt_idx = lent[s]-1;
 			   feat.Row(t*num_stream+s).CopyFromVec(feats[s].Row(utt_idx));

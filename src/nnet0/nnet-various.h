@@ -190,7 +190,7 @@ class SubSample : public Component {
 	    KALDI_ASSERT(in.NumRows() == out->NumRows()*skip_frames_);
 
 	    int rows = out->NumRows();
-        int T = out->NumRows()/nstream_;
+        int T = rows/nstream_;
 	    if (in2out_.Dim() != rows) {
 	    	std::vector<const BaseFloat*> indexes(rows);
 	    	for (int t = 0; t < T; t++) {
@@ -208,10 +208,10 @@ class SubSample : public Component {
                         const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
 	  	  KALDI_ASSERT(in_diff->NumRows() == out_diff.NumRows()*skip_frames_);
 
-	  	in_diff->SetZero();
 		int rows = out_diff.NumRows();
-        int T = out_diff.NumRows()/nstream_;
+        int T = rows/nstream_;
 		if (out2in_.Dim() != rows) {
+	  	    in_diff->SetZero();
 			std::vector<BaseFloat*> indexes(rows);
 	    	for (int t = 0; t < T; t++) {
                 for (int s = 0; s < nstream_; s++) {
@@ -233,8 +233,8 @@ class SubSample : public Component {
   }
 
  private:
-   int skip_frames_;
-   int nstream_;
+   int32 skip_frames_;
+   int32 nstream_;
    CuArray<const BaseFloat*> in2out_;
    CuArray<BaseFloat*> out2in_;
 };
