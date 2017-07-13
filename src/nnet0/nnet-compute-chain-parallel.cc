@@ -223,7 +223,7 @@ private:
 
 		while((example = repository_->ProvideExample()) != NULL) {
 
-			int size = 0, minibatch = 0, utt_frame_num = 0, num_skip,
+			int size = 0, minibatch = 0, utt_frame_num = 0, in_skip, out_skip,
 					utt_len, offset, ctx_left, reset = false, nbptt_truncated;
             if (chain_example != NULL) 
                delete chain_example;
@@ -256,9 +256,10 @@ private:
             //io.features.SwapFullMatrix(&feat_utts);
 
 			// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
-			num_skip = opts->skip_inner ? skip_frames : 1;
+			in_skip = opts->skip_inner ? 1 : skip_frames;
+			out_skip = opts->skip_inner ? skip_frames : 1;
 			int out_frames = (ctx_left+targets_delay+utt_len)*num_stream;
-			int in_frames = out_frames*num_skip;
+			int in_frames = out_frames*out_skip;
 			int row_start = (ctx_left+targets_delay)*num_stream, chunk_frames = out_frames-row_start;
 
 			if (reset) {
@@ -306,9 +307,9 @@ private:
 			// sweep each frame
 			int cur_offset = (offset-ctx_left*skip_frames+sweep_frames[n]);
 			std::vector<int32> indexes(in_frames);
-			for (t = 0; t < len; t++) {
-				for (s = 0; s < num_stream; s++) {
-					indexes[t*num_stream+s] = s*utt_frame_num + cur_offset + t*num_skip;
+		    for (s = 0; s < num_stream; s++) {
+			    for (t = 0; t < len; t++) {
+					indexes[t*num_stream+s] = s*utt_frame_num + cur_offset + t*in_skip;
 				}
 			}
 

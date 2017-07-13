@@ -153,7 +153,7 @@ class Splice: public Component {
 class SubSample : public Component {
  public:
 	SubSample(int32 dim_in, int32 dim_out)
-    : Component(dim_in, dim_out), skip_frames_(1)
+    : Component(dim_in, dim_out), skip_frames_(1), nstream_(1)
   { }
   ~SubSample()
   { }
@@ -190,10 +190,14 @@ class SubSample : public Component {
 	    KALDI_ASSERT(in.NumRows() == out->NumRows()*skip_frames_);
 
 	    int rows = out->NumRows();
+        int T = out->NumRows()/nstream_;
 	    if (in2out_.Dim() != rows) {
 	    	std::vector<const BaseFloat*> indexes(rows);
-	    	for (int i = 0; i < rows; i++)
-	    		indexes[i] = in.RowData(i*skip_frames_);
+	    	for (int t = 0; t < T; t++) {
+                for (int s = 0; s < nstream_; s++) {
+	    		    indexes[t*nstream_+s] = in.RowData(t*skip_frames_*nstream_+s);
+                }
+            } 
 	    	in2out_.CopyFromVec(indexes);
 	    }
 
@@ -206,13 +210,17 @@ class SubSample : public Component {
 
 	  	in_diff->SetZero();
 		int rows = out_diff.NumRows();
+        int T = out_diff.NumRows()/nstream_;
 		if (out2in_.Dim() != rows) {
 			std::vector<BaseFloat*> indexes(rows);
-			for (int i = 0; i < rows; i++)
-				indexes[i] = in_diff->RowData(i*skip_frames_);
+	    	for (int t = 0; t < T; t++) {
+                for (int s = 0; s < nstream_; s++) {
+				    indexes[t*nstream_+s] = in_diff->RowData(t*skip_frames_*nstream_+s);
+                }
+            }
 			out2in_.CopyFromVec(indexes);
 		}
-
+        // diff copy
 		out_diff.CopyToRows(out2in_);
   }
 
@@ -220,8 +228,13 @@ class SubSample : public Component {
     return skip_frames_;
   }
 
+  void SetStream(int nstream) {
+    nstream_ = nstream;
+  }
+
  private:
    int skip_frames_;
+   int nstream_;
    CuArray<const BaseFloat*> in2out_;
    CuArray<BaseFloat*> out2in_;
 };
