@@ -73,7 +73,6 @@ public:
 		int32 num_stream = opts->num_stream;
 		int32 batch_size = opts->batch_size;
 		int32 skip_frames = opts->skip_frames;
-        bool  skip_inner = opts->skip_inner;
 
 
 		Nnet nnet_transf;

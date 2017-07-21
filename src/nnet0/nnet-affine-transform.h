@@ -1,4 +1,4 @@
-	// nnet0/nnet-affine-transform.h
+// nnet0/nnet-affine-transform.h
 
 // Copyright 2011-2014  Brno University of Technology (author: Karel Vesely)
 // Copyright 2016-2017  AISpeech (author: Tao Xu)
@@ -59,7 +59,7 @@ class AffineTransform : public UpdatableComponent {
     float bias_mean = -2.0, bias_range = 2.0, param_stddev = 0.1, param_range = 0.0;
     float learn_rate_coef = 1.0, bias_learn_rate_coef = 1.0;
     float max_norm = 0.0;
-    int32 fix_point = 0;
+    int32 fix_ = 0;
     // parse config
     std::string token; 
     while (!is.eof()) {
@@ -71,7 +71,8 @@ class AffineTransform : public UpdatableComponent {
       else if (token == "<LearnRateCoef>") ReadBasicType(is, false, &learn_rate_coef);
       else if (token == "<BiasLearnRateCoef>") ReadBasicType(is, false, &bias_learn_rate_coef);
       else if (token == "<MaxNorm>") ReadBasicType(is, false, &max_norm);
-      else if (token == "<FixPoint>") ReadBasicType(is, false, &fix_point);
+      else if (token == "<FixPoint>") ReadBasicType(is, false, &fix_);
+      else if (token == "<Bit>") ReadBasicType(is, false, &bit_);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                      << " (ParamStddev|BiasMean|BiasRange|LearnRateCoef|BiasLearnRateCoef)";
       is >> std::ws; // eat-up whitespace
@@ -470,7 +471,6 @@ protected:
   friend class AffinePreconditionedOnlineTransform;
   CuMatrix<BaseFloat> linearity_;
   CuVector<BaseFloat> bias_;
-
   CuMatrix<BaseFloat> linearity_corr_;
   CuVector<BaseFloat> bias_corr_;
 
