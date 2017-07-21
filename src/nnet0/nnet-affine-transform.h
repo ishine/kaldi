@@ -486,6 +486,7 @@ protected:
   BaseFloat local_lrate;
   BaseFloat local_lrate_bias;
   int32 fix_ ;
+  int32 bit_;
 
 };
 

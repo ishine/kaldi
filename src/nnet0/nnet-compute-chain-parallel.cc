@@ -224,7 +224,7 @@ private:
 		while((example = repository_->ProvideExample()) != NULL) {
 
 			int size = 0, minibatch = 0, utt_frame_num = 0, in_skip, out_skip,
-					utt_len, offset, ctx_left, reset = false, nbptt_truncated;
+					utt_len, offset, ctx_left, reset = false; // nbptt_truncated;
             if (chain_example != NULL) 
                delete chain_example;
 			chain_example = dynamic_cast<ChainNnetExample*>(example);
@@ -246,7 +246,7 @@ private:
 				KALDI_WARN << "egs left context is " << ctx_left << ", it will be force use the small one";
 			ctx_left = (ctx_left > context_left && context_left != -1) ? context_left : ctx_left;
 
-			nbptt_truncated = utt_len;
+			//nbptt_truncated = utt_len;
             KALDI_ASSERT(utt_frame_num-offset >=  (utt_len+targets_delay)*skip_frames);
 
             cu_feat_utts.Resize(io.features.NumRows(), io.features.NumCols(), kUndefined);
