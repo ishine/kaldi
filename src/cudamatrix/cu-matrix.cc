@@ -2104,6 +2104,38 @@ void CuMatrixBase<Real>::FindRowMaxId(CuArray<int32> *id) const {
 }
 
 template<typename Real>
+void CuMatrixBase<Real>::FindRowAbsMax(CuVectorBase<Real> &row_max) const {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    Timer tim;
+    row_max.SetZero();
+    MatrixDim d = Dim();
+
+    // CUDA thread layout: one thread block per matrix-row.
+    dim3 dimBlock(CU1DBLOCK);
+    dim3 dimGrid(num_rows_);
+    cuda_find_row_abs_max(dimGrid, dimBlock, data_, row_max.Data(), d);
+    CU_SAFE_CALL(cudaGetLastError());
+
+    // now we have the indices!
+    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+  } else
+#endif
+  {
+    MatrixIndexT num_rows = num_rows_, num_cols = num_cols_;
+    for(MatrixIndexT r = 0; r < num_rows; r++) {
+      const Real *row_data = Mat().RowData(r);
+      row_max.Data()[r] = fabs(row_data[0]);
+      for(MatrixIndexT c = 0; c < num_cols; c++) {
+        if (row_max.Data()[r] < fabs(row_data[c])) {
+          row_max.Data()[r] = fabs(row_data[c]);
+        }
+      }
+    }
+  }
+}
+
+template<typename Real>
 void CuMatrixBase<Real>::DiffSoftmaxPerRow(const CuMatrixBase<Real> &value,
                                            const CuMatrixBase<Real> &diff) {
 
@@ -3522,7 +3554,7 @@ void CuMatrixBase<Real>::ApplyCeiling(Real ceiling_val) {
 }
 
 template<typename Real>
-void CuMatrixBase<Real>::ApplyFixed(Real resolution) {
+void CuMatrixBase<Real>::ApplyFixed(Real resolution, int32 mode) {
  
  #if HAVE_CUDA == 1
      if(CuDevice::Instantiate().Enabled()) {
@@ -3530,13 +3562,13 @@ void CuMatrixBase<Real>::ApplyFixed(Real resolution) {
         dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
          dim3 dimGrid(n_blocks(NumCols(), CU2DBLOCK), n_blocks(NumRows(), CU2DBLOCK));
  
-         cuda_apply_fixed(dimGrid, dimBlock, data_, resolution, Dim());
+         cuda_apply_fixed(dimGrid, dimBlock, data_, resolution, mode, Dim());
          CU_SAFE_CALL(cudaGetLastError());
          CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
      }else
  #endif
      {
-         Mat().ApplyFixed(resolution);
+         Mat().ApplyFixed(resolution, mode);
  
      }
  }
@@ -4064,18 +4096,23 @@ Real CuMatrixBase<Real>::Max() const {
 }
 
 template<typename Real>
-Real CuMatrixBase<Real>::MaxAbs() const{
-
-    Timer tim;
-    Matrix<Real> tmp(NumRows(), NumCols(), kUndefined);
-    CopyToMat(&tmp);
-    Real ans = tmp.MaxAbs();
+Real CuMatrixBase<Real>::AbsMax() const {
 #if HAVE_CUDA == 1
-    if (CuDevice::Instantiate().Enabled()) {
-        CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
-    }
-#endif
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(num_rows_ > 0 && num_cols_ > 0);
+    Timer tim;
+
+    CuVector<Real> col_max(num_rows_, kUndefined);
+    cuda_abs_max_mat_cols(num_rows_, CU1DBLOCK, col_max.Data(), data_, Dim());
+    Real ans = col_max.Max();
+
+    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
     return ans;
+  } else
+#endif
+  {
+    return Mat().AbsMax();
+  }
 }
 
 template<typename Real>

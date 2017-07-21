@@ -204,7 +204,7 @@ private:
         }
 
 		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out, nnet_diff;
-		CuMatrix<BaseFloat> si_nnet_out;
+		CuMatrix<BaseFloat> si_nnet_out; // soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();

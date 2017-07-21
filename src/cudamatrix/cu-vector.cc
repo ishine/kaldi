@@ -684,6 +684,25 @@ void CuVectorBase<Real>::ApplyExp() {
 
 
 template<typename Real>
+void CuVectorBase<Real>::ApplyFixed(Real resolution, int32 mode){
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    if (dim_ == 0) return;
+    Timer tim; 
+    int dimBlock(CU1DBLOCK);
+    int dimGrid(n_blocks(dim_,CU1DBLOCK));
+
+    cuda_vec_apply_fixed(dimGrid, dimBlock, data_, resolution, mode, dim_);
+    CuDevice::Instantiate().AccuProfile("CuVectorBase::ApplyFixed", tim.Elapsed());
+  } else
+#endif
+   {    
+     Vec().ApplyFixed(resolution, mode);
+   }    
+}
+
+
+template<typename Real>
 void CuVectorBase<Real>::ApplyLog() {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {

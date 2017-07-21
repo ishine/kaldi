@@ -169,7 +169,7 @@ class VectorBase {
   void ApplyPowAbs(Real power, bool include_sign=false);
 
     
-  void ApplyFixed(Real resolution, int32 mode=0);
+  void ApplyFixed(Real resolution, int32 mode=1);
 
   /// Compute the p-th norm of the vector.
   Real Norm(Real p) const;

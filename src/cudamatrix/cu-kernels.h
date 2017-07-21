@@ -205,9 +205,9 @@ inline void cuda_apply_floor(dim3 Gr, dim3 Bl, float* mat, float floor_val,
                              MatrixDim dim) {
   cudaF_apply_floor(Gr, Bl, mat, floor_val, dim);
 }
-inline void cuda_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, 
+inline void cuda_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, int mode,
                              MatrixDim d) {
-  cudaF_apply_fixed(Gr, Bl, mat,resolution, d);
+  cudaF_apply_fixed(Gr, Bl, mat,resolution, mode, d);
 }
 inline void cuda_apply_ceiling(dim3 Gr, dim3 Bl, float* mat, float ceiling_val,
                                MatrixDim dim, cudaStream_t s=NULL) {
@@ -429,6 +429,10 @@ inline void cuda_max_mat_cols(int Gr, int Bl, float* result, const float* mat,
                               const MatrixDim d) {
   cudaF_max_mat_cols(Gr, Bl, result, mat, d);
 }
+inline void cuda_abs_max_mat_cols(int Gr, int Bl, float* result, const float* mat,
+                              const MatrixDim d) {
+  cudaF_abs_max_mat_cols(Gr, Bl, result, mat, d);
+}
 inline void cuda_min_mat_cols(int Gr, int Bl, float* result, const float* mat,
                               const MatrixDim d) {
   cudaF_min_mat_cols(Gr, Bl, result, mat, d);
@@ -525,6 +529,9 @@ inline void cuda_vec_apply_ceiling(int Gr, int Bl, float* v, float floor_val,
 }
 inline void cuda_vec_apply_exp(int Gr, int Bl, float* v, int dim) {
   cudaF_vec_apply_exp(Gr, Bl, v, dim);
+}
+inline void cuda_vec_apply_fixed(int Gr, int Bl, float* v, float resolution, int mode, int dim) {
+  cudaF_vec_apply_fixed(Gr, Bl, v, resolution, mode, dim);
 }
 inline void cuda_vec_apply_log(int Gr, int Bl, float* v, float* flag, int dim) {
   cudaF_vec_apply_log(Gr, Bl, v, flag, dim);
@@ -631,6 +638,11 @@ inline void cuda_find_row_max_id(dim3 Gr, dim3 Bl, const float *mat,
                                  float *vec_val, int32_cuda *vec_id,
                                  MatrixDim d) {
   cudaF_find_row_max_id(Gr, Bl, mat, vec_val, vec_id, d);
+}
+inline void cuda_find_row_abs_max(dim3 Gr, dim3 Bl, const float *mat,
+                                 float *row_max,
+                                 MatrixDim d) {
+  cudaF_find_row_abs_max(Gr, Bl, mat, row_max, d);
 }
 inline void cuda_diff_xent(dim3 Gr, dim3 Bl, const int32_cuda *vec_tgt,
                            float *mat_net_out, float *vec_log_post,
@@ -877,9 +889,9 @@ inline void cuda_apply_floor(dim3 Gr, dim3 Bl, double* mat, double floor_val,
                              MatrixDim dim) {
   cudaD_apply_floor(Gr, Bl, mat, floor_val, dim);
 }
-inline void cuda_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, 
+inline void cuda_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, int mode, 
                              MatrixDim d) {
-  cudaD_apply_fixed(Gr, Bl, mat,resolution, d);
+  cudaD_apply_fixed(Gr, Bl, mat,resolution, mode, d);
 }
 inline void cuda_apply_ceiling(dim3 Gr, dim3 Bl, double* mat,
                                double ceiling_val, MatrixDim dim, cudaStream_t s=NULL) {
@@ -1102,6 +1114,10 @@ inline void cuda_max_mat_cols(int Gr, int Bl, double* result, const double* mat,
                               const MatrixDim d) {
   cudaD_max_mat_cols(Gr, Bl, result, mat, d);
 }
+inline void cuda_abs_max_mat_cols(int Gr, int Bl, double* result, const double* mat,
+                              const MatrixDim d) {
+  cudaD_abs_max_mat_cols(Gr, Bl, result, mat, d);
+}
 inline void cuda_min_mat_cols(int Gr, int Bl, double* result, const double* mat,
                               const MatrixDim d) {
   cudaD_min_mat_cols(Gr, Bl, result, mat, d);
@@ -1200,8 +1216,8 @@ inline void cuda_vec_apply_ceiling(int Gr, int Bl, double* v, double floor_val,
 inline void cuda_vec_apply_exp(int Gr, int Bl, double* v, int dim) {
   cudaD_vec_apply_exp(Gr, Bl, v, dim);
 }
-inline void cuda_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int dim) {
-  cudaD_vec_apply_fixed(Gr, Bl, v, resolution, dim);
+inline void cuda_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int mode, int dim) {
+  cudaD_vec_apply_fixed(Gr, Bl, v, resolution, mode, dim);
 }
 inline void cuda_vec_apply_log(int Gr, int Bl, double* v, double* flag,
                                int dim) {
@@ -1313,6 +1329,11 @@ inline void cuda_find_row_max_id(dim3 Gr, dim3 Bl, const double *mat,
                                  double *vec_val, int32_cuda *vec_id,
                                  MatrixDim d) {
   cudaD_find_row_max_id(Gr, Bl, mat, vec_val, vec_id, d);
+}
+inline void cuda_find_row_abs_max(dim3 Gr, dim3 Bl, const double *mat,
+                                 double *row_max,
+                                 MatrixDim d) {
+  cudaD_find_row_abs_max(Gr, Bl, mat, row_max, d);
 }
 inline void cuda_diff_xent(dim3 Gr, dim3 Bl, const int32_cuda *vec_tgt,
                            double *mat_net_out, double *vec_log_post,

@@ -147,6 +147,7 @@ class CuVectorBase {
   MatrixIndexT ApplyFloor(Real floor_val);
   MatrixIndexT ApplyCeiling(Real ceiling_val);
   void ApplyPow(Real power);
+  void ApplyFixed(Real resolution, int32 mode=1);
   Real Sum() const;
 
   void SetRandn();

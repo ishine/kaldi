@@ -1,7 +1,8 @@
-// nnet0/nnet-lstm-projected-streams-fast.h
+// nnet0/nnet-lstm-projected-streams-fixedpoint.h
 
 // Copyright 2014  Jiayu DU (Jerry), Wei Li
 // Copyright 2015  Shanghai Jiao Tong University (author: Wei Deng)
+// Copyright 2016-2017  AISpeech (author: Tao Xu)
 
 // See ../../COPYING for clarification regarding multiple authors
 //
@@ -20,12 +21,13 @@
 
 
 
-#ifndef KALDI_NNET_NNET_LSTM_PROJECTED_STREAMS_FAST_H_
-#define KALDI_NNET_NNET_LSTM_PROJECTED_STREAMS_FAST_H_
+#ifndef KALDI_NNET_NNET_LSTM_PROJECTED_STREAMS_FIXEDPOINT_H_
+#define KALDI_NNET_NNET_LSTM_PROJECTED_STREAMS_FIXEDPOINT_H_
 
 #include "nnet0/nnet-component.h"
 #include "nnet0/nnet-utils.h"
 #include "cudamatrix/cu-math.h"
+#include "nnet0/nnet-lstm-projected-streams-fast.h"
 
 /*************************************
  * x: input neuron
@@ -48,26 +50,21 @@ class LmModelSync;
 
 namespace nnet0 {
 
-class LstmProjectedStreamsFast : public UpdatableComponent {
+class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
 	friend class NnetModelSync;
 	friend class lm::LmModelSync;
  public:
-  LstmProjectedStreamsFast(int32 input_dim, int32 output_dim) :
-    UpdatableComponent(input_dim, output_dim),
-    ncell_(0),
-    nrecur_(output_dim),
-    nstream_(0),
-    ntruncated_bptt_size_(0),
-    clip_gradient_(0.0), clip_cell_(50.0),
-	learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0)
+  LstmProjectedStreamsFixedPoint(int32 input_dim, int32 output_dim) :
+    LstmProjectedStreamsFast(input_dim, output_dim),
+    max_w_gifo_x_(1.0), max_w_gifo_r_(1.0), max_w_r_m_(1.0), fix_(0), bit_(7)
     //, dropout_rate_(0.0)
   { }
 
-  ~LstmProjectedStreamsFast()
+  ~LstmProjectedStreamsFixedPoint()
   { }
 
-  Component* Copy() const { return new LstmProjectedStreamsFast(*this); }
-  ComponentType GetType() const { return kLstmProjectedStreamsFast; }
+  Component* Copy() const { return new LstmProjectedStreamsFixedPoint(*this); }
+  ComponentType GetType() const { return kLstmProjectedStreamsFixedPoint; }
 
   static void InitMatParam(CuMatrix<BaseFloat> &m, float scale) {
     m.SetRandUniform();  // uniform in [0, 1]
@@ -105,6 +102,8 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       else if (token == "<LearnRateCoef>") ReadBasicType(is, false, &learn_rate_coef_);
       else if (token == "<BiasLearnRateCoef>") ReadBasicType(is, false, &bias_learn_rate_coef_);
       else if (token == "<MaxNorm>") ReadBasicType(is, false, &max_norm_);
+      else if (token == "<FixPoint>") ReadBasicType(is, false, &fix_);
+      else if (token == "<Bit>") ReadBasicType(is, false, &bit_);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                << " (CellDim|ClipGradient|ParamScale)";
                //<< " (CellDim|ClipGradient|DropoutRate|ParamScale)";
@@ -169,6 +168,14 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
         ExpectToken(is, binary, "<ClipCell>");
         ReadBasicType(is, binary, &clip_cell_);
     }
+    if('<' == Peek(is, binary)) {
+        ExpectToken(is, binary, "<FixPoint>");
+        ReadBasicType(is, binary, &fix_);
+    }
+    if('<' == Peek(is, binary)) {
+        ExpectToken(is, binary, "<Bit>");
+        ReadBasicType(is, binary, &bit_);
+    }
     //ExpectToken(is, binary, "<DropoutRate>");
     //ReadBasicType(is, binary, &dropout_rate_);
 
@@ -192,6 +199,29 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
     w_r_m_corr_.Resize(nrecur_, ncell_, kSetZero);
+
+    // init fixed point buffer
+    if (fix_ > 0) {
+        w_gifo_x_fix_ = w_gifo_x_;
+        max_w_gifo_x_ = w_gifo_x_fix_.AbsMax();
+        w_gifo_x_fix_.Scale(1.0/max_w_gifo_x_);
+        w_gifo_x_fix_.ApplyFixed(pow(2, -bit_), fix_);
+ 
+        w_gifo_r_fix_ = w_gifo_r_;
+        max_w_gifo_r_ = w_gifo_r_fix_.AbsMax();
+        w_gifo_r_fix_.Scale(1.0/max_w_gifo_r_);
+        w_gifo_r_fix_.ApplyFixed(pow(2, -bit_), fix_);
+ 
+        w_r_m_fix_ = w_r_m_;
+        max_w_r_m_ = w_r_m_fix_.AbsMax();
+        w_r_m_fix_.Scale(1.0/max_w_r_m_);
+        w_r_m_fix_.ApplyFixed(pow(2, -bit_), fix_);
+    }
+
+    p_w_gifo_x_ = fix_ ? &w_gifo_x_fix_ : &w_gifo_x_;
+    p_w_gifo_r_ = fix_ ? &w_gifo_r_fix_ : &w_gifo_r_;
+    p_w_r_m_ = fix_ ? &w_r_m_fix_ : &w_r_m_;
+    
   }
 
   void WriteData(std::ostream &os, bool binary) const {
@@ -209,6 +239,10 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     if (clip_cell_ != 50.0) {
         WriteToken(os, binary, "<ClipCell>");
         WriteBasicType(os, binary, clip_cell_);
+        WriteToken(os, binary, "<FixPoint>");
+        WriteBasicType(os, binary, fix_);
+        WriteToken(os, binary, "<Bit>");
+        WriteBasicType(os, binary, bit_);
     }
     //WriteToken(os, binary, "<DropoutRate>");
     //WriteBasicType(os, binary, dropout_rate_);
@@ -334,29 +368,17 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       "\n  DR  " + MomentStatistics(DR);
   }
 
-  void SetLstmContext(const Matrix<BaseFloat> &recurrent, const Matrix<BaseFloat> &cell) {
-	  KALDI_ASSERT(nstream_ == recurrent.NumRows());
-	  KALDI_ASSERT(nstream_ == cell.NumRows());
+  void SetLstmContext(const CuMatrixBase<BaseFloat> &context)
+  {
+	  KALDI_ASSERT(prev_nnet_state_.NumRows() == context.NumRows());
+	  KALDI_ASSERT(prev_nnet_state_.NumCols() == context.NumCols());
 
-	  CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_, nrecur_));
-	  yr.CopyFromMat(recurrent);
-	  CuSubMatrix<BaseFloat> yc(prev_nnet_state_.ColRange(4*ncell_, ncell_));
-	  yc.CopyFromMat(cell);
+	  prev_nnet_state_.CopyFromMat(context);
   }
 
-  void GetLstmContext(Matrix<BaseFloat> &recurrent, Matrix<BaseFloat> &cell) {
-		KALDI_ASSERT(nstream_ == recurrent.NumRows());
-		KALDI_ASSERT(nstream_ == cell.NumRows());
-
-		CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_, nrecur_));
-		yr.CopyToMat(&recurrent);
-		CuSubMatrix<BaseFloat> yc(prev_nnet_state_.ColRange(4*ncell_, ncell_));
-		yc.CopyToMat(&cell);
-  }
-
-  void GetRCDim(int &r, int &c) {
-        r = nrecur_;
-        c = ncell_;
+  void GetLstmContext(CuMatrix<BaseFloat> *context)
+  {
+	  *context = prev_nnet_state_;
   }
 
   void UpdateLstmStreamsState(const std::vector<int32> &update_state_flag) {
@@ -456,10 +478,25 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
         }
     }
-
+    
+    if (fix_ > 0) {
+        if (input_fix_.NumRows() != in.NumRows()) 
+            input_fix_.Resize(in.NumRows(), in.NumCols());
+        input_fix_.CopyFromMat(in);
+        if(opts_.fix_decode) {
+            input_fix_.ApplyFloor(-8.0);
+            input_fix_.ApplyCeiling(8.0);
+        }
+        input_fix_.ApplyFixed(pow(2, -4), fix_);
+    }
+    p_input_ = fix_ > 0 ? &input_fix_ : &in;
 
     // x -> g, i, f, o, not recurrent, do it all in once
-    YGIFO->RowRange(1*S,T*S).AddMatMat(1.0, in, kNoTrans, w_gifo_x_, kTrans, 0.0);
+    YGIFO->RowRange(1*S,T*S).AddMatMat(max_w_gifo_x_, *p_input_, kNoTrans, *p_w_gifo_x_, kTrans, 0.0);
+    if(opts_.fix_decode){
+        YGIFO->RowRange(1*S,T*S).ApplyFloor(-8.0);
+        YGIFO->RowRange(1*S,T*S).ApplyCeiling(8.0);
+    }
     //// LSTM forward dropout
     //// Google paper 2014: Recurrent Neural Network Regularization
     //// by Wojciech Zaremba, Ilya Sutskever, Oriol Vinyals
@@ -473,17 +510,35 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
     // bias -> g, i, f, o
     YGIFO->RowRange(1*S,T*S).AddVecToRows(1.0, bias_);
+    if(opts_.fix_decode) {
+        YGIFO->RowRange(1*S,T*S).ApplyFloor(-8.0);
+        YGIFO->RowRange(1*S,T*S).ApplyCeiling(8.0);
+    }
 
     for (int t = 1; t <= T; t++) {
 
       // r(t-1) -> g, i, f, o
-      y_gifo[t]->AddMatMat(1.0, *y_r[t-1], kNoTrans, w_gifo_r_, kTrans,  1.0);
+      if(fix_ > 0)
+        y_r[t-1]->ApplyFixed(pow(2, -4), fix_);
+      y_gifo[t]->AddMatMat(max_w_gifo_r_, *y_r[t-1], kNoTrans, *p_w_gifo_r_, kTrans,  1.0);
+      if(opts_.fix_decode) {
+          y_gifo[t]->ApplyFloor(-8.0);
+          y_gifo[t]->ApplyCeiling(8.0);
+      }
 
       // c(t-1) -> i(t) via peephole
       y_i[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, peephole_i_c_, 1.0);
+      if(opts_.fix_decode) {
+          y_i[t]->ApplyFloor(-8.0);
+          y_i[t]->ApplyCeiling(8.0);
+      }
 
       // c(t-1) -> f(t) via peephole
       y_f[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, peephole_f_c_, 1.0);
+      if(opts_.fix_decode) {
+          y_f[t]->ApplyFloor(-8.0);
+          y_f[t]->ApplyCeiling(8.0);
+      }
 
       // i, f sigmoid squashing
       y_i[t]->Sigmoid(*y_i[t]);
@@ -506,6 +561,10 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
       // c(t) -> o(t) via peephole (non-recurrent) & o squashing
       y_o[t]->AddMatDiagVec(1.0, *y_c[t], kNoTrans, peephole_o_c_, 1.0);
+      if(opts_.fix_decode) {
+          y_o[t]->ApplyFloor(-8.0);
+          y_o[t]->ApplyCeiling(8.0);
+      }
 
       // o sigmoid squashing
       y_o[t]->Sigmoid(*y_o[t]);
@@ -514,7 +573,13 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       y_m[t]->AddMatMatElements(1.0, *y_h[t], *y_o[t], 0.0);
 
       // m -> r
-      y_r[t]->AddMatMat(1.0, *y_m[t], kNoTrans, w_r_m_, kTrans, 0.0);
+      if (fix_ > 0)
+        y_m[t]->ApplyFixed(pow(2, -4), fix_);
+      y_r[t]->AddMatMat(max_w_r_m_, *y_m[t], kNoTrans, *p_w_r_m_, kTrans, 0.0);
+      if(opts_.fix_decode) {
+          y_r[t]->ApplyFloor(-8.0);
+          y_r[t]->ApplyCeiling(8.0);
+      }
 
       if (DEBUG) {
         std::cerr << "forward-pass frame " << t << "\n";
@@ -600,8 +665,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     for (int t = T; t >= 1; t--) {
 
       if (ntruncated_bptt_size_ > 0)
-    	  bptt = (t<T && (T-t)%ntruncated_bptt_size_==0) ? 0.0 : 1.0;
-    	  //bptt = t%ntruncated_bptt_size_==0 ? 0.0 : 1.0;
+    	  bptt = t % ntruncated_bptt_size_ ? 1.0 : 0;
       // r
       //   Version 1 (precise gradients):
       //   backprop error from g(t+1), i(t+1), f(t+1), o(t+1) to r(t)
@@ -702,7 +766,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
 	    // weight x -> g, i, f, o
 	    w_gifo_x_corr_.AddMatMat(1.0, DGIFO->RowRange(1*S,T*S), kTrans,
-	                                  input                  , kNoTrans, mmt);
+	                                  *p_input_                  , kNoTrans, mmt);
 	    // recurrent weight r -> g, i, f, o
 	    w_gifo_r_corr_.AddMatMat(1.0, DGIFO->RowRange(1*S,T*S), kTrans,
 	                                  YR->RowRange(0*S,T*S)   , kNoTrans, mmt);
@@ -782,22 +846,40 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
 	    w_r_m_.AddMat(-lr, w_r_m_corr_);
 
-        if (clip_cell_ > 0.0) {
-          w_gifo_x_.ApplyFloor(-clip_cell_);
-          w_gifo_x_.ApplyCeiling(clip_cell_);
-          w_gifo_r_.ApplyFloor(-clip_cell_);
-          w_gifo_r_.ApplyCeiling(clip_cell_);
-          bias_.ApplyFloor(-clip_cell_);
-          bias_.ApplyCeiling(clip_cell_);
-          w_r_m_.ApplyFloor(-clip_cell_);
-          w_r_m_.ApplyCeiling(clip_cell_);
-          peephole_i_c_.ApplyFloor(-clip_cell_);
-          peephole_i_c_.ApplyCeiling(clip_cell_);
-          peephole_f_c_.ApplyFloor(-clip_cell_);
-          peephole_f_c_.ApplyCeiling(clip_cell_);
-          peephole_o_c_.ApplyFloor(-clip_cell_);
-          peephole_o_c_.ApplyCeiling(clip_cell_);
+        if (clip_cell_ > 0.0 && opts_.clip_cell_scale > 0.0) {
+          w_gifo_x_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
+          w_gifo_x_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
+          w_gifo_r_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
+          w_gifo_r_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
+          bias_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
+          bias_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
+          w_r_m_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
+          w_r_m_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
+          peephole_i_c_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
+          peephole_i_c_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
+          peephole_f_c_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
+          peephole_f_c_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
+          peephole_o_c_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
+          peephole_o_c_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
         }
+
+        if(fix_ ){
+          w_gifo_x_fix_.CopyFromMat(w_gifo_x_);
+          max_w_gifo_x_ = w_gifo_x_fix_.AbsMax();
+          w_gifo_x_fix_.Scale(1.0/max_w_gifo_x_);
+          w_gifo_x_fix_.ApplyFixed(pow(2, -bit_), fix_);
+
+          w_gifo_r_fix_.CopyFromMat(w_gifo_r_);
+          max_w_gifo_r_ = w_gifo_r_fix_.AbsMax();            
+          w_gifo_r_fix_.Scale(1.0/max_w_gifo_r_);
+          w_gifo_r_fix_.ApplyFixed(pow(2, -bit_), fix_);
+
+          w_r_m_fix_.CopyFromMat(w_r_m_);
+          max_w_r_m_ = w_r_m_fix_.AbsMax();
+          w_r_m_fix_.Scale(1.0/max_w_r_m_);
+          w_r_m_fix_.ApplyFixed(pow(2, -bit_), fix_);
+        }
+            
   }
 
   void ResetGradient()
@@ -811,6 +893,15 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       w_r_m_corr_.SetZero();
   }
 
+  void ApplyFixed(BaseFloat resolution){
+     w_gifo_x_.ApplyFixed(resolution);
+     w_gifo_r_.ApplyFixed(resolution);
+     bias_.ApplyFixed(resolution);
+     peephole_i_c_.ApplyFixed(resolution);
+     peephole_o_c_.ApplyFixed(resolution);
+     peephole_f_c_.ApplyFixed(resolution);
+     w_r_m_.ApplyFixed(resolution);
+  }
 
   int WeightCopy(void *host, int direction, int copykind)
   {
@@ -838,7 +929,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
                 kind = cudaMemcpyDeviceToDevice;
                 break;
             default:
-                KALDI_ERR << "Default based unified address space";
+                KALDI_ERR << "Default based unified virtual address space";
                 break;
         }
 
@@ -924,7 +1015,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
     // weight x -> g, i, f, o
     w_gifo_x_corr_.AddMatMat(1.0, DGIFO->RowRange(1*S,T*S), kTrans,
-                                  input                     , kNoTrans, mmt);
+                                  *p_input_                   , kNoTrans, mmt);
     // recurrent weight r -> g, i, f, o
     w_gifo_r_corr_.AddMatMat(1.0, DGIFO->RowRange(1*S,T*S), kTrans,
                                   YR->RowRange(0*S,T*S)   , kNoTrans, mmt);
@@ -1079,73 +1170,26 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 		*/
   }
 
- protected:
-  // dims
-  int32 ncell_;
-  int32 nrecur_;  ///< recurrent projection layer dim
-  int32 nstream_;
-  int32 ntruncated_bptt_size_;
+ private:
 
-  CuMatrix<BaseFloat> prev_nnet_state_;
-  CuArray<MatrixIndexT> keep_state_indices_;
-
-  // gradient-clipping value,
-  BaseFloat clip_gradient_;
-  // cell activation clipping value,
-  BaseFloat clip_cell_;
-
-  // non-recurrent dropout
-  //BaseFloat dropout_rate_;
-  //CuMatrix<BaseFloat> dropout_mask_;
-
+  CuMatrix<BaseFloat> input_fix_;
   // feed-forward connections: from x to [g, i, f, o]
-  CuMatrix<BaseFloat> w_gifo_x_;
-  CuMatrix<BaseFloat> w_gifo_x_corr_;
+  CuMatrix<BaseFloat> w_gifo_x_fix_;
 
   // recurrent projection connections: from r to [g, i, f, o]
-  CuMatrix<BaseFloat> w_gifo_r_;
-  CuMatrix<BaseFloat> w_gifo_r_corr_;
-
-  // biases of [g, i, f, o]
-  CuVector<BaseFloat> bias_;
-  CuVector<BaseFloat> bias_corr_;
-
-  // peephole from c to i, f, g
-  // peephole connections are block-internal, so we use vector form
-  CuVector<BaseFloat> peephole_i_c_;
-  CuVector<BaseFloat> peephole_f_c_;
-  CuVector<BaseFloat> peephole_o_c_;
-
-  CuVector<BaseFloat> peephole_i_c_corr_;
-  CuVector<BaseFloat> peephole_f_c_corr_;
-  CuVector<BaseFloat> peephole_o_c_corr_;
+  CuMatrix<BaseFloat> w_gifo_r_fix_;
 
   // projection layer r: from m to r
-  CuMatrix<BaseFloat> w_r_m_;
   CuMatrix<BaseFloat> w_r_m_fix_;
-  CuMatrix<BaseFloat> w_r_m_corr_;
 
-  // propagate buffer: output of [g, i, f, o, c, h, m, r]
-  CuMatrix<BaseFloat> propagate_buf_;
+  const CuMatrixBase<BaseFloat> *p_input_;
+  CuMatrix<BaseFloat> *p_w_gifo_x_, *p_w_gifo_r_, *p_w_r_m_;
 
-  // back-propagate buffer: diff-input of [g, i, f, o, c, h, m, r]
-  CuMatrix<BaseFloat> backpropagate_buf_;
-
-  std::vector<CuSubMatrix<BaseFloat>* > y_g, y_i, y_f, y_o,
-  	  	  	  	  	  	  	  	  	  	  y_c, y_h, y_m, y_r, y_gifo;
-  std::vector<CuSubMatrix<BaseFloat>* > d_g, d_i, d_f, d_o,
-    	  	  	  	  	  	  	  	  	  	  d_c, d_h, d_m, d_r, d_gifo;
-
-  CuSubMatrix<BaseFloat> *YG, *YI, *YF, *YO,
-  	  	  	  	  	  	  	  	  	  	  *YC, *YH, *YM, *YR, *YGIFO;
-
-  CuSubMatrix<BaseFloat> *DG, *DI, *DF, *DO,
-   	  	  	  	  	  	  	  	  	  	  *DC, *DH, *DM, *DR, *DGIFO;
-
-  BaseFloat learn_rate_coef_;
-  BaseFloat bias_learn_rate_coef_;
-  BaseFloat max_norm_;
-
+  BaseFloat max_w_gifo_x_ ;
+  BaseFloat max_w_gifo_r_ ;
+  BaseFloat max_w_r_m_;
+  int32 fix_;
+  int32 bit_;
 };
 } // namespace nnet0
 } // namespace kaldi

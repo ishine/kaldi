@@ -60,7 +60,7 @@ void cudaF_copy_from_tp(dim3 Gr, dim3 Bl, float* A, const float* B,
 void cudaFD_copy_from_tp(dim3 Gr, dim3 Bl, float* A, const double* B,
                          MatrixDim dmat);
 void cudaF_apply_exp(dim3 Gr, dim3 Bl, float* mat, MatrixDim d, cudaStream_t s=NULL);
-void cudaF_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, MatrixDim d);
+void cudaF_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, int mode, MatrixDim d);
 void cudaF_apply_pow(dim3 Gr, dim3 Bl, float* mat, float power, MatrixDim d);
 void cudaF_apply_pow_abs(dim3 Gr, dim3 Bl, float* mat, float power,
                          bool include_sign, MatrixDim d);
@@ -169,6 +169,8 @@ void cudaF_entropy(dim3 Gr, dim3 Bl, float *entropy, const float *mat, MatrixDim
  */
 void cudaF_max_mat_cols(int Gr, int Bl, float* result, const float* mat,
                         const MatrixDim d);
+void cudaF_abs_max_mat_cols(int Gr, int Bl, float* result, const float* mat,
+                        const MatrixDim d);
 void cudaF_min_mat_cols(int Gr, int Bl, float* result, const float* mat,
                         const MatrixDim d);
 void cudaF_sum_mat_cols(int Gr, int Bl, float* result, const float* mat,
@@ -218,7 +220,7 @@ void cudaF_vec_apply_floor(int Gr, int Bl, float* v, float floor_val,
 void cudaF_vec_apply_ceiling(int Gr, int Bl, float* v, float ceiling_val,
                              float* num, int dim);
 void cudaF_vec_apply_exp(int Gr, int Bl, float* v, int dim);
-void cudaF_vec_apply_fixed(int Gr, int Bl, float* v, float resolution, int dim);
+void cudaF_vec_apply_fixed(int Gr, int Bl, float* v, float resolution, int mode, int dim);
 void cudaF_vec_apply_log(int Gr, int Bl, float* v, float* flag, int dim);
 void cudaF_trace(int Gr, int Bl, float* mat, float* value, int dim);
 void cudaF_invert_elements(dim3 Gr, dim3 Bl, float *data, MatrixDim d);
@@ -275,6 +277,8 @@ void cudaF_regularize_l1(dim3 Gr, dim3 Bl, float *wei, float *grad, float l1,
                          float lr, MatrixDim d, int stride_grad);
 void cudaF_find_row_max_id(dim3 Gr, dim3 Bl, const float *mat, float *vec_val,
                            int32_cuda *vec_id, MatrixDim d);
+void cudaF_find_row_abs_max(dim3 Gr, dim3 Bl, const float *mat,
+                           float *row_max, MatrixDim d);
 void cudaF_diff_xent(dim3 Gr, dim3 Bl, const int32_cuda *vec_tgt,
                      float *mat_net_out, float *vec_log_post, MatrixDim d);
 void cudaF_diff_softmax(dim3 Gr, dim3 Bl, float* x, const MatrixDim dim,
@@ -360,7 +364,7 @@ void cudaD_apply_pow_abs(dim3 Gr, dim3 Bl, double* mat, double power,
 void cudaD_apply_heaviside(dim3 Gr, dim3 Bl, double* mat, MatrixDim d);
 void cudaD_apply_floor(dim3 Gr, dim3 Bl, double* mat, double floor_val,
                        MatrixDim d);
-void cudaD_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution,
+void cudaD_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, int mode,
                        MatrixDim d);
 void cudaD_copy_cols(dim3 Gr, dim3 Bl, double* dst, const double* src,
                      const MatrixIndexT_cuda* reorder, MatrixDim dst_dim,
@@ -468,6 +472,8 @@ void cudaD_gen_tgt(dim3 Gr, dim3 Bl, double *x, const int32_cuda *vec_id, Matrix
  */
 void cudaD_max_mat_cols(int Gr, int Bl, double* result, const double* mat,
                         const MatrixDim d);
+void cudaD_abs_max_mat_cols(int Gr, int Bl, double* result, const double* mat,
+                        const MatrixDim d);
 void cudaD_min_mat_cols(int Gr, int Bl, double* result, const double* mat,
                         const MatrixDim d);
 void cudaD_sum_mat_cols(int Gr, int Bl, double* result, const double* mat,
@@ -515,7 +521,7 @@ void cudaD_vec_apply_floor(int Gr, int Bl, double* v, double floor_val,
 void cudaD_vec_apply_ceiling(int Gr, int Bl, double* v, double ceiling_val,
                              float* num, int dim);
 void cudaD_vec_apply_exp(int Gr, int Bl, double* v, int dim);
-void cudaD_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int dim);
+void cudaD_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int mode, int dim);
 void cudaD_vec_apply_log(int Gr, int Bl, double* v, double* flag, int dim);
 void cudaD_trace(int Gr, int Bl, double* mat, double* value, int dim);
 void cudaD_invert_elements(dim3 Gr, dim3 Bl, double *data, MatrixDim d);
@@ -574,6 +580,8 @@ void cudaD_regularize_l1(dim3 Gr, dim3 Bl, double *wei, double *grad, double l1,
                          double lr, MatrixDim d, int stride_grad);
 void cudaD_find_row_max_id(dim3 Gr, dim3 Bl, const double *mat, double *vec_val,
                            int32_cuda *vec_id, MatrixDim d);
+void cudaD_find_row_abs_max(dim3 Gr, dim3 Bl, const double *mat,
+                           double *row_max, MatrixDim d);
 void cudaD_diff_xent(dim3 Gr, dim3 Bl, const int32_cuda *vec_tgt,
                      double *mat_net_out, double *vec_log_post, MatrixDim d);
 void cudaD_diff_softmax(dim3 Gr, dim3 Bl, double* x, const MatrixDim dim,

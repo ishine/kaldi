@@ -360,7 +360,7 @@ private:
 			if (num_done % 5000 == 0)
 			{
 			  time_now = time.Elapsed();
-			  KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
+			  KALDI_LOG << "After " << num_done << " utterances: time elapsed = "
 							<< time_now/60 << " min; processed " << total_frames/time_now
 							<< " frames per second.";
 			}

@@ -29,6 +29,7 @@
 
 #include "nnet0/nnet-affine-preconditioned-transform.h"
 #include "nnet0/nnet-lstm-projected-streams-fast.h"
+#include "nnet0/nnet-lstm-projected-streams-fixedpoint.h"
 #include "nnet0/nnet-lstm-projected-streams-simple.h"
 #include "nnet0/nnet-lstm-streams.h"
 #include "nnet0/nnet-gru-streams.h"
@@ -500,6 +501,10 @@ void Nnet::ResetLstmStreams(const std::vector<int32> &stream_reset_flag, int32 n
       LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
     }
+    else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
+      LstmProjectedStreamsFixedPoint& comp = dynamic_cast<LstmProjectedStreamsFixedPoint&>(GetComponent(c));
+      comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
+    }
     else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsSimple) {
       LstmProjectedStreamsSimple& comp = dynamic_cast<LstmProjectedStreamsSimple&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
@@ -533,6 +538,10 @@ void Nnet::UpdateLstmStreamsState(const std::vector<int32> &stream_update_flag) 
   for (int32 c=0; c < NumComponents(); c++) {
 	if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
       LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
+      comp.UpdateLstmStreamsState(stream_update_flag);
+    }
+	if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
+      LstmProjectedStreamsFixedPoint& comp = dynamic_cast<LstmProjectedStreamsFixedPoint&>(GetComponent(c));
       comp.UpdateLstmStreamsState(stream_update_flag);
     }
 	else if (GetComponent(c).GetType() == Component::kParallelComponentMultiTask) {

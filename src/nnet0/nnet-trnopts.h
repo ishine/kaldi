@@ -33,11 +33,17 @@ struct NnetTrainOptions {
   BaseFloat momentum;
   BaseFloat l2_penalty;
   BaseFloat l1_penalty;
+
+  // fixed point option
+  BaseFloat clip_cell_scale;
+  bool fix_decode ;
   // default values
   NnetTrainOptions() : learn_rate(0.008),
                        momentum(0.0),
                        l2_penalty(0.0),
-                       l1_penalty(0.0) 
+                       l1_penalty(0.0),
+                       clip_cell_scale(1.0),
+                       fix_decode(true)
                        { }
   // register options
   void Register(OptionsItf *opts) {
@@ -45,6 +51,8 @@ struct NnetTrainOptions {
     opts->Register("momentum", &momentum, "Momentum");
     opts->Register("l2-penalty", &l2_penalty, "L2 penalty (weight decay)");
     opts->Register("l1-penalty", &l1_penalty, "L1 penalty (promote sparsity)");
+    opts->Register("clip-cell-scale", &clip_cell_scale, "Clip cell scale factor for lstm-ctc fixedpoint model training");
+    opts->Register("fix-decode", &fix_decode, "Simulate fixedpoint decoding");
   }
   // print for debug purposes
   friend std::ostream& operator<<(std::ostream& os, const NnetTrainOptions& opts) {

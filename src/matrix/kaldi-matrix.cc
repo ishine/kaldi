@@ -1610,7 +1610,7 @@ Real MatrixBase<Real>::Max() const {
 }
 
 template<typename Real>
-Real MatrixBase<Real>::MaxAbs() const {
+Real MatrixBase<Real>::AbsMax() const {
 
     KALDI_ASSERT(num_rows_ > 0 && num_cols_ > 0);
     Real ans= abs(*data_);
@@ -2055,9 +2055,9 @@ void MatrixBase<Real>::ApplyHeaviside() {
 }
 
 template<typename Real>
- void MatrixBase<Real>::ApplyFixed(Real resolution){
+ void MatrixBase<Real>::ApplyFixed(Real resolution, int mode){
      for(MatrixIndexT i = 0; i < num_rows_; i++){
-         Row(i).ApplyFixed(resolution);
+         Row(i).ApplyFixed(resolution, mode);
      }
  
  }

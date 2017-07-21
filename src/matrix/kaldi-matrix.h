@@ -227,7 +227,7 @@ class MatrixBase {
 
   /// Returns maximum element of matrix.
   Real Max() const;
-  Real MaxAbs() const;
+  Real AbsMax() const;
   /// Returns minimum element of matrix.
   Real Min() const;
 
@@ -361,7 +361,7 @@ class MatrixBase {
   /// RectifiedLinearComponent in the neural net code.
   void ApplyHeaviside();
 
-  void ApplyFixed(Real resolution);
+  void ApplyFixed(Real resolution, int mode=1);
   /// Eigenvalue Decomposition of a square NxN matrix into the form (*this) = P D
   /// P^{-1}.  Be careful: the relationship of D to the eigenvalues we output is
   /// slightly complicated, due to the need for P to be real.  In the symmetric
