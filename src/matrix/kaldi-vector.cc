@@ -894,7 +894,7 @@ Real VectorBase<Real>::ApplyLogSoftMax() {
 
 template<typename Real>
 void VectorBase<Real>::ApplyFixed(Real resolution, int32 mode){
-   if(0 == mode){
+   if(1 == mode){
      for(int i = 0; i < dim_; i++){
          Real tmp = int(data_[i]/resolution)*resolution ;
          if(data_[i] > 0.0){
@@ -910,9 +910,9 @@ void VectorBase<Real>::ApplyFixed(Real resolution, int32 mode){
                 data_[i] = tmp ;
          }
      }
-    }else if(1 == mode){
+    }else if(2 == mode){
       for(int i = 0; i < dim_; i++){
-        data_[i] = (data_[i]/resolution)*resolution;
+        data_[i] = int(data_[i]/resolution)*resolution;
       }
     }
 }

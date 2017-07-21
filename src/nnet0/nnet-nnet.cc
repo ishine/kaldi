@@ -29,6 +29,7 @@
 
 #include "nnet0/nnet-affine-preconditioned-transform.h"
 #include "nnet0/nnet-lstm-projected-streams-fast.h"
+#include "nnet0/nnet-lstm-projected-streams-fixedpoint.h"
 #include "nnet0/nnet-lstm-projected-streams-simple.h"
 #include "nnet0/nnet-lstm-streams.h"
 #include "nnet0/nnet-gru-streams.h"
@@ -500,6 +501,10 @@ void Nnet::ResetLstmStreams(const std::vector<int32> &stream_reset_flag, int32 n
       LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
     }
+    else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
+      LstmProjectedStreamsFixedPoint& comp = dynamic_cast<LstmProjectedStreamsFixedPoint&>(GetComponent(c));
+      comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
+    }
     else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsSimple) {
       LstmProjectedStreamsSimple& comp = dynamic_cast<LstmProjectedStreamsSimple&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
@@ -531,6 +536,10 @@ void Nnet::UpdateLstmStreamsState(const std::vector<int32> &stream_update_flag) 
       LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
       comp.UpdateLstmStreamsState(stream_update_flag);
     }
+	if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
+      LstmProjectedStreamsFixedPoint& comp = dynamic_cast<LstmProjectedStreamsFixedPoint&>(GetComponent(c));
+      comp.UpdateLstmStreamsState(stream_update_flag);
+    }
 	else if (GetComponent(c).GetType() == Component::kParallelComponentMultiTask) {
 	  ParallelComponentMultiTask& comp = dynamic_cast<ParallelComponentMultiTask&>(GetComponent(c));
 	  comp.UpdateLstmStreamsState(stream_update_flag);
@@ -559,7 +568,6 @@ BaseFloat Nnet::ComputeConditionalLogprob(int32 current_word,
             std::unordered_map<std::string, float> &unk_penalty)
 {
     static ClassAffineTransform *class_affine = NULL;
-    static CBSoftmax *cb_softmax = NULL;
     static std::vector<int32> word2class;
     static std::vector<int32> class_boundary;
     static std::vector<int32> sortedclass_target_index(1,0), sortedclass_target_reindex(1,0);
@@ -571,8 +579,6 @@ BaseFloat Nnet::ComputeConditionalLogprob(int32 current_word,
         {
         	if (this->GetComponent(c).GetType() == Component::kClassAffineTransform)
         		class_affine = &(dynamic_cast<ClassAffineTransform&>(this->GetComponent(c)));
-        	else if (this->GetComponent(c).GetType() == Component::kCBSoftmax)
-        		cb_softmax = &(dynamic_cast<CBSoftmax&>(this->GetComponent(c)));
         }
 
     	int i,j = 0;
@@ -668,7 +674,6 @@ void Nnet::SetClassBoundary(std::string classboundary_file)
 
     std::vector<int32> class_boundary;
 	class_boundary.resize(classinfo.Dim());
-	int32 num_class = class_boundary.size()-1;
     for (int i = 0; i < classinfo.Dim(); i++)
     	class_boundary[i] = classinfo(i);
 

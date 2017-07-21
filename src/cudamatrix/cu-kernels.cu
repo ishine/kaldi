@@ -263,25 +263,27 @@ static void _apply_exp(Real* mat, MatrixDim d) {
 
 template<typename Real>
 __global__
-static void _apply_fixed(Real* mat, Real resolution, MatrixDim d) {
+static void _apply_fixed(Real* mat, Real resolution, int mode, MatrixDim d) {
   int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
   int32_cuda j = blockIdx.y * blockDim.y + threadIdx.y;
   int32_cuda index = i + j * d.stride ;
+  Real tmp ;
  
-  if(i < d.cols && j < d.rows){
- 
-     Real tmp ;
- 
-     if(mat[index] > 0.0){
-           tmp = int(mat[index]/resolution)*resolution;
-     }else{
-           tmp = int((mat[index]-resolution)/resolution)*resolution;
-     }
-     if((mat[index]-tmp)/resolution > 0.5){
-         mat[index] = tmp + resolution ;
-     }else{
-         mat[index] = tmp ;
-     }
+  if(i < d.cols && j < d.rows) {
+    if(1 == mode) {
+       if(mat[index] > 0.0){
+             tmp = int(mat[index]/resolution)*resolution;
+       }else{
+             tmp = int((mat[index]-resolution)/resolution)*resolution;
+       }
+       if((mat[index]-tmp)/resolution > 0.5){
+           mat[index] = tmp + resolution ;
+       }else{
+           mat[index] = tmp ;
+       }
+    } else if (2 == mode) {
+       mat[index] = int(mat[index]/resolution) * resolution;
+    } 
   }
 }
 
@@ -1150,26 +1152,28 @@ static void _vec_apply_log(Real* v, Real* flag, int dim) {
 
 template<typename Real>
  __global__
- static void _vec_apply_fixed(Real* v, Real resolution, int dim){
+ static void _vec_apply_fixed(Real* v, Real resolution, int mode, int dim){
    int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
    Real tmp;
  
-   if(i < dim){
- 
-     tmp = int(v[i]/resolution) * resolution;
-     if(v[i] > 0){
-         if((v[i] - tmp) >= 0.5*resolution)
-           v[i] = tmp + resolution;
-         else
-           v[i] = tmp ;
- 
-     }else{
-         if((tmp - v[i]) >= 0.5 * resolution)
-             v[i] = tmp - resolution ;
-         else
-            v[i] = tmp;
- 
-    }
+   if(i < dim) {
+      if (1 == mode) { 
+         tmp = int(v[i]/resolution) * resolution;
+         if(v[i] > 0){
+             if((v[i] - tmp) >= 0.5*resolution)
+               v[i] = tmp + resolution;
+             else
+               v[i] = tmp ;
+        
+         }else{
+             if((tmp - v[i]) >= 0.5 * resolution)
+                 v[i] = tmp - resolution ;
+             else
+                v[i] = tmp;
+         }
+      } else if (2 == mode) {
+            v[i] = (v[i]/resolution) * resolution;
+      }
    }
  }
 
@@ -1269,7 +1273,7 @@ static void _equal_element_mask(const Real *mat1, const Real *mat2, Real *mask,
 }
 
 enum EnumTransformReduce {
-  SUM, MAX, MIN, LINFNORM, L2NORM, L1NORM, L0NORM, LPNORM
+  SUM, MAX, MIN, ABSMAX, LINFNORM, L2NORM, L1NORM, L0NORM, LPNORM
 };
 
 template<EnumTransformReduce TransReduceType, typename Real>
@@ -1349,6 +1353,26 @@ struct TransReduceOp<MIN, Real> {
   __forceinline__
   __device__ Real PostReduce(const Real& x, const Real& output) const {
     return x;
+  }
+};
+
+template<typename Real>
+struct TransReduceOp<ABSMAX, Real> {
+  __forceinline__
+  __device__ Real InitValue() const {
+    return sizeof(Real) == sizeof(float) ? -CUDART_INF_F : -CUDART_INF;
+  }
+  __forceinline__
+  __device__ Real Transform(const Real& x) const {
+    return fabs(x);
+  }
+  __forceinline__
+  __device__ Real Reduce(const Real& a, const Real& b) const {
+    return fmax(a, b);
+  }
+  __forceinline__
+  __device__ Real PostReduce(const Real& x, const Real& output) const {
+    return fabs(x);
   }
 };
 
@@ -2806,6 +2830,56 @@ static void _find_row_max_id(const Real* mat, Real* vec_val, int32_cuda* vec_id,
 
 template<typename Real>
 __global__
+static void _find_row_abs_max(const Real* mat, Real* row_max,
+                             MatrixDim d) { 
+  const int32_cuda i = blockIdx.x;
+  const int32_cuda base = i * d.stride;
+  const int32_cuda tid = threadIdx.x;
+
+  __shared__ Real smax[CU1DBLOCK];
+
+  Real tmax = -1e20;
+
+  // Loop over blocks for coalesced memory access.
+  for (int32_cuda j = tid; j < d.cols; j += CU1DBLOCK) {
+    const Real val = fabs(mat[base + j]);
+    if (val > tmax) {
+      tmax = val; 
+    }    
+  }
+
+  smax[tid] = tmax;
+
+  // Parallel reduce
+#pragma unroll
+  for (int32_cuda num_working_threads = CU1DBLOCK / 2; 
+      num_working_threads >= warpSize; num_working_threads >>= 1) { 
+    __syncthreads();
+    if (tid < num_working_threads) {
+      if (smax[tid + num_working_threads] > smax[tid]) {
+        smax[tid] = smax[tid + num_working_threads];
+      }    
+    }    
+  }
+  // Warp reduce without __syncthreads()
+  // (note.: synchronizes implicitly within a warp at the multiprocessor)
+  if (tid < warpSize / 2) { 
+#pragma unroll
+    for (int32_cuda num_working_threads = warpSize / 2; num_working_threads > 0; 
+        num_working_threads >>= 1) { 
+      if (smax[tid + num_working_threads] > smax[tid]) {
+        smax[tid] = smax[tid + num_working_threads];
+      }    
+    }    
+  }
+
+  if (tid == 0) { 
+    row_max[i] = smax[0];
+  }
+}
+
+template<typename Real>
+__global__
 static void _diff_xent(const int32_cuda* vec_tgt, Real* mat_net_out,
                        Real* vec_log_post, MatrixDim d) {
   int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -3547,8 +3621,8 @@ void cudaF_apply_log(dim3 Gr, dim3 Bl, float* mat, MatrixDim d) {
   _apply_log<<<Gr,Bl>>>(mat,d);
 }
 
-void cudaF_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, MatrixDim d){
-  _apply_fixed<<<Gr,Bl>>>(mat, resolution, d);
+void cudaF_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, int mode, MatrixDim d){
+  _apply_fixed<<<Gr,Bl>>>(mat, resolution, mode, d);
  }
 
 void cudaF_mul_elements(dim3 Gr, dim3 Bl, float* mat, const float* A,
@@ -3680,6 +3754,11 @@ void cudaF_max_mat_cols(int Gr, int Bl, float* result, const float* mat,
                         const MatrixDim d) {
   _transform_reduce_mat_cols<<<Gr,Bl>>>(result,mat,d,
       TransReduceOp<MAX,float>());
+}
+void cudaF_abs_max_mat_cols(int Gr, int Bl, float* result, const float* mat,
+                        const MatrixDim d) {
+  _transform_reduce_mat_cols<<<Gr,Bl>>>(result,mat,d,
+      TransReduceOp<ABSMAX,float>());
 }
 void cudaF_min_mat_cols(int Gr, int Bl, float* result, const float* mat,
                         const MatrixDim d) {
@@ -3826,8 +3905,8 @@ void cudaF_vec_apply_log(int Gr, int Bl, float* v, float* flag, int dim) {
   _vec_apply_log<<<Gr,Bl>>>(v,flag,dim);
 }
 
-void cudaF_vec_apply_fixed(int Gr, int Bl, float* v, float resolution, int dim){
-   _vec_apply_fixed<<<Gr,Bl>>>(v, resolution, dim);
+void cudaF_vec_apply_fixed(int Gr, int Bl, float* v, float resolution, int mode, int dim){
+   _vec_apply_fixed<<<Gr,Bl>>>(v, resolution, mode, dim);
 }
 void cudaF_invert_elements(dim3 Gr, dim3 Bl, float* data, MatrixDim d) {
   _invert_elements<<<Gr,Bl>>>(data, d);
@@ -4003,6 +4082,11 @@ void cudaF_find_row_max_id(dim3 Gr, dim3 Bl, const float* mat, float* vec_val,
   _find_row_max_id<<<Gr,Bl>>>(mat, vec_val, vec_id, d);
 }
 
+void cudaF_find_row_abs_max(dim3 Gr, dim3 Bl, const float* mat,
+                           float *row_max, MatrixDim d) {
+  _find_row_abs_max<<<Gr,Bl>>>(mat, row_max, d);
+}
+
 void cudaF_diff_xent(dim3 Gr, dim3 Bl, const int32_cuda* vec_tgt,
                      float* mat_net_out, float* vec_log_post, MatrixDim d) {
   _diff_xent<<<Gr,Bl>>>(vec_tgt,mat_net_out,vec_log_post,d);
@@ -4117,8 +4201,8 @@ void cudaD_apply_heaviside(dim3 Gr, dim3 Bl, double* mat, MatrixDim d) {
   _apply_heaviside<<<Gr,Bl>>>(mat, d);
 }
 
-void cudaD_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, MatrixDim d){
-  _apply_fixed<<<Gr,Bl>>>(mat, resolution, d);
+void cudaD_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, int mode, MatrixDim d){
+  _apply_fixed<<<Gr,Bl>>>(mat, resolution, mode, d);
  }
 
 void cudaD_copy_cols(dim3 Gr, dim3 Bl, double* dst, const double* src,
@@ -4343,6 +4427,11 @@ void cudaD_max_mat_cols(int Gr, int Bl, double* result, const double* mat,
                         const MatrixDim d) {
   _transform_reduce_mat_cols<<<Gr,Bl>>>(result,mat,d,
       TransReduceOp<MAX,double>());
+}
+void cudaD_abs_max_mat_cols(int Gr, int Bl, double* result, const double* mat,
+                        const MatrixDim d) {
+  _transform_reduce_mat_cols<<<Gr,Bl>>>(result,mat,d,
+      TransReduceOp<ABSMAX,double>());
 }
 void cudaD_min_mat_cols(int Gr, int Bl, double* result, const double* mat,
                         const MatrixDim d) {
@@ -4650,6 +4739,11 @@ void cudaD_regularize_l1(dim3 Gr, dim3 Bl, double* wei, double* grad, double l1,
 void cudaD_find_row_max_id(dim3 Gr, dim3 Bl, const double* mat, double* vec_val,
                            int32_cuda* vec_id, MatrixDim d) {
   _find_row_max_id<<<Gr,Bl>>>(mat, vec_val, vec_id, d);
+}
+
+void cudaD_find_row_abs_max(dim3 Gr, dim3 Bl, const double* mat,
+                           double *row_max, MatrixDim d) {
+  _find_row_abs_max<<<Gr,Bl>>>(mat, row_max, d);
 }
 
 void cudaD_diff_xent(dim3 Gr, dim3 Bl, const int32_cuda* vec_tgt,
@@ -5337,8 +5431,8 @@ void cudaF_col_sum_reduce(size_t Gr, size_t Bl, float alpha, float *y, const flo
  _col_sum_reduce<<<Gr,Bl,0,s>>>(alpha,y,x,beta,d); 
 }
 
-void cudaD_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int dim){
-   _vec_apply_fixed<<<Gr,Bl>>>(v, resolution, dim);
+void cudaD_vec_apply_fixed(int Gr, int Bl, double* v, double resolution, int mode, int dim){
+   _vec_apply_fixed<<<Gr,Bl>>>(v, resolution, mode, dim);
 }
 
 

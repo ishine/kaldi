@@ -44,9 +44,9 @@ class AffineTransform : public UpdatableComponent {
  public:
   AffineTransform(int32 dim_in, int32 dim_out) 
     : UpdatableComponent(dim_in, dim_out), 
-      linearity_(dim_out, dim_in), bias_(dim_out), linearity_fix_point_(dim_out, dim_in),
+      linearity_(dim_out, dim_in), bias_(dim_out),
       linearity_corr_(dim_out, dim_in), bias_corr_(dim_out),
-      learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0), fix_point_(0) 
+      learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0), fix_(0) 
   { }
   ~AffineTransform()
   { }
@@ -90,7 +90,11 @@ class AffineTransform : public UpdatableComponent {
       }
     }
     linearity_ = mat;
-    linearity_fix_point_ = mat;
+    // fixed point
+    if(fix_){
+        linearity_fix_= linearity_;
+    }
+
     //
     Vector<BaseFloat> vec(output_dim_);
     for (int32 i=0; i<output_dim_; i++) {
@@ -119,15 +123,15 @@ class AffineTransform : public UpdatableComponent {
     }
     if ('<' == Peek(is, binary)) {
       ExpectToken(is, binary, "<FixPoint>");
-      ReadBasicType(is, binary, &fix_point_);
+      ReadBasicType(is, binary, &fix_);
     }
     // weights
     linearity_.Read(is, binary);
     bias_.Read(is, binary);
 
-    if(fix_point_){
-        linearity_fix_point_.CopyFromMat(linearity_);
-        linearity_fix_point_.ApplyFixed(0.0625);
+    if(fix_){
+        linearity_fix_ = linearity_;
+        linearity_fix_.ApplyFixed(0.0625);
     }
 
     KALDI_ASSERT(linearity_.NumRows() == output_dim_);
@@ -142,12 +146,12 @@ class AffineTransform : public UpdatableComponent {
     WriteBasicType(os, binary, bias_learn_rate_coef_);
     WriteToken(os, binary, "<MaxNorm>");
     WriteBasicType(os, binary, max_norm_);
-    WriteToken(os, binary, "<FixPoint>");
-    WriteBasicType(os, binary, fix_point_);
     // weights
-    if(fix_point_)
-        linearity_fix_point_.Write(os, binary);
-    else
+    if(fix_) {
+        WriteToken(os, binary, "<FixPoint>");
+        WriteBasicType(os, binary, fix_);
+        linearity_fix_.Write(os, binary);
+    } else 
         linearity_.Write(os, binary);
     bias_.Write(os, binary);
   }
@@ -164,8 +168,8 @@ class AffineTransform : public UpdatableComponent {
   }
   
   std::string Info() const {
-    return std::string("\n  linearity") + MomentStatistics(linearity_) +
-    "\n" + std::string("\n  linearity_fix_point") + MomentStatistics(linearity_fix_point_) +
+    std::string fixparm = fix_ ? std::string("\n  linearity_fix_") + MomentStatistics(linearity_fix_) : "";
+    return std::string("\n  linearity") + MomentStatistics(linearity_) + fixparm +
            "\n  bias" + MomentStatistics(bias_);
   }
   std::string InfoGradient() const {
@@ -179,19 +183,23 @@ class AffineTransform : public UpdatableComponent {
 
 
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
-    if(fix_point_){
-        BaseFloat max = in.MaxAbs();
-        in.Scale(1.0/max);
-        in.ApplyFixed(0.0078125);
-        out->AddVecToRows(1.0, bias_, 0.0);
-        out->AddMatMat(max, in, kNoTrans, linearity_fix_point_, kTrans, 1.0);
-    }else{
-        
-        // precopy bias
-        out->AddVecToRows(1.0, bias_, 0.0);
+    // precopy bias
+    out->AddVecToRows(1.0, bias_, 0.0);
+
+    if(fix_){
+        if (input_fix_.NumRows() != in.NumRows())
+            input_fix_.Resize(in.NumRows(), in.NumCols());
+        input_fix_.CopyFromMat(in);
+        BaseFloat max = input_fix_.AbsMax();
+        input_fix_.Scale(1.0/max);
+        input_fix_.ApplyFixed(0.0078125);
+        out->AddMatMat(max, input_fix_, kNoTrans, linearity_fix_, kTrans, 1.0);
+    } else {
         // multiply by weights^t
         out->AddMatMat(1.0, in, kNoTrans, linearity_, kTrans, 1.0);
     }
+
+    p_input_ = fix_ ? &input_fix_ : &in;
   }
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
@@ -220,7 +228,7 @@ class AffineTransform : public UpdatableComponent {
 		local_lrate_bias = -lr_bias;
 
 	    // compute gradient (incl. momentum)
-	    linearity_corr_.AddMatMat(1.0, diff, kTrans, input, kNoTrans, mmt);
+	    linearity_corr_.AddMatMat(1.0, diff, kTrans, *p_input_, kNoTrans, mmt);
 	    bias_corr_.AddRowSumMat(1.0, diff, mmt);
 	    // l2 regularization
 	    if (l2 != 0.0) {
@@ -250,13 +258,13 @@ class AffineTransform : public UpdatableComponent {
 	        scl.InvertElements();
 	        linearity_.MulRowsVec(scl); // shink to sphere!
 	      }
-          if(fix_point_){
+          if(fix_){
               bias_.ApplyFloor(-8.0);
               bias_.ApplyCeiling(8.0);
               linearity_.ApplyFloor(-8.0);
               linearity_.ApplyCeiling(8.0);
-              linearity_fix_point_.CopyFromMat(linearity_);
-              linearity_fix_point_.ApplyFixed(0.0625);
+              linearity_fix_.CopyFromMat(linearity_);
+              linearity_fix_.ApplyFixed(0.0625);
           }
 
   }
@@ -271,7 +279,7 @@ class AffineTransform : public UpdatableComponent {
     // we will also need the number of frames in the mini-batch
     const int32 num_frames = input.NumRows();
     // compute gradient (incl. momentum)
-    linearity_corr_.AddMatMat(1.0, diff, kTrans, input, kNoTrans, mmt);
+    linearity_corr_.AddMatMat(1.0, diff, kTrans, *p_input_, kNoTrans, mmt);
     bias_corr_.AddRowSumMat(1.0, diff, mmt);
     // l2 regularization
     if (l2 != 0.0) {
@@ -297,13 +305,13 @@ class AffineTransform : public UpdatableComponent {
       scl.InvertElements();
       linearity_.MulRowsVec(scl); // shink to sphere!
     }
-    if(fix_point_){
-        bias_.ApplyFloor(-8.0);
-        bias_.ApplyCeiling(8.0);
-        linearity_.ApplyFloor(-8.0);
-        linearity_.ApplyCeiling(8.0);
-        linearity_fix_point_.CopyFromMat(linearity_);
-        linearity_fix_point_.ApplyFixed(0.0625);
+    if(fix_){
+      bias_.ApplyFloor(-8.0);
+      bias_.ApplyCeiling(8.0);
+      linearity_.ApplyFloor(-8.0);
+      linearity_.ApplyCeiling(8.0);
+      linearity_fix_.CopyFromMat(linearity_);
+      linearity_fix_.ApplyFixed(0.0625);
     }
   }
 
@@ -463,9 +471,13 @@ protected:
   CuMatrix<BaseFloat> linearity_;
   CuVector<BaseFloat> bias_;
 
-  CuMatrix<BaseFloat> linearity_fix_point_;
   CuMatrix<BaseFloat> linearity_corr_;
   CuVector<BaseFloat> bias_corr_;
+
+  // for fixed point training
+  CuMatrix<BaseFloat> input_fix_;
+  CuMatrix<BaseFloat> linearity_fix_;
+  const CuMatrixBase<BaseFloat> *p_input_;
 
   BaseFloat learn_rate_coef_;
   BaseFloat bias_learn_rate_coef_;
@@ -473,7 +485,7 @@ protected:
 
   BaseFloat local_lrate;
   BaseFloat local_lrate_bias;
-  int32 fix_point_ ;
+  int32 fix_ ;
 
 };
 

@@ -23,6 +23,7 @@
 #include "nnet0/nnet-convolutional-2d-component-fast.h"
 #include "nnet0/nnet-cudnn-convolutional-2d-component.h"
 #include "nnet0/nnet-lstm-projected-streams-fast.h"
+#include "nnet0/nnet-lstm-projected-streams-fixedpoint.h"
 #include "nnet0/nnet-lstm-projected-streams-simple.h"
 #include "nnet0/nnet-lstm-projected-streams.h"
 #include "nnet0/nnet-lstm-streams.h"
@@ -177,6 +178,8 @@ NnetModelSync::GetDim(Nnet *nnet)
 				    dim += bstlstm_t->b_peephole_f_c_.Dim();
 				    dim += bstlstm_t->b_peephole_o_c_.Dim();
 					break;
+			    case Component::kLstmProjectedStreamsFixedPoint:
+				    lstm_t = (LstmProjectedStreamsFast*)(nnet->components_[n]);
 				case Component::kLstmProjectedStreamsFast:
 					lstm_t = (LstmProjectedStreamsFast*)(nnet->components_[n]);
 					dim += lstm_t->w_gifo_x_.SizeInBytes()/sizeof(BaseFloat);
@@ -454,6 +457,8 @@ NnetModelSync::GetWeight(Nnet *nnet)
 		        CU_SAFE_CALL(cudaMemcpy(host_data_+pos, bstlstm_t->b_peephole_o_c_.Data(), size, cudaMemcpyDeviceToHost));
 		        pos += size;
 				break;
+			case Component::kLstmProjectedStreamsFixedPoint:
+				lstm_t = (LstmProjectedStreamsFast*)(nnet->components_[n]);
 			case Component::kLstmProjectedStreamsFast:
 				lstm_t = (LstmProjectedStreamsFast*)(nnet->components_[n]);
 
@@ -967,6 +972,8 @@ NnetModelSync::SetWeight(Nnet *nnet)
 			   	CU_SAFE_CALL(cudaMemcpy(bstlstm_t->b_peephole_o_c_.Data(), host_data_+pos, size, cudaMemcpyHostToDevice));
 			   	pos += size;
 				break;
+			case Component::kLstmProjectedStreamsFixedPoint:
+				lstm_t = (LstmProjectedStreamsFast*)(nnet->components_[n]);
 			case Component::kLstmProjectedStreamsFast:
 				lstm_t = (LstmProjectedStreamsFast*)(nnet->components_[n]);
 

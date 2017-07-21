@@ -174,6 +174,7 @@ private:
 	      nnet_transf.SetDropoutRetention(opts->dropout_retention);
 	      nnet.SetDropoutRetention(opts->dropout_retention);
 	    }
+
 	    if (crossvalidate) {
 	      nnet_transf.SetDropoutRetention(1.0);
 	      nnet.SetDropoutRetention(1.0);
@@ -181,9 +182,7 @@ private:
 
 	    Nnet si_nnet;
 	    if (this->kld_scale > 0)
-	    {
 	    	si_nnet.Read(si_model_filename);
-	    }
 
 	    model_sync->Initialize(&nnet);
 
@@ -194,9 +193,18 @@ private:
 
 	    Xent xent;
 	    Mse mse;
+        MultiTaskLoss multitask;
+        if (0 == objective_function.compare(0, 9, "multitask")) {
+          // objective_function contains something like :
+          // 'multitask,xent,2456,1.0,mse,440,0.001'
+          //
+          // the meaning is following:
+          // 'multitask,<type1>,<dim1>,<weight1>,...,<typeN>,<dimN>,<weightN>'
+          multitask.InitFromString(objective_function);
+        }
 
-		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
-		//CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
+		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out, nnet_diff;
+		CuMatrix<BaseFloat> si_nnet_out; // soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
@@ -285,6 +293,7 @@ private:
 
 	        if (feat.NumCols() != feats[0].NumCols()) {
 	        	feat.Resize(batch_size * num_stream, feats[0].NumCols(), kSetZero);
+                nnet_in.Resize(batch_size * num_stream, feats[0].NumCols(), kSetZero);
 	        }
 
 	        // fill a multi-stream bptt batch
@@ -328,21 +337,50 @@ private:
 
 	        // apply optional feature transform
 	        //nnet_transf.Feedforward(CuMatrix<BaseFloat>(feat), &feats_transf);
+	        nnet_in.CopyFromMat(feat);
 
 	        // for streams with new utterance, history states need to be reset
 	        nnet.ResetLstmStreams(new_utt_flags);
 
 	        // forward pass
-	        nnet.Propagate(CuMatrix<BaseFloat>(feat), &nnet_out);
+	        nnet.Propagate(nnet_in, &nnet_out);
 
-	        // evaluate objective function we've chosen
-	        if (objective_function == "xent") {
-	            xent.Eval(frame_mask, nnet_out, target, &nnet_diff);
-	        //} else if (objective_function == "mse") {     // not supported yet
-	        //    mse.Eval(frame_mask, nnet_out, targets_batch, &obj_diff);
-	        } else {
-	            KALDI_ERR << "Unknown objective function code : " << objective_function;
-	        }
+            CuMatrix<BaseFloat> tgt_mat;
+            if (this->kld_scale > 0) {   
+                si_nnet.ResetLstmStreams(new_utt_flags);
+                si_nnet.Propagate(nnet_in, &si_nnet_out);
+                //p_si_nnet_out = &si_nnet_out;
+                // convert posterior to matrix,
+                PosteriorToMatrix(target, nnet.OutputDim(), &tgt_mat);
+                tgt_mat.Scale(1-this->kld_scale);
+                tgt_mat.AddMat(this->kld_scale, si_nnet_out);
+            }   
+
+            // evaluate objective function we've chosen
+            if (objective_function == "xent") {
+                // gradients re-scaled by weights in Eval,
+                if (this->kld_scale > 0)
+                    xent.Eval(frame_mask, nnet_out, tgt_mat, &nnet_diff);
+                else
+                    xent.Eval(frame_mask, nnet_out, target, &nnet_diff);
+            } 
+            /*
+            else if (objective_function == "mse") {
+                // gradients re-scaled by weights in Eval,
+                if (this->kld_scale > 0)
+                    mse.Eval(frame_mask, nnet_out, tgt_mat, &nnet_diff);
+                else
+                    mse.Eval(frame_mask, nnet_out, target, &nnet_diff);
+            }*/ 
+            else if (0 == objective_function.compare(0, 9, "multitask")) {
+                  // gradients re-scaled by weights in Eval,
+                if (this->kld_scale > 0)
+                    multitask.Eval(frame_mask, nnet_out, tgt_mat, &nnet_diff);
+                else
+                    multitask.Eval(frame_mask, nnet_out, target, &nnet_diff);
+            } else {
+                KALDI_ERR<< "Unknown objective function code : " << objective_function;
+            }
 
 
 		        // backward pass
@@ -454,7 +492,9 @@ private:
 		 }else if (objective_function == "mse"){
 			//KALDI_LOG << mse.Report();
 			stats_->mse.Add(&mse);
-		 }else {
+		 }else if (0 == objective_function.compare(0, 9, "multitask")) {
+             stats_->multitask.Add(&multitask);
+         }else {
 			 KALDI_ERR<< "Unknown objective function code : " << objective_function;
 		 }
 
@@ -528,6 +568,9 @@ void NnetLstmUpdateAsgd(const NnetLstmUpdateOptions *opts,
 		    if (opts->frame_weights != "") {
 		      weights_reader.Open(opts->frame_weights);
 		    }
+
+            if (opts->objective_function.compare(0, 9, "multitask") == 0)
+                stats->multitask.InitFromString(opts->objective_function);
 
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
