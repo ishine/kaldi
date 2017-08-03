@@ -211,17 +211,37 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
         max_w_gifo_r_ = w_gifo_r_fix_.AbsMax();
         w_gifo_r_fix_.Scale(1.0/max_w_gifo_r_);
         w_gifo_r_fix_.ApplyFixed(pow(2, -bit_), fix_);
+
+        bias_fix_ = bias_;
  
         w_r_m_fix_ = w_r_m_;
         max_w_r_m_ = w_r_m_fix_.AbsMax();
         w_r_m_fix_.Scale(1.0/max_w_r_m_);
         w_r_m_fix_.ApplyFixed(pow(2, -bit_), fix_);
+
+        peephole_i_c_.ApplyFloor(-4.0);
+        peephole_i_c_.ApplyCeiling(4.0);
+        peephole_f_c_.ApplyFloor(-4.0);
+        peephole_f_c_.ApplyCeiling(4.0);
+        peephole_o_c_.ApplyFloor(-4.0);
+        peephole_o_c_.ApplyCeiling(4.0);
+        
+        peephole_i_c_fix_ = peephole_i_c_;
+        peephole_f_c_fix_ = peephole_f_c_;
+        peephole_o_c_fix_ = peephole_o_c_;
+        peephole_i_c_fix_.ApplyFixed(pow(2, -(bit_-2)), fix_);
+        peephole_f_c_fix_.ApplyFixed(pow(2, -(bit_-2)), fix_);
+        peephole_o_c_fix_.ApplyFixed(pow(2, -(bit_-2)), fix_);
     }
 
     p_w_gifo_x_ = fix_ ? &w_gifo_x_fix_ : &w_gifo_x_;
     p_w_gifo_r_ = fix_ ? &w_gifo_r_fix_ : &w_gifo_r_;
     p_w_r_m_ = fix_ ? &w_r_m_fix_ : &w_r_m_;
-    
+
+    p_bias_ = fix_ ? &bias_fix_ : &bias_;
+    p_peephole_i_c_ = fix_ ? &peephole_i_c_fix_ : &peephole_i_c_;
+    p_peephole_f_c_ = fix_ ? &peephole_f_c_fix_ : &peephole_f_c_;
+    p_peephole_o_c_ = fix_ ? &peephole_o_c_fix_ : &peephole_o_c_;
   }
 
   void WriteData(std::ostream &os, bool binary) const {
@@ -483,20 +503,14 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
         if (input_fix_.NumRows() != in.NumRows()) 
             input_fix_.Resize(in.NumRows(), in.NumCols());
         input_fix_.CopyFromMat(in);
-        if(opts_.fix_decode) {
-            input_fix_.ApplyFloor(-8.0);
-            input_fix_.ApplyCeiling(8.0);
-        }
+        input_fix_.ApplyFloor(-8.0);
+        input_fix_.ApplyCeiling(8.0);
         input_fix_.ApplyFixed(pow(2, -4), fix_);
     }
     p_input_ = fix_ > 0 ? &input_fix_ : &in;
 
     // x -> g, i, f, o, not recurrent, do it all in once
     YGIFO->RowRange(1*S,T*S).AddMatMat(max_w_gifo_x_, *p_input_, kNoTrans, *p_w_gifo_x_, kTrans, 0.0);
-    if(opts_.fix_decode){
-        YGIFO->RowRange(1*S,T*S).ApplyFloor(-8.0);
-        YGIFO->RowRange(1*S,T*S).ApplyCeiling(8.0);
-    }
     //// LSTM forward dropout
     //// Google paper 2014: Recurrent Neural Network Regularization
     //// by Wojciech Zaremba, Ilya Sutskever, Oriol Vinyals
@@ -509,7 +523,7 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
     //}
 
     // bias -> g, i, f, o
-    YGIFO->RowRange(1*S,T*S).AddVecToRows(1.0, bias_);
+    YGIFO->RowRange(1*S,T*S).AddVecToRows(1.0, *p_bias_);
     if(opts_.fix_decode) {
         YGIFO->RowRange(1*S,T*S).ApplyFloor(-8.0);
         YGIFO->RowRange(1*S,T*S).ApplyCeiling(8.0);
@@ -518,27 +532,24 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
     for (int t = 1; t <= T; t++) {
 
       // r(t-1) -> g, i, f, o
-      if(fix_ > 0)
+      if(fix_ > 0){
+        y_r[t-1]->ApplyFloor(-8.0);
+        y_r[t-1]->ApplyCeiling(8.0);
         y_r[t-1]->ApplyFixed(pow(2, -4), fix_);
-      y_gifo[t]->AddMatMat(max_w_gifo_r_, *y_r[t-1], kNoTrans, *p_w_gifo_r_, kTrans,  1.0);
-      if(opts_.fix_decode) {
-          y_gifo[t]->ApplyFloor(-8.0);
-          y_gifo[t]->ApplyCeiling(8.0);
+        y_gifo[t]->AddMatMat(max_w_gifo_r_, *y_r[t-1], kNoTrans, *p_w_gifo_r_, kTrans,  1.0);
       }
 
       // c(t-1) -> i(t) via peephole
-      y_i[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, peephole_i_c_, 1.0);
-      if(opts_.fix_decode) {
-          y_i[t]->ApplyFloor(-8.0);
-          y_i[t]->ApplyCeiling(8.0);
-      }
+      if(fix_ > 0)
+        y_c[t-1]->ApplyFixed(pow(2, -(bit_-1)), fix_);
+
+      y_i[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, *p_peephole_i_c_, 1.0);
 
       // c(t-1) -> f(t) via peephole
-      y_f[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, peephole_f_c_, 1.0);
-      if(opts_.fix_decode) {
-          y_f[t]->ApplyFloor(-8.0);
-          y_f[t]->ApplyCeiling(8.0);
-      }
+      if(fix_ > 0)
+        y_c[t-1]->ApplyFixed(pow(2, -bit_), fix_);
+
+      y_f[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, *p_peephole_f_c_, 1.0);
 
       // i, f sigmoid squashing
       y_i[t]->Sigmoid(*y_i[t]);
@@ -548,9 +559,17 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
       y_g[t]->Tanh(*y_g[t]);
 
       // g -> c
+      if(fix_ > 0){
+        y_g[t]->ApplyFixed(pow(2, -bit_), fix_);
+        y_i[t]->ApplyFixed(pow(2, -bit_), fix_);
+      }
       y_c[t]->AddMatMatElements(1.0, *y_g[t], *y_i[t], 0.0);
 
       // c(t-1) -> c(t) via forget-gate
+      if(fix_ > 0){
+        y_c[t-1]->ApplyFixed(pow(2, -(bit_-1)), fix_);
+        y_f[t]->ApplyFixed(pow(2, -bit_), fix_);
+      }
       y_c[t]->AddMatMatElements(1.0, *y_c[t-1], *y_f[t], 1.0);
 
       y_c[t]->ApplyFloor(-clip_cell_);   // optional clipping of cell activation
@@ -560,25 +579,30 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
       y_h[t]->Tanh(*y_c[t]);
 
       // c(t) -> o(t) via peephole (non-recurrent) & o squashing
-      y_o[t]->AddMatDiagVec(1.0, *y_c[t], kNoTrans, peephole_o_c_, 1.0);
-      if(opts_.fix_decode) {
-          y_o[t]->ApplyFloor(-8.0);
-          y_o[t]->ApplyCeiling(8.0);
-      }
+      if(fix_ > 0)
+        y_c[t]->ApplyFixed(pow(2, -(bit_-1)), fix_);
 
+      y_o[t]->AddMatDiagVec(1.0, *y_c[t], kNoTrans, *p_peephole_o_c_, 1.0);
       // o sigmoid squashing
       y_o[t]->Sigmoid(*y_o[t]);
 
       // h -> m via output gate
+      if(fix_){
+          y_h[t]->ApplyFixed(pow(2, -bit_), fix_);
+          y_o[t]->ApplyFixed(pow(2, -bit_), fix_);
+      }
       y_m[t]->AddMatMatElements(1.0, *y_h[t], *y_o[t], 0.0);
 
       // m -> r
-      if (fix_ > 0)
-        y_m[t]->ApplyFixed(pow(2, -4), fix_);
-      y_r[t]->AddMatMat(max_w_r_m_, *y_m[t], kNoTrans, *p_w_r_m_, kTrans, 0.0);
-      if(opts_.fix_decode) {
-          y_r[t]->ApplyFloor(-8.0);
-          y_r[t]->ApplyCeiling(8.0);
+      if (fix_ > 0){
+        //y_m[t]->ApplyFixed(pow(2, -4), fix_);
+        BaseFloat y_m_max = y_m[t]->AbsMax();
+        y_m[t]->Scale(1.0/y_m_max);
+        y_m[t]->ApplyFixed(pow(2, -(bit_-1)), fix_);
+        y_r[t]->AddMatMat(max_w_r_m_*y_m_max, *y_m[t], kNoTrans, w_r_m_fix_, kTrans, 0.0);
+        y_m[t]->Scale(y_m_max);
+      }else{
+        y_r[t]->AddMatMat(1.0, *y_m[t], kNoTrans, w_r_m_, kTrans, 0.0);
       }
 
       if (DEBUG) {
@@ -835,6 +859,7 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
   {
 	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
         const BaseFloat lr_bias = opts_.learn_rate * bias_learn_rate_coef_;
+        const BaseFloat clip_cell_scale = opts_.clip_cell_scale;
 
 	    w_gifo_x_.AddMat(-lr, w_gifo_x_corr_);
 	    w_gifo_r_.AddMat(-lr, w_gifo_r_corr_);
@@ -847,20 +872,20 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
 	    w_r_m_.AddMat(-lr, w_r_m_corr_);
 
         if (clip_cell_ > 0.0 && opts_.clip_cell_scale > 0.0) {
-          w_gifo_x_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
-          w_gifo_x_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
-          w_gifo_r_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
-          w_gifo_r_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
-          bias_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
-          bias_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
-          w_r_m_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
-          w_r_m_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
-          peephole_i_c_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
-          peephole_i_c_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
-          peephole_f_c_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
-          peephole_f_c_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
-          peephole_o_c_.ApplyFloor(-clip_cell_*opts_.clip_cell_scale);
-          peephole_o_c_.ApplyCeiling(clip_cell_*opts_.clip_cell_scale);
+          w_gifo_x_.ApplyFloor(-clip_cell_*clip_cell_scale);
+          w_gifo_x_.ApplyCeiling(clip_cell_*clip_cell_scale);
+          w_gifo_r_.ApplyFloor(-clip_cell_*clip_cell_scale);
+          w_gifo_r_.ApplyCeiling(clip_cell_*clip_cell_scale);
+          bias_.ApplyFloor(-clip_cell_*clip_cell_scale);
+          bias_.ApplyCeiling(clip_cell_*clip_cell_scale);
+          w_r_m_.ApplyFloor(-clip_cell_*clip_cell_scale);
+          w_r_m_.ApplyCeiling(clip_cell_*clip_cell_scale);
+          peephole_i_c_.ApplyFloor(-clip_cell_*clip_cell_scale);
+          peephole_i_c_.ApplyCeiling(clip_cell_*clip_cell_scale);
+          peephole_f_c_.ApplyFloor(-clip_cell_*clip_cell_scale);
+          peephole_f_c_.ApplyCeiling(clip_cell_*clip_cell_scale);
+          peephole_o_c_.ApplyFloor(-clip_cell_*clip_cell_scale);
+          peephole_o_c_.ApplyCeiling(clip_cell_*clip_cell_scale);
         }
 
         if(fix_ ){
@@ -874,10 +899,25 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
           w_gifo_r_fix_.Scale(1.0/max_w_gifo_r_);
           w_gifo_r_fix_.ApplyFixed(pow(2, -bit_), fix_);
 
+          bias_fix_.CopyFromVec(bias_);
+
           w_r_m_fix_.CopyFromMat(w_r_m_);
           max_w_r_m_ = w_r_m_fix_.AbsMax();
           w_r_m_fix_.Scale(1.0/max_w_r_m_);
           w_r_m_fix_.ApplyFixed(pow(2, -bit_), fix_);
+
+          peephole_i_c_.ApplyFloor(-4.0);
+          peephole_i_c_.ApplyCeiling(4.0);
+          peephole_f_c_.ApplyFloor(-4.0);
+          peephole_f_c_.ApplyCeiling(4.0);
+          peephole_o_c_.ApplyFloor(-4.0);
+          peephole_o_c_.ApplyCeiling(4.0);
+          peephole_i_c_fix_.CopyFromVec(peephole_i_c_);
+          peephole_i_c_fix_.ApplyFixed(pow(2, -(bit_-2)), fix_);
+          peephole_f_c_fix_.CopyFromVec(peephole_f_c_);
+          peephole_f_c_fix_.ApplyFixed(pow(2, -(bit_-2)), fix_);
+          peephole_o_c_fix_.CopyFromVec(peephole_o_c_);
+          peephole_o_c_fix_.ApplyFixed(pow(2, -(bit_-2)), fix_);
         }
             
   }
@@ -1178,11 +1218,21 @@ class LstmProjectedStreamsFixedPoint : public LstmProjectedStreamsFast {
 
   // recurrent projection connections: from r to [g, i, f, o]
   CuMatrix<BaseFloat> w_gifo_r_fix_;
+  // biases of [g, i, f, o]
+  CuVector<BaseFloat> bias_fix_;
 
   // projection layer r: from m to r
   CuMatrix<BaseFloat> w_r_m_fix_;
 
+  // peephole from c to i, f, g
+  // peephole connections are block-internal, so we use vector form
+  CuVector<BaseFloat> peephole_i_c_fix_;
+  CuVector<BaseFloat> peephole_f_c_fix_;
+  CuVector<BaseFloat> peephole_o_c_fix_;
+
   const CuMatrixBase<BaseFloat> *p_input_;
+  CuVector<BaseFloat> *p_peephole_i_c_, *p_peephole_f_c_, *p_peephole_o_c_;
+  CuVector<BaseFloat> *p_bias_;
   CuMatrix<BaseFloat> *p_w_gifo_x_, *p_w_gifo_r_, *p_w_r_m_;
 
   BaseFloat max_w_gifo_x_ ;
