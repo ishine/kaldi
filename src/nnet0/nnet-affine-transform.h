@@ -46,7 +46,7 @@ class AffineTransform : public UpdatableComponent {
     : UpdatableComponent(dim_in, dim_out), 
       linearity_(dim_out, dim_in), bias_(dim_out),
       linearity_corr_(dim_out, dim_in), bias_corr_(dim_out),
-      learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0), fix_(0) 
+      learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0), fix_(0), bit_(7) 
   { }
   ~AffineTransform()
   { }
@@ -126,13 +126,20 @@ class AffineTransform : public UpdatableComponent {
       ExpectToken(is, binary, "<FixPoint>");
       ReadBasicType(is, binary, &fix_);
     }
+    if ('<' == Peek(is, binary)) {
+      ExpectToken(is, binary, "<Bit>");
+      ReadBasicType(is, binary, &bit_);
+    }
     // weights
     linearity_.Read(is, binary);
     bias_.Read(is, binary);
 
     if(fix_){
         linearity_fix_ = linearity_;
-        linearity_fix_.ApplyFixed(0.0625);
+        linearity_row_max_.Resize(linearity_.NumRows());
+        linearity_fix_.FindRowAbsMax(linearity_row_max_);
+        linearity_fix_.DivRowsVec(linearity_row_max_);
+        linearity_fix_.ApplyFixed(pow(2, -bit_), fix_);
     }
 
     KALDI_ASSERT(linearity_.NumRows() == output_dim_);
@@ -151,6 +158,8 @@ class AffineTransform : public UpdatableComponent {
     if(fix_) {
         WriteToken(os, binary, "<FixPoint>");
         WriteBasicType(os, binary, fix_);
+        WriteToken(os, binary, "<Bit>");
+        WriteBasicType(os, binary, bit_);
         linearity_fix_.Write(os, binary);
     } else 
         linearity_.Write(os, binary);
@@ -191,11 +200,15 @@ class AffineTransform : public UpdatableComponent {
         if (input_fix_.NumRows() != in.NumRows())
             input_fix_.Resize(in.NumRows(), in.NumCols());
         input_fix_.CopyFromMat(in);
-        BaseFloat max = input_fix_.AbsMax();
-        input_fix_.Scale(1.0/max);
-        input_fix_.ApplyFixed(0.0078125);
-        out->AddMatMat(max, input_fix_, kNoTrans, linearity_fix_, kTrans, 1.0);
-    } else {
+        row_max_.Resize(in.NumRows(), kSetZero);
+        in.FindRowAbsMax(row_max_);
+        input_fix_.DivRowsVec(row_max_);
+        input_fix_.ApplyFixed(pow(2, -bit_), fix_);
+        out->AddMatMat(1.0, input_fix_, kNoTrans, linearity_fix_, kTrans, 0.0);
+        out->MulRowsVec(row_max_);
+        out->MulColsVec(linearity_row_max_);       
+        out->AddVecToRows(1.0, bias_, 1.0); 
+    }else{
         // multiply by weights^t
         out->AddMatMat(1.0, in, kNoTrans, linearity_, kTrans, 1.0);
     }
@@ -262,10 +275,12 @@ class AffineTransform : public UpdatableComponent {
           if(fix_){
               bias_.ApplyFloor(-8.0);
               bias_.ApplyCeiling(8.0);
-              linearity_.ApplyFloor(-8.0);
-              linearity_.ApplyCeiling(8.0);
+              //linearity_.ApplyFloor(-8.0);
+              //linearity_.ApplyCeiling(8.0);
               linearity_fix_.CopyFromMat(linearity_);
-              linearity_fix_.ApplyFixed(0.0625);
+              linearity_fix_.FindRowAbsMax(linearity_row_max_);
+              linearity_fix_.DivRowsVec(linearity_row_max_); 
+              linearity_fix_.ApplyFixed(pow(2, -bit_), fix_);
           }
 
   }
@@ -309,10 +324,12 @@ class AffineTransform : public UpdatableComponent {
     if(fix_){
       bias_.ApplyFloor(-8.0);
       bias_.ApplyCeiling(8.0);
-      linearity_.ApplyFloor(-8.0);
-      linearity_.ApplyCeiling(8.0);
+      //linearity_.ApplyFloor(-8.0);
+      //linearity_.ApplyCeiling(8.0);
       linearity_fix_.CopyFromMat(linearity_);
-      linearity_fix_.ApplyFixed(0.0625);
+      linearity_fix_.FindRowAbsMax(linearity_row_max_);
+      linearity_fix_.DivRowsVec(linearity_row_max_); 
+      linearity_fix_.ApplyFixed(pow(2, -bit_), fix_);
     }
   }
 
@@ -475,9 +492,11 @@ protected:
   CuVector<BaseFloat> bias_corr_;
 
   // for fixed point training
-  CuMatrix<BaseFloat> input_fix_;
+  CuVector<BaseFloat> row_max_;
   CuMatrix<BaseFloat> linearity_fix_;
-  const CuMatrixBase<BaseFloat> *p_input_;
+  CuVector<BaseFloat> linearity_row_max_;  
+  CuMatrix<BaseFloat> input_fix_;
+  const CuMatrix<BaseFloat> *p_input_;
 
   BaseFloat learn_rate_coef_;
   BaseFloat bias_learn_rate_coef_;
@@ -487,7 +506,6 @@ protected:
   BaseFloat local_lrate_bias;
   int32 fix_ ;
   int32 bit_;
-
 };
 
 } // namespace nnet0
