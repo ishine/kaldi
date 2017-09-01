@@ -28,9 +28,6 @@ local/swbd1_prepare_dict.sh
 # after downloading.
 # Usage: local/swbd1_data_prep.sh /path/to/SWBD [/path/to/SWBD_docs]
 local/swbd1_data_prep.sh /export/corpora3/LDC/LDC97S62
-# local/swbd1_data_prep.sh /home/dpovey/data/LDC97S62
-# local/swbd1_data_prep.sh /data/corpora0/LDC97S62
-# local/swbd1_data_prep.sh /mnt/matylda2/data/SWITCHBOARD_1R2 # BUT,
 # local/swbd1_data_prep.sh /exports/work/inf_hcrc_cstr_general/corpora/switchboard/switchboard1
 
 utils/prepare_lang.sh data/local/dict_nosp \
