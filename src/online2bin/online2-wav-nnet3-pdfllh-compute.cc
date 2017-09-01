@@ -30,51 +30,6 @@
 #include "util/kaldi-thread.h"
 #include "nnet3/nnet-utils.h"
 
-namespace kaldi {
-
-void GetDiagnosticsAndPrintOutput(const std::string &utt,
-                                  const fst::SymbolTable *word_syms,
-                                  const CompactLattice &clat,
-                                  int64 *tot_num_frames,
-                                  double *tot_like) {
-  if (clat.NumStates() == 0) {
-    KALDI_WARN << "Empty lattice.";
-    return;
-  }
-  CompactLattice best_path_clat;
-  CompactLatticeShortestPath(clat, &best_path_clat);
-
-  Lattice best_path_lat;
-  ConvertLattice(best_path_clat, &best_path_lat);
-
-  double likelihood;
-  LatticeWeight weight;
-  int32 num_frames;
-  std::vector<int32> alignment;
-  std::vector<int32> words;
-  GetLinearSymbolSequence(best_path_lat, &alignment, &words, &weight);
-  num_frames = alignment.size();
-  likelihood = -(weight.Value1() + weight.Value2());
-  *tot_num_frames += num_frames;
-  *tot_like += likelihood;
-  KALDI_VLOG(2) << "Likelihood per frame for utterance " << utt << " is "
-                << (likelihood / num_frames) << " over " << num_frames
-                << " frames.";
-
-  if (word_syms != NULL) {
-    std::cerr << utt << ' ';
-    for (size_t i = 0; i < words.size(); i++) {
-      std::string s = word_syms->Find(words[i]);
-      if (s == "")
-        KALDI_ERR << "Word-id " << words[i] << " not in symbol table.";
-      std::cerr << s << ' ';
-    }
-    std::cerr << std::endl;
-  }
-}
-
-}
-
 int main(int argc, char *argv[]) {
   try {
     using namespace kaldi;
@@ -95,8 +50,6 @@ int main(int argc, char *argv[]) {
         "you want to decode utterance by utterance.\n";
 
     ParseOptions po(usage);
-
-    std::string word_syms_rxfilename;
 
     // feature_opts includes configuration for the iVector adaptation,
     // as well as the basic features.
@@ -151,6 +104,8 @@ int main(int argc, char *argv[]) {
 
     TransitionModel trans_model;
     nnet3::AmNnetSimple am_nnet;
+    Vector<BaseFloat> logpriors(am_nnet.Priors());
+    logpriors.ApplyLog();
     {
       bool binary;
       Input ki(nnet3_rxfilename, &binary);
@@ -200,7 +155,7 @@ int main(int argc, char *argv[]) {
             feature_info.silence_weighting_config,
 	          decodable_opts.frame_subsampling_factor);
 
-        nnet3::DecodableAmNnetLoopedOnline decodable(trans_model, decodable_info, feature_pipeline.InputFeature(), feature_pipeline.IvectorFeature());
+        nnet3::DecodableNnetLoopedOnline decodable(decodable_info, feature_pipeline.InputFeature(), feature_pipeline.IvectorFeature());
         OnlineTimer decoding_timer(utt);
 
         BaseFloat samp_freq = wave_data.SampFreq();
@@ -235,10 +190,13 @@ int main(int argc, char *argv[]) {
           int nframesready = decodable.NumFramesReady();
           if (nframesready > nout) llhs.Resize(nframesready, npdf, kCopyData);
           for (; nout < nframesready; nout++) {
-            if (!decodable.IsLastFrame(nout-1)) for (size_t j = 1; j <= npdf; j++) {
-              llhs(nout, j-1) = decodable.LogLikelihood(nout, j);
+            if (!decodable.IsLastFrame(nout-1)) for (size_t j = 0; j < npdf; j++) {
+              llhs(nout, j) = decodable.LogLikelihood(nout, j+1);
             }
           }
+          // to get back at posteriors:
+          // if (logpriors.Dim() == llhs.NumCols()) llhs.AddVecToRows(1.0, logpriors);
+
         }
         writer.Write(utt, llhs);
 
