@@ -294,8 +294,8 @@ private:
 			feat_mat_host.Resize(cur_stream_num * max_frame_num, feat_dim, kSetZero);
 			if (this->objective_function == "xent")
 			{
-				target.resize(cur_stream_num * max_frame_num/num_skip);
-				frame_mask_host.Resize(cur_stream_num * max_frame_num/num_skip, kSetZero);
+				target.resize(cur_stream_num * (max_frame_num+num_skip-1)/num_skip);
+				frame_mask_host.Resize(cur_stream_num * (max_frame_num+num_skip-1)/num_skip, kSetZero);
 			}
 
 			for (int s = 0; s < cur_stream_num; s++) {

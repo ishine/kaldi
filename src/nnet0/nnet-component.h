@@ -267,9 +267,10 @@ inline void Component::Propagate(const CuMatrixBase<BaseFloat> &in,
               << " input-dim : " << input_dim_ << " data : " << in.NumCols();
   }
   int nsubsample = this->GetSubSampleRate();
-  int nstream = this->GetStream();
+  int S = this->GetStream();
+  int T = (in.NumRows()/S + nsubsample-1)/nsubsample;
   // Allocate target buffer
-  out->Resize(in.NumRows()/(nstream*nsubsample), output_dim_, kSetZero, kStrideEqualNumCols); // reset
+  out->Resize(T*S, output_dim_, kSetZero, kStrideEqualNumCols); // reset
   // Call the propagation implementation of the component
   PropagateFnc(in, out);
 }
@@ -299,9 +300,10 @@ inline void Component::Backpropagate(const CuMatrixBase<BaseFloat> &in,
     in_diff->Resize(in.NumRows(), input_dim_, kUndefined, kStrideEqualNumCols); // reset
     // Asserts on the dims
     int nsubsample = this->GetSubSampleRate();
-    int nstream = this->GetStream();
-    KALDI_ASSERT((in.NumRows()/(nstream*nsubsample) == out.NumRows()) &&
-                 (in.NumRows()/(nstream*nsubsample) == out_diff.NumRows()) &&
+    int S = this->GetStream();
+    int T = (in.NumRows()/S + nsubsample-1)/nsubsample;
+    KALDI_ASSERT((T*S == out.NumRows()) &&
+                 (T*S == out_diff.NumRows()) &&
                  (in.NumRows() == in_diff->NumRows()));
     KALDI_ASSERT(in.NumCols() == in_diff->NumCols());
     KALDI_ASSERT(out.NumCols() == out_diff.NumCols());
