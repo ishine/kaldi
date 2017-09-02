@@ -107,13 +107,6 @@ public:
 	    nnet_transf.SetDropoutRetention(1.0);
 	    nnet.SetDropoutRetention(1.0);
 
-		std::vector<int32> sweep_frames;
-		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
-			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
-
-		if (sweep_frames[0] > opts->skip_frames || sweep_frames.size() > 1)
-			KALDI_ERR << "invalid sweep frame index";
-
         int in_skip = opts->skip_inner ? 1 : skip_frames,
         out_skip = opts->skip_inner ? skip_frames : 1;
 
@@ -185,13 +178,13 @@ public:
 	                feats[s].Resize(feats_transf.NumRows(), feats_transf.NumCols());
 	                feats_transf.CopyToMat(&feats[s]);
 	                //feats[s] = mat;
-	                curt[s] = sweep_frames[0];
+	                curt[s] = 0;
 	                lent[s] = feats[s].NumRows();
 	                new_utt_flags[s] = 1;  // a new utterance feeded to this stream
 
 	                //frame_num_utt[s] = (lent[s]+skip_frames-1)/skip_frames;
 	                frame_num_utt[s] = lent[s]/skip_frames;
-	                frame_num_utt[s] += lent[s]%skip_frames > sweep_frames[0] ? 1 : 0;
+	                frame_num_utt[s] += lent[s]%skip_frames > 0 ? 1 : 0;
 	                lent[s] = lent[s] > frame_num_utt[s]*skip_frames ? frame_num_utt[s]*skip_frames : lent[s];
 	                int32 utt_frames = opts->copy_posterior ? lent[s]:frame_num_utt[s];
 	                utt_feats[s].Resize(utt_frames, out_dim, kUndefined);
@@ -301,7 +294,7 @@ public:
 	    	if (time_shift > 0 || skip_frames > 1)
 	    	{
 				int32 len = mat.NumRows()/skip_frames, cur = 0;
-				len += mat.NumRows()%skip_frames > sweep_frames[0] ? 1 : 0;
+				len += mat.NumRows()%skip_frames > 0 ? 1 : 0;
                 len *= out_skip;
 				feat.Resize(len, mat.NumCols(), kUndefined);
 
@@ -418,21 +411,41 @@ void NnetForwardParallel(const NnetForwardOptions *opts,
     	    MultiThreader<NnetForwardParallelClass> m(opts->num_threads, c);
 
     	    // iterate over all feature files
-    	    NnetExample *example;
-    	    std::vector<NnetExample*> examples;
-    	    for (; !feature_reader.Done(); feature_reader.Next()) {
-    	    	example = new FeatureExample(&feature_reader);
-    	    	if (example->PrepareData(examples))
-    	    	{
-    	    		for (int i = 0; i < examples.size(); i++)
-    	    			repository.AcceptExample(examples[i]);
-    	    		if (examples[0] != example)
-    	    		    			delete example;
-    	    	}
-    	    	else
-    	    		delete example;
-    	    }
-    	    repository.ExamplesDone();
+			// prepare sample
+			NnetExample *example;
+			std::vector<NnetExample*> examples;
+			std::vector<int> sweep_frames, loop_frames;
+			if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+				KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+			for (int i = 0; i < sweep_frames.size(); i++) {
+				if (sweep_frames[i] >= opts->skip_frames)
+					KALDI_ERR << "invalid sweep frames indexes";
+			}
+
+			int nframes = sweep_frames.size();
+			int idx = 0;
+			loop_frames = sweep_frames;
+			// loop sweep skip frames
+			for (; !feature_reader.Done(); feature_reader.Next()) {
+				if (!opts->sweep_loop) {
+					loop_frames.resize(1);
+					loop_frames[0] = sweep_frames[idx];
+					idx = (idx+1)%nframes;
+				}
+
+				example = new FeatureExample(&feature_reader, opts);
+				example->SetSweepFrames(loop_frames, opts->skip_inner);
+				if (example->PrepareData(examples)) {
+					for (int i = 0; i < examples.size(); i++) {
+						repository.AcceptExample(examples[i]);
+					}
+					if (examples[0] != example)
+						delete example;
+				}
+				else
+					delete example;
+			}
+			repository.ExamplesDone();
 
 }
 

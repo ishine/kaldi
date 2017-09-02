@@ -1054,21 +1054,44 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
 	    MultiThreader<SeqTrainParallelClass> m(opts->parallel_opts->num_threads, c);
-	    NnetExample *example;
-	    std::vector<NnetExample*> examples;
-	    for (; !feature_reader.Done(); feature_reader.Next()) {
-	    	example = new SequentialNnetExample(&feature_reader, &den_lat_reader, &num_ali_reader, &model_sync, stats, opts);
-	    	if (example->PrepareData(examples))
-	    	{
-	    		for (int i = 0; i < examples.size(); i++)
-	    			repository.AcceptExample(examples[i]);
-	    		if (examples[0] != example)
-	    			delete example;
-	    	}
-	    	else
-	    		delete example;
-	    }
-	    repository.ExamplesDone();
+
+	    // prepare sample
+		NnetExample *example;
+		std::vector<NnetExample*> examples;
+		std::vector<int> sweep_frames, loop_frames;
+		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+		for (int i = 0; i < sweep_frames.size(); i++) {
+			if (sweep_frames[i] >= opts->skip_frames)
+				KALDI_ERR << "invalid sweep frames indexes";
+		}
+
+		int nframes = sweep_frames.size();
+		int idx = 0;
+		loop_frames = sweep_frames;
+		// loop sweep skip frames
+		for (; !feature_reader.Done(); feature_reader.Next()) {
+			if (!opts->sweep_loop) {
+				loop_frames.resize(1);
+				loop_frames[0] = sweep_frames[idx];
+				idx = (idx+1)%nframes;
+			}
+
+			example = new SequentialNnetExample(&feature_reader, &den_lat_reader,
+					&num_ali_reader, &model_sync, stats, opts);
+			example->SetSweepFrames(loop_frames, opts->skip_inner);
+			if (example->PrepareData(examples)) {
+				for (int i = 0; i < examples.size(); i++) {
+					repository.AcceptExample(examples[i]);
+				}
+				if (examples[0] != example)
+					delete example;
+			}
+			else
+				delete example;
+		}
+		repository.ExamplesDone();
+
 	  }
 
 }

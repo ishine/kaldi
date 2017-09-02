@@ -25,119 +25,119 @@ namespace nnet0 {
 
 bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 {
-	        utt = feature_reader->Key();
-	        KALDI_VLOG(3) << "Reading " << utt;
-	        // check that we have targets
-	        if (!targets_reader->HasKey(utt)) {
-	          KALDI_WARN << utt << ", missing targets";
-	          model_sync->LockStates();
-	          stats->num_no_tgt_mat++;
-	          model_sync->UnlockStates();
-	          return false;
-	        }
-	        // check we have per-frame weights
-	        if (opts->frame_weights != "" && !weights_reader->HasKey(utt)) {
-	          KALDI_WARN << utt << ", missing per-frame weights";
-	          model_sync->LockStates();
-	          stats->num_other_error++;
-	          model_sync->UnlockStates();
-	          return false;
-	        }
+	utt = feature_reader->Key();
+	KALDI_VLOG(3) << "Reading " << utt;
+	// check that we have targets
+	if (!targets_reader->HasKey(utt)) {
+	  KALDI_WARN << utt << ", missing targets";
+	  model_sync->LockStates();
+	  stats->num_no_tgt_mat++;
+	  model_sync->UnlockStates();
+	  return false;
+	}
+	// check we have per-frame weights
+	if (opts->frame_weights != "" && !weights_reader->HasKey(utt)) {
+	  KALDI_WARN << utt << ", missing per-frame weights";
+	  model_sync->LockStates();
+	  stats->num_other_error++;
+	  model_sync->UnlockStates();
+	  return false;
+	}
 
-	        // get feature / target pair
-	        input_frames = feature_reader->Value();
-	        targets = targets_reader->Value(utt);
-	        // get per-frame weights
-	        if (opts->frame_weights != "") {
-	        	frames_weights = weights_reader->Value(utt);
-	        } else { // all per-frame weights are 1.0
-	        	frames_weights.Resize(input_frames.NumRows());
-	        	frames_weights.Set(1.0);
-	        }
+	// get feature / target pair
+	input_frames = feature_reader->Value();
+	targets = targets_reader->Value(utt);
+	// get per-frame weights
+	if (opts->frame_weights != "") {
+		frames_weights = weights_reader->Value(utt);
+	} else { // all per-frame weights are 1.0
+		frames_weights.Resize(input_frames.NumRows());
+		frames_weights.Set(1.0);
+	}
 
 
-	        // correct small length mismatch ... or drop sentence
-	        {
-	          // add lengths to vector
-	          std::vector<int32> lenght;
-	          lenght.push_back(input_frames.NumRows());
-	          lenght.push_back(targets.size());
-	          lenght.push_back(frames_weights.Dim());
-	          // find min, max
-	          int32 min = *std::min_element(lenght.begin(),lenght.end());
-	          int32 max = *std::max_element(lenght.begin(),lenght.end());
-	          // fix or drop ?
-	          if (max - min < opts->length_tolerance) {
-	            if(input_frames.NumRows() != min) input_frames.Resize(min, input_frames.NumCols(), kCopyData);
-	            if(targets.size() != min) targets.resize(min);
-	            if(frames_weights.Dim() != min) frames_weights.Resize(min, kCopyData);
-	          } else {
-	            KALDI_WARN << utt << ", length mismatch of targets " << targets.size()
-	                       << " and features " << input_frames.NumRows();
-	            model_sync->LockStates();
-	            stats->num_other_error++;
-	            model_sync->UnlockStates();
-	            return false;
-	          }
-	        }
+	// correct small length mismatch ... or drop sentence
+	{
+	  // add lengths to vector
+	  std::vector<int32> lenght;
+	  lenght.push_back(input_frames.NumRows());
+	  lenght.push_back(targets.size());
+	  lenght.push_back(frames_weights.Dim());
+	  // find min, max
+	  int32 min = *std::min_element(lenght.begin(),lenght.end());
+	  int32 max = *std::max_element(lenght.begin(),lenght.end());
+	  // fix or drop ?
+	  if (max - min < opts->length_tolerance) {
+		if(input_frames.NumRows() != min) input_frames.Resize(min, input_frames.NumCols(), kCopyData);
+		if(targets.size() != min) targets.resize(min);
+		if(frames_weights.Dim() != min) frames_weights.Resize(min, kCopyData);
+	  } else {
+		KALDI_WARN << utt << ", length mismatch of targets " << targets.size()
+				   << " and features " << input_frames.NumRows();
+		model_sync->LockStates();
+		stats->num_other_error++;
+		model_sync->UnlockStates();
+		return false;
+	  }
+	}
 
-	        examples.resize(1);
+	examples.resize(1);
 
-	        // split feature
-	        int32 skip_frames = opts->skip_frames;
-	        int32 sweep_time = opts->sweep_time;
+	// split feature
+	int32 skip_frames = opts->skip_frames;
+	int32 sweep_time = opts->sweep_time;
 
-	        if (sweep_time>skip_frames)
-	        {
-	        	KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
-	        	sweep_time = skip_frames;
-	        }
+	if (sweep_time>skip_frames)
+	{
+		KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
+		sweep_time = skip_frames;
+	}
 
-	        if (skip_frames <= 1)
-	        {
-	        	examples[0] = this;
-	        	return true;
-	        }
+	if (skip_frames <= 1)
+	{
+		examples[0] = this;
+		return true;
+	}
 
-	        if (sweep_time == skip_frames)
-	        {
-	        	this->sweep_frames.resize(sweep_time);
-	        	for (int i = 0; i < sweep_time; i++)
-	        		sweep_frames[i] = i;
-	        }
+	if (sweep_time == skip_frames)
+	{
+		this->sweep_frames.resize(sweep_time);
+		for (int i = 0; i < sweep_time; i++)
+			sweep_frames[i] = i;
+	}
 
-	        examples.resize(sweep_frames.size());
+	examples.resize(sweep_frames.size());
 
-	        DNNNnetExample *example = NULL;
-	        int32 lent, feat_lent, cur,
-				utt_len = input_frames.NumRows();
-	        for (int i = 0; i < sweep_frames.size(); i++) {
-	        	example = new DNNNnetExample(feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
-	        	example->utt = utt;
-	        	lent = utt_len/skip_frames;
-	        	lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
-	        	feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
-	        	example->input_frames.Resize(feat_lent, input_frames.NumCols());
-	        	example->targets.resize(lent);
-	        	example->frames_weights.Resize(lent);
+	DNNNnetExample *example = NULL;
+	int32 lent, feat_lent, cur,
+		utt_len = input_frames.NumRows();
+	for (int i = 0; i < sweep_frames.size(); i++) {
+		example = new DNNNnetExample(feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
+		example->utt = utt;
+		lent = utt_len/skip_frames;
+		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
+		example->input_frames.Resize(feat_lent, input_frames.NumCols());
+		example->targets.resize(lent);
+		example->frames_weights.Resize(lent);
 
-	        	cur = sweep_frames[i];
-	        	for (int j = 0; j < feat_lent; j++) {
-	        		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
-	        		cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
-	        		if (cur >= utt_len) cur = utt_len-1;
-	        	}
+		cur = sweep_frames[i];
+		for (int j = 0; j < feat_lent; j++) {
+			example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+			cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
+			if (cur >= utt_len) cur = utt_len-1;
+		}
 
-	        	cur = sweep_frames[i];
-	        	for (int j = 0; j < lent; j++) {
-	        		example->targets[j] = targets[cur];
-	        		example->frames_weights(j) = frames_weights(cur);
-	        		cur += skip_frames;
-	        	}
-	        	examples[i] = example;
-	        }
+		cur = sweep_frames[i];
+		for (int j = 0; j < lent; j++) {
+			example->targets[j] = targets[cur];
+			example->frames_weights(j) = frames_weights(cur);
+			cur += skip_frames;
+		}
+		examples[i] = example;
+	}
 
-	        return true;
+	return true;
 }
 
 bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
@@ -213,118 +213,155 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 {
-			  utt = feature_reader->Key();
-		      if (!den_lat_reader->HasKey(utt)) {
-		        KALDI_WARN << "Utterance " << utt << ": found no lattice.";
-		        model_sync->LockStates();
-		        stats->num_no_den_lat++;
-		        model_sync->UnlockStates();
-		        return false;
-		      }
-		      if (!num_ali_reader->HasKey(utt)) {
-		        KALDI_WARN << "Utterance " << utt << ": found no reference alignment.";
-		        model_sync->LockStates();
-		        stats->num_no_num_ali++;
-		        model_sync->UnlockStates();
+	utt = feature_reader->Key();
+	if (!den_lat_reader->HasKey(utt)) {
+	KALDI_WARN << "Utterance " << utt << ": found no lattice.";
+	model_sync->LockStates();
+	stats->num_no_den_lat++;
+	model_sync->UnlockStates();
+	return false;
+	}
+	if (!num_ali_reader->HasKey(utt)) {
+	KALDI_WARN << "Utterance " << utt << ": found no reference alignment.";
+	model_sync->LockStates();
+	stats->num_no_num_ali++;
+	model_sync->UnlockStates();
 
-		        return false;
-		      }
+	return false;
+	}
 
-		      // 1) get the features, numerator alignment
-		      input_frames = feature_reader->Value();
-		      num_ali = num_ali_reader->Value(utt);
-		      int32 skip_frames = opts->skip_frames;
-		      //int32 utt_frames = (input_frames.NumRows()+skip_frames-1)/skip_frames; // 
-		      int32 utt_frames = input_frames.NumRows(), ali_frames = num_ali.size();
-              //for CTC
-              if (ali_frames == utt_frames || ali_frames == utt_frames-1 ||
-			ali_frames == utt_frames/skip_frames || ali_frames == utt_frames/skip_frames+1)
-                    utt_frames = ali_frames;
+	// 1) get the features, numerator alignment
+	input_frames = feature_reader->Value();
+	num_ali = num_ali_reader->Value(utt);
+	int32 skip_frames = opts->skip_frames;
+	//int32 utt_frames = (input_frames.NumRows()+skip_frames-1)/skip_frames; //
+	int32 utt_frames = input_frames.NumRows(), ali_frames = num_ali.size();
+	//for CTC
+	if (ali_frames == utt_frames || ali_frames == utt_frames-1 ||
+		  ali_frames == utt_frames/skip_frames || ali_frames == utt_frames/skip_frames+1)
+		utt_frames = ali_frames;
 
-		      // check for temporal length of numerator alignments
-		      if ((int32)num_ali.size() != utt_frames){
-		        KALDI_WARN << "Numerator alignment has wrong length "
-		                   << num_ali.size() << " vs. "<< utt_frames;
-		        model_sync->LockStates();
-		        stats->num_other_error++;
-		        model_sync->UnlockStates();
-		        return false;
-		      }
-		      if (input_frames.NumRows() > opts->max_frames) {
-		    	  KALDI_WARN << "Utterance " << utt << ": Skipped because it has " << input_frames.NumRows() <<
-		    			  	  " frames, which is more than " << opts->max_frames << ".";
-		    	  model_sync->LockStates();
-		    	  stats->num_other_error++;
-		    	  model_sync->UnlockStates();
-		    	  return false;
-		      }
+	// check for temporal length of numerator alignments
+	if ((int32)num_ali.size() != utt_frames){
+	KALDI_WARN << "Numerator alignment has wrong length "
+			   << num_ali.size() << " vs. "<< utt_frames;
+		model_sync->LockStates();
+		stats->num_other_error++;
+		model_sync->UnlockStates();
+		return false;
+	}
+	if (input_frames.NumRows() > opts->max_frames) {
+		KALDI_WARN << "Utterance " << utt << ": Skipped because it has " << input_frames.NumRows() <<
+				  " frames, which is more than " << opts->max_frames << ".";
+		model_sync->LockStates();
+		stats->num_other_error++;
+		model_sync->UnlockStates();
+		return false;
+	}
 
-		      // 2) get the denominator lattice, preprocess
-		      den_lat = den_lat_reader->Value(utt);
-		      if (den_lat.Start() == -1) {
-		        KALDI_WARN << "Empty lattice for utt " << utt;
-		        model_sync->LockStates();
-		        stats->num_other_error++;
-		        model_sync->UnlockStates();
-		        return false;
-		      }
-		      if (opts->old_acoustic_scale != 1.0) {
-		        fst::ScaleLattice(fst::AcousticLatticeScale(opts->old_acoustic_scale), &den_lat);
-		      }
-		      // optional sort it topologically
-		      kaldi::uint64 props = den_lat.Properties(fst::kFstProperties, false);
-		      if (!(props & fst::kTopSorted)) {
-		        if (fst::TopSort(&den_lat) == false)
-		          KALDI_ERR << "Cycles detected in lattice.";
-		      }
-		      // get the lattice length and times of states
-		      int32 max_time = kaldi::LatticeStateTimes(den_lat, &state_times);
-		      // check for temporal length of denominator lattices
-		      if (max_time != utt_frames) {
-		        KALDI_WARN << "Denominator lattice has wrong length "
-		                   << max_time << " vs. " << utt_frames;
-		        model_sync->LockStates();
-		        stats->num_other_error++;
-		        model_sync->UnlockStates();
-		        return false;
-		      }
+	// 2) get the denominator lattice, preprocess
+	den_lat = den_lat_reader->Value(utt);
+	if (den_lat.Start() == -1) {
+		KALDI_WARN << "Empty lattice for utt " << utt;
+		model_sync->LockStates();
+		stats->num_other_error++;
+		model_sync->UnlockStates();
+		return false;
+	}
+	if (opts->old_acoustic_scale != 1.0) {
+		fst::ScaleLattice(fst::AcousticLatticeScale(opts->old_acoustic_scale), &den_lat);
+	}
+	// optional sort it topologically
+	kaldi::uint64 props = den_lat.Properties(fst::kFstProperties, false);
+	if (!(props & fst::kTopSorted)) {
+		if (fst::TopSort(&den_lat) == false)
+		  KALDI_ERR << "Cycles detected in lattice.";
+	}
+	// get the lattice length and times of states
+	int32 max_time = kaldi::LatticeStateTimes(den_lat, &state_times);
+	// check for temporal length of denominator lattices
+	if (max_time != utt_frames) {
+		KALDI_WARN << "Denominator lattice has wrong length "
+				   << max_time << " vs. " << utt_frames;
+		model_sync->LockStates();
+		stats->num_other_error++;
+		model_sync->UnlockStates();
+		return false;
+	}
 
 
-		        // split feature
-		      examples.resize(1);
+	// split feature
+	examples.resize(1);
 
-				if (skip_frames <= 1)
-				{
-					examples[0] = this;
-					return true;
-				}
+	if (skip_frames <= 1) {
+		examples[0] = this;
+		return true;
+	}
 
-				SequentialNnetExample *example = NULL;
-				int32 lent, feat_lent, cur,
-					utt_len = input_frames.NumRows();
-				for (int i = 0; i < 1; i++) {
-					example = new SequentialNnetExample(feature_reader, den_lat_reader, num_ali_reader, model_sync, stats, opts);
-					example->utt = utt;
-					example->den_lat = den_lat;
-					example->num_ali = num_ali;
-					example->state_times = state_times;
+	SequentialNnetExample *example = NULL;
+	int32 lent, feat_lent, cur,
+		utt_len = input_frames.NumRows();
+	for (int i = 0; i < 1; i++) {
+		example = new SequentialNnetExample(feature_reader,
+				den_lat_reader, num_ali_reader, model_sync, stats, opts);
+		example->utt = utt;
+		example->den_lat = den_lat;
+		example->num_ali = num_ali;
+		example->state_times = state_times;
 
-					lent = utt_len/skip_frames;
-					lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
-					feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
-					example->input_frames.Resize(feat_lent, input_frames.NumCols());
+		lent = utt_len/skip_frames;
+		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
+		example->input_frames.Resize(feat_lent, input_frames.NumCols());
 
-					cur = sweep_frames[i];
-					for (int j = 0; j < feat_lent; j++) {
-						example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
-						cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
-						if (cur >= utt_len) cur = utt_len-1;
-					}
+		cur = sweep_frames[i];
+		for (int j = 0; j < feat_lent; j++) {
+			example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+			cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
+			if (cur >= utt_len) cur = utt_len-1;
+		}
 
-					examples[i] = example;
-				}
+		examples[i] = example;
+	}
 
-		      return true;
+	return true;
+}
+
+bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
+{
+	utt = feature_reader->Key();
+	input_frames = feature_reader->Value();
+
+	int32 skip_frames = opts->skip_frames;
+
+	if (skip_frames <= 1) {
+		examples[0] = this;
+		return true;
+	}
+
+	SequentialNnetExample *example = NULL;
+	int32 lent, feat_lent, cur,
+		utt_len = input_frames.NumRows();
+	for (int i = 0; i < 1; i++) {
+		example = new FeatureExample(feature_reader, opts);
+		example->utt = utt;
+
+		lent = utt_len/skip_frames;
+		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
+		example->input_frames.Resize(feat_lent, input_frames.NumCols());
+
+		cur = sweep_frames[i];
+		for (int j = 0; j < feat_lent; j++) {
+			example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+			cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
+			if (cur >= utt_len) cur = utt_len-1;
+		}
+
+		examples[i] = example;
+	}
+
+	return true;
 }
 
 bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
