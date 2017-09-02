@@ -187,7 +187,7 @@ class SubSample : public Component {
   }
 
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
-	    KALDI_ASSERT(in.NumRows()/(nstream_*skip_frames_) == out->NumRows());
+	    KALDI_ASSERT((in.NumRows()/nstream_ + skip_frames_-1)/skip_frames_ == out->NumRows()/nstream_);
 
 	    int rows = out->NumRows();
         int T = rows/nstream_;
@@ -206,7 +206,7 @@ class SubSample : public Component {
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
                         const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
-	  	  KALDI_ASSERT(in_diff->NumRows()/(nstream_*skip_frames_) == out_diff.NumRows());
+	  	KALDI_ASSERT((in.NumRows()/nstream_ + skip_frames_-1)/skip_frames_ == out->NumRows()/nstream_);
 
 		int rows = out_diff.NumRows();
         int T = rows/nstream_;
