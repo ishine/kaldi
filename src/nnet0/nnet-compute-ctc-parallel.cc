@@ -268,10 +268,10 @@ private:
 
 				feats_utt[s].Resize(feats_transf.NumRows(), feats_transf.NumCols());
 				feats_transf.CopyToMat(&feats_utt[s]);
-		        //feats_utt[s] = mat;
+		        	//feats_utt[s] = mat;
 				in_rows = mat.NumRows();
 				num_utt_frame_in.push_back(in_rows);
-		        num_frames += utt_rows;
+		        	num_frames += in_rows;
 
 		        // inner skip frames
 		        out_rows = in_rows/num_skip;

@@ -243,7 +243,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 	// check for temporal length of numerator alignments
 	if ((int32)num_ali.size() != utt_frames){
-	KALDI_WARN << "Numerator alignment has wrong length "
+	KALDI_WARN << "Utterance " << utt << ": Numerator alignment has wrong length "
 			   << num_ali.size() << " vs. "<< utt_frames;
 		model_sync->LockStates();
 		stats->num_other_error++;
