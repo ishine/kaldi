@@ -60,10 +60,10 @@ int main(int argc, char *argv[]) {
 
     BaseFloat chunk_length_secs = 0.18;
     bool online = true;
-    bool posteriors = false;
+    bool logpost = false;
 
-    po.Register("posteriors", &posteriors,
-                "Compute posteriors instead of llhs.");
+    po.Register("logpost", &logpost,
+                "Compute log posteriors instead of llhs.");
     po.Register("chunk-length", &chunk_length_secs,
                 "Length of chunk size in seconds, that we process.  Set to <= 0 "
                 "to use all input in one chunk.");
@@ -200,8 +200,8 @@ int main(int argc, char *argv[]) {
           }
 
         }
-        // to get back at posteriors:
-        if (posteriors && logpriors.Dim() == llhs.NumCols()) {
+        // to get back to log posteriors:
+        if (logpost && logpriors.Dim() == llhs.NumCols()) {
           llhs.Scale(1.0 / decodable_opts.acoustic_scale);
           llhs.AddVecToRows(1.0, logpriors);
         }
