@@ -214,7 +214,7 @@ private:
 
 	    std::vector< Matrix<BaseFloat> > feats_utt(num_stream);  // Feature matrix of every utterance
 	    std::vector< std::vector<int> > labels_utt(num_stream);  // Label vector of every utterance
-	    std::vector<int> frame_num_utt;
+	    std::vector<int> num_utt_frame_in, num_utt_frame_out;
         std::vector<int> new_utt_flags;
 
 	    Matrix<BaseFloat> feat_mat_host;
@@ -228,7 +228,7 @@ private:
 	    Timer time;
 	    double time_now = 0;
 
-		int32 cur_stream_num = 0, num_skip;
+		int32 cur_stream_num = 0, num_skip, in_rows, out_rows;
 		int32 feat_dim = nnet.InputDim();
 
 	    while (num_stream) {
@@ -236,7 +236,9 @@ private:
 
 			int32 s = 0, max_frame_num = 0, cur_frames = 0;
 			cur_stream_num = 0; num_frames = 0;
-			frame_num_utt.clear();
+			num_utt_frame_in.clear();
+			num_utt_frame_out.clear();
+			num_skip = opts->skip_inner ? skip_frames : 1;
 
 			if (NULL == example)
 				example = repository_->ProvideExample();
@@ -267,8 +269,14 @@ private:
 				feats_utt[s].Resize(feats_transf.NumRows(), feats_transf.NumCols());
 				feats_transf.CopyToMat(&feats_utt[s]);
 		        //feats_utt[s] = mat;
-		        frame_num_utt.push_back(mat.NumRows());
-		        num_frames += mat.NumRows();
+				in_rows = mat.NumRows();
+				num_utt_frame_in.push_back(in_rows);
+		        num_frames += utt_rows;
+
+		        // inner skip frames
+		        out_rows = in_rows/num_skip;
+		        out_rows += in_rows%num_skip > 0 ? 1:0;
+		        num_utt_frame_out.push_back(out_rows);
 
 				s++;
 				num_done++;
@@ -278,7 +286,6 @@ private:
 				example = repository_->ProvideExample();
 			}
 
-			num_skip = opts->skip_inner ? skip_frames : 1;
 			targets_delay *=  num_skip;
 			cur_stream_num = s;
 			new_utt_flags.resize(cur_stream_num, 1);
@@ -293,13 +300,13 @@ private:
 
 			for (int s = 0; s < cur_stream_num; s++) {
 			  //Matrix<BaseFloat> mat_tmp = feats_utt[s];
-			  for (int r = 0; r < frame_num_utt[s]; r++) {
+			  for (int r = 0; r < num_utt_frame_in[s]; r++) {
 				  //feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(mat_tmp.Row(r));
-				  if (r + targets_delay < frame_num_utt[s]) {
+				  if (r + targets_delay < num_utt_frame_in[s]) {
 					  feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(feats_utt[s].Row(r+targets_delay));
 				  }
 				  else{
-					  int last = (frame_num_utt[s]-1); // frame_num_utt[s]-1
+					  int last = (num_utt_frame_in[s]-1); // frame_num_utt[s]-1
 					  feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(feats_utt[s].Row(last));
 				  }
 				  //ce label
@@ -316,7 +323,7 @@ private:
 			//for lstm
 			nnet.ResetLstmStreams(new_utt_flags, batch_size);
 			//for bilstm
-			nnet.SetSeqLengths(frame_num_utt);
+			nnet.SetSeqLengths(num_utt_frame_in);
 
 	        // report the speed
 	        if (num_done % 5000 == 0) {
@@ -334,9 +341,9 @@ private:
 	        }
 	        else if (objective_function == "ctc"){
 	        	//ctc error
-	        	ctc.EvalParallel(frame_num_utt, nnet_out, labels_utt, &nnet_diff);
+	        	ctc.EvalParallel(num_utt_frame_out, nnet_out, labels_utt, &nnet_diff);
 	        	// Error rates
-	        	ctc.ErrorRateMSeq(frame_num_utt, nnet_out, labels_utt);
+	        	ctc.ErrorRateMSeq(num_utt_frame_out, nnet_out, labels_utt);
 	        }
 	        else
 	        	KALDI_ERR<< "Unknown objective function code : " << objective_function;
