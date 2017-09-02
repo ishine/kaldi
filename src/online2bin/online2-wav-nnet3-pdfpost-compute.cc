@@ -60,10 +60,7 @@ int main(int argc, char *argv[]) {
 
     BaseFloat chunk_length_secs = 0.18;
     bool online = true;
-    bool posteriors = false;
 
-    po.Register("posteriors", &posteriors,
-                "Compute posteriors instead of llhs.");
     po.Register("chunk-length", &chunk_length_secs,
                 "Length of chunk size in seconds, that we process.  Set to <= 0 "
                 "to use all input in one chunk.");
@@ -106,25 +103,22 @@ int main(int argc, char *argv[]) {
     }
 
     TransitionModel trans_model;
-    nnet3::AmNnetSimple am_nnet;
+    nnet3::Nnet nnet;
     Vector<BaseFloat> logpriors;
     {
       bool binary;
       Input ki(nnet3_rxfilename, &binary);
       trans_model.Read(ki.Stream(), binary);
-      am_nnet.Read(ki.Stream(), binary);
-      logpriors = am_nnet.Priors();
-      logpriors.ApplyLog();
-      SetBatchnormTestMode(true, &(am_nnet.GetNnet()));
-      SetDropoutTestMode(true, &(am_nnet.GetNnet()));
-      nnet3::CollapseModel(nnet3::CollapseModelConfig(), &(am_nnet.GetNnet()));
+      nnet.Read(ki.Stream(), binary);
+      SetBatchnormTestMode(true, &nnet);
+      SetDropoutTestMode(true, &nnet);
+      nnet3::CollapseModel(nnet3::CollapseModelConfig(), &nnet);
     }
 
     // this object contains precomputed stuff that is used by all decodable
-    // objects.  It takes a pointer to am_nnet because if it has iVectors it has
+    // objects.  It takes a pointer to nnet because if it has iVectors it has
     // to modify the nnet to accept iVectors at intervals.
-    nnet3::DecodableNnetSimpleLoopedInfo decodable_info(decodable_opts,
-                                                        &am_nnet);
+    nnet3::DecodableNnetSimpleLoopedInfo decodable_info(decodable_opts, &nnet);
 
     int32 num_done = 0, num_err = 0;
 
@@ -133,6 +127,8 @@ int main(int argc, char *argv[]) {
     BaseFloatMatrixWriter writer(llhs_wspecifier);
 
     OnlineTimingStats timing_stats;
+
+    cout << 1.0 / decodable_opts.acoustic_scale << "\n";
 
     for (; !spk2utt_reader.Done(); spk2utt_reader.Next()) {
       std::string spk = spk2utt_reader.Key();
@@ -198,13 +194,8 @@ int main(int argc, char *argv[]) {
               llhs(nout, j) = decodable.LogLikelihood(nout, j+1);
             }
           }
-
         }
-        // to get back at posteriors:
-        if (posteriors && logpriors.Dim() == llhs.NumCols()) {
-          llhs.Scale(1.0 / decodable_opts.acoustic_scale);
-          llhs.AddVecToRows(1.0, logpriors);
-        }
+        llhs.Scale(1.0 / decodable_opts.acoustic_scale);
         writer.Write(utt, llhs);
 
         decoding_timer.OutputStats(&timing_stats);
