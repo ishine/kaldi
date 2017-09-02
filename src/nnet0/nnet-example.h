@@ -25,6 +25,7 @@
 #include "nnet0/nnet-compute-ctc-parallel.h"
 #include "nnet0/nnet-compute-lstm-lm-parallel.h"
 #include "nnet0/nnet-compute-chain-parallel.h"
+#include "nnet0/nnet-compute-forward.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -140,7 +141,7 @@ struct FeatureExample: NnetExample
 {
 	const NnetForwardOptions *opts;
 
-	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader, opts)
+	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader, const NnetForwardOptions *opts)
 	:NnetExample(feature_reader), opts(opts) {
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;

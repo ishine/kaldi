@@ -334,12 +334,15 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 
 	int32 skip_frames = opts->skip_frames;
 
+	// split feature
+	examples.resize(1);
+
 	if (skip_frames <= 1) {
 		examples[0] = this;
 		return true;
 	}
 
-	SequentialNnetExample *example = NULL;
+	FeatureExample *example = NULL;
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
 	for (int i = 0; i < 1; i++) {
