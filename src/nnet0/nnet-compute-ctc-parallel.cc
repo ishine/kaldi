@@ -230,6 +230,8 @@ private:
 
 		int32 cur_stream_num = 0, num_skip, in_rows, out_rows;
 		int32 feat_dim = nnet.InputDim();
+	    num_skip = opts->skip_inner ? skip_frames : 1;
+        frame_limit *= num_skip;
 
 	    while (num_stream) {
 
@@ -238,7 +240,6 @@ private:
 			cur_stream_num = 0; num_frames = 0;
 			num_utt_frame_in.clear();
 			num_utt_frame_out.clear();
-			num_skip = opts->skip_inner ? skip_frames : 1;
 
 			if (NULL == example)
 				example = repository_->ProvideExample();
