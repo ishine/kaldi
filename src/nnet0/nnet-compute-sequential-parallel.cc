@@ -612,7 +612,8 @@ private:
 		int32 update_frames = 0;
 		int32 num_frames = 0;
 		int32 cur_stream_num = 0;
-		int32 num_dump = 0;
+		int32 num_dump = 0, num_skip;
+		num_skip = opts->skip_inner ? skip_frames : 1;
 
 		SequentialNnetExample *example = NULL;
 
@@ -624,6 +625,7 @@ private:
 					cur_stream_num = 0; num_frames = 0;
 					p_nnet_diff_h = &diff_feat;
 					
+
 					if (NULL == example)
 						example = dynamic_cast<SequentialNnetExample*>(repository_->ProvideExample());
 
@@ -667,10 +669,10 @@ private:
 					if (cur_stream_num == 0) break;
 
 					feat.Resize(max_frame_num * cur_stream_num, feat_dim, kSetZero);
-					nnet_out_host.Resize(max_frame_num * cur_stream_num, out_dim, kUndefined);
+					nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
 
 					//int truc_frame_num = batch_size>0 ? (max_frame_num+batch_size-1)/batch_size * batch_size : max_frame_num;
-					diff_feat.Resize(max_frame_num * cur_stream_num, out_dim, kSetZero);
+					diff_feat.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kSetZero);
 
 					// fill a multi-stream bptt batch
 					 // * feat: first shifted to achieve targets delay; then padded to batch_size
@@ -701,14 +703,14 @@ private:
                         // for streams with new utterance, history states need to be reset
                         si_nnet.ResetLstmStreams(new_utt_flags, batch_size);
 						si_nnet.Propagate(feats_transf, &si_nnet_out);
-						si_nnet_out_host.Resize(max_frame_num * cur_stream_num, out_dim, kUndefined);
+						si_nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
 						si_nnet_out.CopyToMat(&si_nnet_out_host);
 					}
 
 					if (this->kld_scale > 0 || frame_smooth > 0)
 					{
 						softmax.Propagate(nnet_out, &soft_nnet_out);
-						soft_nnet_out_host.Resize(max_frame_num * cur_stream_num, out_dim, kUndefined);
+						soft_nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
 						soft_nnet_out.CopyToMat(&soft_nnet_out_host);
 					}
 					/*
