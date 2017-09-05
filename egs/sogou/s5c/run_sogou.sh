@@ -45,11 +45,12 @@ mfccdir=mfcc
 # In this setup, we use MFCC feature to train GMM and FBANK to train NN  
 if [ $stage -le 2 ]; then
   cp -r data/local/train data/train_mfcc || exit 1;
-  cp -r data/local/not_on_screen data/not_on_screen_mfcc || exit 1;
-  cp -r data/local/test8000 data/test8000_mfcc || exit 1;
-  cp -r data/local/testIOS data/testIOS_mfcc || exit 1;
+  #We do not use test-set but dev-set to test 
+#  cp -r data/local/not_on_screen data/not_on_screen_mfcc || exit 1;
+#  cp -r data/local/test8000 data/test8000_mfcc || exit 1;
+#  cp -r data/local/testIOS data/testIOS_mfcc || exit 1;
   # Modify conf/mfcc.conf to set the MFCC config 
-  for x in train_mfcc not_on_screen_mfcc test8000_mfcc testIOS_mfcc; do
+  for x in train_mfcc ; do
     steps/make_mfcc.sh --nj 30 --cmd "$train_cmd" \
       data/$x exp/make_mfcc/$x $mfccdir || exit 1;
     steps/compute_cmvn_stats.sh data/$x exp/make_mfcc/$x $mfccdir || exit 1;

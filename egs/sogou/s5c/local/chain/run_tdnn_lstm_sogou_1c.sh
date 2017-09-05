@@ -76,20 +76,24 @@ local/nnet3/run_ivector_common.sh --stage $stage \
 fbankdir=fbank
 if [ $stage -le 8 ]; then 
   # first make fbank features for NN trainging
+  cp -r data/local/train data/train_fbank || exit 1;
+  cp -r data/local/not_on_screen data/not_on_screen || exit 1;
+  cp -r data/local/test8000 data/test8000 || exit 1;
+  cp -r data/local/testIOS data/testIOS || exit 1;
+  
   # modify conf/fbank.conf to set fbank feature config
-for x in train_fbank; do
-  steps/make_fbank.sh --nj 40 --cmd "$train_cmd" \
-    data/$x exp/make_fbank/$x $fbankdir
-  steps/compute_cmvn_stats.sh data/$x exp/make_fbank/$x $fbankdir
-  utils/fix_data_dir.sh data/$x
-done
+  for x in train_fbank not_on_screen test8000 testIOS; do
+    steps/make_fbank.sh --nj 40 --cmd "$train_cmd" \
+      data/$x exp/make_fbank/$x $fbankdir
+    steps/compute_cmvn_stats.sh data/$x exp/make_fbank/$x $fbankdir
+    utils/fix_data_dir.sh data/$x
+  done
 fi
 
 if [ $stage -le 9 ]; then
   # Get the alignments as lattices (gives the chain training more freedom).
   # use the same num-jobs as the alignments
-  #nj=$(cat exp/tri3b_ali/num_jobs) || exit 1;
-  nj=40
+  nj=$(cat exp/tri3b_ali/num_jobs) || exit 1;
   steps/align_fmllr_lats.sh --nj $nj --cmd "$train_cmd" $mfcc_data \
     data/lang exp/tri3b exp/tri3_lats_nodup$suffix
   rm exp/tri3_lats_nodup$suffix/fsts.*.gz # save space
@@ -115,7 +119,7 @@ if [ $stage -le 11 ]; then
   steps/nnet3/chain/build_tree.sh --frame-subsampling-factor 3 \
       --leftmost-questions-truncate $leftmost_questions_truncate \
       --context-opts "--context-width=2 --central-position=1" \
-      --cmd "$train_cmd" 7000 data/$train_set $lang $ali_dir $treedir
+      --cmd "$train_cmd" 9000 $mfcc_data $lang $ali_dir $treedir
 fi
 
 if [ $stage -le 12 ]; then
@@ -166,11 +170,6 @@ EOF
 fi
 
 if [ $stage -le 13 ]; then
-  if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
-    utils/create_split_dir.pl \
-     /export/b0{5,6,7,8}/$USER/kaldi-data/egs/swbd-$(date +'%m_%d_%H_%M')/s5c/$dir/egs/storage $dir/egs/storage
-  fi
-
   steps/nnet3/chain/train.py --stage $train_stage \
     --cmd "$decode_cmd" \
     --feat.cmvn-opts "--norm-means=false --norm-vars=false" \
@@ -205,17 +204,15 @@ if [ $stage -le 13 ]; then
     --dir $dir  || exit 1;
 fi
 
-<<!
 if [ $stage -le 14 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
-  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_sw1_tg $dir $dir/graph_sw1_tg
+  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_bigG $dir $dir/graph_bigG
 fi
-!
 
 decode_suff=final_bigG
-graph_dir=/search/speech/wangzhichao/kaldi/kaldi-master/egs/sogou/s5c/exp/chain/lstm_6j_8job_ld5/graph_sogou
+graph_dir=$dir/graph_bigG
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -226,7 +223,7 @@ if [ $stage -le 15 ]; then
   fi
   for decode_set in train_dev not_on_screen test8000 testIOS; do
       (
-       steps/nnet3/decode.sh --acwt 1.0 --post-decode-acwt 10.0 \
+       steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
           --nj 6 --cmd "$decode_cmd" $iter_opts \
           --extra-left-context $extra_left_context  \
           --extra-right-context $extra_right_context  \
