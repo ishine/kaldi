@@ -221,7 +221,7 @@ if [ $stage -le 15 ]; then
   if [ ! -z $decode_iter ]; then
     iter_opts=" --iter $decode_iter "
   fi
-  for decode_set in train_dev not_on_screen test8000 testIOS; do
+  for decode_set in not_on_screen test8000 testIOS; do
       (
        steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
           --nj 6 --cmd "$decode_cmd" $iter_opts \
