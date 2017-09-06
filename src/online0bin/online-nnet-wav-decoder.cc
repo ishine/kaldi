@@ -108,12 +108,13 @@ int main(int argc, char *argv[])
         bool skip_inner = decoding_opts.skip_inner;
         bool copy_posterior = decoding_opts.copy_posterior;
         int batch_size = forward_opts.batch_size * skip_frames;
-        Matrix<BaseFloat> feat(forward_opts.batch_size, feat_dim);
+        int in_skip = skip_inner ? 1:skip_frames,
+        out_skip = skip_inner ? skip_frames : 1;
+        Matrix<BaseFloat> feat(out_skip*forward_opts.batch_size, feat_dim);
         Matrix<BaseFloat> feat_out, feat_out_ready;
         char fn[1024];
 
         kaldi::int64 frame_count = 0;
-        int in_skip = skip_inner ? 1:skip_frames;
 
         while (wav_reader.getline(fn, 1024)) {
         	WaveHolder holder;

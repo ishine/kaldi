@@ -90,7 +90,7 @@ public:
 		bool no_softmax = opts_.no_softmax;
 		bool apply_log = opts_.apply_log;
 		int32 num_stream = opts_.num_stream;
-		int32 batch_size = opts_.batch_size;
+		//int32 batch_size = opts_.batch_size;
 		std::string feature_transform = opts_.feature_transform;
 		std::string model_filename = opts_.network_model;
 
@@ -119,12 +119,12 @@ public:
     	if (opts_.prior_opts.class_frame_counts != "") 
 	        pdf_prior_ = new PdfPrior(opts.prior_opts);
 
-	    int input_dim = feature_transform != "" ? nnet_transf_.InputDim() : nnet_.InputDim();
-	    int output_dim = nnet_.OutputDim();
-	    feat_.Resize(batch_size * num_stream, input_dim, kSetZero, kStrideEqualNumCols);
-	    feat_out_.Resize(batch_size * num_stream, output_dim, kSetZero, kStrideEqualNumCols);
+	    //int input_dim = feature_transform != "" ? nnet_transf_.InputDim() : nnet_.InputDim();
+	    //int output_dim = nnet_.OutputDim();
+	    //feat_.Resize(batch_size * num_stream, input_dim, kSetZero, kStrideEqualNumCols);
+	    //feat_out_.Resize(batch_size * num_stream, output_dim, kSetZero, kStrideEqualNumCols);
 
-	    new_utt_flags_.resize(opts.num_stream, 1);
+	    new_utt_flags_.resize(num_stream, 1);
 	}
 
     virtual ~OnlineNnetForward() {
@@ -134,6 +134,7 @@ public:
 
 	void Forward(const MatrixBase<BaseFloat> &in, Matrix<BaseFloat> *out) {
 		CuMatrix<BaseFloat> feats_transf;
+        feat_.Resize(in.NumRows(), in.NumCols(), kUndefined, kStrideEqualNumCols);
 		feat_.CopyFromMat(in);
 		nnet_transf_.Propagate(feat_, &feats_transf); // Feedforward
 		// for streams with new utterance, history states need to be reset
