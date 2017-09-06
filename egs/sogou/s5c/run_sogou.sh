@@ -74,17 +74,17 @@ if [ $stage -le 4 ]; then
   
   steps/train_deltas.sh --cmd "$train_cmd" 4000 60000 \
     data/train_mfcc_1000k data/lang exp/mono_ali exp/tri1 || exit 1;
-fi
 
-# use the last 2000 sentenses as dev set.
-utils/subset_data_dir.sh --last data/train_mfcc 2000 data/train_mfcc_dev || exit 1;
-(
-  graph_dir=exp/tri1/graph
-  $train_cmd $graph_dir/mkgraph.log \
-    utils/mkgraph.sh data/lang exp/tri1 $graph_dir
-  steps/decode_si.sh --nj 30 --cmd "$decode_cmd" --config conf/decode.config \
-    $graph_dir data/train_mfcc_dev exp/tri1/decode_dev
-) &
+  # use the last 2000 sentenses as dev set.
+  utils/subset_data_dir.sh --last data/train_mfcc 2000 data/train_mfcc_dev || exit 1;
+  (
+    graph_dir=exp/tri1/graph
+    $train_cmd $graph_dir/mkgraph.log \
+      utils/mkgraph.sh data/lang exp/tri1 $graph_dir
+    steps/decode_si.sh --nj 30 --cmd "$decode_cmd" --config conf/decode.config \
+      $graph_dir data/train_mfcc_dev exp/tri1/decode_dev
+  ) &
+fi
 
 if [ $stage -le 5 ]; then
   steps/align_si.sh --nj 30 --cmd "$train_cmd" \
@@ -115,7 +115,6 @@ if [ $stage -le 7 ]; then
   # Get the alignment for NN training
   steps/align_fmllr.sh --nj 30 --cmd "$train_cmd" \
     data/train_mfcc data/lang exp/tri3b exp/tri3b_ali
-fi
 (
   graph_dir=exp/tri3b/graph
   $train_cmd $graph_dir/mkgraph.log \
@@ -125,8 +124,11 @@ fi
     $graph_dir data/train_mfcc_dev exp/tri3b/decode_dev
 ) &
 wait
+fi
 
 # Here is for MMI training (later will be added)
+
+
 
 
 if [ $stage -le 8 ]; then 
