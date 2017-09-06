@@ -95,11 +95,9 @@ if [ $stage -le 9 ]; then
   # use the same num-jobs as the alignments
   nj=$(cat exp/tri3b_ali/num_jobs) || exit 1;
   steps/align_fmllr_lats.sh --nj $nj --cmd "$train_cmd" $mfcc_data \
-    data/lang exp/tri3b exp/tri3_lats_nodup$suffix
-  rm exp/tri3_lats_nodup$suffix/fsts.*.gz # save space
+    data/lang exp/tri3b exp/tri3b_lats_nodup$suffix
+  rm exp/tri3b_lats_nodup$suffix/fsts.*.gz # save space
 fi
-echo "generate lattice finished!"
-exit 1;
 
 if [ $stage -le 10 ]; then
   # Create a version of the lang/ directory that has one state per phone in the
