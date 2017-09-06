@@ -105,6 +105,7 @@ int main(int argc, char *argv[])
         BaseFloat chunk_length_secs = decoding_opts.chunk_length_secs;
         int feat_dim = feature_pipeline.Dim();
         int skip_frames = decoding_opts.skip_frames;
+        bool copy_posterior = decoding_opts.copy_posterior;
         int batch_size = forward_opts.batch_size * skip_frames;
         Matrix<BaseFloat> feat(forward_opts.batch_size, feat_dim);
         Matrix<BaseFloat> feat_out, feat_out_ready;
@@ -168,11 +169,16 @@ int main(int argc, char *argv[])
 					forward.Forward(feat, &feat_out);
 
 					// copy posterior
-					feat_out_ready.Resize(frame_ready, feat_out.NumCols(), kUndefined);
-					for (int i = 0; i < frame_ready; i++) {
-						feat_out_ready.Row(i).CopyFromVec(feat_out.Row(i/skip_frames));
+					if (copy_posterior) {
+						feat_out_ready.Resize(frame_ready, feat_out.NumCols(), kUndefined);
+						for (int i = 0; i < frame_ready; i++)
+							feat_out_ready.Row(i).CopyFromVec(feat_out.Row(i/skip_frames));
+
+						decodable.AcceptLoglikes(&feat_out_ready);
 					}
-					decodable.AcceptLoglikes(&feat_out_ready);
+					else
+						decodable.AcceptLoglikes(&feat_out);
+
 					decoder_sync.DecoderSignal();
 				} // part wav data
 			} // finish a wav 
