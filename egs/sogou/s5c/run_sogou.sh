@@ -26,7 +26,7 @@ srilm_opts="-subset -prune-lowprobs -unk -tolower -order 3"
 
 if [ $stage -le 1 ]; then
   utils/prepare_lang.sh --position-dependent-phones false data/local/dict \
-  "<!SIL>"  data/local/lang data/lang
+  '!SIL'  data/local/lang data/lang
  # if train_LM=true, we train the language models with the training transcription
   if $train_LM ; then 
     echo "train LM with local transcription"
