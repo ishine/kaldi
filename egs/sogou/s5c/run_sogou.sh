@@ -115,14 +115,14 @@ if [ $stage -le 7 ]; then
   # Get the alignment for NN training
   steps/align_fmllr.sh --nj 30 --cmd "$train_cmd" \
     data/train_mfcc data/lang exp/tri3b exp/tri3b_ali
-(
-  graph_dir=exp/tri3b/graph
-  $train_cmd $graph_dir/mkgraph.log \
-    utils/mkgraph.sh data/lang exp/tri3b $graph_dir
-  steps/decode_fmllr.sh --nj 30 --cmd "$decode_cmd" \
-    --config conf/decode.config \
-    $graph_dir data/train_mfcc_dev exp/tri3b/decode_dev
-) &
+  (
+    graph_dir=exp/tri3b/graph
+    $train_cmd $graph_dir/mkgraph.log \
+      utils/mkgraph.sh data/lang exp/tri3b $graph_dir
+    steps/decode_fmllr.sh --nj 30 --cmd "$decode_cmd" \
+      --config conf/decode.config \
+      $graph_dir data/train_mfcc_dev exp/tri3b/decode_dev
+  ) &
 wait
 fi
 
