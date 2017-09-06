@@ -105,6 +105,7 @@ int main(int argc, char *argv[])
         BaseFloat chunk_length_secs = decoding_opts.chunk_length_secs;
         int feat_dim = feature_pipeline.Dim();
         int skip_frames = decoding_opts.skip_frames;
+        bool skip_inner = decoding_opts.skip_inner;
         bool copy_posterior = decoding_opts.copy_posterior;
         int batch_size = forward_opts.batch_size * skip_frames;
         Matrix<BaseFloat> feat(forward_opts.batch_size, feat_dim);
@@ -112,6 +113,7 @@ int main(int argc, char *argv[])
         char fn[1024];
 
         kaldi::int64 frame_count = 0;
+        int in_skip = skip_inner ? 1:skip_frames;
 
         while (wav_reader.getline(fn, 1024)) {
         	WaveHolder holder;
@@ -160,8 +162,8 @@ int main(int argc, char *argv[])
 					else
 						frame_ready = batch_size;
 
-					for (int i = 0; i < frame_ready; i += skip_frames) {
-						feature_pipeline.GetFrame(frame_offset+i, &feat.Row(i/skip_frames));
+					for (int i = 0; i < frame_ready; i += in_skip) {
+						feature_pipeline.GetFrame(frame_offset+i, &feat.Row(i/in_skip));
 					}
 					frame_offset += frame_ready;
 

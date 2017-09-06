@@ -49,6 +49,7 @@ struct OnlineNnetDecodingOptions {
 	BaseFloat chunk_length_secs;
 	int32 skip_frames;
 	bool  copy_posterior;
+    bool  skip_inner;
 	std::string silence_phones_str;
 
 	std::string word_syms_filename;
@@ -60,7 +61,7 @@ struct OnlineNnetDecodingOptions {
 	OnlineNnetDecodingOptions(const OnlineNnetFasterDecoderOptions &opts):
                             decoder_opts(opts),
 							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05),
-							skip_frames(1), copy_posterior(true), silence_phones_str(""),
+							skip_frames(1), copy_posterior(true), skip_inner(false), silence_phones_str(""),
                             word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
                             words_wspecifier(""), alignment_wspecifier("")
     { }
@@ -80,6 +81,7 @@ struct OnlineNnetDecodingOptions {
 	                "to use all input in one chunk.");
 	    po->Register("skip-frames", &skip_frames, "skip frames for next input");
 	    po->Register("copy-posterior", &copy_posterior, "Copy posterior for skip frames output");
+	    po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
 		po->Register("silence-phones", &silence_phones_str,
                      "Colon-separated list of integer ids of silence phones, e.g. 1:2:3");
 
