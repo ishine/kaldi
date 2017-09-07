@@ -424,6 +424,12 @@ int main(int argc, char *argv[]) {
           }
         }
       }
+      // Kaituo Monitor
+      if (objective_function == "xent") {
+        if (num_done % 100 <= 5) {
+          KALDI_LOG << xent.Report();
+        }
+      }
     }
 
     // after last minibatch : show what happens in network,

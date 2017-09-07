@@ -359,9 +359,15 @@ int main(int argc, char *argv[]) {
             counter = 0;
           }
         }
+        // Kaituo Monitor
+        if (objective_function == "xent") {
+          if (total_frames % 20000 == 0) {
+            KALDI_LOG << xent.Report();
+          }
+        }
 
-        total_frames += nnet_in.NumRows();
-      }
+		total_frames += nnet_in.NumRows();
+	  }
     }  // main loop,
 
     // after last mini-batch : show what happens in network,
