@@ -1,6 +1,7 @@
-// nnet/nnet-affine-transform.h
+// nnet/nnet-sparse-affine-transform.h
 
 // Copyright 2011-2014  Brno University of Technology (author: Karel Vesely)
+//                2017  Sogou (authpr: Kaituo Xu)
 
 // See ../../COPYING for clarification regarding multiple authors
 //
@@ -18,8 +19,8 @@
 // limitations under the License.
 
 
-#ifndef KALDI_NNET_NNET_AFFINE_TRANSFORM_H_
-#define KALDI_NNET_NNET_AFFINE_TRANSFORM_H_
+#ifndef KALDI_NNET_NNET_SPARSE_AFFINE_TRANSFORM_H_
+#define KALDI_NNET_NNET_SPARSE_AFFINE_TRANSFORM_H_
 
 #include <string>
 
@@ -30,19 +31,17 @@
 namespace kaldi {
 namespace nnet1 {
 
-class AffineTransform : public UpdatableComponent {
+class SparseAffineTransform : public AffineTransform {
  public:
-  AffineTransform(int32 dim_in, int32 dim_out):
-    UpdatableComponent(dim_in, dim_out),
-    linearity_(dim_out, dim_in), bias_(dim_out),
-    linearity_corr_(dim_out, dim_in), bias_corr_(dim_out),
-    max_norm_(0.0)
+  SparseAffineTransform(int32 dim_in, int32 dim_out):
+    AffineTransform(dim_in, dim_out),
+    prune_mask_(dim_out, dim_in), prune_ratio_(0.0)
   { }
-  ~AffineTransform()
+  ~SparseAffineTransform()
   { }
 
-  Component* Copy() const { return new AffineTransform(*this); }
-  ComponentType GetType() const { return kAffineTransform; }
+  Component* Copy() const { return new SparseAffineTransform(*this); }
+  ComponentType GetType() const { return kSparseAffineTransform; }
 
   void InitData(std::istream &is) {
     // define options
@@ -57,6 +56,7 @@ class AffineTransform : public UpdatableComponent {
       else if (token == "<LearnRateCoef>") ReadBasicType(is, false, &learn_rate_coef_);
       else if (token == "<BiasLearnRateCoef>") ReadBasicType(is, false, &bias_learn_rate_coef_);
       else if (token == "<MaxNorm>") ReadBasicType(is, false, &max_norm_);
+      else if (token == "<PruneRatio>") ReadBasicType(is, false, &prune_ratio_);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                      << " (ParamStddev|BiasMean|BiasRange|LearnRateCoef|BiasLearnRateCoef)";
     }
@@ -86,6 +86,9 @@ class AffineTransform : public UpdatableComponent {
         case 'M': ExpectToken(is, binary, "<MaxNorm>");
           ReadBasicType(is, binary, &max_norm_);
           break;
+        case 'P': ExpectToken(is, binary, "<PruneRatio>");
+          ReadBasicType(is, binary, &prune_ratio_);
+          break;
         default:
           std::string token;
           ReadToken(is, false, &token);
@@ -98,10 +101,13 @@ class AffineTransform : public UpdatableComponent {
     linearity_.Read(is, binary);
     // bias vector,
     bias_.Read(is, binary);
+    prune_mask_.Read(is, binary);
 
     KALDI_ASSERT(linearity_.NumRows() == output_dim_);
     KALDI_ASSERT(linearity_.NumCols() == input_dim_);
     KALDI_ASSERT(bias_.Dim() == output_dim_);
+    KALDI_ASSERT(prune_mask_.NumRows() == output_dim_);
+    KALDI_ASSERT(prune_mask_.NumCols() == input_dim_);
   }
 
   void WriteData(std::ostream &os, bool binary) const {
@@ -111,10 +117,13 @@ class AffineTransform : public UpdatableComponent {
     WriteBasicType(os, binary, bias_learn_rate_coef_);
     WriteToken(os, binary, "<MaxNorm>");
     WriteBasicType(os, binary, max_norm_);
+    WriteToken(os, binary, "<PruneRatio>");
+    WriteBasicType(os, binary, prune_ratio_);
     if (!binary) os << "\n";
     // weights
     linearity_.Write(os, binary);
     bias_.Write(os, binary);
+    prune_mask_.Write(os, binary);
   }
 
   int32 NumParams() const {
@@ -161,6 +170,8 @@ class AffineTransform : public UpdatableComponent {
 
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in,
                     CuMatrixBase<BaseFloat> *out) {
+    // element multiply by prune_mask_
+    linearity_.MulElements(prune_mask_);
     // precopy bias
     out->AddVecToRows(1.0, bias_, 0.0);
     // multiply by weights^t
@@ -171,6 +182,8 @@ class AffineTransform : public UpdatableComponent {
                         const CuMatrixBase<BaseFloat> &out,
                         const CuMatrixBase<BaseFloat> &out_diff,
                         CuMatrixBase<BaseFloat> *in_diff) {
+    // element multiply by prune_mask_
+    linearity_.MulElements(prune_mask_);
     // multiply error derivative by weights
     in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity_, kNoTrans, 0.0);
   }
@@ -213,6 +226,16 @@ class AffineTransform : public UpdatableComponent {
       scl.InvertElements();
       linearity_.MulRowsVec(scl);  // shink to sphere!
     }
+    // element multiply by prune_mask_
+    linearity_.MulElements(prune_mask_);
+  }
+
+  void SetPruneRatio(const BaseFloat& ratio) { prune_ratio_ = ratio; }
+
+  const BaseFloat& GetPruneRatio() const { return prune_ratio_; }
+
+  /// TODO
+  void ComputePruneMask() {
   }
 
   /// Accessors to the component parameters,
@@ -231,17 +254,12 @@ class AffineTransform : public UpdatableComponent {
     linearity_.CopyFromMat(linearity);
   }
 
- protected:
-  CuMatrix<BaseFloat> linearity_;
-  CuVector<BaseFloat> bias_;
-
-  CuMatrix<BaseFloat> linearity_corr_;
-  CuVector<BaseFloat> bias_corr_;
-
-  BaseFloat max_norm_;
+ private:
+  CuMatrix<BaseFloat> prune_mask_;
+  BaseFloat prune_ratio_;
 };
 
 }  // namespace nnet1
 }  // namespace kaldi
 
-#endif  // KALDI_NNET_NNET_AFFINE_TRANSFORM_H_
+#endif  // KALDI_NNET_NNET_SPARSE_AFFINE_TRANSFORM_H_

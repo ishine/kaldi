@@ -84,7 +84,9 @@ class Component {
     kMaxPooling2DComponent,
     kFramePoolingComponent,
     kParallelComponent,
-    kMultiBasisComponent
+    kMultiBasisComponent,
+
+    kSparseAffineTransform
   } ComponentType;
 
   /// A pair of type and marker,
@@ -255,9 +257,19 @@ class UpdatableComponent : public Component {
     learn_rate_coef_ = val;
   }
 
+  /// Get the learn-rate coefficient,
+  virtual const BaseFloat GetLearnRateCoef() const {
+    return learn_rate_coef_;
+  }
+
   /// Set the learn-rate coefficient for bias,
   virtual void SetBiasLearnRateCoef(BaseFloat val) {
     bias_learn_rate_coef_ = val;
+  }
+
+  /// Get the learn-rate coefficient for bias,
+  virtual const BaseFloat GetBiasLearnRateCoef() const {
+    return bias_learn_rate_coef_;
   }
 
   /// Initialize the content of the component by the 'line' from the prototype,

@@ -49,6 +49,8 @@
 #include "nnet/nnet-multibasis-component.h"
 #include "nnet/nnet-parametric-relu.h"
 
+#include "nnet/nnet-sparse-affine-transform.h"
+
 namespace kaldi {
 namespace nnet1 {
 
@@ -85,6 +87,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kFramePoolingComponent, "<FramePoolingComponent>" },
   { Component::kParallelComponent, "<ParallelComponent>" },
   { Component::kMultiBasisComponent, "<MultiBasisComponent>" },
+  { Component::kSparseAffineTransform, "<SparseAffineTransform>" },
 };
 
 
@@ -207,6 +210,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kMultiBasisComponent :
       ans = new MultiBasisComponent(input_dim, output_dim);
+      break;
+    case Component::kSparseAffineTransform :
+      ans = new SparseAffineTransform(input_dim, output_dim);
       break;
     case Component::kUnknown :
     default :
