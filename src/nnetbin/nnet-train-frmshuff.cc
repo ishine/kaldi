@@ -366,7 +366,7 @@ int main(int argc, char *argv[]) {
           }
         }
 
-		total_frames += nnet_in.NumRows();
+        total_frames += nnet_in.NumRows();
 	  }
     }  // main loop,
 

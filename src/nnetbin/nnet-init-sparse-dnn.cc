@@ -56,6 +56,7 @@ int main(int argc, char *argv[]) {
       if (nnet_dense.GetComponent(i).GetType() == Component::kAffineTransform ||
           nnet_dense.GetComponent(i).GetType() ==
               Component::kSparseAffineTransform) {
+        // Copy dense params
         AffineTransform *dense_comp = 
           dynamic_cast<AffineTransform*>(nnet_dense.GetComponent(i).Copy());
         int32 input_dim = dense_comp->InputDim();
@@ -67,11 +68,13 @@ int main(int argc, char *argv[]) {
         sparse_comp->SetParams(params);
         sparse_comp->SetLearnRateCoef(dense_comp->GetLearnRateCoef());
         sparse_comp->SetBiasLearnRateCoef(dense_comp->GetBiasLearnRateCoef());
+        // Set prune params
         KALDI_ASSERT(j < prune_ratioes.size());
         sparse_comp->SetPruneRatio(prune_ratioes[j++]);
-        // sparse_comp.ComputePruneMask(); TODO
-        nnet_sparse.AppendComponentPointer(sparse_comp);
+        sparse_comp->ComputePruneMask();
+        // append to nnet
         KALDI_LOG << Component::TypeToMarker(sparse_comp->GetType());
+        nnet_sparse.AppendComponentPointer(sparse_comp);
       } else {
         nnet_sparse.AppendComponent(nnet_dense.GetComponent(i));
       }

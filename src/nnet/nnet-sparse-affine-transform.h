@@ -70,6 +70,8 @@ class SparseAffineTransform : public AffineTransform {
     // Uniform,
     bias_.Resize(OutputDim());
     RandUniform(bias_mean, bias_range, &bias_);
+    // all 1.0
+    prune_mask_.Set(1.0);
   }
 
   void ReadData(std::istream &is, bool binary) {
@@ -234,8 +236,28 @@ class SparseAffineTransform : public AffineTransform {
 
   const BaseFloat& GetPruneRatio() const { return prune_ratio_; }
 
-  /// TODO
   void ComputePruneMask() {
+    int32 count = linearity_.NumRows() * linearity_.NumCols();
+    std::vector<BaseFloat> sort_weight(count);
+
+    // Sort lineary_, in order to find the threshold
+    for (size_t r = 0, i = 0; r < linearity_.NumRows(); r++) {
+      for (size_t c = 0; c < linearity_.NumCols(); c++) {
+        sort_weight[i++] = fabs(linearity_(r, c));
+      }
+    }
+    sort(sort_weight.begin(), sort_weight.end());
+
+    int32 index = int(count * prune_ratio_);
+    float32 threshold = sort_weight[index-1];
+    KALDI_LOG << threshold;
+
+    // Set mask
+    for (size_t r = 0; r < linearity_.NumRows(); r++) {
+      for (size_t c = 0; c < linearity_.NumCols(); c++) {
+        prune_mask_(r, c) = ((fabs(linearity_(r, c)) > threshold) ? 1.0 : 0.0);
+      }
+    }
   }
 
   /// Accessors to the component parameters,
