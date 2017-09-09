@@ -24,7 +24,7 @@ namespace kaldi {
 OnlineNnetFeaturePipelineOptions::OnlineNnetFeaturePipelineOptions(
 		const OnlineNnetFeaturePipelineConfig &config):
 		feature_type("fbank"), add_pitch(false),
-		add_cmvn(false), add_deltas(false), splice_feats(false) {
+		add_cmvn(false), add_deltas(false), splice_feats(false), samp_freq(16000) {
 
 	if (config.feature_type == "mfcc" || config.feature_type == "plp" ||
 	  config.feature_type == "fbank") {
@@ -36,6 +36,7 @@ OnlineNnetFeaturePipelineOptions::OnlineNnetFeaturePipelineOptions(
 
 	if (config.mfcc_config != "") {
 		ReadConfigFromFile(config.mfcc_config, &mfcc_opts);
+		samp_freq = mfcc_opts.frame_opts.samp_freq;
 		if (feature_type != "mfcc")
 			KALDI_WARN << "--mfcc-config option has no effect "
 				 << "since feature type is set to " << feature_type << ".";
@@ -43,6 +44,7 @@ OnlineNnetFeaturePipelineOptions::OnlineNnetFeaturePipelineOptions(
 
 	if (config.plp_config != "") {
 		ReadConfigFromFile(config.plp_config, &plp_opts);
+		samp_freq = plp_opts.frame_opts.samp_freq;
 		if (feature_type != "plp")
 			KALDI_WARN << "--plp-config option has no effect "
 				 << "since feature type is set to " << feature_type << ".";
@@ -50,6 +52,7 @@ OnlineNnetFeaturePipelineOptions::OnlineNnetFeaturePipelineOptions(
 
 	if (config.fbank_config != "") {
 		ReadConfigFromFile(config.fbank_config, &fbank_opts);
+		samp_freq = fbank_opts.frame_opts.samp_freq;
 		if (feature_type != "fbank")
 			KALDI_WARN << "--fbank-config option has no effect "
 				 << "since feature type is set to " << feature_type << ".";

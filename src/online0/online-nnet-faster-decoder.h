@@ -70,15 +70,16 @@ class OnlineNnetFasterDecoder : public FasterDecoder {
 public:
 	// Codes returned by Decode() to show the current state of the decoder
 	enum DecodeState {
-		kEndFeats = 1, // No more scores are available from the Decodable
-		kEndBatch = 2, // End of batch - end of utterance not reached yet
+		kStartFeats = 1, // Start from the Decodable
+		kEndFeats = 2, // No more scores are available from the Decodable
+		kEndBatch = 3, // End of batch - end of utterance not reached yet
 	};
 
 	OnlineNnetFasterDecoder(const fst::Fst<fst::StdArc> &fst,
 							const OnlineNnetFasterDecoderOptions &opts):
 								FasterDecoder(fst, opts), opts_(opts),
 								max_beam_(opts.beam), effective_beam_(FasterDecoder::config_.beam),
-								state_(kEndFeats), frame_(0), utt_frames_(0),
+								state_(kStartFeats), frame_(0), utt_frames_(0),
 								immortal_tok_(NULL), prev_immortal_tok_(NULL)
 							{
 

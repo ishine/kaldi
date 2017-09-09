@@ -82,7 +82,7 @@ struct OnlineNnetFeaturePipelineConfig {
 struct OnlineNnetFeaturePipelineOptions {
 	OnlineNnetFeaturePipelineOptions():
 		feature_type("fbank"), add_pitch(false),
-		add_cmvn(false), add_deltas(false), splice_feats(false) { }
+		add_cmvn(false), add_deltas(false), splice_feats(false), samp_freq(16000) { }
 
 	OnlineNnetFeaturePipelineOptions(const OnlineNnetFeaturePipelineConfig &config);
 
@@ -104,6 +104,8 @@ struct OnlineNnetFeaturePipelineOptions {
 
 	bool splice_feats;
 	OnlineSpliceOptions splice_opts;  // Options for frame splicing, if done.
+
+	BaseFloat samp_freq;
 
 private:
 	KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNnetFeaturePipelineOptions);

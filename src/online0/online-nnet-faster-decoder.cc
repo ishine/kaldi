@@ -212,17 +212,15 @@ OnlineNnetFasterDecoder::TracebackNFrames(int32 nframes,
 OnlineNnetFasterDecoder::DecodeState
 OnlineNnetFasterDecoder::Decode(DecodableInterface *decodable) {
   if (state_ == kEndFeats) // new utterance
-    return state_;
-  else if (state_ == kStartFeats)
-    ResetDecoder(state_ == kStartFeats);
+    ResetDecoder(state_ == kEndFeats);
 
   ProcessNonemitting(std::numeric_limits<float>::max());
   int32 batch_frame = 0;
   Timer timer;
   double64 tstart = timer.Elapsed(), tstart_batch = tstart;
   BaseFloat factor = -1;
-  for (; !decodable->IsLastFrame(frame_ - 1) && batch_frame < opts_.batch_size;
-       ++frame_, ++utt_frames_, ++batch_frame) {
+  for (; frame_ < decodable->NumFramesReady() && batch_frame < opts_.batch_size;
+		  ++frame_, ++utt_frames_, ++batch_frame) {
     if (batch_frame != 0 && (batch_frame % opts_.update_interval) == 0) {
       // adjust the beam if needed
       BaseFloat tend = timer.Elapsed();
@@ -248,9 +246,9 @@ OnlineNnetFasterDecoder::Decode(DecodableInterface *decodable) {
     BaseFloat weight_cutoff = ProcessEmitting(decodable);
     ProcessNonemitting(weight_cutoff);
   }
-  if (batch_frame == opts_.batch_size && !decodable->IsLastFrame(frame_ - 1))
+
 	  state_ = kEndBatch;
-  else if (decodable->IsLastFrame(frame_ - 1))
+  if (decodable->IsLastFrame(frame_ - 1))
 	  state_ = kEndFeats;
 
   return state_;

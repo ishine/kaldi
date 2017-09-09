@@ -155,7 +155,7 @@ public:
 
         out->Resize(feat_out_.NumRows(), feat_out_.NumCols(), kUndefined);
     	out->CopyFromMat(feat_out_);
-	    new_utt_flags_.resize(opts_.num_stream, 0);
+		new_utt_flags_[0] = 0;
 	}
 
 	void ResetHistory() {
