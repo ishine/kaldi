@@ -184,16 +184,19 @@ public:
 
 		while (!decoder_sync_->IsFinsihed())
 		{
+            decoder_sync_->DecoderWait();
+            if (decoder_sync_->IsFinsihed())
+                break;
+
 			decoder_->ResetDecoder(true);
 			decoder_->InitDecoding();
-
+				
 			while (true)
 			{
-				decoder_sync_->DecoderWait();
-
 				while (decodable_->NumFramesReady() >= decoder_->NumFramesDecoded() + batch_size)
 				{
 					decoder_->Decode(decodable_);
+
 					if (decoder_->PartialTraceback(&out_fst))
 					{
 						fst::GetLinearSymbolSequence(out_fst, static_cast<std::vector<int32> *>(0), 
@@ -204,9 +207,9 @@ public:
 
 
 				frame_ready = decodable_->NumFramesReady();
-				frame_decoded = decoder_->NumFramesDecoded();
-				if (decodable_->IsLastFrame(frame_ready-1) && frame_ready <= frame_decoded+batch_size)
-				//if (decodable_->IsLastFrame(frame_ready-1))
+				//frame_decoded = decoder_->NumFramesDecoded();
+				//if (decodable_->IsLastFrame(frame_ready-1) && frame_ready <= frame_decoded+batch_size)
+				if (decodable_->IsLastFrame(frame_ready-1))
 				{
 					utt = decoder_sync_->GetUtt();
 
@@ -217,13 +220,14 @@ public:
                                                         &word_ids, static_cast<LatticeArc::Weight*>(0));
 					PrintPartialResult(word_ids, &word_syms_, true);
 
+
                     /*
 					// get best full path
-					decoder_->ReachedFinal();
+					//decoder_->ReachedFinal();
 					decoder_->GetBestPath(&out_fst);
 					fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
 					PrintPartialResult(word_ids, &word_syms_, true);
-                    */
+					*/
 
                     /*
 					if (!word_ids.empty())
@@ -234,6 +238,8 @@ public:
 					decoder_sync_->UtteranceSignal();
 					break;
 				}
+
+				decoder_sync_->DecoderWait();
 
 			} // message queue
 		}

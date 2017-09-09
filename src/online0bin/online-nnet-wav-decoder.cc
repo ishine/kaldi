@@ -204,6 +204,8 @@ int main(int argc, char *argv[])
 
 	    //delete decode_fst;
 	    //delete word_syms;
+	    sleep(0.1);
+		decoder_sync.DecoderSignal();
 	    return 0;
 	} catch(const std::exception& e) {
 	    std::cerr << e.what();

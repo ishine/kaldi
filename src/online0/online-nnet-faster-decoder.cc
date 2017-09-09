@@ -39,6 +39,7 @@ void OnlineNnetFasterDecoder::ResetDecoder(bool full) {
   utt_frames_ = 0;
   if (full)
     frame_ = 0;
+  state_ = kStartFeats;
 }
 
 
@@ -211,7 +212,10 @@ OnlineNnetFasterDecoder::TracebackNFrames(int32 nframes,
 OnlineNnetFasterDecoder::DecodeState
 OnlineNnetFasterDecoder::Decode(DecodableInterface *decodable) {
   if (state_ == kEndFeats) // new utterance
-    ResetDecoder(state_ == kEndFeats);
+    return state_;
+  else if (state_ == kStartFeats)
+    ResetDecoder(state_ == kStartFeats);
+
   ProcessNonemitting(std::numeric_limits<float>::max());
   int32 batch_frame = 0;
   Timer timer;
