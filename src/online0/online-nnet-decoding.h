@@ -32,8 +32,6 @@
 namespace kaldi {
 
 struct OnlineNnetDecodingOptions {
-	const OnlineNnetFasterDecoderOptions decoder_opts;
-
 	/// feature pipeline config
 	OnlineNnetFeaturePipelineConfig feature_cfg;
 
@@ -47,6 +45,7 @@ struct OnlineNnetDecodingOptions {
 	BaseFloat acoustic_scale;
 	bool allow_partial;
 	BaseFloat chunk_length_secs;
+	int batch_size;
 	int32 skip_frames;
 	bool  copy_posterior;
     bool  skip_inner;
@@ -58,9 +57,8 @@ struct OnlineNnetDecodingOptions {
 	std::string words_wspecifier;
 	std::string alignment_wspecifier;
 
-	OnlineNnetDecodingOptions(const OnlineNnetFasterDecoderOptions &opts):
-                            decoder_opts(opts),
-							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05),
+	OnlineNnetDecodingOptions():
+							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(16),
 							skip_frames(1), copy_posterior(true), skip_inner(false), silence_phones_str(""),
                             word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
                             words_wspecifier(""), alignment_wspecifier("")
@@ -79,6 +77,7 @@ struct OnlineNnetDecodingOptions {
 	    po->Register("chunk-length", &chunk_length_secs,
 	                "Length of chunk size in seconds, that we process.  Set to <= 0 "
 	                "to use all input in one chunk.");
+	    po->Register("batch-size", &batch_size, "batch frames feed to decoder in one time.");
 	    po->Register("skip-frames", &skip_frames, "skip frames for next input");
 	    po->Register("copy-posterior", &copy_posterior, "Copy posterior for skip frames output");
 	    po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
@@ -152,6 +151,19 @@ private:
 	bool is_waited_;
 };
 
+typedef struct Result_ {
+	std::vector<int> word_ids_;
+	std::vector<int> tids_;
+	std::string utt;
+	int num_frames;
+	void clear() {
+		word_ids_.clear();
+		tids_.clear();
+		num_frames = 0;
+		utt = "";
+	}
+}Result;
+
 class OnlineNnetDecodingClass : public MultiThreadable
 {
 public:
@@ -159,26 +171,21 @@ public:
 			OnlineNnetFasterDecoder *decoder,
 			OnlineDecodableMatrixMapped *decodable,
 			DecoderSync *decoder_sync,
-			fst::SymbolTable &word_syms,
-			Int32VectorWriter &words_writer,
-			Int32VectorWriter &alignment_writer):
+			Result *result):
 				opts_(opts),
 				decoder_(decoder), decodable_(decodable), decoder_sync_(decoder_sync),
-				word_syms_(word_syms),
-				words_writer_(words_writer), alignment_writer_(alignment_writer)
-	{
-
-	}
+				result_(result)
+	{ }
 
 	~OnlineNnetDecodingClass() {}
 
 	void operator () ()
 	{
 		fst::VectorFst<LatticeArc> out_fst;
-		std::vector<int32> word_ids;
-		std::vector<int32> tids;
+		std::vector<int> word_ids;
+		std::vector<int> tids;
 		typedef OnlineNnetFasterDecoder::DecodeState DecodeState;
-		int batch_size = opts_.decoder_opts.batch_size;
+		int batch_size = opts_.batch_size;
         int frame_decoded, frame_ready;
 		std::string utt;
 
@@ -186,19 +193,24 @@ public:
 		{
 			decoder_->ResetDecoder(true);
 			decoder_->InitDecoding();
+			result_->clear();
 
 			while (true)
 			{
 				decoder_sync_->DecoderWait();
 
-				while (decodable_->NumFramesReady() >= decoder_->NumFramesDecoded() + batch_size)
-				{
+				while (decodable_->NumFramesReady() >= decoder_->NumFramesDecoded() + batch_size) {
 					decoder_->Decode(decodable_);
-					if (decoder_->PartialTraceback(&out_fst))
-					{
-						fst::GetLinearSymbolSequence(out_fst, static_cast<std::vector<int32> *>(0), 
-                                                            &word_ids, static_cast<LatticeArc::Weight*>(0));
-						PrintPartialResult(word_ids, &word_syms_, false);
+					if (decoder_->PartialTraceback(&out_fst)) {
+						//fst::GetLinearSymbolSequence(out_fst, static_cast<std::vector<int32> *>(0),
+                        //                                    &word_ids, static_cast<LatticeArc::Weight*>(0));
+						//PrintPartialResult(word_ids, &word_syms_, false);
+
+						fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
+						for (int i = 0; i < word_ids.size(); i++)
+							result_->word_ids_.push_back(word_ids[i]);
+						for (int i = 0; i < tids.size(); i++)
+							result_->tids_.push_back(tids[i]);
 					}
 				}
 
@@ -213,9 +225,12 @@ public:
 					decoder_->Decode(decodable_);
 
 					decoder_->FinishTraceBack(&out_fst);
-					fst::GetLinearSymbolSequence(out_fst, static_cast<std::vector<int32> *>(0), 
-                                                        &word_ids, static_cast<LatticeArc::Weight*>(0));
-					PrintPartialResult(word_ids, &word_syms_, true);
+					fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
+					for (int i = 0; i < word_ids.size(); i++)
+						result_->word_ids_.push_back(word_ids[i]);
+					for (int i = 0; i < tids.size(); i++)
+						result_->tids_.push_back(tids[i]);
+					//PrintPartialResult(word_ids, &word_syms_, true);
 
                     /*
 					// get best full path
@@ -245,9 +260,7 @@ private:
 	OnlineNnetFasterDecoder *decoder_;
 	OnlineDecodableMatrixMapped *decodable_;
 	DecoderSync *decoder_sync_;
-	fst::SymbolTable &word_syms_;
-	Int32VectorWriter &words_writer_;
-	Int32VectorWriter &alignment_writer_;
+	Result *result_;
 };
 
 
