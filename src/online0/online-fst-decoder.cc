@@ -17,7 +17,7 @@
 // limitations under the License.
 
 #include "online0/online-util.h"
-#include "online0/Online-fst-decoder.h"
+#include "online0/online-fst-decoder.h"
 
 namespace kaldi {
 
@@ -32,14 +32,14 @@ OnlineFstDecoder::OnlineFstDecoder(std::string cfg) :
 
 	// main config
 	decoding_opts_ = new OnlineNnetDecodingOptions;
-	ReadConfigFromFile(cfg, &decoding_opts_);
+	ReadConfigFromFile(cfg, decoding_opts_);
 
 	// decoder feature forward config
 	decoder_opts_ = new OnlineNnetFasterDecoderOptions;
 	forward_opts_ = new OnlineNnetForwardOptions;
 	feature_opts_ = new OnlineNnetFeaturePipelineOptions(decoding_opts_->feature_cfg);
-	ReadConfigFromFile(decoding_opts_->decoder_cfg, &decoder_opts_);
-	ReadConfigFromFile(decoding_opts_->forward_cfg, &forward_opts_);
+	ReadConfigFromFile(decoding_opts_->decoder_cfg, decoder_opts_);
+	ReadConfigFromFile(decoding_opts_->forward_cfg, forward_opts_);
 }
 
 void OnlineFstDecoder::Destory() {
@@ -76,7 +76,7 @@ void OnlineFstDecoder::Destory() {
 
 void OnlineFstDecoder::InitDecoder() {
 #if HAVE_CUDA==1
-    if (forward_opts.use_gpu == "yes")
+    if (forward_opts_->use_gpu == "yes")
         CuDevice::Instantiate().Initialize();
 #endif
 	// trainsition model
@@ -85,7 +85,7 @@ void OnlineFstDecoder::InitDecoder() {
 	trans_model_.Read(ki.Stream(), binary);
 
 	// HCLG fst graph
-	decode_fst_ = ReadFstKaldi(decoding_opts_->fst_rspecifier);
+	decode_fst_ = fst::ReadFstKaldi(decoding_opts_->fst_rspecifier);
 	if (!(word_syms_ = fst::SymbolTable::ReadText(decoding_opts_->word_syms_filename)))
 		KALDI_ERR << "Could not read symbol table from file " << decoding_opts_->word_syms_filename;
 	// decodable feature pipe to decoder
@@ -98,7 +98,7 @@ void OnlineFstDecoder::InitDecoder() {
 
 	// decoder
 	decoder_ = new OnlineNnetFasterDecoder(*decode_fst_, *decoder_opts_);
-	decoding_ = new OnlineNnetDecodingClass(decoding_opts_,
+	decoding_ = new OnlineNnetDecodingClass(*decoding_opts_,
 		    								decoder_, decodable_, &decoder_sync_,
 											&result_);
 	decoder_thread_ = new MultiThreader<OnlineNnetDecodingClass>(1, *decoding_);
@@ -107,13 +107,13 @@ void OnlineFstDecoder::InitDecoder() {
 	feature_pipeline_ = new OnlineNnetFeaturePipeline(*feature_opts_);
 
 	// forward
-	forward_ = new OnlineNnetForward(forward_opts_);
+	forward_ = new OnlineNnetForward(*forward_opts_);
 
 	// decoding buffer
-	int in_skip = decoding_opts_->skip_inner ? 1:decoding_opts_->skip_frames,
-	        out_skip = decoding_opts_->skip_inner ? decoding_opts_->skip_frames : 1;
+	in_skip_ = decoding_opts_->skip_inner ? 1:decoding_opts_->skip_frames,
+	        out_skip_ = decoding_opts_->skip_inner ? decoding_opts_->skip_frames : 1;
 	int feat_dim = feature_pipeline_->Dim();
-	feat_in_.Resize(out_skip*forward_opts_->batch_size, feat_dim);
+	feat_in_.Resize(out_skip_*forward_opts_->batch_size, feat_dim);
 	// wav buffer
 	wav_buffer_.Resize(VECTOR_INC_STEP, kSetZero); // 16k, 10s
 
@@ -157,8 +157,8 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 	int32 batch_size = forward_opts_->batch_size * decoding_opts_->skip_frames;
 
 	if (sample_offset_ < len_) {
-		SubVector<BaseFloat> wave_part(wav_data, sample_offset_, samp_remaining);
-		feature_pipeline_.AcceptWaveform(feature_opts_->samp_freq, wave_part);
+		SubVector<BaseFloat> wave_part(wav_buffer_, sample_offset_, samp_remaining);
+		feature_pipeline_->AcceptWaveform(feature_opts_->samp_freq, wave_part);
 		sample_offset_ += samp_remaining;
 
 		if (state == FEAT_END)
@@ -217,8 +217,11 @@ Result* OnlineFstDecoder::GetResult(FeatState state) {
 	for (int i = cur_result_idx_; i < size; i++)
 		word_ids.push_back(result_.word_ids_[i]);
 
-	PrintPartialResult(word_ids, &word_syms_, state == FEAT_END);
-	KALDI_LOG << "Finish decode utterance: " << result_.utt;
+    bool newutt = (state == FEAT_END);
+	PrintPartialResult(word_ids, word_syms_, newutt);
+
+    if (newutt)
+	    KALDI_LOG << "Finish decode utterance: " << result_.utt;
 	cur_result_idx_ = size;
 	return &result_;
 }

@@ -20,7 +20,7 @@
 #include "base/timer.h"
 #include "feat/wave-reader.h"
 
-#include "online0/Online-fst-decoder.h"
+#include "online0/online-fst-decoder.h"
 
 int main(int argc, char *argv[])
 {
@@ -47,6 +47,7 @@ int main(int argc, char *argv[])
 
 	    std::string cfg;
 	    po.Register("cfg", &cfg, "decoder config file");
+        po.Read(argc, argv);
 
 	    OnlineFstDecoder decoder(cfg);
 	    decoder.InitDecoder();
@@ -56,6 +57,7 @@ int main(int argc, char *argv[])
 	    BaseFloat chunk_length_secs = 0.5, total_frames = 0;
 	    Result *result;
 	    FeatState state;
+        char fn[1024];
 
         Timer timer;
 	    while (wav_reader.getline(fn, 1024)) {
@@ -94,6 +96,8 @@ int main(int argc, char *argv[])
 				decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), state);
 				// get part result
 				result = decoder.GetResult(state);
+                result->utt = std::string(fn);
+                sleep(chunk_length_secs);
 			}
 			total_frames += result->num_frames;
 	    }

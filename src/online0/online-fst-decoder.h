@@ -27,6 +27,7 @@
 #include "online0/online-nnet-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
+#include "online0/online-nnet-decoding.h"
 
 namespace kaldi {
 

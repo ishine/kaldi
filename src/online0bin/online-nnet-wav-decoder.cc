@@ -25,13 +25,13 @@
 #include "online0/online-util.h"
 #include "online0/online-nnet-decoding.h"
 
-void PrintResult(int &curt, fst::SymbolTable *word_syms, Result &result, bool state) {
+void PrintResult(int &curt, fst::SymbolTable *word_syms, kaldi::Result &result, bool state) {
 	std::vector<int32> word_ids;
 	int size = result.word_ids_.size();
 	for (int i = curt; i < size; i++)
 		word_ids.push_back(result.word_ids_[i]);
 
-	PrintPartialResult(word_ids, word_syms, state == true );
+	kaldi::PrintPartialResult(word_ids, word_syms, state == true );
 	curt = size;
 }
 
@@ -205,6 +205,7 @@ int main(int argc, char *argv[])
 			decoder_sync.UtteranceWait();
 
 			PrintResult(curt, word_syms, result, true);
+            result.clear();
 			KALDI_LOG << "Finish decode utterance: " << fn;
         }
 

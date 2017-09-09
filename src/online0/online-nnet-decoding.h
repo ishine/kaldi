@@ -186,7 +186,7 @@ public:
 		std::vector<int> tids;
 		typedef OnlineNnetFasterDecoder::DecodeState DecodeState;
 		int batch_size = opts_.batch_size;
-        int frame_decoded, frame_ready;
+        int frame_ready;
 		std::string utt;
 
 		while (!decoder_sync_->IsFinsihed())
@@ -201,8 +201,6 @@ public:
 
 			while (true)
 			{
-				decoder_sync_->DecoderWait();
-
 				while (decodable_->NumFramesReady() >= decoder_->NumFramesDecoded() + batch_size) {
 					decoder_->Decode(decodable_);
 					if (decoder_->PartialTraceback(&out_fst)) {
