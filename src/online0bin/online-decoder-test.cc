@@ -54,7 +54,7 @@ int main(int argc, char *argv[])
 
 	    std::ifstream wav_reader(wav_rspecifier);
 
-	    BaseFloat chunk_length_secs = 0.5, total_frames = 0;
+	    BaseFloat chunk_length_secs = 0.2, total_frames = 0;
 	    Result *result;
 	    FeatState state;
         char fn[1024];
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
 				// get part result
 				result = decoder.GetResult(state);
                 result->utt = std::string(fn);
-                sleep(chunk_length_secs);
+                usleep(chunk_length_secs/2*1e6);
 			}
 			total_frames += result->num_frames;
 	    }
