@@ -144,14 +144,6 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // Add a ``half-frame'' to all the elements to
-    // avoid zero-counts which would cause problems in decoding
-    Vector<double> counts_nozero(counts);
-    counts_nozero.Add(0.5);
-
-    Output ko(wxfilename, binary);
-    counts_nozero.Write(ko.Stream(), binary);
-
     //
     // THE REST IS FOR ANALYSIS, IT GETS PRINTED TO LOG
     //
@@ -172,6 +164,23 @@ int main(int argc, char *argv[]) {
                         std::make_pair(static_cast<double>(counts(i)), i));
       }
       std::sort(sorted_counts.begin(), sorted_counts.end());
+
+    // Add a ``half-frame'' to all the elements to
+    // avoid zero-counts which would cause problems in decoding
+    Vector<double> counts_nozero(counts);
+    double floor = 0.5;
+    for (int32 i = 0; i < sorted_counts.size(); i++) {
+        if (sorted_counts[i].first > 0 ) {
+           floor = sorted_counts[i].first - 0.5; 
+           break;
+        }
+    }
+    //counts_nozero.Add(0.5);
+    counts_nozero.ApplyFloor(floor);
+
+    Output ko(wxfilename, binary);
+    counts_nozero.Write(ko.Stream(), binary);
+
       std::ostringstream os;
       double sum = counts.Sum();
       os << "Printing...\n### The sorted count table," << std::endl;
