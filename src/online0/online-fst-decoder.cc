@@ -219,6 +219,7 @@ Result* OnlineFstDecoder::GetResult(FeatState state) {
 
     bool newutt = (state == FEAT_END);
 	PrintPartialResult(word_ids, word_syms_, newutt);
+    std::cout.flush();
 
     if (newutt)
 	    KALDI_LOG << "Finish decode utterance: " << result_.utt;

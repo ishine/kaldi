@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
 				// get part result
 				result = decoder.GetResult(state);
                 result->utt = std::string(fn);
-                usleep(chunk_length_secs/2*1e6);
+                //usleep(chunk_length_secs/2*1e6);
 			}
 			total_frames += result->num_frames;
 	    }

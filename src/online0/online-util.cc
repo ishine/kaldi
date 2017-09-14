@@ -1,4 +1,4 @@
-// online/online-util.cc
+// online0/online-util.cc
 
 // Copyright 2012 Cisco Systems (author: Matthias Paulik)
 
@@ -20,7 +20,7 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#include "online-util.h"
+#include "online0/online-util.h"
 
 namespace kaldi {
 
