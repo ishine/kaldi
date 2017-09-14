@@ -36,7 +36,7 @@ class SparseAffineTransform : public AffineTransform {
   SparseAffineTransform(int32 dim_in, int32 dim_out):
     AffineTransform(dim_in, dim_out),
     prune_mask_(dim_out, dim_in), prune_ratio_(0.0)
-  { }
+  { prune_mask_.Set(1.0); }
   ~SparseAffineTransform()
   { }
 
@@ -173,11 +173,14 @@ class SparseAffineTransform : public AffineTransform {
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in,
                     CuMatrixBase<BaseFloat> *out) {
     // element multiply by prune_mask_
-    linearity_.MulElements(prune_mask_);
+    CuMatrix<BaseFloat> linearity(linearity_);
+    // KALDI_LOG << "before" << linearity_.Row(0);
+    linearity.MulElements(prune_mask_);
+    // KALDI_LOG << "after" << linearity_.Row(0);
     // precopy bias
     out->AddVecToRows(1.0, bias_, 0.0);
     // multiply by weights^t
-    out->AddMatMat(1.0, in, kNoTrans, linearity_, kTrans, 1.0);
+    out->AddMatMat(1.0, in, kNoTrans, linearity, kTrans, 1.0);
   }
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in,
@@ -185,9 +188,10 @@ class SparseAffineTransform : public AffineTransform {
                         const CuMatrixBase<BaseFloat> &out_diff,
                         CuMatrixBase<BaseFloat> *in_diff) {
     // element multiply by prune_mask_
-    linearity_.MulElements(prune_mask_);
+    CuMatrix<BaseFloat> linearity(linearity_);
+    linearity.MulElements(prune_mask_);
     // multiply error derivative by weights
-    in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity_, kNoTrans, 0.0);
+    in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity, kNoTrans, 0.0);
   }
 
 
@@ -212,6 +216,8 @@ class SparseAffineTransform : public AffineTransform {
     if (l1 != 0.0) {
       cu::RegularizeL1(&linearity_, &linearity_corr_, lr*l1*num_frames, lr);
     }
+    // element multiply by prune_mask_
+    linearity_corr_.MulElements(prune_mask_);
     // update
     linearity_.AddMat(-lr, linearity_corr_);
     bias_.AddVec(-lr_bias, bias_corr_);
@@ -228,8 +234,6 @@ class SparseAffineTransform : public AffineTransform {
       scl.InvertElements();
       linearity_.MulRowsVec(scl);  // shink to sphere!
     }
-    // element multiply by prune_mask_
-    linearity_.MulElements(prune_mask_);
   }
 
   void SetPruneRatio(const BaseFloat& ratio) { prune_ratio_ = ratio; }
@@ -237,10 +241,12 @@ class SparseAffineTransform : public AffineTransform {
   const BaseFloat& GetPruneRatio() const { return prune_ratio_; }
 
   void ComputePruneMask() {
+    if (prune_ratio_ == 0) return;
+
     int32 count = linearity_.NumRows() * linearity_.NumCols();
     std::vector<BaseFloat> sort_weight(count);
 
-    // Sort lineary_, in order to find the threshold
+    // Sort linearity_, in order to find the threshold
     for (size_t r = 0, i = 0; r < linearity_.NumRows(); r++) {
       for (size_t c = 0; c < linearity_.NumCols(); c++) {
         sort_weight[i++] = fabs(linearity_(r, c));
@@ -249,14 +255,19 @@ class SparseAffineTransform : public AffineTransform {
     sort(sort_weight.begin(), sort_weight.end());
 
     int32 index = int(count * prune_ratio_);
-    float32 threshold = sort_weight[index-1];
-    KALDI_LOG << threshold;
 
     // Set mask
-    for (size_t r = 0; r < linearity_.NumRows(); r++) {
-      for (size_t c = 0; c < linearity_.NumCols(); c++) {
-        prune_mask_(r, c) = ((fabs(linearity_(r, c)) > threshold) ? 1.0 : 0.0);
+    if (index > 0) {
+      float32 threshold = sort_weight[index-1];
+      KALDI_LOG << threshold;
+      for (size_t r = 0; r < linearity_.NumRows(); r++) {
+        for (size_t c = 0; c < linearity_.NumCols(); c++) {
+          prune_mask_(r, c) =
+              ((fabs(linearity_(r, c)) > threshold) ? 1.0 : 0.0);
+        }
       }
+    } else {
+      KALDI_LOG << "prune nothing.";
     }
   }
 
