@@ -614,6 +614,7 @@ private:
 		int32 cur_stream_num = 0;
 		int32 num_dump = 0, num_skip;
 		num_skip = opts->skip_inner ? skip_frames : 1;
+        num_skip = opts->skip_frames == skip_frames ? num_skip : opts->skip_frames; // for CTC
         frame_limit *= num_skip;
 
 		SequentialNnetExample *example = NULL;
