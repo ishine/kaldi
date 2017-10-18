@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
     typedef kaldi::int32 int32;
     using fst::SymbolTable;
     using fst::VectorFst;
+    using fst::Fst;
     using fst::StdArc;
     using fst::ReadFstKaldi;
 
@@ -86,7 +87,8 @@ int main(int argc, char *argv[]) {
       am_gmm.Read(ki.Stream(), binary);
     }
 
-    VectorFst<StdArc> *decode_fst = ReadFstKaldi(fst_in_filename);
+ //   VectorFst<StdArc> *decode_fst = ReadFstKaldi(fst_in_filename);
+      Fst<StdArc> *decode_fst = fst::ReadFstKaldiGeneric(fst_in_filename);
 
     Int32VectorWriter words_writer(words_wspecifier);
 

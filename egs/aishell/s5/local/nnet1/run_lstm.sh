@@ -16,7 +16,7 @@ dev_original=data/dev
 test_original=data/test
 
 gmm=exp/tri5a # TODO: make it a argument
-conf_dir=kaldi-nnet1
+conf_dir=local/nnet1/
 fbank_conf=$conf_dir/fbank.conf
 decode_dnn_conf=$conf_dir/decode_dnn.config
 
@@ -37,7 +37,7 @@ fi
 
 # Step 2: Train LSTM with truncated BPTT
 if [ $stage -le 2 ]; then
-  dir=exp/lstm_truncated_BPTT
+  dir=exp/lstm2x832x512
   ali=${gmm}_ali
   dev_ali=${gmm}_dev_ali
 
@@ -49,10 +49,10 @@ if [ $stage -le 2 ]; then
     steps/nnet/train.sh \
       --cmvn-opts "--norm-means=true --norm-vars=true" --copy-feats false \
       --feature-transform-proto $dir/delay5.proto \
-      --network-type lstm --proto-opts "--cell-dim 640 --proj-dim 400 --num-layer 3" \
+      --network-type lstm --proto-opts "--cell-dim 832 --proj-dim 512 --num-layer 2" \
       --learn-rate 0.0001 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
       --train-tool "nnet-train-multistream" \
-      --train-tool-opts "--num-streams=10 --batch-size=20" \
+      --train-tool-opts "--num-streams=256 --batch-size=20" \
     $train $dev data/lang $ali $dev_ali $dir || exit 1;
 fi
 

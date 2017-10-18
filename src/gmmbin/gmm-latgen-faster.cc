@@ -106,6 +106,7 @@ int main(int argc, char *argv[]) {
     if (ClassifyRspecifier(fst_in_str, NULL, NULL) == kNoRspecifier) {
       SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
       // Input FST is just one FST, not a table of FSTs.
+      KALDI_LOG << "Run if";
       Fst<StdArc> *decode_fst = fst::ReadFstKaldiGeneric(fst_in_str);
       timer.Reset();
 
@@ -139,6 +140,7 @@ int main(int argc, char *argv[]) {
       }
       delete decode_fst; // delete this only after decoder goes out of scope.
     } else { // We have different FSTs for different utterances.
+      KALDI_LOG << "Run else";
       SequentialTableReader<fst::VectorFstHolder> fst_reader(fst_in_str);
       RandomAccessBaseFloatMatrixReader feature_reader(feature_rspecifier);
       for (; !fst_reader.Done(); fst_reader.Next()) {
