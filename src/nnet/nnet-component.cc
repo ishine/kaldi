@@ -50,6 +50,7 @@
 #include "nnet/nnet-parametric-relu.h"
 
 #include "nnet/nnet-sparse-affine-transform.h"
+#include "nnet/nnet-simple-recurrent-unit.h"
 
 namespace kaldi {
 namespace nnet1 {
@@ -88,6 +89,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kParallelComponent, "<ParallelComponent>" },
   { Component::kMultiBasisComponent, "<MultiBasisComponent>" },
   { Component::kSparseAffineTransform, "<SparseAffineTransform>" },
+  { Component::kSimpleRecurrentUnit, "<SimpleRecurrentUnit>" },
 };
 
 
@@ -213,6 +215,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kSparseAffineTransform :
       ans = new SparseAffineTransform(input_dim, output_dim);
+      break;
+    case Component::kSimpleRecurrentUnit :
+      ans = new SimpleRecurrentUnit(input_dim, output_dim);
       break;
     case Component::kUnknown :
     default :

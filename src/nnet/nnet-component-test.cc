@@ -412,6 +412,84 @@ namespace nnet1 {
     delete c;
   }
 
+  void UnitTestSimpleRecurrentUnit() { /* Implemented by Kaituo XU */
+    Component* cp = Component::Init(
+      "<SimpleRecurrentUnit> <InputDim> 3 <OutputDim> 3 \
+      <CellDim> 3"
+    );
+    SimpleRecurrentUnit* c = dynamic_cast<SimpleRecurrentUnit*>(cp);
+    auto t = c->GetType();
+    KALDI_LOG << c->TypeToMarker(t);
+    KALDI_LOG << c->Info();
+
+    CuMatrix<BaseFloat> mat_in;
+    ReadCuMatrixFromString("[ -0.4 -0.34117647 -0.28235294 \n\
+        0.12941176  0.18823529  0.24705882 \n\
+       -0.22352941 -0.16470588 -0.10588235 \n\
+        0.30588235  0.36470588  0.42352941 \n\
+       -0.04705882  0.01176471  0.07058824 \n\
+        0.48235294  0.54117647  0.6       ]", &mat_in);
+    KALDI_LOG << mat_in.NumRows() << " " << mat_in.NumCols();
+    std::vector<int32> seq_len{3, 3};
+    c->SetSeqLengths(seq_len);
+
+    CuMatrix<BaseFloat> W_bf_br;
+    ReadCuMatrixFromString("[ -0.2         0.17714286  0.55428571 \
+       -0.16857143  0.20857143  0.58571429 \
+       -0.13714286  0.24        0.61714286 \
+       -0.10571429  0.27142857  0.64857143 \
+       -0.07428571  0.30285714  0.68       \
+       -0.04285714  0.33428571  0.71142857 \
+       -0.01142857  0.36571429  0.74285714 \
+        0.02        0.39714286  0.77428571 \
+        0.05142857  0.42857143  0.80571429 \
+        0.08285714  0.46        0.83714286 \
+        0.11428571  0.49142857  0.86857143 \
+        0.14571429  0.52285714  0.9        \
+        0.2   0.45  0.7 \
+        0.2   0.45  0.7 ]", &W_bf_br);
+
+    Vector<BaseFloat> para;
+    para.Resize(4*3*3+3*2, kSetZero);
+    para.CopyRowsFromMat(W_bf_br);
+    KALDI_LOG << para;
+    c->SetParams(para);
+
+    // propagate,
+    CuMatrix<BaseFloat> mat_out;
+    c->Propagate(mat_in, &mat_out);
+    KALDI_LOG << "mat_out" << mat_out;
+    /* mat_out should be
+    [[-0.2596111  -0.25931769 -0.25462568]
+     [ 0.15380283  0.14249242  0.12924175]
+     [-0.11801852 -0.12430928 -0.1285231 ]
+     [ 0.27003811  0.2517609   0.22933191]
+     [ 0.02075762  0.00835634 -0.00479826]
+     [ 0.37424206  0.3499653   0.31938951]]
+    */
+
+    CuMatrix<BaseFloat> mat_out_diff(mat_out);
+    ReadCuMatrixFromString("[ -0.6        -0.52941176 -0.45882353 \n\
+     0.03529412  0.10588235  0.17647059 \n\
+    -0.38823529 -0.31764706 -0.24705882 \n\
+     0.24705882  0.31764706  0.38823529 \n\
+    -0.17647059 -0.10588235 -0.03529412 \n\
+     0.45882353  0.52941176  0.6       ]", &mat_out_diff);
+    // backpropagate,
+    CuMatrix<BaseFloat> mat_in_diff;
+    c->Backpropagate(mat_in, mat_out, mat_out_diff, &mat_in_diff);
+    KALDI_LOG << "mat_in_diff " << mat_in_diff;
+    /* mat_in_diff should be
+    [[ 0.0110512  -0.5594053  -1.1298618 ]
+     [-0.05572256  0.11826764  0.29225785]
+     [ 0.00324207 -0.26730506 -0.53785218]
+     [-0.04434476  0.17014438  0.38463351]
+     [ 0.00098253 -0.0717513  -0.14448512]
+     [-0.01109324  0.16023669  0.33156661]]
+    */
+    delete c;
+  }
+
 }  // namespace nnet1
 }  // namespace kaldi
 
@@ -438,6 +516,7 @@ int main() {
     UnitTestMaxPooling2DComponent();
     UnitTestAveragePooling2DComponent();
     UnitTestDropoutComponent();
+    UnitTestSimpleRecurrentUnit();
     // end of unit-tests,
     if (loop == 0)
         KALDI_LOG << "Tests without GPU use succeeded.";
