@@ -41,11 +41,11 @@ class SimpleRecurrentUnit : public MultistreamComponent {
  public:
   SimpleRecurrentUnit(int32 input_dim, int32 output_dim):
     MultistreamComponent(input_dim, output_dim),
-    cell_dim_(0) // ,
+    cell_dim_(0),
     // cell_clip_(50.0),
     // diff_clip_(1.0),
     // cell_diff_clip_(0.0),
-    // grad_clip_(250.0)
+    grad_clip_(250.0)
   { }
 
   ~SimpleRecurrentUnit()
@@ -68,7 +68,7 @@ class SimpleRecurrentUnit : public MultistreamComponent {
       // else if (token == "<CellClip>") ReadBasicType(is, false, &cell_clip_);
       // else if (token == "<DiffClip>") ReadBasicType(is, false, &diff_clip_);
       // else if (token == "<CellDiffClip>") ReadBasicType(is, false, &cell_diff_clip_);
-      // else if (token == "<GradClip>") ReadBasicType(is, false, &grad_clip_);
+      else if (token == "<GradClip>") ReadBasicType(is, false, &grad_clip_);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                      << " (ParamRange|CellDim|LearnRateCoef|BiasLearnRateCoef|CellClip|DiffClip|GradClip)";
     }
@@ -97,7 +97,6 @@ class SimpleRecurrentUnit : public MultistreamComponent {
           /**/ if (token == "<CellDim>") ReadBasicType(is, binary, &cell_dim_);
           // else if (token == "<CellClip>") ReadBasicType(is, binary, &cell_clip_);
           // else if (token == "<CellDiffClip>") ReadBasicType(is, binary, &cell_diff_clip_);
-          // else if (token == "<ClipGradient>") ReadBasicType(is, binary, &grad_clip_); // bwd-compat.
           else KALDI_ERR << "Unknown token: " << token;
           break;
         case 'L': ExpectToken(is, binary, "<LearnRateCoef>");
@@ -109,9 +108,9 @@ class SimpleRecurrentUnit : public MultistreamComponent {
         // case 'D': ExpectToken(is, binary, "<DiffClip>");
         //   ReadBasicType(is, binary, &diff_clip_);
         //   break;
-        // case 'G': ExpectToken(is, binary, "<GradClip>");
-        //   ReadBasicType(is, binary, &grad_clip_);
-        //   break;
+        case 'G': ExpectToken(is, binary, "<GradClip>");
+          ReadBasicType(is, binary, &grad_clip_);
+          break;
         default: ReadToken(is, false, &token);
           KALDI_ERR << "Unknown token: " << token;
       }
@@ -139,8 +138,8 @@ class SimpleRecurrentUnit : public MultistreamComponent {
     // WriteBasicType(os, binary, diff_clip_);
     // WriteToken(os, binary, "<CellDiffClip>");
     // WriteBasicType(os, binary, cell_diff_clip_);
-    // WriteToken(os, binary, "<GradClip>");
-    // WriteBasicType(os, binary, grad_clip_);
+    WriteToken(os, binary, "<GradClip>");
+    WriteBasicType(os, binary, grad_clip_);
 
     // write model parameters,
     if (!binary) os << "\n";
@@ -239,7 +238,7 @@ class SimpleRecurrentUnit : public MultistreamComponent {
       ", bias_learn_rate_coef_ " + ToString(bias_learn_rate_coef_) +
       // ", cell_clip_ " + ToString(cell_clip_) +
       // ", diff_clip_ " + ToString(diff_clip_) +
-      // ", grad_clip_ " + ToString(grad_clip_) + " )" +
+      ", grad_clip_ " + ToString(grad_clip_) + " )" +
       "\n  w_xfrh_  "   + MomentStatistics(w_xfrh_) +
       "\n  bias_f_  "     + MomentStatistics(bias_f_) +
       "\n  bias_r_  "     + MomentStatistics(bias_r_);
@@ -269,7 +268,7 @@ class SimpleRecurrentUnit : public MultistreamComponent {
       ", bias_learn_rate_coef_ " + ToString(bias_learn_rate_coef_) +
       // ", cell_clip_ " + ToString(cell_clip_) +
       // ", diff_clip_ " + ToString(diff_clip_) +
-      // ", grad_clip_ " + ToString(grad_clip_) + " )" +
+      ", grad_clip_ " + ToString(grad_clip_) + " )" +
       "\n  ### Gradients " +
       "\n  w_xfrh_corr_  "   + MomentStatistics(w_xfrh_corr_) +
       "\n  bias_f_corr_  "     + MomentStatistics(bias_f_corr_) +
@@ -381,7 +380,7 @@ class SimpleRecurrentUnit : public MultistreamComponent {
           }
         }
       }
-    }
+    }  // for loop
 
     out->CopyFromMat(H.RowRange(1*S, T*S));
 
@@ -501,7 +500,16 @@ class SimpleRecurrentUnit : public MultistreamComponent {
 
   void Update(const CuMatrixBase<BaseFloat> &input,
               const CuMatrixBase<BaseFloat> &diff) {
-    // TODO: clip gradient
+
+    // apply the gradient clipping
+    if (grad_clip_ > 0.0) {
+      w_xfrh_corr_.ApplyFloor(-grad_clip_);
+      w_xfrh_corr_.ApplyCeiling(grad_clip_);
+      bias_f_corr_.ApplyFloor(-grad_clip_);
+      bias_f_corr_.ApplyCeiling(grad_clip_);
+      bias_r_corr_.ApplyFloor(-grad_clip_);
+      bias_r_corr_.ApplyCeiling(grad_clip_);
+    }
     
     const BaseFloat lr  = opts_.learn_rate;
 
@@ -536,7 +544,7 @@ class SimpleRecurrentUnit : public MultistreamComponent {
   CuMatrix<BaseFloat> backpropagate_buf_;
 
   // gradient-clipping value,
-  BaseFloat clip_gradient_;
+  BaseFloat grad_clip_;
 };  // class SimpleRecurrentUnit
 
 }  // namespace nnet1

@@ -200,6 +200,7 @@ int main(int argc, char *argv[]) {
       nnet_transf.SetDropoutRate(0.0);
       nnet.SetDropoutRate(0.0);
     }
+    KALDI_LOG << nnet.Info();
 
     kaldi::int64 total_frames = 0;
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Created on 2017-09-05
+# Created on 2017-10-20
 # Author: Kaituo Xu
-# Funciton: Train DNN with frame cross-entropy.
+# Function: Train SimpleRecurrentUnit using fbank features and truncated BPTT.
 
 [ -f cmd.sh ] && . ./cmd.sh
 [ -f path.sh ] && . ./path.sh
@@ -35,20 +35,33 @@ stage=0
   done
 fi
 
-# Step 2: Train DNN with frame cross-entropy
+# Step 2: Train SRU with truncated BPTT
 if [ $stage -le 2 ]; then
-  dir=exp/dnn.0004 # TODO: argument
+  dir=exp/sru
   ali=${gmm}_ali
   dev_ali=${gmm}_dev_ali
+
+  mkdir -p $dir
+  echo "<Splice> <InputDim> 40 <OutputDim> 40 <BuildVector> 5 </BuildVector>" > $dir/delay5.proto
+
+  nnet_proto=$dir/nnet.proto
+  cat > $nnet_proto << EOF
+<SimpleRecurrentUnit> <InputDim> 40 <OutputDim> 1024 <CellDim> 1024
+<SimpleRecurrentUnit> <InputDim> 1024 <OutputDim> 1024 <CellDim> 1024
+<SimpleRecurrentUnit> <InputDim> 1024 <OutputDim> 1024 <CellDim> 1024
+<AffineTransform> <InputDim> 1024 <OutputDim> 3019 <BiasMean> 0.0 <BiasRange> 0.0
+<Softmax> <InputDim> 3019 <OutputDim> 3019
+EOF
 
   # Train
   $cuda_cmd $dir/log/train_nnet.log \
     steps/nnet/train.sh \
-      --splice 5 --cmvn-opts "--norm-means=true --norm-vars=true" --copy-feats false \
-      --network-type dnn --hid-layers 5 --hid_dim 1024 \
-      --learn-rate 0.0004 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
-      --train-tool "nnet-train-frmshuff" \
-      --train-tool-opts "--minibatch-size=256" \
+      --cmvn-opts "--norm-means=true --norm-vars=true" --copy-feats false \
+      --feature-transform-proto $dir/delay5.proto \
+      --nnet-proto $nnet_proto \
+      --learn-rate 0.00001 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
+      --train-tool "nnet-train-multistream" \
+      --train-tool-opts "--num-streams=128 --batch-size=20" \
     $train $dev data/lang $ali $dev_ali $dir || exit 1;
 fi
 
