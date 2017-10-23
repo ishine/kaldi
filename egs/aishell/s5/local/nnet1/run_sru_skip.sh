@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# Created on 2017-10-20
+# Created on 2017-10-23
 # Author: Kaituo Xu
-# Function: Train SimpleRecurrentUnit using fbank features and truncated BPTT.
+# Function: Train SimpleRecurrentUnit using fbank features and truncated BPTT,
+#   and skipping frame.
 
 [ -f cmd.sh ] && . ./cmd.sh
 [ -f path.sh ] && . ./path.sh
@@ -37,7 +38,7 @@ fi
 
 # Step 2: Train SRU with truncated BPTT
 if [ $stage -le 2 ]; then
-  dir=exp/sru9x512+1024
+  dir=exp/sru9x512+1024-skip1
   ali=${gmm}_ali
   dev_ali=${gmm}_dev_ali
 
@@ -67,8 +68,8 @@ EOF
       --feature-transform-proto $dir/delay5.proto \
       --nnet-proto $nnet_proto \
       --learn-rate 0.00001 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
-      --train-tool "nnet-train-multistream" \
-      --train-tool-opts "--num-streams=128 --batch-size=20" \
+      --train-tool "nnet-train-multistream-skip" \
+      --train-tool-opts "--num-streams=128 --batch-size=20 --num-skip-frames=1" \
     $train $dev data/lang $ali $dev_ali $dir || exit 1;
 fi
 

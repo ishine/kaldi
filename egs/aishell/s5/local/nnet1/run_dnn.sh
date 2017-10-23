@@ -37,7 +37,7 @@ fi
 
 # Step 2: Train DNN with frame cross-entropy
 if [ $stage -le 2 ]; then
-  dir=exp/dnn.0004 # TODO: argument
+  dir=exp/dnn6x1024-lr.0004 # TODO: argument
   ali=${gmm}_ali
   dev_ali=${gmm}_dev_ali
 
@@ -45,7 +45,7 @@ if [ $stage -le 2 ]; then
   $cuda_cmd $dir/log/train_nnet.log \
     steps/nnet/train.sh \
       --splice 5 --cmvn-opts "--norm-means=true --norm-vars=true" --copy-feats false \
-      --network-type dnn --hid-layers 5 --hid_dim 1024 \
+      --network-type dnn --hid-layers 6 --hid_dim 1024 \
       --learn-rate 0.0004 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
       --train-tool "nnet-train-frmshuff" \
       --train-tool-opts "--minibatch-size=256" \
