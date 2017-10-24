@@ -37,19 +37,18 @@ stage=0
 fi
 
 # Step 2: Train SRU with truncated BPTT
+dir=exp/sru9x512+1024-l0r4-skip1
 if [ $stage -le 2 ]; then
-  dir=exp/sru9x512+1024-skip1
   ali=${gmm}_ali
   dev_ali=${gmm}_dev_ali
 
   mkdir -p $dir
-  echo "<Splice> <InputDim> 40 <OutputDim> 40 <BuildVector> 5 </BuildVector>" > $dir/delay5.proto
-
-  num_tgt=$(hmm-info --print-args=false $ali/final.mdl | grep pdfs | awk '{ print $NF }')
+  echo "<Splice> <InputDim> 40 <OutputDim> 200 <BuildVector> 0:4 </BuildVector>" > $dir/delay5.proto
+  echo "<Splice> <InputDim> 200 <OutputDim> 200 <BuildVector> 5 </BuildVector>" >> $dir/delay5.proto
 
   nnet_proto=$dir/nnet.proto
   cat > $nnet_proto << EOF
-<SimpleRecurrentUnit> <InputDim> 40 <OutputDim> 512 <CellDim> 512
+<SimpleRecurrentUnit> <InputDim> 200 <OutputDim> 512 <CellDim> 512
 <SimpleRecurrentUnit> <InputDim> 512 <OutputDim> 512 <CellDim> 512
 <SimpleRecurrentUnit> <InputDim> 512 <OutputDim> 512 <CellDim> 512
 <SimpleRecurrentUnit> <InputDim> 512 <OutputDim> 512 <CellDim> 512
@@ -59,8 +58,8 @@ if [ $stage -le 2 ]; then
 <SimpleRecurrentUnit> <InputDim> 512 <OutputDim> 512 <CellDim> 512
 <SimpleRecurrentUnit> <InputDim> 512 <OutputDim> 512 <CellDim> 512
 <SimpleRecurrentUnit> <InputDim> 512 <OutputDim> 1024 <CellDim> 1024
-<AffineTransform> <InputDim> 1024 <OutputDim> $num_tgt <BiasMean> 0.0 <BiasRange> 0.0
-<Softmax> <InputDim> $num_tgt <OutputDim> $num_tgt
+<AffineTransform> <InputDim> 1024 <OutputDim> 3019 <BiasMean> 0.0 <BiasRange> 0.0
+<Softmax> <InputDim> 3019 <OutputDim> 3019
 EOF
 
   # Train
@@ -69,7 +68,7 @@ EOF
       --cmvn-opts "--norm-means=true --norm-vars=true" --copy-feats false \
       --feature-transform-proto $dir/delay5.proto \
       --nnet-proto $nnet_proto \
-      --learn-rate 0.00001 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
+      --learn-rate 0.000001 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
       --train-tool "nnet-train-multistream-skip" \
       --train-tool-opts "--num-streams=128 --batch-size=20 --num-skip-frames=1" \
     $train $dev data/lang $ali $dev_ali $dir || exit 1;

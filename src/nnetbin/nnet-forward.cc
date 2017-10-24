@@ -58,6 +58,10 @@ int main(int argc, char *argv[]) {
     po.Register("use-gpu", &use_gpu,
         "yes|no|optional, only has effect if compiled with CUDA");
 
+    int32 num_skip_frames = 0;
+    po.Register("num-skip-frames", &num_skip_frames,
+      "Number of frames to skip in the Multi-stream training");
+
     using namespace kaldi;
     using namespace kaldi::nnet1;
     typedef kaldi::int32 int32;
@@ -147,8 +151,25 @@ int main(int argc, char *argv[]) {
         KALDI_ERR << "NaN or inf found in transformed-features for " << utt;
       }
 
+      CuMatrix<BaseFloat> feats_skip;
+      if (num_skip_frames > 0) {
+        // Input: feats_transf
+        // Output: skipped feats_transf
+        int32 utt_frames = feats_transf.NumRows();
+        feats_skip.Resize(ceil(utt_frames*1.0/(num_skip_frames+1)), feats_transf.NumCols());
+        for (int32 f = 0, j = 0; f < utt_frames; f += num_skip_frames + 1, ++j) {
+          feats_skip.Row(j).CopyFromVec(feats_transf.Row(f));
+        }
+      }
+
       // fwd-pass, nnet,
-      nnet.Feedforward(feats_transf, &nnet_out);
+      if (num_skip_frames == 0) {
+        nnet.Feedforward(feats_transf, &nnet_out);
+      } else if (num_skip_frames > 0) {
+        nnet.Feedforward(feats_skip, &nnet_out);
+      } else {
+        KALDI_ERR << "num-skip-frames should >= 0";
+      }
       if (!KALDI_ISFINITE(nnet_out.Sum())) {  // check there's no nan/inf,
         KALDI_ERR << "NaN or inf found in nn-output for " << utt;
       }
@@ -163,13 +184,36 @@ int main(int argc, char *argv[]) {
         nnet_out.ApplyLog();
       }
 
+      CuMatrix<BaseFloat> nnet_out_refill;
+      if (num_skip_frames > 0) {
+        // Input: skipped nnet_out
+        // Output: refilled nnet_out
+        int32 utt_frames = feats_transf.NumRows();
+        int32 remain_frames = ceil(utt_frames*1.0/(num_skip_frames+1));
+        nnet_out_refill.Resize(utt_frames, nnet_out.NumCols());
+        for (int32 r = 0; r < remain_frames; ++r) {
+          for (int32 s = 0; s < num_skip_frames + 1 &&
+                            r*(num_skip_frames+1)+s < utt_frames; s++) {
+            nnet_out_refill.Row(r*(num_skip_frames+1)+s).CopyFromVec(nnet_out.Row(r));
+          }
+        }
+      }
+
       // subtract log-priors from log-posteriors or pre-softmax,
       if (prior_opts.class_frame_counts != "") {
-        pdf_prior.SubtractOnLogpost(&nnet_out);
+        if (num_skip_frames == 0) {
+          pdf_prior.SubtractOnLogpost(&nnet_out);
+        } else {
+          pdf_prior.SubtractOnLogpost(&nnet_out_refill);
+        }
       }
 
       // download from GPU,
-      nnet_out_host = Matrix<BaseFloat>(nnet_out);
+      if (num_skip_frames == 0) {
+        nnet_out_host = Matrix<BaseFloat>(nnet_out);
+      } else {
+        nnet_out_host = Matrix<BaseFloat>(nnet_out_refill);
+      }
 
       // write,
       if (!KALDI_ISFINITE(nnet_out_host.Sum())) {  // check there's no nan/inf,
