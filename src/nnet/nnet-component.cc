@@ -51,6 +51,7 @@
 
 #include "nnet/nnet-sparse-affine-transform.h"
 #include "nnet/nnet-simple-recurrent-unit.h"
+#include "nnet/nnet-batch-norm-component.h"
 
 namespace kaldi {
 namespace nnet1 {
@@ -90,6 +91,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kMultiBasisComponent, "<MultiBasisComponent>" },
   { Component::kSparseAffineTransform, "<SparseAffineTransform>" },
   { Component::kSimpleRecurrentUnit, "<SimpleRecurrentUnit>" },
+  { Component::kBatchNormComponent, "<BatchNormComponent>" },
 };
 
 
@@ -218,6 +220,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kSimpleRecurrentUnit :
       ans = new SimpleRecurrentUnit(input_dim, output_dim);
+      break;
+    case Component::kBatchNormComponent :
+      ans = new BatchNormComponent(input_dim, output_dim);
       break;
     case Component::kUnknown :
     default :

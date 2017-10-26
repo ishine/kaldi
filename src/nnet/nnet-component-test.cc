@@ -28,6 +28,8 @@
 #include "nnet/nnet-max-pooling-component.h"
 #include "nnet/nnet-max-pooling-2d-component.h"
 #include "nnet/nnet-average-pooling-2d-component.h"
+#include "nnet/nnet-simple-recurrent-unit.h"
+#include "nnet/nnet-batch-norm-component.h"
 #include "util/common-utils.h"
 
 namespace kaldi {
@@ -490,6 +492,77 @@ namespace nnet1 {
     delete c;
   }
 
+  void UnitTestBatchNormComponent() { /* Implemented by Kaituo Xu */
+    const int32 N = 200, D = 3;
+
+    Component* cp = Component::Init("<BatchNormComponent> <InputDim> 3 \
+    <OutputDim> 3");
+    BatchNormComponent* c = dynamic_cast<BatchNormComponent*>(cp);
+
+    CuMatrix<BaseFloat> mat_in(N, D);
+    BaseFloat mean = 1.2, std = 3.5;
+    RandGauss(mean, std, &mat_in);
+    KALDI_LOG << "Before batch normalization (mean=1.2, std=3.5)";
+    KALDI_LOG << MomentStatistics(mat_in);
+
+    {
+      CuMatrix<BaseFloat> param(2, 3);
+      ReadCuMatrixFromString("[ 1 1 1 \n 0 0 0 ]", &param);
+      Vector<BaseFloat> para(6);
+      para.CopyRowsFromMat(param);
+      c->SetParams(para);
+
+      CuMatrix<BaseFloat> mat_out;
+      c->Propagate(mat_in, &mat_out);
+
+      KALDI_LOG << "After batch normalization (gamma=1, beta=0)";
+      KALDI_LOG << MomentStatistics(mat_out);
+    }
+    {
+      CuMatrix<BaseFloat> param(2, D);
+      ReadCuMatrixFromString("[ 1 2 3 \n 11 12 13 ]", &param);
+      Vector<BaseFloat> para(6);
+      para.CopyRowsFromMat(param);
+      c->SetParams(para);
+
+      CuMatrix<BaseFloat> mat_out;
+      c->Propagate(mat_in, &mat_out);
+
+      CuVector<BaseFloat> mean(D), var(D);
+      mean.AddRowSumMat(1.0/N, mat_out);
+      mat_out.AddVecToRows(-1.0, mean);
+      mat_out.ApplyPow(2.0);
+      var.AddRowSumMat(1.0/N, mat_out);
+
+      KALDI_LOG << "After batch normalization (gamma=[1 2 3], beta=[11 12 13])";
+      // KALDI_LOG << MomentStatistics(mat_out);
+      KALDI_LOG << "mean" << mean;
+      KALDI_LOG << "var" << var;
+    }
+
+    {
+      KALDI_LOG << "Now test \"test\" mode";
+      CuMatrix<BaseFloat> param(2, D);
+      ReadCuMatrixFromString("[ 1 1 1 \n 0 0 0 ]", &param);
+      Vector<BaseFloat> para(6);
+      para.CopyRowsFromMat(param);
+      c->SetParams(para);
+
+      CuMatrix<BaseFloat> mat_out;
+      c->SetBatchNormMode("train");
+      RandGauss(mean, std, &mat_in);
+      for (int i = 0; i < 50; ++i) {
+        c->Propagate(mat_in, &mat_out);
+      }
+      KALDI_LOG << MomentStatistics(mat_out);
+
+      c->SetBatchNormMode("test");
+      RandGauss(mean, std, &mat_in);
+      c->Propagate(mat_in, &mat_out);
+      KALDI_LOG << MomentStatistics(mat_out);
+    }
+    delete c;
+  }
 }  // namespace nnet1
 }  // namespace kaldi
 
@@ -507,16 +580,17 @@ int main() {
       CuDevice::Instantiate().SelectGpuId("optional");
 #endif
     // unit-tests :
-    UnitTestLengthNorm();
-    UnitTestSimpleSentenceAveragingComponent();
-    UnitTestConvolutionalComponentUnity();
-    UnitTestConvolutionalComponent3x3();
-    UnitTestMaxPoolingComponent();
-    UnitTestConvolutional2DComponent();
-    UnitTestMaxPooling2DComponent();
-    UnitTestAveragePooling2DComponent();
-    UnitTestDropoutComponent();
-    UnitTestSimpleRecurrentUnit();
+    // UnitTestLengthNorm();
+    // UnitTestSimpleSentenceAveragingComponent();
+    // UnitTestConvolutionalComponentUnity();
+    // UnitTestConvolutionalComponent3x3();
+    // UnitTestMaxPoolingComponent();
+    // UnitTestConvolutional2DComponent();
+    // UnitTestMaxPooling2DComponent();
+    // UnitTestAveragePooling2DComponent();
+    // UnitTestDropoutComponent();
+    // UnitTestSimpleRecurrentUnit();
+    UnitTestBatchNormComponent();
     // end of unit-tests,
     if (loop == 0)
         KALDI_LOG << "Tests without GPU use succeeded.";
