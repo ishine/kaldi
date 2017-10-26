@@ -82,7 +82,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kLstmProjectedStreamsFast,"<LstmProjectedStreamsFast>"},
   { Component::kLstmProjectedStreamsFixedPoint,"<LstmProjectedStreamsFixedPoint>"},
   { Component::kLstmProjectedStreamsSimple,"<LstmProjectedStreamsSimple>"},
-  { Component::kLstmProjectedStreamsFast,"<LstmProjectedStreamsResidual>"},
+  { Component::kLstmProjectedStreamsResidual,"<LstmProjectedStreamsResidual>"},
   { Component::kBLstmProjectedStreams,"<BLstmProjectedStreams>"},
   { Component::kBLstmStreams,"<BLstmStreams>"},
   { Component::kGruStreams,"<GruStreams>"},

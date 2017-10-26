@@ -114,7 +114,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     // init weight and bias (Uniform)
     w_gifo_x_.Resize(4*ncell_, input_dim_, kUndefined);
     w_gifo_r_.Resize(4*ncell_, nrecur_, kUndefined);
-    w_r_m_.Resize(nrecur_+input_dim_, ncell_, kUndefined); // residual
+    w_r_m_.Resize(nrecur_, ncell_+input_dim_, kUndefined); // residual
 
     InitMatParam(w_gifo_x_, param_scale);
     InitMatParam(w_gifo_r_, param_scale);
@@ -141,7 +141,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_f_c_corr_.Resize(ncell_, kSetZero);
     peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
-    w_r_m_corr_.Resize(nrecur_+input_dim_, ncell_, kSetZero); // residual
+    w_r_m_corr_.Resize(nrecur_, ncell_+input_dim_, kSetZero); // residual
 
     KALDI_ASSERT(clip_gradient_ >= 0.0);
     KALDI_ASSERT(clip_cell_ >= 0.0);
@@ -191,7 +191,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_f_c_corr_.Resize(ncell_, kSetZero);
     peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
-    w_r_m_corr_.Resize(nrecur_+input_dim_, ncell_, kSetZero); // residual
+    w_r_m_corr_.Resize(nrecur_, ncell_+input_dim_, kSetZero); // residual
   }
 
   void WriteData(std::ostream &os, bool binary) const {
