@@ -32,7 +32,7 @@ namespace kaldi {
 namespace nnet1 {
 
 class BatchNormComponent : public UpdatableComponent {
-public:
+ public:
   BatchNormComponent(int32 input_dim, int32 output_dim):
     UpdatableComponent(input_dim, output_dim),
     mode_("train"), running_decay_rate_(0.9), var_floor_(1e-10)
@@ -267,7 +267,7 @@ public:
 
   // parameters, scale the input
   CuVector<BaseFloat> gamma_;
-  // parameters, shif the input
+  // parameters, shift the input
   CuVector<BaseFloat> beta_;
 
   // gradient

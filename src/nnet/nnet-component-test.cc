@@ -493,73 +493,128 @@ namespace nnet1 {
   }
 
   void UnitTestBatchNormComponent() { /* Implemented by Kaituo Xu */
-    const int32 N = 200, D = 3;
+    int32 N = 200, D = 3;
 
     Component* cp = Component::Init("<BatchNormComponent> <InputDim> 3 \
     <OutputDim> 3");
     BatchNormComponent* c = dynamic_cast<BatchNormComponent*>(cp);
 
-    CuMatrix<BaseFloat> mat_in(N, D);
-    BaseFloat mean = 1.2, std = 3.5;
-    RandGauss(mean, std, &mat_in);
-    KALDI_LOG << "Before batch normalization (mean=1.2, std=3.5)";
-    KALDI_LOG << MomentStatistics(mat_in);
-
+    // test propagate
     {
-      CuMatrix<BaseFloat> param(2, 3);
-      ReadCuMatrixFromString("[ 1 1 1 \n 0 0 0 ]", &param);
-      Vector<BaseFloat> para(6);
-      para.CopyRowsFromMat(param);
-      c->SetParams(para);
-
-      CuMatrix<BaseFloat> mat_out;
-      c->Propagate(mat_in, &mat_out);
-
-      KALDI_LOG << "After batch normalization (gamma=1, beta=0)";
-      KALDI_LOG << MomentStatistics(mat_out);
-    }
-    {
-      CuMatrix<BaseFloat> param(2, D);
-      ReadCuMatrixFromString("[ 1 2 3 \n 11 12 13 ]", &param);
-      Vector<BaseFloat> para(6);
-      para.CopyRowsFromMat(param);
-      c->SetParams(para);
-
-      CuMatrix<BaseFloat> mat_out;
-      c->Propagate(mat_in, &mat_out);
-
-      CuVector<BaseFloat> mean(D), var(D);
-      mean.AddRowSumMat(1.0/N, mat_out);
-      mat_out.AddVecToRows(-1.0, mean);
-      mat_out.ApplyPow(2.0);
-      var.AddRowSumMat(1.0/N, mat_out);
-
-      KALDI_LOG << "After batch normalization (gamma=[1 2 3], beta=[11 12 13])";
-      // KALDI_LOG << MomentStatistics(mat_out);
-      KALDI_LOG << "mean" << mean;
-      KALDI_LOG << "var" << var;
-    }
-
-    {
-      KALDI_LOG << "Now test \"test\" mode";
-      CuMatrix<BaseFloat> param(2, D);
-      ReadCuMatrixFromString("[ 1 1 1 \n 0 0 0 ]", &param);
-      Vector<BaseFloat> para(6);
-      para.CopyRowsFromMat(param);
-      c->SetParams(para);
-
-      CuMatrix<BaseFloat> mat_out;
-      c->SetBatchNormMode("train");
+      CuMatrix<BaseFloat> mat_in(N, D);
+      BaseFloat mean = 1.2, std = 3.5;
       RandGauss(mean, std, &mat_in);
-      for (int i = 0; i < 50; ++i) {
+      KALDI_LOG << "Before batch normalization (mean=1.2, std=3.5)";
+      KALDI_LOG << MomentStatistics(mat_in);
+
+      {
+        CuMatrix<BaseFloat> param(2, 3);
+        ReadCuMatrixFromString("[ 1 1 1 \n 0 0 0 ]", &param);
+        Vector<BaseFloat> para(6);
+        para.CopyRowsFromMat(param);
+        c->SetParams(para);
+
+        CuMatrix<BaseFloat> mat_out;
         c->Propagate(mat_in, &mat_out);
-      }
-      KALDI_LOG << MomentStatistics(mat_out);
 
-      c->SetBatchNormMode("test");
-      RandGauss(mean, std, &mat_in);
+        KALDI_LOG << "After batch normalization (gamma=1, beta=0)";
+        KALDI_LOG << MomentStatistics(mat_out);
+      }
+      {
+        CuMatrix<BaseFloat> param(2, D);
+        ReadCuMatrixFromString("[ 1 2 3 \n 11 12 13 ]", &param);
+        Vector<BaseFloat> para(6);
+        para.CopyRowsFromMat(param);
+        c->SetParams(para);
+
+        CuMatrix<BaseFloat> mat_out;
+        c->Propagate(mat_in, &mat_out);
+
+        CuVector<BaseFloat> mean(D), var(D);
+        mean.AddRowSumMat(1.0/N, mat_out);
+        mat_out.AddVecToRows(-1.0, mean);
+        mat_out.ApplyPow(2.0);
+        var.AddRowSumMat(1.0/N, mat_out);
+
+        KALDI_LOG << "After batch normalization (gamma=[1 2 3], beta=[11 12 13])";
+        // KALDI_LOG << MomentStatistics(mat_out);
+        KALDI_LOG << "mean" << mean;
+        KALDI_LOG << "var" << var;
+      }
+
+      {
+        KALDI_LOG << "Now test \"test\" mode";
+        CuMatrix<BaseFloat> param(2, D);
+        ReadCuMatrixFromString("[ 1 1 1 \n 0 0 0 ]", &param);
+        Vector<BaseFloat> para(6);
+        para.CopyRowsFromMat(param);
+        c->SetParams(para);
+
+        CuMatrix<BaseFloat> mat_out;
+        c->SetBatchNormMode("train");
+        RandGauss(mean, std, &mat_in);
+        for (int i = 0; i < 50; ++i) {
+          c->Propagate(mat_in, &mat_out);
+        }
+        KALDI_LOG << MomentStatistics(mat_out);
+
+        c->SetBatchNormMode("test");
+        RandGauss(mean, std, &mat_in);
+        c->Propagate(mat_in, &mat_out);
+        KALDI_LOG << MomentStatistics(mat_out);
+      }
+    }
+    // test backpropagate
+    {
+      N = 4;
+      D = 3;
+      c->SetBatchNormMode("train");
+      CuMatrix<BaseFloat> mat_in(N, D);
+      ReadCuMatrixFromString("[ 14.20613743  10.34564924  24.15385594 \n\
+      10.73953935  12.54804921  19.91240559 \n\
+       7.45383798   9.04181671  12.93801613 \n\
+      10.35065021   6.03617694  10.97561745 ]", &mat_in);
+
+      CuMatrix<BaseFloat> param(2, D);
+      ReadCuMatrixFromString("[ -0.35882895  0.6034716  -1.66478853 \n\
+      -0.70017904  1.15139101  1.85733101 ]", &param);
+      Vector<BaseFloat> para(2*D);
+      para.CopyRowsFromMat(param);
+      c->SetParams(para);
+
+      CuMatrix<BaseFloat> mat_out;
       c->Propagate(mat_in, &mat_out);
-      KALDI_LOG << MomentStatistics(mat_out);
+      KALDI_LOG << "mat_out" << mat_out;
+      /* mat_out should be
+      [-1.22724083  1.36975815 -0.39042692]
+      [-0.707968    1.93375134  0.94131083]
+      [-0.21579227  1.03587117  3.13114143]
+      [-0.64971505  0.26618338  3.74729868]
+      */
+
+      CuMatrix<BaseFloat> mat_out_diff(mat_out);
+      ReadCuMatrixFromString("[ -1.51117956  0.64484751 -0.98060789 \n\
+      -0.85685315 -0.87187918 -0.42250793 \n\
+       0.99643983  0.71242127  0.05914424 \n\
+      -0.36331088  0.00328884 -0.10593044 ]", &mat_out_diff);
+      // backpropagate,
+      CuMatrix<BaseFloat> mat_in_diff;
+      c->Backpropagate(mat_in, mat_out, mat_out_diff, &mat_in_diff);
+      KALDI_LOG << "mat_in_diff " << mat_in_diff;
+      /* mat_in_diff should be
+      [-0.03290006  0.1578986   0.0370725 ]
+      [ 0.06051027 -0.1683892  -0.0451365 ]
+      [-0.03566548  0.13842916 -0.04340304]
+      [ 0.00805527 -0.12793856  0.05146703]
+      */
+
+      Vector<BaseFloat> gradient(2*D);
+      c->GetGradient(&gradient);
+      KALDI_LOG << "gradient of gamma and beta " << gradient;
+      /* gradient should be
+      [-3.53228792 -1.03819347 -1.48146646]
+      [-1.73490376  0.48867844 -1.44990201]
+      */
     }
     delete c;
   }
@@ -580,16 +635,16 @@ int main() {
       CuDevice::Instantiate().SelectGpuId("optional");
 #endif
     // unit-tests :
-    // UnitTestLengthNorm();
-    // UnitTestSimpleSentenceAveragingComponent();
-    // UnitTestConvolutionalComponentUnity();
-    // UnitTestConvolutionalComponent3x3();
-    // UnitTestMaxPoolingComponent();
-    // UnitTestConvolutional2DComponent();
-    // UnitTestMaxPooling2DComponent();
-    // UnitTestAveragePooling2DComponent();
-    // UnitTestDropoutComponent();
-    // UnitTestSimpleRecurrentUnit();
+    UnitTestLengthNorm();
+    UnitTestSimpleSentenceAveragingComponent();
+    UnitTestConvolutionalComponentUnity();
+    UnitTestConvolutionalComponent3x3();
+    UnitTestMaxPoolingComponent();
+    UnitTestConvolutional2DComponent();
+    UnitTestMaxPooling2DComponent();
+    UnitTestAveragePooling2DComponent();
+    UnitTestDropoutComponent();
+    UnitTestSimpleRecurrentUnit();
     UnitTestBatchNormComponent();
     // end of unit-tests,
     if (loop == 0)
