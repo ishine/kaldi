@@ -24,6 +24,7 @@
 #include "nnet/nnet-activation.h"
 #include "nnet/nnet-affine-transform.h"
 #include "nnet/nnet-various.h"
+#include "nnet/nnet-batch-norm-component.h"
 
 namespace kaldi {
 namespace nnet1 {
@@ -273,6 +274,20 @@ void Nnet::SetDropoutRate(BaseFloat r)  {
       comp.SetDropoutRate(r);
       KALDI_LOG << "Setting dropout-rate in component " << c
                 << " from " << r_old << " to " << r;
+    }
+  }
+}
+
+
+void Nnet::SetBatchNormMode(std::string mode) {
+  for (int32 c = 0; c < NumComponents(); c++) {
+    if (GetComponent(c).GetType() == Component::kBatchNormComponent) {
+      BatchNormComponent& comp = 
+          dynamic_cast<BatchNormComponent&>(GetComponent(c));
+      std::string mode_old = comp.GetBatchNormMode();
+      comp.SetBatchNormMode(mode);
+      KALDI_LOG << "Setting batch normlization mode in component " << c
+      << " from " << mode_old << " to " << mode;
     }
   }
 }

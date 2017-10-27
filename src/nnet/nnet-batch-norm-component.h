@@ -256,6 +256,9 @@ class BatchNormComponent : public UpdatableComponent {
     beta_.AddVec(-lr * learn_rate_coef_, beta_corr_);
   }
 
+
+  std::string GetBatchNormMode() { return mode_; }
+
   void SetBatchNormMode(std::string mode) {
     mode_ = mode;
     KALDI_ASSERT(mode_ == "train" || mode_ == "test");

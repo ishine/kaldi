@@ -118,6 +118,8 @@ int main(int argc, char *argv[]) {
     if (crossvalidate) {
       nnet_transf.SetDropoutRate(0.0);
       nnet.SetDropoutRate(0.0);
+      nnet_transf.SetBatchNormMode("test");
+      nnet.SetBatchNormMode("test");
     }
 
     kaldi::int64 total_frames = 0;

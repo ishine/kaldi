@@ -125,6 +125,9 @@ class Nnet {
   /// Set the dropout rate
   void SetDropoutRate(BaseFloat r);
 
+  /// Set the batch normalization mode
+  void SetBatchNormMode(std::string mode);
+
   /// Reset streams in multi-stream training,
   void ResetStreams(const std::vector<int32> &stream_reset_flag);
 
