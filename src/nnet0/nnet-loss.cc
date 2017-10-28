@@ -358,6 +358,7 @@ void CBXent::Eval(const VectorBase<BaseFloat> &frame_weights,
 	  class_id_.push_back(class_boundary_.size()-1);
 
 
+#if HAVE_CUDA == 1
 	  SetStream(class_frame_weights_, streamlist_);
 	  SetStream(class_target_sum_, streamlist_);
 	  SetStream(class_target_, streamlist_);
@@ -367,12 +368,14 @@ void CBXent::Eval(const VectorBase<BaseFloat> &frame_weights,
 	  SetStream(class_entropy_aux_, streamlist_);
 	  if (class_frame_zt_ptr_ != NULL)
 		  SetStream(*class_frame_zt_ptr_, streamlist_);
+#endif
 
 	  GenTargetStreamed(class_target_, tgt_id_);
 
 	  // call the other eval function,
 	  Eval();
     
+#if HAVE_CUDA == 1
 	  ResetStream(class_frame_weights_);
 	  ResetStream(class_target_sum_);
 	  ResetStream(class_target_);
@@ -382,6 +385,7 @@ void CBXent::Eval(const VectorBase<BaseFloat> &frame_weights,
 	  ResetStream(class_entropy_aux_);
 	  if (class_frame_zt_ptr_ != NULL)
 		  ResetStream(*class_frame_zt_ptr_);
+#endif
 
 }
 
@@ -544,9 +548,11 @@ void CBXent::Eval() {
 
 void CBXent::GetTargetWordPosterior(Vector<BaseFloat> &tgt)
 {
+#if HAVE_CUDA == 1
 	SetStream(class_target_sum_, streamlist_);
 	AddColSumMatStreamed(static_cast<BaseFloat>(1.0f), class_target_sum_, class_xentropy_aux_, static_cast<BaseFloat>(0.0f));
 	ResetStream(class_target_sum_);
+#endif
 
 	Vector<BaseFloat> tgt_post(target_sum_);
 	int size = tgt_post.Dim()/2;
@@ -974,6 +980,9 @@ void MultiTaskLoss::Merge(int myid, int root) {
 /**CTC**/
 
 void Ctc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+
   diff->Resize(net_out.NumRows(), net_out.NumCols());
   int32 num_frames = net_out.NumRows();
   int32 num_classes = net_out.NumCols();
@@ -1044,10 +1053,20 @@ void Ctc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> 
     }
   }
 
+  }else
+#endif
+        {
+                // not implemented for CPU yet
+                // return 0;
+        }
+
 }
 
 void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
                        std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+
   diff->Resize(net_out.NumRows(), net_out.NumCols());
 
   int32 num_sequence = frame_num_utt.size();  // number of sequences
@@ -1138,6 +1157,13 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
       ref_num_progress_ = 0;
     }
   }
+
+  }else
+#endif
+        {
+                // not implemented for CPU yet
+                // return 0;
+        }
 
 }
 

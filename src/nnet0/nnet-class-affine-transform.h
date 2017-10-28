@@ -217,19 +217,23 @@ class ClassAffineTransform : public UpdatableComponent {
 	updateclass_bias_.push_back(class_bias_.back());
 	output_patches_.push_back(new CuSubMatrix<BaseFloat>(out->ColRange(class_boundary_.back(), clen)));
 
+#if HAVE_CUDA == 1
     SetStream(input_patches_, streamlist_);
    	SetStream(output_patches_, streamlist_);
     SetStream(updateclass_linearity_, streamlist_);
    	SetStream(updateclass_bias_, streamlist_);
+#endif
 
     AddVecToRowsStreamed(static_cast<BaseFloat>(1.0f), output_patches_, updateclass_bias_, static_cast<BaseFloat>(0.0f));
     AddMatMatStreamed(static_cast<BaseFloat>(1.0f), output_patches_, input_patches_, kNoTrans,
     									updateclass_linearity_, kTrans, static_cast<BaseFloat>(1.0f));
 
+#if HAVE_CUDA == 1
     ResetStream(input_patches_);
     ResetStream(output_patches_);
     ResetStream(updateclass_linearity_);
     ResetStream(updateclass_bias_);
+#endif
   }
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
@@ -268,16 +272,20 @@ class ClassAffineTransform : public UpdatableComponent {
 	    }
 
         updateclass_linearity_.resize(out_diff_patches_.size());
+#if HAVE_CUDA == 1
 	    SetStream(in_diff_patches_, streamlist_);
 	    SetStream(out_diff_patches_, streamlist_);
 	    SetStream(updateclass_linearity_, streamlist_);
+#endif
 
 	    AddMatMatStreamed(static_cast<BaseFloat>(1.0f), in_diff_patches_, out_diff_patches_, kNoTrans,
 	    												updateclass_linearity_, kNoTrans, static_cast<BaseFloat>(0.0f));
 
+#if HAVE_CUDA == 1
 	    ResetStream(in_diff_patches_);
 	    ResetStream(out_diff_patches_);
 	    ResetStream(updateclass_linearity_);
+#endif
 
 	    // class
 	    clen = output_dim_ - class_boundary_.back();
@@ -311,11 +319,13 @@ class ClassAffineTransform : public UpdatableComponent {
 		local_lrate_bias = -lr_bias;
 
 
+#if HAVE_CUDA == 1
 	    SetStream(updateclass_linearity_corr_, streamlist_);
 	   	SetStream(out_diff_patches_, streamlist_);
 	    SetStream(input_patches_, streamlist_);
 	    SetStream(updateclass_bias_corr_, streamlist_);
 	    SetStream(updateclass_linearity_, streamlist_);
+#endif
 
 		AddMatMatStreamed(static_cast<BaseFloat>(1.0f), updateclass_linearity_corr_, out_diff_patches_, kTrans,
 																input_patches_, kNoTrans, static_cast<BaseFloat>(mmt));
@@ -326,11 +336,13 @@ class ClassAffineTransform : public UpdatableComponent {
             AddMatStreamed(-lr*l2*num_frames, updateclass_linearity_, updateclass_linearity_);
         }
 
+#if HAVE_CUDA == 1
 		ResetStream(updateclass_linearity_corr_);
 		ResetStream(out_diff_patches_);
 		ResetStream(input_patches_);
 		ResetStream(updateclass_bias_corr_);
 	    ResetStream(updateclass_linearity_);
+#endif
   }
 
   void UpdateGradient()
@@ -339,12 +351,17 @@ class ClassAffineTransform : public UpdatableComponent {
 	      //linearity_.AddMat(local_lrate, linearity_corr_);
 	      //bias_.AddVec(local_lrate_bias, bias_corr_);
 
+#if HAVE_CUDA == 1
 	  	  SetStream(updateclass_linearity_, streamlist_);
 	  	  SetStream(updateclass_bias_, streamlist_);
+#endif
 	  	  AddMatStreamed(local_lrate, updateclass_linearity_, updateclass_linearity_corr_);
 	  	  AddVecStreamed(local_lrate_bias, updateclass_bias_, updateclass_bias_corr_);
+
+#if HAVE_CUDA == 1
 	  	  ResetStream(updateclass_bias_);
 	  	  ResetStream(updateclass_linearity_);
+#endif
   }
 
   void Update(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
