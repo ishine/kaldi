@@ -49,6 +49,7 @@
 #include "nnet0/nnet-lstm-projected-streams-fast.h"
 #include "nnet0/nnet-lstm-projected-streams-fixedpoint.h"
 #include "nnet0/nnet-lstm-projected-streams-simple.h"
+#include "nnet0/nnet-lstm-projected-streams-residual.h"
 #include "nnet0/nnet-blstm-projected-streams.h"
 #include "nnet0/nnet-blstm-streams.h"
 
@@ -85,6 +86,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kLstmProjectedStreamsFast,"<LstmProjectedStreamsFast>"},
   { Component::kLstmProjectedStreamsFixedPoint,"<LstmProjectedStreamsFixedPoint>"},
   { Component::kLstmProjectedStreamsSimple,"<LstmProjectedStreamsSimple>"},
+  { Component::kLstmProjectedStreamsResidual,"<LstmProjectedStreamsResidual>"},
   { Component::kBLstmProjectedStreams,"<BLstmProjectedStreams>"},
   { Component::kBLstmStreams,"<BLstmStreams>"},
   { Component::kGruStreams,"<GruStreams>"},
@@ -197,6 +199,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kLstmProjectedStreamsSimple :
       ans = new LstmProjectedStreamsSimple(input_dim, output_dim);
+      break;
+    case Component::kLstmProjectedStreamsResidual :
+      ans = new LstmProjectedStreamsResidual(input_dim, output_dim);
       break;
     case Component::kBLstmProjectedStreams :
       ans = new BLstmProjectedStreams(input_dim, output_dim);
