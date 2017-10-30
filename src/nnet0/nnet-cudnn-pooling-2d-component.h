@@ -1,7 +1,9 @@
 #ifndef NNET_CUDNN_POOLING_2D_COMPONENT_H_
 #define NNET_CUDNN_POOLING_2D_COMPONENT_H_
 
+#if HAVE_CUDA == 1
 #include <cudnn.h>
+
 #include "nnet/nnet-component.h"
 
 namespace kaldi{
@@ -212,4 +214,5 @@ namespace nnet0{
 
 }
 }
+#endif
 #endif

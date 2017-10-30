@@ -49,6 +49,7 @@
 #include "nnet0/nnet-lstm-projected-streams-fast.h"
 #include "nnet0/nnet-lstm-projected-streams-fixedpoint.h"
 #include "nnet0/nnet-lstm-projected-streams-simple.h"
+#include "nnet0/nnet-lstm-projected-streams-residual.h"
 #include "nnet0/nnet-blstm-projected-streams.h"
 #include "nnet0/nnet-blstm-streams.h"
 
@@ -75,12 +76,17 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kConvolutionalComponent,"<ConvolutionalComponent>"},
   { Component::kConvolutional2DComponent,"<Convolutional2DComponent>"},
   { Component::kConvolutional2DComponentFast,"<Convolutional2DComponentFast>"},
+#if HAVE_CUDA == 1
+  { Component::kCudnnPooling2DComponent, "<CudnnPooling2DComponent>"},
   { Component::kCudnnConvolutional2DComponent, "<CudnnConvolutional2DComponent>"},
+  { Component::kCudnnRelu, "<CudnnRelu>"},
+#endif
   { Component::kLstmProjectedStreams,"<LstmProjectedStreams>"},
   { Component::kLstmStreams,"<LstmStreams>"},
   { Component::kLstmProjectedStreamsFast,"<LstmProjectedStreamsFast>"},
   { Component::kLstmProjectedStreamsFixedPoint,"<LstmProjectedStreamsFixedPoint>"},
   { Component::kLstmProjectedStreamsSimple,"<LstmProjectedStreamsSimple>"},
+  { Component::kLstmProjectedStreamsResidual,"<LstmProjectedStreamsResidual>"},
   { Component::kBLstmProjectedStreams,"<BLstmProjectedStreams>"},
   { Component::kBLstmStreams,"<BLstmStreams>"},
   { Component::kGruStreams,"<GruStreams>"},
@@ -90,7 +96,6 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kBlockSoftmax,"<BlockSoftmax>" },
   { Component::kSigmoid,"<Sigmoid>" },
   { Component::kRelu,"<Relu>" },
-  { Component::kCudnnRelu, "<CudnnRelu>"},
   { Component::kTanh,"<Tanh>" },
   { Component::kDropout,"<Dropout>" },
   { Component::kLengthNormComponent,"<LengthNormComponent>" },
@@ -104,7 +109,6 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kAveragePoolingComponent,"<AveragePoolingComponent>"},
   { Component::kAveragePooling2DComponent,"<AveragePooling2DComponent>"},
   { Component::kMaxPoolingComponent, "<MaxPoolingComponent>"},
-  { Component::kCudnnPooling2DComponent, "<CudnnPooling2DComponent>"},
   { Component::kMaxPooling2DComponent, "<MaxPooling2DComponent>"},
   { Component::kMaxPooling2DComponentFast, "<MaxPooling2DComponentFast>"},
   { Component::kSentenceAveragingComponent,"<SentenceAveragingComponent>"},
@@ -170,9 +174,17 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
     case Component::kConvolutional2DComponentFast :
       ans = new Convolutional2DComponentFast(input_dim, output_dim);
       break;
+#if HAVE_CUDA == 1
     case Component::kCudnnConvolutional2DComponent :
       ans = new CudnnConvolutional2DComponent(input_dim, output_dim);
       break;
+    case Component::kCudnnPooling2DComponent:
+      ans = new CudnnPooling2DComponent(input_dim, output_dim);
+      break;
+    case Component::kCudnnRelu :
+      ans = new CudnnRelu(input_dim, output_dim);
+      break;
+#endif
     case Component::kLstmProjectedStreams :
       ans = new LstmProjectedStreams(input_dim, output_dim);
       break;
@@ -187,6 +199,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kLstmProjectedStreamsSimple :
       ans = new LstmProjectedStreamsSimple(input_dim, output_dim);
+      break;
+    case Component::kLstmProjectedStreamsResidual :
+      ans = new LstmProjectedStreamsResidual(input_dim, output_dim);
       break;
     case Component::kBLstmProjectedStreams :
       ans = new BLstmProjectedStreams(input_dim, output_dim);
@@ -214,9 +229,6 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kRelu :
       ans = new Relu(input_dim, output_dim);
-      break;
-    case Component::kCudnnRelu :
-      ans = new CudnnRelu(input_dim, output_dim);
       break;
     case Component::kTanh :
       ans = new Tanh(input_dim, output_dim);
@@ -271,9 +283,6 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kFramePoolingComponent :
       ans = new FramePoolingComponent(input_dim, output_dim);
-      break;
-    case Component::kCudnnPooling2DComponent:
-      ans = new CudnnPooling2DComponent(input_dim, output_dim);
       break;
     case Component::kParallelComponent :
       ans = new ParallelComponent(input_dim, output_dim);

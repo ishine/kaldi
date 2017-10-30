@@ -21,7 +21,10 @@
 #ifndef KALDI_NNET_NNET_ACTIVATION_H_
 #define KALDI_NNET_NNET_ACTIVATION_H_
 
+#if HAVE_CUDA == 1
 #include <cudnn.h>
+#endif
+
 #include "nnet0/nnet-component.h"
 #include "nnet0/nnet-utils.h"
 #include "cudamatrix/cu-math.h"
@@ -106,14 +109,17 @@ class CBSoftmax : public Component {
     output_patches_.push_back(new CuSubMatrix<BaseFloat>(out->ColRange(class_boundary_.back(), clen)));
     frame_zt_patches_.push_back(new CuSubVector<BaseFloat>(frame_zt_.Range(size, size)));
 
-
+#if HAVE_CUDA == 1
     SetStream(input_patches_, streamlist_);
    	SetStream(output_patches_, streamlist_);
+#endif
 
 	ApplySoftMaxPerRowStreamed(output_patches_, input_patches_, &frame_zt_patches_);
 
+#if HAVE_CUDA == 1
 	ResetStream(input_patches_);
 	ResetStream(output_patches_);
+#endif
 
   }
 
@@ -149,13 +155,17 @@ class CBSoftmax : public Component {
     indiff_patches_.push_back(new CuSubMatrix<BaseFloat>(in_diff->ColRange(class_boundary_.back(), clen)));
     outdiff_patches_.push_back(new CuSubMatrix<BaseFloat>(out_diff.ColRange(class_boundary_.back(), clen)));
 
+#if HAVE_CUDA == 1
     SetStream(indiff_patches_, streamlist_);
    	SetStream(outdiff_patches_, streamlist_);
+#endif
 
     CopyFromMatStreamed(outdiff_patches_, indiff_patches_);
 
+#if HAVE_CUDA == 1
 	ResetStream(indiff_patches_);
 	ResetStream(outdiff_patches_);
+#endif
 
     for (int p = 0; p < indiff_patches_.size(); p++)
     {
@@ -350,6 +360,7 @@ class Relu : public Component {
   }
 };
 
+#if HAVE_CUDA == 1
 class CudnnRelu : public Component {
 
     public:
@@ -442,6 +453,7 @@ class CudnnRelu : public Component {
         cudaStream_t stream_ ;
 
 };
+#endif
 
 
 class Tanh : public Component {

@@ -110,6 +110,9 @@ void ModelAverageMerge::Merge(int root)
 void
 ModelGlobalSumMerge::Init()
 {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+
 	if (NULL != this->nnet_free_data_)
 		return;
 
@@ -134,6 +137,12 @@ ModelGlobalSumMerge::Init()
 	{
 	    throw std::bad_alloc();
 	}
+ }else
+#endif
+        {
+                // not implemented for CPU yet
+                // return 0;
+        }
 }
 
 
@@ -162,7 +171,14 @@ void ModelGlobalSumMerge::Merge(int root)
 	MPI_Bcast((void*)(this->nnet_data_), dim_, MPI_FLOAT, root, MPI_COMM_WORLD);
 
 	//std::memcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat));
-	CU_SAFE_CALL(cudaMemcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat), cudaMemcpyHostToHost));
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+	    CU_SAFE_CALL(cudaMemcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat), cudaMemcpyHostToHost));
+    }else
+#endif
+    {
+        std::memcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat));
+    }
 
 	//t2 = MPI_Wtime();
 			//c = (t2-t1)*1000;
@@ -179,6 +195,9 @@ void ModelGlobalSumMerge::Merge(int root)
 
 void ModelGlobalGradientMerge::Init()
 {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+
 	if (NULL != this->nnet_free_data_)
 		return;
 
@@ -220,6 +239,12 @@ void ModelGlobalGradientMerge::Init()
 	{
 	    throw std::bad_alloc();
 	}
+ }else
+#endif
+        {
+                // not implemented for CPU yet
+                // return 0;
+        }
 
 }
 
@@ -266,9 +291,15 @@ void ModelGlobalGradientMerge::Merge(int root)
     KALDI_VLOG(2) << "MPI_Bcast: " << t2-t1;
 
 	//std::memcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat));
-	CU_SAFE_CALL(cudaMemcpy(this->model_sync_->data_, this->nnet_data_, dim_ * sizeof(BaseFloat), cudaMemcpyHostToHost));
-
-
+#if HAVE_CUDA == 1
+    if (CuDevice::Instantiate().Enabled()) {
+	    CU_SAFE_CALL(cudaMemcpy(this->model_sync_->data_, this->nnet_data_, dim_ * sizeof(BaseFloat), cudaMemcpyHostToHost));
+	}else 
+#endif
+    {
+	    std::memcpy(this->model_sync_->data_, this->nnet_data_, dim_ * sizeof(BaseFloat));
+	}
+    
 	this->mLeftMerge--;
 
 }
@@ -314,7 +345,14 @@ void ModelGlobalAdagradMerge::Merge(int root)
 	MPI_Bcast((void*)(this->nnet_data_), dim_, MPI_FLOAT, root, MPI_COMM_WORLD);
 
 	//std::memcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat));
-	CU_SAFE_CALL(cudaMemcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat), cudaMemcpyHostToHost));
+#if HAVE_CUDA == 1
+    if (CuDevice::Instantiate().Enabled()) {
+	    CU_SAFE_CALL(cudaMemcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat), cudaMemcpyHostToHost));
+    }else
+#endif
+    {
+        std::memcpy(model_sync->data_, this->nnet_data_, dim_ * sizeof(BaseFloat));
+    }
 
 	//t2 = MPI_Wtime();
 			//c = (t2-t1)*1000;
