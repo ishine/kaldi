@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 3) {
+    if (po.NumArgs() != 5) {
       po.PrintUsage();
       exit(1);
     }
@@ -120,11 +120,12 @@ int main(int argc, char *argv[]) {
     SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
     BaseFloatMatrixWriter feature_writer(feature_wspecifier);
     BaseFloatMatrixWriter smooth_writer(smooth_wspecifier);
-    BaseFloatVectorWriter confidence_writer(confidence_wspecifier);
+    BaseFloatMatrixWriter confidence_writer(confidence_wspecifier);
+    //BaseFloatVectorWriter confidence_writer(confidence_wspecifier);
 
     CuMatrix<BaseFloat> feats, feats_transf, nnet_out;
     Matrix<BaseFloat> nnet_out_host, post_smooth;
-    Vector<BaseFloat> confidence;
+    Matrix<BaseFloat> confidence;
 
 
     Timer time;
@@ -203,9 +204,9 @@ int main(int argc, char *argv[]) {
       int rows = nnet_out_host.NumRows();
       int cols = nnet_out_host.NumCols();
       post_smooth.Resize(rows, cols);
-      confidence.Resize(rows);
+      confidence.Resize(rows, 2*cols);
       int hs, hm;
-      float sum, max;
+      float sum, max, maxid, mul;
 
       // posterior smoothing
       for (int j = 0; j < rows; j++) {
@@ -220,17 +221,25 @@ int main(int argc, char *argv[]) {
       }
 
       // compute confidence score
-      confidence.Set(1.0);
+      // confidence.Set(1.0);
       for (int j = 0; j < rows; j++) {
-    	  for (int i = 0; i < cols; i++) {
+          mul = 1.0;
+    	  for (int i = 1; i < cols; i++) { // 1,2,...,n-1 keywords
     		  hm = j-w_max+1 > 0 ? j-w_max+1 : 0;
     		  max = 0;
+              maxid = hm;
 			  for (int k = hm; k <= j; k++) {
-				  max = max > post_smooth(k, i) ? max : post_smooth(k, i);
+                  if (max < post_smooth(k, i)) {
+                       max = post_smooth(k, i);
+                       maxid = k;
+                  } 
 			  }
-			  confidence(j) = confidence(j) * max;
+			  confidence(j,2*i) = max;
+			  confidence(j,2*i+1) = maxid;
+              mul *= max;
     	  }
-    	  confidence(j) = pow(confidence(j), 1.0/cols);
+    	  confidence(j,0) = pow(mul, 1.0/(cols-1));
+    	  confidence(j,1) = j;
       }
 
       // write,
