@@ -41,7 +41,7 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	  BaseFloat max_beam_update; // maximum rate of beam adjustment
 
 	  OnlineNnetFasterDecoderOptions() :
-	    rt_min(0.7), rt_max(0.75), batch_size(16),
+	    rt_min(0.7), rt_max(0.75), batch_size(18),
 	    inter_utt_sil(50), max_utt_len_(1500),
 	    update_interval(3), beam_update(0.01),
 	    max_beam_update(0.05) {}
@@ -52,6 +52,8 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	                   "Approximate minimum decoding run time factor");
 	    opts->Register("rt-max", &rt_max,
 	                   "Approximate maximum decoding run time factor");
+	    opts->Register("batch-size", &batch_size,
+	                   "number of features decoded in one go");
 	    opts->Register("update-interval", &update_interval,
 	                   "Beam update interval in frames");
 	    opts->Register("beam-update", &beam_update, "Beam update rate");
