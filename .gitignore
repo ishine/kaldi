@@ -77,6 +77,8 @@ GSYMS
 /egs/*/s*/exp
 /egs/*/s*/data
 /egs/*/s*/fbank
+/egs/*/s*/fbank*
+/egs/*/s*/kaldi_files
 
 # /tools/
 /tools/ATLAS/

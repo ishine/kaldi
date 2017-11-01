@@ -9,7 +9,7 @@
 . path.sh
 set -e # exit on error
 
-stage=8
+stage=6
 train_nn_stage=12
 train_LM=false
 # Prepare sogou Acoustic data and Language data first:
@@ -18,7 +18,7 @@ train_LM=false
 # 2. Put dict data (including: "extra_questions.txt, lexicon.txt, nonsilence_phones.txt, optional_silence.txt, \\
 # phones.txt, silence_phones.txt") under the path: data/local/dict
 # check data/local/train dir
-utils/fix_data_dir.sh data/local/train
+###utils/fix_data_dir.sh data/local/train
 
 # Now prepare the "lang" data and train LM if train_LM=true. 
 LM=data/local/lm/sw1.o3g.kn.gz
@@ -72,7 +72,7 @@ if [ $stage -le 4 ]; then
   steps/align_si.sh --nj 30 --cmd "$train_cmd" \
     data/train_mfcc_1000k data/lang exp/mono exp/mono_ali || exit 1;
   
-  steps/train_deltas.sh --cmd "$train_cmd" 4000 60000 \
+  steps/train_deltas.sh --cmd "$train_cmd" 4000 50000 \
     data/train_mfcc_1000k data/lang exp/mono_ali exp/tri1 || exit 1;
 
   # use the last 2000 sentenses as dev set.
@@ -101,7 +101,7 @@ if [ $stage -le 6 ]; then
 
   # Do another iteration of LDA+MLLT training, on all the data.
   steps/train_lda_mllt.sh --cmd "$train_cmd" --splice-opts "--left-context=3 --right-context=3" \
-    6000 200000 data/train_mfcc data/lang exp/tri2_ali exp/tri2b
+    6000 240000 data/train_mfcc data/lang exp/tri2_ali exp/tri2b
 fi
 
 # Train tri3b, which is LDA+MLLT+SAT, on all the data.
@@ -110,7 +110,7 @@ if [ $stage -le 7 ]; then
     data/train_mfcc data/lang exp/tri2b exp/tri2b_ali
 
   steps/train_sat.sh  --cmd "$train_cmd" \
-    10000 400000 data/train_mfcc data/lang exp/tri2b_ali exp/tri3b
+    10000 500000 data/train_mfcc data/lang exp/tri2b_ali exp/tri3b
   
   # Get the alignment for NN training
   steps/align_fmllr.sh --nj 30 --cmd "$train_cmd" \
@@ -136,6 +136,6 @@ if [ $stage -le 8 ]; then
 # local/chain/run_lstm_sogou.sh
 
 # nnet3-chain TDNN-LSTM recipe
-  local/chain/local/chain/run_tdnn_lstm_sogou_1c.sh --train-stage "$train_nn_stage" 
+#  local/chain/local/chain/run_tdnn_lstm_sogou_1c.sh --train-stage "$train_nn_stage" 
 fi
 # getting results (see RESULTS file)
