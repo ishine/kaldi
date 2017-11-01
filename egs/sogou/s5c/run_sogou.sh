@@ -127,11 +127,34 @@ wait
 fi
 
 # Here is for MMI training (later will be added)
+if [ $stage -le 8 ]; then
+  steps/make_denlats.sh --nj 30 --cmd "$decode_cmd" \
+    --config conf/decode.config --transform-dir exp/tri3b_ali \
+    data/train_mfcc data/lang exp/tri3b exp/tri4_denlats
+
+  # 4 iterations of MMI seems to work well overall. The number of iterations is
+  # used as an explicit argument even though train_mmi.sh will use 4 iterations by
+  # default.
+  num_mmi_iters=4
+  steps/train_mmi.sh --cmd "$decode_cmd" \
+    --boost 0.1 --num-iters $num_mmi_iters \
+    data/train_mfcc data/lang exp/tri3b_ali exp/tri4_denlats exp/tri4_mmi_b0.1
+
+  for iter in 1 2 3 4; do
+    (
+      graph_dir=exp/tri3b/graph
+      decode_dir=exp/tri4_mmi_b0.1/decode_dev_${iter}
+      steps/decode.sh --nj 6 --cmd "$decode_cmd" \
+        --config conf/decode.config --iter $iter \
+        --transform-dir exp/tri3b/decode_dev \
+        $graph_dir data/train_mfcc_dev $decode_dir
+    ) &
+  done
+fi
 
 
 
-
-if [ $stage -le 8 ]; then 
+if [ $stage -le 9 ]; then 
 # nnet3-chain LSTM recipe
 # local/chain/run_lstm_sogou.sh
 
