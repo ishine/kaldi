@@ -67,6 +67,13 @@ int main(int argc, char *argv[]) {
     int32 w_max = 40;
     po.Register("sliding-window", &w_max, "The confidence score is computed within a sliding window of size sliding-window.");
 
+
+    std::string keywords_str;
+    po.Register("keywords-id", &keywords_str, "keywords index in network output.");
+    std::vector<int32> keywords;
+    if (!kaldi::SplitStringToIntegers(keywords_str, ":", false, &keywords))
+    	KALDI_ERR << "Invalid keywords id string " << keywords_str;
+
     po.Read(argc, argv);
 
     if (po.NumArgs() != 5) {
@@ -202,7 +209,8 @@ int main(int argc, char *argv[]) {
 
       // kws confidence
       int rows = nnet_out_host.NumRows();
-      int cols = nnet_out_host.NumCols();
+      //int cols = nnet_out_host.NumCols();
+      int cols = keywords.size()+1;
       post_smooth.Resize(rows, cols);
       confidence.Resize(rows, 2*cols);
       int hs, hm;
@@ -214,7 +222,7 @@ int main(int argc, char *argv[]) {
     		  hs = j-w_smooth+1 > 0 ? j-w_smooth+1 : 0;
     		  sum = 0;
     		  for (int k = hs; k <= j; k++) {
-    			  sum += nnet_out_host(k, i);
+    			  sum += nnet_out_host(k, keywords[i]);
     		  }
     		  post_smooth(j, i) = sum/(j-hs+1);
     	  }
