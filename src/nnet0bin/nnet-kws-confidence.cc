@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
     // iterate over all feature files
     for (; !output_reader.Done(); output_reader.Next()) {
       // read
-      Matrix<BaseFloat> &mat = output_reader.Value();
+      const Matrix<BaseFloat> &mat = output_reader.Value();
       std::string utt = output_reader.Key();
       KALDI_VLOG(2) << "Processing utterance " << num_done+1 
                     << ", " << utt
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
 
       // kws confidence
       int rows = mat.NumRows();
-      //int cols = nnet_out_host.NumCols();
+      //int cols = mat.NumCols();
       int cols = keywords.size()+1;
       post_smooth.Resize(rows, cols);
       confidence.Resize(rows, 2*cols);
@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
     		  hs = j-w_smooth+1 > 0 ? j-w_smooth+1 : 0;
     		  sum = 0;
     		  for (int k = hs; k <= j; k++) {
-    			  sum += nnet_out_host(k, keywords[i-1]);
+    			  sum += mat(k, keywords[i-1]);
     		  }
     		  post_smooth(j, i) = sum/(j-hs+1);
     	  }
