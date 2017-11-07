@@ -25,7 +25,7 @@ BINFILES = align-equal align-equal-compiled acc-tree-stats \
         vector-sum matrix-sum-rows est-pca sum-lda-accs sum-mllt-accs \
         transform-vec align-text matrix-dim copy-align ali-join-to-post latgen-faster-ctc \
 		compile-train-graphs-ctc align-compiled-mapped-ctc copy-fst arpa2fst \
-		latgen-faster-ctc-mapped-parallel
+		latgen-faster-ctc-mapped-parallel analyze-pdf-acc
 
 
 OBJFILES =

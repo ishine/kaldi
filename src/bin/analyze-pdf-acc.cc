@@ -81,6 +81,7 @@ int main(int argc, char *argv[]) {
 
     int32 num_done = 0, num_other_error = 0;
     int32 rows, cols, id;
+    BaseFloat max = 0;
     for (; !feature_reader.Done(); feature_reader.Next()) {
     	// read
     	const Matrix<BaseFloat> &mat = feature_reader.Value();
@@ -93,9 +94,11 @@ int main(int argc, char *argv[]) {
     		TP.Resize(cols,kCopyData);
     		FN.Resize(cols,kCopyData);
     		FP.Resize(cols,kCopyData);
+    		precision.Resize(cols,kCopyData);
+    		recall.Resize(cols,kCopyData);
     		//TN.Resize(cols,kCopyData);
     	}
-    	if (!targets_reader->HasKey(utt)) {
+    	if (!targets_reader.HasKey(utt)) {
     	  KALDI_WARN << utt << ", missing targets";
     	  num_other_error++;
     	  continue;
@@ -108,10 +111,9 @@ int main(int argc, char *argv[]) {
     		continue;
     	}
 
-    	BaseFloat max = 0;
-    	id = 0;
     	// Accumulate the counts
     	for (int i = 0; i < rows; i++) {
+            max = 0; id = 0;
     		for (int j = 0; j < cols; j++) {
     			if (max < mat(i,j)) {
     				max = mat(i,j);
@@ -130,8 +132,8 @@ int main(int argc, char *argv[]) {
     }
 
     for (size_t i = 0; i < precision.Dim(); i++) {
-    	precision[i] = (TP[i]+FP[i]) != 0 ? TP[i]/(TP[i]+FP[i]) : 0;
-    	recall[i] = counts[i] != 0 ? TP[i]/counts[i] : 0;
+    	precision(i) = (TP(i)+FP(i)) != 0 ? TP(i)/(TP(i)+FP(i)) : 0;
+    	recall(i) = counts(i) != 0 ? TP(i)/counts(i) : 0;
     }
 
     // Report elements with zero counts
@@ -144,7 +146,7 @@ int main(int argc, char *argv[]) {
     //
     // THE REST IS FOR ANALYSIS, IT GETS PRINTED TO LOG
     //
-    if (symbol_table_filename != "" || (kaldi::g_kaldi_verbose_level >= 1)) {
+    if (symbol_table_filename != "" || (kaldi::g_kaldi_verbose_level >= 0)) {
       // load the symbol table
       fst::SymbolTable *elem_syms = NULL;
       if (symbol_table_filename != "") {
@@ -166,19 +168,20 @@ int main(int argc, char *argv[]) {
       double sum = counts.Sum();
 
       os << "Printing...\n### The sorted count table," << std::endl;
-      os << "count\t(norm),\tid\t(symbol),\tprecision\trecall:" << std::endl;
+      os << "count\t\t(norm),\tid\t(symbol),\tprecision(tp/(tp+fp))\trecall(tp/(tp+fn)):" << std::endl;
       for (int32 i = 0; i < sorted_counts.size(); i++) {
-        os << sorted_counts[i].first << "\t("
+        os << sorted_counts[i].first << "\t\t("
            << static_cast<float>(sorted_counts[i].first) / sum << "),\t"
            << sorted_counts[i].second << "\t"
            << (elem_syms != NULL ? "(" +
                            elem_syms->Find(sorted_counts[i].second) + ")" : "") << "\t"
-		   << precision[sorted_counts[i].second]*100 << " %\t"
-		   << recall[sorted_counts[i].second]*100 << " %"
+		   << precision(sorted_counts[i].second)*100 << "%\t"
+		   << recall(sorted_counts[i].second)*100 << "%"
            << std::endl;
       }
       os << "\n#total " << sum
-         << " (" << static_cast<float>(sum)/100/3600 << "h)"
+         << " (" << static_cast<float>(sum)/100/3600 << "h) "
+         << TP.Sum()/sum*100 << "% recall "
          << std::endl;
       KALDI_LOG << os.str();
     }

@@ -70,9 +70,6 @@ int main(int argc, char *argv[]) {
 
     std::string keywords_str;
     po.Register("keywords-id", &keywords_str, "keywords index in network output.");
-    std::vector<int32> keywords;
-    if (!kaldi::SplitStringToIntegers(keywords_str, ":", false, &keywords))
-    	KALDI_ERR << "Invalid keywords id string " << keywords_str;
 
     po.Read(argc, argv);
 
@@ -121,6 +118,11 @@ int main(int argc, char *argv[]) {
     // disable dropout,
     nnet_transf.SetDropoutRetention(1.0);
     nnet.SetDropoutRetention(1.0);
+
+    //keywords id list
+    std::vector<int32> keywords;
+    if (!kaldi::SplitStringToIntegers(keywords_str, ":", false, &keywords))
+    	KALDI_ERR << "Invalid keywords id string " << keywords_str;
 
     kaldi::int64 tot_t = 0;
 
@@ -218,11 +220,11 @@ int main(int argc, char *argv[]) {
 
       // posterior smoothing
       for (int j = 0; j < rows; j++) {
-    	  for (int i = 0; i < cols; i++) {
+    	  for (int i = 1; i < cols; i++) {
     		  hs = j-w_smooth+1 > 0 ? j-w_smooth+1 : 0;
     		  sum = 0;
     		  for (int k = hs; k <= j; k++) {
-    			  sum += nnet_out_host(k, keywords[i]);
+    			  sum += nnet_out_host(k, keywords[i-1]);
     		  }
     		  post_smooth(j, i) = sum/(j-hs+1);
     	  }
