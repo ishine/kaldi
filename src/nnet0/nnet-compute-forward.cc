@@ -73,6 +73,7 @@ public:
 		int32 num_stream = opts->num_stream;
 		int32 batch_size = opts->batch_size;
 		int32 skip_frames = opts->skip_frames;
+		float blank_posterior_scale = opts->blank_posterior_scale;
 
 
 		Nnet nnet_transf;
@@ -97,7 +98,11 @@ public:
 
 	    // avoid some bad option combinations,
 	    if (apply_log && no_softmax) {
-	      KALDI_ERR << "Cannot use both --apply-log=true --no-softmax=true, use only one of the two!";
+	    	KALDI_ERR << "Cannot use both --apply-log=true --no-softmax=true, use only one of the two!";
+	    }
+
+	    if (blank_posterior_scale >= 0 && prior_opts->class_frame_counts != "") {
+	    	KALDI_ERR << "Cannot use both --blank-posterior-scale --class-frame-counts, use only one of the two!";
 	    }
 
 	    // we will subtract log-priors later,
@@ -241,6 +246,11 @@ public:
 			   // forward pass
 			   //nnet.Propagate(feats_transf, &nnet_out);
 			   nnet.Propagate(CuMatrix<BaseFloat>(feat), &nnet_out);
+
+			   // ctc prior, only scale blank label posterior
+			   if (blank_posterior_scale >= 0) {
+				   nnet_out.ColRange(0, 1).Scale(blank_posterior_scale);
+			   }
 
 		    	// convert posteriors to log-posteriors,
 		    	if (apply_log) {

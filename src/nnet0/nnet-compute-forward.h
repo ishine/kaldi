@@ -46,13 +46,15 @@ struct NnetForwardOptions {
     std::string sweep_frames_str;
     bool  sweep_loop;
     bool  skip_inner;
+    float blank_posterior_scale;
 
     const PdfPriorOptions *prior_opts;
 
     NnetForwardOptions(const PdfPriorOptions *prior_opts)
     	:feature_transform(""),no_softmax(false),apply_log(false),copy_posterior(true),use_gpu("no"),num_threads(1),
 		 	 	 	 	 	 	 time_shift(0),batch_size(20),num_stream(0),dump_interval(0), 
-                                 skip_frames(1), sweep_time(1), sweep_frames_str("0"), sweep_loop(false), skip_inner(false), prior_opts(prior_opts)
+                                 skip_frames(1), sweep_time(1), sweep_frames_str("0"), sweep_loop(false), skip_inner(false),
+								 blank_posterior_scale(-1.0), prior_opts(prior_opts)
     {
 
     }
@@ -79,6 +81,7 @@ struct NnetForwardOptions {
         po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
         po->Register("sweep-time", &sweep_time, "Sweep times for each utterance in skip frames training(Deprecated, use --sweep-frames instead)");
         po->Register("sweep-frames", &sweep_frames_str, "Sweep frames index for each utterance in skip frames decoding, e.g. 0");
+        po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
     }
 
 };
