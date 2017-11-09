@@ -103,6 +103,100 @@ void AccumulateTreeStats(const TransitionModel &trans_model,
 }
 
 
+void AccumulateTreeStatsPhone(const TransitionModel &trans_model,
+                         const AccumulateTreeStatsInfo &info,
+                         const std::vector<int32> &alignment,
+                         const Matrix<BaseFloat> &features,
+                         const int32 sil_pos,
+                         std::map<EventType, GaussClusterable*> *stats) {
+  std::vector<std::vector<int32> > split_alignment;
+  bool ans = SplitToPhones(trans_model, alignment, &split_alignment);
+  if (!ans) {
+    KALDI_WARN << "AccumulateTreeStats: alignment appears to be bad, not using it";
+    return;
+  }
+  int32 cur_pos = 0;
+  int32 dim = features.NumCols();
+  KALDI_ASSERT(features.NumRows() == static_cast<int32>(alignment.size()));
+  for (int32 i = -info.context_width; i < static_cast<int32>(split_alignment.size()); i++) {
+    // consider window starting at i, only if i+info.central_position is within
+    // list of phones.
+    if (i + info.central_position >= 0 &&
+        i + info.central_position < static_cast<int32>(split_alignment.size())) {
+      int32 central_phone =
+          MapPhone(info.phone_map,
+                   trans_model.TransitionIdToPhone(
+                       split_alignment[i+info.central_position][0]));
+      bool is_ctx_dep = !std::binary_search(info.ci_phones.begin(),
+                                            info.ci_phones.end(),
+                                            central_phone);
+
+      // EventType:{{EventKeyType,EventValueType}{EventKeyType,EventValueType}}
+      // obtain EventType;
+      EventType evec;
+      for (int32 j = 0; j < info.context_width; j++) {
+        int32 phone;
+        if (i + j >= 0 && i + j < static_cast<int32>(split_alignment.size()))
+          phone =
+              MapPhone(info.phone_map,
+                       trans_model.TransitionIdToPhone(split_alignment[i+j][0]));
+        else
+          phone = sil_pos;  // ContextDependency class uses 0 to mean "out of window";
+        // we also set the phone arbitrarily to 0
+
+        // Don't add stuff to the event that we don't "allow" to be asked, due
+        // to the central phone being context-independent: check "is_ctx_dep".
+        // Why not just set the value to zero in this
+        // case?  It's for safety.  By omitting the key from the event, we
+        // ensure that there is no way a question can ever be asked that might
+        // give an inconsistent answer in tree-training versus graph-building.
+        // [setting it to zero would have the same effect given the "normal"
+        // recipe but might be less robust to changes in tree-building recipe].
+        if (is_ctx_dep || j == info.central_position)
+          evec.push_back(std::make_pair(static_cast<EventKeyType>(j), static_cast<EventValueType>(phone)));
+      }
+
+      // find the central frame of each state
+      int32 pdf_class_last;
+      std::vector<int32> state_duratin;
+      for (int32 j = 0; j < static_cast<int32>(split_alignment[i+info.central_position].size());j++) {
+
+          int32 pdf_class = trans_model.TransitionIdToPdfClass(split_alignment[i+info.central_position][j]);
+          if(j==0){
+              pdf_class_last = pdf_class;
+              continue;
+          }
+          if(pdf_class_last != pdf_class){
+              state_duratin.push_back(j-1);
+              pdf_class_last = pdf_class;
+          }
+
+      }
+      state_duratin.push_back(static_cast<int32>(split_alignment[i+info.central_position].size()-1));
+
+      EventType evec_more(evec);
+      std::pair<EventKeyType, EventValueType> pr(kPdfClass, 0);
+      evec_more.push_back(pr);
+      std::sort(evec_more.begin(), evec_more.end());  // these must be sorted!
+
+      pdf_class_last = 0;
+      for (int32 j = 0; j < static_cast<int32>(state_duratin.size());j++) {
+        // for central phone of this window...
+        if (stats->count(evec_more) == 0){
+            (*stats)[evec_more] = new GaussClusterable(dim, info.var_floor);
+        }
+        BaseFloat weight = 1.0;
+    KALDI_ASSERT(pdf_class_last<=state_duratin[j]);
+        int32 pdf_central_pos = (pdf_class_last+state_duratin[j])/2;
+        (*stats)[evec_more]->AddStats(features.Row(cur_pos+pdf_central_pos), weight);
+        pdf_class_last = state_duratin[j]+1;
+      }
+      cur_pos += split_alignment[i+info.central_position].size();
+    }
+  }
+}
+
+
 void ReadPhoneMap(std::string phone_map_rxfilename,
                   std::vector<int32> *phone_map) {
   phone_map->clear();

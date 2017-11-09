@@ -37,11 +37,13 @@ struct AccumulateTreeStatsOptions {
   BaseFloat var_floor;
   std::string ci_phones_str;
   std::string phone_map_rxfilename;
+  bool cluster_phone;
   bool collapse_pdf_classes;
   int context_width;
   int central_position;
-  AccumulateTreeStatsOptions(): var_floor(0.01), context_width(3),
-                                central_position(1) { }
+  int sil_pos;
+  AccumulateTreeStatsOptions(): var_floor(0.01), cluster_phone(false), context_width(3),
+                                central_position(1), sil_pos(0) { }
 
 
   void Register(OptionsItf *opts) {
@@ -53,6 +55,8 @@ struct AccumulateTreeStatsOptions {
     opts->Register("context-width", &context_width, "Context window size.");
     opts->Register("central-position", &central_position, "Central "
                    "context-window position (zero-based)");
+    opts->Register("cluster-phone", &cluster_phone, "cluster in phone level, not for state");
+    opts->Register("sil-pos", &sil_pos, "sil phone index");
     opts->Register("phone-map", &phone_map_rxfilename,
                    "File name containing old->new phone mapping (each line is: "
                    "old-integer-id new-integer-id)");
@@ -80,6 +84,12 @@ void AccumulateTreeStats(const TransitionModel &trans_model,
                          const Matrix<BaseFloat> &features,
                          std::map<EventType, GaussClusterable*> *stats);
 
+void AccumulateTreeStatsPhone(const TransitionModel &trans_model,
+                         const AccumulateTreeStatsInfo &info,
+                         const std::vector<int32> &alignment,
+                         const Matrix<BaseFloat> &features,
+                         const int32 sil_pos,
+                         std::map<EventType, GaussClusterable*> *stats);
 
 
 /*** Read a mapping from one phone set to another.  The phone map file has lines

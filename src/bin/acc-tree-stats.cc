@@ -91,11 +91,20 @@ int main(int argc, char *argv[]) {
           continue;
         }
 
-        AccumulateTreeStats(trans_model,
+        if(opts.cluster_phone){
+            AccumulateTreeStatsPhone(trans_model,
+                            acc_tree_stats_info,
+                            alignment,
+                            mat,
+                            opts.sil_pos,
+                            &tree_stats);
+        } else {
+            AccumulateTreeStats(trans_model,
                             acc_tree_stats_info,
                             alignment,
                             mat,
                             &tree_stats);
+        }
         num_done++;
         if (num_done % 1000 == 0)
           KALDI_LOG << "Processed " << num_done << " utterances.";
