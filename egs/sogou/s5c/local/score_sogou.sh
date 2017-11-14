@@ -6,6 +6,12 @@
 
 [ -f ./path.sh ] && . ./path.sh
 
+function full2half() {
+    sed 'y/ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ/abcdefghihklmnopqrstuvwxyz/' |
+    sed 'y/ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ/abcdefghihklmnopqrstuvwxyz/' |
+    sed 'y/ABCDEFGHIJKLMNOPQRSTUVWXYZ/abcdefghihklmnopqrstuvwxyz/' |
+    sed 'y/一二三四五六七八九零/1234567890/' |sed 'y/１２３４５６７８９０/1234567890/'
+}
 # begin configuration section.
 cmd=run.pl
 stage=0
@@ -88,13 +94,13 @@ if [ $stage -le 0 ]; then
 
 	export LC_ALL=zh_CN.gbk
 	cat $dir/scoring_kaldi/test_filt.txt | awk '{ print $1}' > $dir/scoring_kaldi/utt_id
-	cat $dir/scoring_kaldi/test_filt.txt | awk '{{for (i = 2; i <= NF; i++) printf(" %s", $i);} printf("\n"); }' | sed -e 's/\(\S\)/\1 /g' > $dir/scoring_kaldi/utt_tra
+	cat $dir/scoring_kaldi/test_filt.txt | awk '{{for (i = 2; i <= NF; i++) printf(" %s", $i);} printf("\n"); }' | sed -e 's/\(\S\)/\1 /g' | full2half > $dir/scoring_kaldi/utt_tra
 	paste  $dir/scoring_kaldi/utt_id $dir/scoring_kaldi/utt_tra > $dir/scoring_kaldi/test_filt.txt
 	rm -f $dir/scoring_kaldi/utt_id $dir/scoring_kaldi/utt_tra
 	for i in `seq $min_lmwt $max_lmwt`
 	do
 		cat $dir/scoring_kaldi/penalty_$wip/$i.txt |awk '{ print $1}' > $dir/scoring_kaldi/utt_id
-		cat $dir/scoring_kaldi/penalty_$wip/$i.txt |awk '{{for (i = 2; i <= NF; i++) printf(" %s", $i);} printf("\n"); }' | sed -e 's/\(\S\)/\1 /g' > $dir/scoring_kaldi/utt_tra
+		cat $dir/scoring_kaldi/penalty_$wip/$i.txt |awk '{{for (i = 2; i <= NF; i++) printf(" %s", $i);} printf("\n"); }' | sed -e 's/\(\S\)/\1 /g' | full2half > $dir/scoring_kaldi/utt_tra
 		paste  $dir/scoring_kaldi/utt_id $dir/scoring_kaldi/utt_tra > $dir/scoring_kaldi/penalty_$wip/$i.txt
 		rm -f $dir/scoring_kaldi/utt_id $dir/scoring_kaldi/utt_tra
 	done

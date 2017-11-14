@@ -21,11 +21,11 @@
 set -e
 
 # configs for 'chain'
-stage=15
+stage=13
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/lstm_6j_offline_2500h_1536-512_sogoufeat_triphone_bigchange # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -43,7 +43,7 @@ extra_right_context=0
 frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5/egs
+common_egs_dir=exp/chain/lstm_6j_offline_2500h_shrink_sogoufeat_triphone_ld5/egs
 
 affix=
 # End configuration section.
@@ -74,8 +74,8 @@ dir=$dir${affix:+_$affix}
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
 train_set=train_sogou_fbank
-ali_dir=exp/tri3b_ali
-treedir=exp/chain/tri5_7000houres_tree$suffix
+ali_dir=exp/tri3b_2500h_ali
+treedir=exp/chain/tri5_2500h_tree_triphone$suffix
 lang=data/lang_chain_2y
 mfcc_data=data/train_mfcc
 
@@ -127,8 +127,8 @@ if [ $stage -le 11 ]; then
   # Build a tree using our new topology.
   steps/nnet3/chain/build_tree.sh --frame-subsampling-factor 3 \
       --leftmost-questions-truncate $leftmost_questions_truncate \
-      --context-opts "--context-width=2 --central-position=1" \
-      --cmd "$train_cmd" 7000 $mfcc_data $lang $ali_dir $treedir
+      --context-opts "--context-width=3 --central-position=1" \
+      --cmd "$train_cmd" 9000 $mfcc_data $lang $ali_dir $treedir
 fi
 
 if [ $stage -le 12 ]; then
@@ -146,9 +146,9 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 input=Append(-2,-1,0,1,2) cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm1 input=Append(-2,-1,0,1,2) cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=fastlstm2 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=fastlstm3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -184,7 +184,7 @@ if [ $stage -le 13 ]; then
     --chain.lm-opts="--num-extra-lm-states=2000" \
     --trainer.num-chunk-per-minibatch 64 \
     --trainer.frames-per-iter 1200000 \
-    --trainer.max-param-change 2.0 \
+    --trainer.max-param-change 3.0 \
     --trainer.num-epochs 4 \
     --trainer.optimization.shrink-value 0.99 \
     --trainer.optimization.num-jobs-initial 3 \
@@ -212,12 +212,12 @@ if [ $stage -le 14 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
-  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_online $dir $dir/graph_online
+  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_offline $dir $dir/graph_offline
 fi
 !
 
 decode_suff=offline
-graph_dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5/graph_offline
+graph_dir=exp/chain/lstm_6j_offline_2500h_shrink_sogoufeat_triphone_ld5/graph_offline
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;

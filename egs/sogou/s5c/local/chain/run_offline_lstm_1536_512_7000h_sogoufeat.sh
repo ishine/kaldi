@@ -25,7 +25,7 @@ stage=15
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/lstm_6j_offline_1536_512_sogoufeat_7000h # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -146,9 +146,9 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 input=Append(-2,-1,0,1,2) cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm1 input=Append(-2,-1,0,1,2) cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=fastlstm2 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=fastlstm3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -215,9 +215,9 @@ if [ $stage -le 14 ]; then
   utils/mkgraph.sh --self-loop-scale 1.0 data/lang_online $dir $dir/graph_online
 fi
 !
-
 decode_suff=offline
 graph_dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5/graph_offline
+#graph_dir=$dir/graph_online
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;

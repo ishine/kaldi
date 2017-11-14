@@ -72,7 +72,7 @@ GSYMS
 /src/kaldi.mk.bak
 
 # /egs/
-/egs/*/s*/mfcc
+/egs/*/s*/mfcc*
 /egs/*/s*/plp
 /egs/*/s*/exp
 /egs/*/s*/data

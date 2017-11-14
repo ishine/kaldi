@@ -13,11 +13,11 @@ cmd=run.pl
 use_gpu=false
 frames_per_chunk=150
 iter=final
-extra_left_context=50
+extra_left_context=49
 extra_right_context=0
 extra_left_context_initial=0
 extra_right_context_final=0
-frame_subsampling_factor=6
+frame_subsampling_factor=3
 compress=false    # Specifies whether the output should be compressed before
                   # dumping to disk
 online_ivector_dir=

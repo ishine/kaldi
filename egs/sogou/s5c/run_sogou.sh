@@ -9,7 +9,7 @@
 . path.sh
 set -e # exit on error
 
-stage=6
+stage=9
 train_nn_stage=12
 train_LM=false
 # Prepare sogou Acoustic data and Language data first:
@@ -135,6 +135,9 @@ if [ $stage -le 8 ]; then
   # 4 iterations of MMI seems to work well overall. The number of iterations is
   # used as an explicit argument even though train_mmi.sh will use 4 iterations by
   # default.
+fi
+
+if [ $stage -le 9 ]; then
   num_mmi_iters=4
   steps/train_mmi.sh --cmd "$decode_cmd" \
     --boost 0.1 --num-iters $num_mmi_iters \

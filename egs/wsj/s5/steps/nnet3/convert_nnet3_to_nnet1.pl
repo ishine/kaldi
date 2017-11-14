@@ -11,7 +11,7 @@ if(@ARGV!=2)
 
 ################### Set net config ######################
 $lstm_layers=3;      #lstm layer number
-$lstm_nodes="355 1024 256;256 1024 256;256 1024 256";   # nodes config per layer, separated by semicolons; (each layer:input_dim cell_dim output_dim)
+$lstm_nodes="355 1536 512;512 1536 512;512 1536 512";   # nodes config per layer, separated by semicolons; (each layer:input_dim cell_dim output_dim)
 $output_node=3766;    #the final layer i.e. output layer node number
 
 ################### Net conf end ########################
@@ -88,8 +88,8 @@ while($layer_cnt < $lstm_layers)
       }
 
       ########## write nne1 cifo_x ###########
-      print OUT "<LstmProjected> $output_dim $input_dim\n";
-      print OUT "<CellDim> $cell_dim <LearnRateCoef> 1 <BiasLearnRateCoef> 1 <CellClip> 50 <DiffClip> 1 <CellDiffClip> 0 <GradClip> 5\n";
+      print OUT "<LstmProjectedStreams> $output_dim $input_dim\n";
+      print OUT "<CellDim> $cell_dim <ClipGradient> 5\n";
       print OUT " [\n";
       $cnt = 0;
       while($cnt < $cell_dim)
@@ -260,7 +260,7 @@ while($layer_cnt < $lstm_layers)
       push @rm_bias, @params[1..$output_dim]; 
 
       print OUT " [ @rm_bias ]\n"; 
-      print OUT "<!EndOfComponent>\n";
+#      print OUT "<!EndOfComponent>\n";
       if($layer_cnt==3)
       {
         print "@rm_bias\n";
@@ -315,7 +315,7 @@ shift @params;
 push @final_bias, @params[1..$output_node];
 
 print OUT " [ @final_bias ]\n";
-print OUT "<!EndOfComponent>\n";
+#print OUT "<!EndOfComponent>\n";
 print OUT "</Nnet>\n";
 #print "@final_affine[0..$output_dim-1]\n@final_affine[$output_dim*($output_node-1)..$output_dim*$output_node-1]\n";
 #print "@final_bias\n";

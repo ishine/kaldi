@@ -21,11 +21,11 @@
 set -e
 
 # configs for 'chain'
-stage=15
+stage=12
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/lstm_6j_offline_2500h_1024-256_sogoufeat_triphone7000states # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -43,7 +43,7 @@ extra_right_context=0
 frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5/egs
+common_egs_dir=
 
 affix=
 # End configuration section.
@@ -74,8 +74,8 @@ dir=$dir${affix:+_$affix}
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
 train_set=train_sogou_fbank
-ali_dir=exp/tri3b_ali
-treedir=exp/chain/tri5_7000houres_tree$suffix
+ali_dir=exp/tri3b_2500h_ali
+treedir=exp/chain/tri5_2500h_tree_triphone_7000states$suffix
 lang=data/lang_chain_2y
 mfcc_data=data/train_mfcc
 
@@ -127,7 +127,7 @@ if [ $stage -le 11 ]; then
   # Build a tree using our new topology.
   steps/nnet3/chain/build_tree.sh --frame-subsampling-factor 3 \
       --leftmost-questions-truncate $leftmost_questions_truncate \
-      --context-opts "--context-width=2 --central-position=1" \
+      --context-opts "--context-width=3 --central-position=1" \
       --cmd "$train_cmd" 7000 $mfcc_data $lang $ali_dir $treedir
 fi
 
@@ -207,17 +207,17 @@ if [ $stage -le 13 ]; then
     --lat-dir exp/tri3b_lats_nodup$suffix \
     --dir $dir  || exit 1;
 fi
-<<!
+
 if [ $stage -le 14 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
-  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_online $dir $dir/graph_online
+  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_offline $dir $dir/graph_offline
 fi
-!
+
 
 decode_suff=offline
-graph_dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5/graph_offline
+graph_dir=$dir/graph_offline
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
