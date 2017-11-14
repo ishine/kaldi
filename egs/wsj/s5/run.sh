@@ -365,10 +365,6 @@ local/nnet/run_dnn.sh
 #local/run_bnf.sh
 #local/run_bnf_sgmm.sh
 
-
-# You probably want to try KL-HMM
-#local/run_kl_hmm.sh
-
 # Getting results [see RESULTS file]
 # for x in exp/*/decode*; do [ -d $x ] && grep WER $x/wer_* | utils/best_wer.sh; done
 
@@ -402,7 +398,7 @@ local/nnet/run_dnn.sh
 # local/nnet3/run_lstm.sh  # lstm recipe
 # bidirectional lstm recipe
 # local/nnet3/run_lstm.sh --affix bidirectional \
-#	                  --lstm-delay " [-1,1] [-2,2] [-3,3] " \
+#                         --lstm-delay " [-1,1] [-2,2] [-3,3] " \
 #                         --label-delay 0 \
 #                         --cell-dim 640 \
 #                         --recurrent-projection-dim 128 \

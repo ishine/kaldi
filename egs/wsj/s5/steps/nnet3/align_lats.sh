@@ -3,33 +3,29 @@
 #           2013  Johns Hopkins University (Author: Daniel Povey)
 #           2015  Vijayaditya Peddinti
 #           2016  Vimal Manohar
+#           2017  Pegah Ghahremani
 # Apache 2.0
 
-# Computes training alignments using nnet3 DNN
+# Computes training alignments using nnet3 DNN, with output to lattices.
 
 # Begin configuration section.
-nj=30
-stage=0
+nj=4
 cmd=run.pl
+stage=-1
 # Begin configuration.
-scale_opts="--transition-scale=1.0 --acoustic-scale=0.1 --self-loop-scale=0.1"
-beam=10
-lattice_beam=6.0
-retry_beam=40
-max_active=1000
-min_active=200
-acwt=0.1
-post_decode_acwt=1.0
+scale_opts="--transition-scale=1.0 --self-loop-scale=0.1"
+acoustic_scale=0.1
+beam=20
 transform_dir=
 iter=final
-use_gpu=true
 frames_per_chunk=50
 extra_left_context=0
 extra_right_context=0
 extra_left_context_initial=-1
 extra_right_context_final=-1
 online_ivector_dir=
-minimize=false
+graphs_scp=
+generate_ali_from_lats=false # If true, alingments generated from lattices.
 # End configuration options.
 
 echo "$0 $@"  # Print the command line for logging
@@ -51,7 +47,6 @@ data=$1
 lang=$2
 srcdir=$3
 dir=$4
-model=$srcdir/$iter.mdl
 
 oov=`cat $lang/oov.int` || exit 1;
 mkdir -p $dir/log
@@ -59,14 +54,6 @@ echo $nj > $dir/num_jobs
 sdata=$data/split${nj}utt
 [[ -d $sdata && $data/feats.scp -ot $sdata ]] || \
    split_data.sh --per-utt $data $nj || exit 1;
-
-if $use_gpu; then
-  queue_opt="--gpu 1"
-  gpu_opt="--use-gpu=yes"
-else
-  queue_opt=""
-  gpu_opt="--use-gpu=no"
-fi
 
 extra_files=
 if [ ! -z "$online_ivector_dir" ]; then
@@ -121,8 +108,6 @@ fi
 
 echo "$0: aligning data in $data using model from $srcdir, putting alignments in $dir"
 
-tra="ark:utils/sym2int.pl --map-oov $oov -f 2- $lang/words.txt $sdata/JOB/text|";
-
 frame_subsampling_opt=
 if [ -f $srcdir/frame_subsampling_factor ]; then
   # e.g. for 'chain' systems
@@ -130,35 +115,63 @@ if [ -f $srcdir/frame_subsampling_factor ]; then
   frame_subsampling_opt="--frame-subsampling-factor=$frame_subsampling_factor"
   cp $srcdir/frame_subsampling_factor $dir
   if [ "$frame_subsampling_factor" -gt 1 ] && \
-     [ "$scale_opts" == "--transition-scale=1.0 --acoustic-scale=0.1 --self-loop-scale=0.1" ]; then
+     [ "$scale_opts" == "--transition-scale=1.0 --self-loop-scale=0.1" ]; then
     echo "$0: frame-subsampling-factor is not 1 (so likely a chain system),"
     echo "...  but the scale opts are the defaults.  You probably want"
-    echo "--scale-opts '--transition-scale=1.0 --acoustic-scale=1.0 --self-loop-scale=1.0'"
+    echo "--scale-opts '--transition-scale=1.0 --self-loop-scale=1.0'"
     sleep 1
   fi
 fi
 
+if [ ! -z "$graphs_scp" ]; then
+  if [ ! -f $graphs_scp ]; then
+    echo "Could not find graphs $graphs_scp" && exit 1
+  fi
+  tra="scp:utils/filter_scp.pl $sdata/JOB/utt2spk $graphs_scp |"
+  prog=compile-train-graphs-fsts
+else
+  tra="ark:utils/sym2int.pl --map-oov $oov -f 2- $lang/words.txt $sdata/JOB/text|";
+  prog=compile-train-graphs
+fi
+
 if [ $stage -le 0 ]; then
-  echo "$0: compiling training graphs"
+  ## because nnet3-latgen-faster doesn't support adding the transition-probs to the
+  ## graph itself, we need to bake them into the compiled graphs.  This means we can't reuse previously compiled graphs,
+  ## because the other scripts write them without transition probs.
   $cmd JOB=1:$nj $dir/log/compile_graphs.JOB.log \
-    compile-train-graphs --transition-scale=1.0 --self-loop-scale=1.0 --read-disambig-syms=$lang/phones/disambig.int $dir/tree $srcdir/${iter}.mdl $lang/L.fst "$tra" "ark:|gzip -c >$dir/fsts.JOB.gz"
+    $prog --read-disambig-syms=$lang/phones/disambig.int \
+    $scale_opts \
+    $dir/tree $srcdir/${iter}.mdl  $lang/L.fst "$tra" \
+    "ark:|gzip -c >$dir/fsts.JOB.gz" || exit 1
 fi
 
-if [ $stage -le 1 ]; then 
-  echo "$0: generating lattices containing alternate pronunciations."
-  $cmd JOB=1:$nj $dir/log/generate_lattices.JOB.log  \
-    nnet3-latgen-faster $ivector_opts $frame_subsampling_opt \
-     --frames-per-chunk=$frames_per_chunk \
-     --extra-left-context=$extra_left_context \
-     --extra-right-context=$extra_right_context \
-     --extra-left-context-initial=$extra_left_context_initial \
-     --extra-right-context-final=$extra_right_context_final \
-     --minimize=$minimize --max-active=$max_active --min-active=$min_active --beam=$beam \
-     --lattice-beam=$lattice_beam --acoustic-scale=1.0 \
-     --allow-partial=false --word-determinize=false \
-     "$model" "ark:gunzip -c $dir/fsts.JOB.gz|" \
-     "$feats" "ark:|gzip -c >$dir/lat.JOB.gz" || exit 1;
+if [ $stage -le 1 ]; then
+  # Warning: nnet3-latgen-faster doesn't support a retry-beam so you may get more
+  # alignment errors (however, it does have a default min-active=200 so this
+  # will tend to reduce alignment errors).
+  # --allow_partial=false makes sure we reach the end of the decoding graph.
+  # --word-determinize=false makes sure we retain the alternative pronunciations of
+  #   words (including alternatives regarding optional silences).
+  #  --lattice-beam=$beam keeps all the alternatives that were within the beam,
+  #    it means we do no pruning of the lattice (lattices from a training transcription
+  #    will be small anyway).
+  $cmd JOB=1:$nj $dir/log/generate_lattices.JOB.log \
+    nnet3-latgen-faster --acoustic-scale=$acoustic_scale $ivector_opts $frame_subsampling_opt \
+    --frames-per-chunk=$frames_per_chunk \
+    --extra-left-context=$extra_left_context \
+    --extra-right-context=$extra_right_context \
+    --extra-left-context-initial=$extra_left_context_initial \
+    --extra-right-context-final=$extra_right_context_final \
+    --beam=$beam --lattice-beam=$beam \
+    --allow-partial=false --word-determinize=false \
+    $srcdir/${iter}.mdl "ark:gunzip -c $dir/fsts.JOB.gz |" \
+    "$feats" "ark:|gzip -c >$dir/lat.JOB.gz" || exit 1;
 fi
 
-
-echo "$0: done generating lattices from training transcripts with nnet3."
+if [ $stage -le 2 ] && $generate_ali_from_lats; then
+  # If generate_alignments is true, ali.*.gz is generated in lats dir
+  $cmd JOB=1:$nj $dir/log/generate_alignments.JOB.log \
+    lattice-best-path --acoustic-scale=$acoustic_scale "ark:gunzip -c $dir/lat.JOB.gz |" \
+    ark:/dev/null "ark:|gzip -c >$dir/ali.JOB.gz" || exit 1;
+fi
+echo "$0: done generating lattices from training transcripts."
