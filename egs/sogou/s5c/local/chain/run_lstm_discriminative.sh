@@ -12,7 +12,7 @@ set -e
 . cmd.sh
 
 
-stage=1
+stage=4
 train_stage=-10 # can be used to start training in the middle.
 get_egs_stage=-10
 use_gpu=true  # for training
@@ -162,14 +162,13 @@ if [ -z "$degs_dir" ]; then
     steps/nnet3/get_egs_discriminative.sh \
       --cmd "$decode_cmd --max-jobs-run $max_jobs --mem 20G" --stage $get_egs_stage --cmvn-opts "$cmvn_opts" \
       --adjust-priors false --acwt 1.0 \
-      --online-ivector-dir $online_ivector_dir \
       --left-context $left_context --right-context $right_context \
       $frame_subsampling_opt \
       --frames-per-eg $frames_per_eg --frames-overlap-per-eg $frames_overlap_per_eg \
       $train_data_dir $lang ${srcdir}_ali${affix} $lats_dir $srcdir/final.mdl $degs_dir ;
   fi
 fi
-exit 1;
+###################  adjust params ##################
 if [ $stage -le 4 ]; then
   steps/nnet3/train_discriminative.sh --cmd "$decode_cmd" \
     --stage $train_stage \
