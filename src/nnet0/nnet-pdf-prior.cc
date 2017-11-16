@@ -41,7 +41,7 @@ PdfPrior::PdfPrior(const PdfPriorOptions &opts)
 
   if (opts.use_count) {
   KALDI_LOG << "Computing pdf-priors from : " << opts.class_frame_counts;
-  
+
   // get relative frequencies,
   rel_freq = frame_counts;
   rel_freq.Scale(1.0/frame_counts.Sum());
@@ -65,7 +65,7 @@ PdfPrior::PdfPrior(const PdfPriorOptions &opts)
             << "(hard-set to " << sqrt(FLT_MAX) << ", which disables DNN output when decoding)";
   }
   else
-      log_priors = frame_counts;
+	  log_priors = frame_counts;
 
   // sanity check,
   KALDI_ASSERT(KALDI_ISFINITE(log_priors.Sum()));
