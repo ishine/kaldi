@@ -88,7 +88,8 @@ class Component {
 
     kSparseAffineTransform,
     kSimpleRecurrentUnit,
-    kBatchNormComponent
+    kBatchNormComponent,
+    kEmbedding
   } ComponentType;
 
   /// A pair of type and marker,
