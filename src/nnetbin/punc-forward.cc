@@ -20,7 +20,6 @@
 #include <limits>
 
 #include "nnet/nnet-nnet.h"
-#include "nnet/nnet-loss.h"
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
 #include "base/timer.h"
@@ -39,6 +38,19 @@ map<string, size_t> BuildVocab(ifstream &vocab_file) {
     }
 
     return word_to_id;
+}
+
+map<size_t, string> BuildReverseVocab(ifstream &vocab_file) {
+    map<size_t, string> id_to_word;
+    string word;
+    size_t i = 0;
+
+    while (getline(vocab_file, word)) {
+        id_to_word[i] = word;
+        i++;
+    }
+
+    return id_to_word;
 }
 
 vector<size_t> Transform(const string &words, const map<string, size_t> &vocab) {
@@ -70,9 +82,54 @@ void PrintVec(const vector<size_t> & ids) {
 }
 
 template<typename Real>
-void ReadCuMatrixFromString(const std::string& s, CuMatrix<Real>* m) {
+void IdsToMatrix(const std::vector<size_t>& ids, Matrix<Real>* m) {
+  std::string s("[ ");
+  int i;
+  for (i = 0; i <ids.size()-1; ++i) {
+      s += to_string(ids[i]) + " \n";
+  }
+  s += to_string(ids[i]) + " ]";
+  std::cout << s << endl;
+
   std::istringstream is(s + "\n");
   m->Read(is, false);  // false for ascii
+}
+
+template<typename Real>
+void ProbToId(const Matrix<Real> &m, vector<size_t> &ids) { 
+    // m: T x C
+    // ids: T
+    for (int r = 0; r < m.NumRows(); ++r) {
+        Real max = 0.0;
+        int32 max_id = -1;
+        for (int c = 0; c < m.NumCols(); ++c) {
+            if (m(r, c) > max) {
+                max = m(r, c);
+                max_id = c;
+            }
+        }
+        ids.push_back(max_id);
+    }
+}
+
+void AddPuncToTxt(const std::string &txt_line, 
+                  const std::vector<size_t> &punc_ids, 
+                  const std::map<size_t, std::string> &id_to_punc,
+                  std::string &txt_line_with_punc) {
+  istringstream stream(txt_line);
+  std::string word, punc;
+  size_t i = 0;
+  while (stream >> word) {
+    punc = id_to_punc.find(punc_ids[i])->second;
+    if (punc == " ") {
+      txt_line_with_punc += word + " ";
+    } else {
+      txt_line_with_punc += punc + " " + word + " ";
+    }
+    ++i;
+  }
+  punc = id_to_punc.find(punc_ids[i])->second;
+  txt_line_with_punc += punc;
 }
 
 
@@ -104,16 +161,15 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 3) {
+    if (po.NumArgs() != 4) {
       po.PrintUsage();
       exit(1);
     }
 
     std::string model_filename = po.GetArg(1),
         vocab_file_path = po.GetArg(2),
-        txt_file_path = po.GetArg(3);
-        // feature_rspecifier = po.GetArg(2),
-        // feature_wspecifier = po.GetArg(3);
+        punc_vocab_file_path = po.GetArg(3),
+        txt_file_path = po.GetArg(4);
 
     // Select the GPU
 #if HAVE_CUDA == 1
@@ -128,11 +184,16 @@ int main(int argc, char *argv[]) {
     nnet.SetBatchNormMode("test");
 
     // Step 2. Load Vocab
-    ifstream vocab_file(vocab_file_path);
-    auto word_to_id = BuildVocab(vocab_file);
-    for (auto b = word_to_id.begin(); b != word_to_id.end(); b++) {
-        cout << b->first << " " << b->second << endl;
-    }
+    std::ifstream vocab_file(vocab_file_path);
+    std::ifstream punc_vocab_file(punc_vocab_file_path);
+    std::map<std::string, size_t> word_to_id = BuildVocab(vocab_file);
+    std::map<size_t, std::string> id_to_punc = BuildReverseVocab(punc_vocab_file);
+    // for (auto b = id_to_punc.begin(); b != id_to_punc.end(); b++) {
+    //     cout << b->first << " " << b->second << endl;
+    // }
+    // for (auto b = word_to_id.begin(); b != word_to_id.end(); b++) {
+    //     cout << b->first << " " << b->second << endl;
+    // }
 
     kaldi::int64 tot_t = 0;
 
@@ -142,35 +203,37 @@ int main(int argc, char *argv[]) {
     Timer time;
     int32 num_done = 0;
 
-    ifstream txt_file(txt_file_path);
-    string line;
+    std::ifstream txt_file(txt_file_path);
+    std::string txt_line;
     // main loop,
-    while (getline(txt_file, line)) {
+    while (getline(txt_file, txt_line)) {
       // 2. words to ids
-      vector<size_t> ids;
-      ids = Transform(line, word_to_id);
-      cout << line;
+      std::vector<size_t> ids;
+      ids = Transform(txt_line + " <END>", word_to_id);
+      std::cout << txt_line << std::endl;
       PrintVec(ids);
-
-/*
-      // read
-      // Matrix<BaseFloat> mat = feature_reader.Value();
-
+      // 3. ids to Matrix
+      Matrix<BaseFloat> mat;
+      IdsToMatrix(ids, &mat);
+      KALDI_LOG << mat;
       // push it to gpu,
       feats = mat;
-
-      // fwd-pass, nnet,
+      // 4. fwd-pass, nnet,
       nnet.Feedforward(feats, &nnet_out);
-
       // download from GPU,
       nnet_out_host = Matrix<BaseFloat>(nnet_out);
+      KALDI_LOG << nnet_out_host;
+      // 5. prob to punc id
+      std::vector<size_t> predict_punc_ids;
+      ProbToId(nnet_out_host, predict_punc_ids);
+      PrintVec(predict_punc_ids);
 
-      // write,
-      // feature_writer.Write(feature_reader.Key(), nnet_out_host);
-      */
+      std::string txt_line_with_punc;
+      AddPuncToTxt(txt_line, predict_punc_ids, id_to_punc, txt_line_with_punc);
+      std::cout << txt_line_with_punc << std::endl;
 
       num_done++;
-      // tot_t += mat.NumRows();
+      tot_t += mat.NumRows();
     }
 
 #if HAVE_CUDA == 1
