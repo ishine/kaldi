@@ -1,0 +1,2 @@
+all:
+	g++ -o npz2nnet npz2nnet.cc -I$(HOME)/tools/cnpy/include -L$(HOME)/tools/cnpy/lib -lcnpy -lz --std=c++11
