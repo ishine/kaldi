@@ -100,28 +100,29 @@ int main(int argc, char *argv[]) {
     std::ifstream txt_file(txt_file_path);
     std::string txt_line;
     // main loop,
+    // 1. Read a line
     while (getline(txt_file, txt_line)) {
       // 2. words to ids
       std::vector<size_t> ids;
       ids = Transform(txt_line + " <END>", word_to_id);
-      std::cout << txt_line << std::endl;
-      PrintVec(ids);
+      // std::cout << txt_line << std::endl;
+      // PrintVec(ids);
       // 3. ids to Matrix
       Matrix<BaseFloat> mat;
       IdsToMatrix(ids, &mat);
-      KALDI_LOG << mat;
+      // KALDI_LOG << mat;
       // push it to gpu,
       feats = mat;
-      // 4. fwd-pass, nnet,
+      // 4. nnet forward pass
       nnet.Feedforward(feats, &nnet_out);
       // download from GPU,
       nnet_out_host = Matrix<BaseFloat>(nnet_out);
-      KALDI_LOG << nnet_out_host;
+      // KALDI_LOG << nnet_out_host;
       // 5. prob to punc id
       std::vector<size_t> predict_punc_ids;
       ProbToId(nnet_out_host, predict_punc_ids);
-      PrintVec(predict_punc_ids);
-
+      // PrintVec(predict_punc_ids);
+      // 6. punc id to punc txt
       std::string txt_line_with_punc;
       AddPuncToTxt(txt_line, predict_punc_ids, id_to_punc, txt_line_with_punc);
       std::cout << txt_line_with_punc << std::endl;

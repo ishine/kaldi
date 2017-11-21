@@ -68,7 +68,7 @@ void IdsToMatrix(const std::vector<size_t>& ids, Matrix<Real>* m) {
       s += to_string(ids[i]) + " \n";
   }
   s += to_string(ids[i]) + " ]";
-  std::cout << s << endl;
+  // std::cout << s << endl;
 
   std::istringstream is(s + "\n");
   m->Read(is, false);  // false for ascii
