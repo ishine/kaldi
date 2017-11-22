@@ -42,6 +42,8 @@ int main(int argc, char *argv[]) {
     std::string silence_phones_str;
     po.Register("silence-phones", &silence_phones_str, "Colon-separated list of integer id's of silence phones, e.g. 46:47");
 
+    int32 pdf_class = 0;
+    po.Register("pdf-class", &pdf_class, "Hmm state id, e.g. 0, 1 or 2");
 
     po.Read(argc, argv);
 
@@ -99,7 +101,7 @@ int main(int argc, char *argv[]) {
     		triphone[1] = phones_del_sil[j];
     		for(int m = 0; m < phones.size(); m++){
     			triphone[2] = phones[m];
-    		    if(!ctx_dep.Compute(triphone, 0, &pdf_id)){
+    		    if(!ctx_dep.Compute(triphone, pdf_class, &pdf_id)){
     		    	KALDI_ERR << "Something went wrong! " << triphone[0] << " " << triphone[1] << " " << triphone[2];
     		    } else {
     		    	triphones_pdfid.push_back(triphone);
