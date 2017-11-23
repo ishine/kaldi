@@ -196,7 +196,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
     w_r_m_corr_.Resize(nrecur_, ncell_, kSetZero);
-    w_r_m_corr_.Resize(nrecur_, nrecur_+input_dim_, kSetZero); // residual
+    w_res_rx_corr_.Resize(nrecur_, nrecur_+input_dim_, kSetZero); // residual
   }
 
   void WriteData(std::ostream &os, bool binary) const {
@@ -305,8 +305,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     const CuSubMatrix<BaseFloat> YC(propagate_buf_.ColRange(4*ncell_, ncell_));
     const CuSubMatrix<BaseFloat> YH(propagate_buf_.ColRange(5*ncell_, ncell_));
     const CuSubMatrix<BaseFloat> YM(propagate_buf_.ColRange(6*ncell_, ncell_));
-    const CuSubMatrix<BaseFloat> YX(propagate_buf_.ColRange(7*ncell_, input_dim_));
-    const CuSubMatrix<BaseFloat> YR(propagate_buf_.ColRange(7*ncell_+input_dim_, nrecur_));
+    const CuSubMatrix<BaseFloat> YR(propagate_buf_.ColRange(7*ncell_, nrecur_));
+    const CuSubMatrix<BaseFloat> YX(propagate_buf_.ColRange(7*ncell_+nrecur_, input_dim_));
 
     // disassemble backpropagate buffer into different neurons,
     const CuSubMatrix<BaseFloat> DG(backpropagate_buf_.ColRange(0*ncell_, ncell_));
@@ -316,8 +316,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     const CuSubMatrix<BaseFloat> DC(backpropagate_buf_.ColRange(4*ncell_, ncell_));
     const CuSubMatrix<BaseFloat> DH(backpropagate_buf_.ColRange(5*ncell_, ncell_));
     const CuSubMatrix<BaseFloat> DM(backpropagate_buf_.ColRange(6*ncell_, ncell_));
-    const CuSubMatrix<BaseFloat> DX(backpropagate_buf_.ColRange(7*ncell_, input_dim_));
-    const CuSubMatrix<BaseFloat> DR(backpropagate_buf_.ColRange(7*ncell_+input_dim_, nrecur_));
+    const CuSubMatrix<BaseFloat> DR(backpropagate_buf_.ColRange(7*ncell_, nrecur_));
+    const CuSubMatrix<BaseFloat> DX(backpropagate_buf_.ColRange(7*ncell_+nrecur_, input_dim_));
 
     return std::string("  ") +
       "\n  Gradients:" +
@@ -337,8 +337,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       "\n  YH  " + MomentStatistics(YH) +
       "\n  YO  " + MomentStatistics(YO) +
       "\n  YM  " + MomentStatistics(YM) +
-	  "\n  YX  " + MomentStatistics(YX) +
       "\n  YR  " + MomentStatistics(YR) +
+	  "\n  YX  " + MomentStatistics(YX) +
       "\n  Backward-pass:" +
       "\n  DG  " + MomentStatistics(DG) +
       "\n  DI  " + MomentStatistics(DI) +
@@ -347,15 +347,15 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       "\n  DH  " + MomentStatistics(DH) +
       "\n  DO  " + MomentStatistics(DO) +
       "\n  DM  " + MomentStatistics(DM) +
-	  "\n  DX  " + MomentStatistics(DX) +
-      "\n  DR  " + MomentStatistics(DR);
+      "\n  DR  " + MomentStatistics(DR) +
+	  "\n  DX  " + MomentStatistics(DX);
   }
 
   void SetLstmContext(const Matrix<BaseFloat> &recurrent, const Matrix<BaseFloat> &cell) {
 	  KALDI_ASSERT(nstream_ == recurrent.NumRows());
 	  KALDI_ASSERT(nstream_ == cell.NumRows());
 
-	  CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_+input_dim_, nrecur_));
+	  CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_, nrecur_));
 	  yr.CopyFromMat(recurrent);
 	  CuSubMatrix<BaseFloat> yc(prev_nnet_state_.ColRange(4*ncell_, ncell_));
 	  yc.CopyFromMat(cell);
@@ -365,7 +365,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 		KALDI_ASSERT(nstream_ == recurrent.NumRows());
 		KALDI_ASSERT(nstream_ == cell.NumRows());
 
-		CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_+input_dim_, nrecur_));
+		CuSubMatrix<BaseFloat> yr(prev_nnet_state_.ColRange(7*ncell_, nrecur_));
 		yr.CopyToMat(&recurrent);
 		CuSubMatrix<BaseFloat> yc(prev_nnet_state_.ColRange(4*ncell_, ncell_));
 		yc.CopyToMat(&cell);
@@ -389,7 +389,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     if (nstream_ != stream_reset_flag.size()) {
       // Karel: we just got number of streams! (before the 1st batch comes)
       nstream_ = stream_reset_flag.size();
-      prev_nnet_state_.Resize(nstream_, 7*ncell_ + input_dim_ + 1*nrecur_, kSetZero);
+      prev_nnet_state_.Resize(nstream_, 7*ncell_ + input_dim_ + 2*nrecur_, kSetZero);
       KALDI_LOG << "Running training with " << nstream_ << " streams.";
     }
     // reset flag: 1 - reset stream network state
@@ -1012,6 +1012,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 
     w_r_m_corr_.AddMatMat(1.0, DR->RowRange(1*S,T*S), kTrans,
                                YM->RowRange(1*S,T*S), kNoTrans, mmt);
+
     w_res_rx_corr_.AddMatMat(1.0, DRES->RowRange(1*S,T*S), kTrans,
                     		   YRX->RowRange(1*S,T*S), kNoTrans, mmt); // residual
 
