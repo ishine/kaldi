@@ -114,11 +114,13 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     // init weight and bias (Uniform)
     w_gifo_x_.Resize(4*ncell_, input_dim_, kUndefined);
     w_gifo_r_.Resize(4*ncell_, nrecur_, kUndefined);
-    w_r_m_.Resize(nrecur_, ncell_+input_dim_, kUndefined); // residual
+    w_r_m_.Resize(nrecur_, ncell_, kUndefined);
+    w_res_rx_.Resize(nrecur_, nrecur_+input_dim_, kUndefined); // residual
 
     InitMatParam(w_gifo_x_, param_scale);
     InitMatParam(w_gifo_r_, param_scale);
     InitMatParam(w_r_m_, param_scale);
+    InitMatParam(w_res_rx_, param_scale);
 
     bias_.Resize(4*ncell_, kUndefined);
     peephole_i_c_.Resize(ncell_, kUndefined);
@@ -141,7 +143,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_f_c_corr_.Resize(ncell_, kSetZero);
     peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
-    w_r_m_corr_.Resize(nrecur_, ncell_+input_dim_, kSetZero); // residual
+    w_r_m_corr_.Resize(nrecur_, ncell_, kSetZero);
+    w_res_rx_corr_.Resize(nrecur_, nrecur_+input_dim_, kSetZero); // residual
 
     KALDI_ASSERT(clip_gradient_ >= 0.0);
     KALDI_ASSERT(clip_cell_ >= 0.0);
@@ -181,6 +184,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_o_c_.Read(is, binary);
 
     w_r_m_.Read(is, binary);
+    w_res_rx_.Read(is, binary); // residual
 
     // init delta buffers
     w_gifo_x_corr_.Resize(4*ncell_, input_dim_, kSetZero);
@@ -191,7 +195,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_f_c_corr_.Resize(ncell_, kSetZero);
     peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
-    w_r_m_corr_.Resize(nrecur_, ncell_+input_dim_, kSetZero); // residual
+    w_r_m_corr_.Resize(nrecur_, ncell_, kSetZero);
+    w_r_m_corr_.Resize(nrecur_, nrecur_+input_dim_, kSetZero); // residual
   }
 
   void WriteData(std::ostream &os, bool binary) const {
@@ -222,6 +227,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_o_c_.Write(os, binary);
 
     w_r_m_.Write(os, binary);
+    w_res_rx_.Write(os, binary);
   }
 
   int32 NumParams() const {
@@ -231,7 +237,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
          peephole_i_c_.Dim() +
          peephole_f_c_.Dim() +
          peephole_o_c_.Dim() +
-         w_r_m_.NumRows() * w_r_m_.NumCols() );
+         w_r_m_.NumRows() * w_r_m_.NumCols() +
+		 w_res_rx_.NumRows() * w_res_rx_.NumCols() );
   }
 
   int32 GetDim() const {
@@ -241,7 +248,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
          peephole_i_c_.Dim() +
          peephole_f_c_.Dim() +
          peephole_o_c_.Dim() +
-         w_r_m_.SizeInBytes()/sizeof(BaseFloat) );
+         w_r_m_.SizeInBytes()/sizeof(BaseFloat) +
+		 w_res_rx_.SizeInBytes()/sizeof(BaseFloat) );
   }
 
   void GetParams(Vector<BaseFloat>* wei_copy) const {
@@ -270,6 +278,9 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     offset += len; len = w_r_m_.NumRows() * w_r_m_.NumCols();
     wei_copy->Range(offset, len).CopyRowsFromMat(w_r_m_);
 
+    offset += len; len = w_res_rx_.NumRows() * w_res_rx_.NumCols();
+    wei_copy->Range(offset, len).CopyRowsFromMat(w_res_rx_);
+
     return;
   }
 
@@ -281,7 +292,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       "\n  peephole_i_c_  " + MomentStatistics(peephole_i_c_) +
       "\n  peephole_f_c_  " + MomentStatistics(peephole_f_c_) +
       "\n  peephole_o_c_  " + MomentStatistics(peephole_o_c_) +
-      "\n  w_r_m_  "    + MomentStatistics(w_r_m_);
+      "\n  w_r_m_  "    + MomentStatistics(w_r_m_) +
+	  "\n  w_res_rx_  "    + MomentStatistics(w_res_rx_);
   }
 
   std::string InfoGradient() const {
@@ -316,6 +328,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       "\n  peephole_f_c_corr_  " + MomentStatistics(peephole_f_c_corr_) +
       "\n  peephole_o_c_corr_  " + MomentStatistics(peephole_o_c_corr_) +
       "\n  w_r_m_corr_  "    + MomentStatistics(w_r_m_corr_) +
+      "\n  w_res_rx_corr_  "    + MomentStatistics(w_res_rx_corr_) +
       "\n  Forward-pass:" +
       "\n  YG  " + MomentStatistics(YG) +
       "\n  YI  " + MomentStatistics(YI) +
@@ -402,7 +415,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     if (nstream_ == 0) {
       do_stream_reset = true;
       nstream_ = 1; // Karel: we are in nnet-forward, so 1 stream,
-      prev_nnet_state_.Resize(nstream_, 7*ncell_ + 1*input_dim_ + 1*nrecur_, kSetZero);
+      prev_nnet_state_.Resize(nstream_, 7*ncell_ + 1*input_dim_ + 2*nrecur_, kSetZero);
       KALDI_LOG << "Running nnet-forward with per-utterance LSTM-state reset";
     }
     if (do_stream_reset) prev_nnet_state_.SetZero();
@@ -415,7 +428,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     bool reset = propagate_buf_.NumRows() != (T+2)*S ? true:false;
 
     // 0:forward pass history, [1, T]:current sequence, T+1:dummy
-    propagate_buf_.Resize((T+2)*S, 7 * ncell_ + input_dim_ + nrecur_, kSetZero);
+    propagate_buf_.Resize((T+2)*S, 7 * ncell_ + input_dim_ + 2*nrecur_, kSetZero);
     propagate_buf_.RowRange(0*S,S).CopyFromMat(prev_nnet_state_);
 
     // disassemble entire neuron activation buffer into different neurons
@@ -430,9 +443,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
         YC = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(4*ncell_, ncell_));
         YH = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(5*ncell_, ncell_));
         YM = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(6*ncell_, ncell_));
-        YX = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(7*ncell_, input_dim_));
-        YMX = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(6*ncell_, ncell_+input_dim_));
-        YR = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(7*ncell_+input_dim_, nrecur_));
+        YR = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(7*ncell_, nrecur_));
+        YX = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(7*ncell_+nrecur_, input_dim_));
+        YRX = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(7*ncell_, nrecur_+input_dim_));
+        YRES = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(7*ncell_+nrecur_+input_dim_, nrecur_));
 
         YGIFO = new CuSubMatrix<BaseFloat>(propagate_buf_.ColRange(0, 4*ncell_));
 
@@ -443,9 +457,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
         y_c.resize(T+2);
         y_h.resize(T+2);
         y_m.resize(T+2);
-        y_x.resize(T+2);
-        y_mx.resize(T+2);
         y_r.resize(T+2);
+        y_x.resize(T+2);
+        y_rx.resize(T+2);
+        y_res.resize(T+2);
         y_gifo.resize(T+2);
 
         for (int t = 0; t <= T+1; t++)
@@ -458,9 +473,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
         	y_c[t] = new CuSubMatrix<BaseFloat>(YC->RowRange(t*S,S));
         	y_h[t] = new CuSubMatrix<BaseFloat>(YH->RowRange(t*S,S));
         	y_m[t] = new CuSubMatrix<BaseFloat>(YM->RowRange(t*S,S));
-        	y_x[t] = new CuSubMatrix<BaseFloat>(YX->RowRange(t*S,S));
-        	y_mx[t] = new CuSubMatrix<BaseFloat>(YMX->RowRange(t*S,S));
         	y_r[t] = new CuSubMatrix<BaseFloat>(YR->RowRange(t*S,S));
+        	y_x[t] = new CuSubMatrix<BaseFloat>(YX->RowRange(t*S,S));
+        	y_rx[t] = new CuSubMatrix<BaseFloat>(YRX->RowRange(t*S,S));
+        	y_res[t] = new CuSubMatrix<BaseFloat>(YRES->RowRange(t*S,S));
 
         	y_gifo[t] = new CuSubMatrix<BaseFloat>(YGIFO->RowRange(t*S,S));
 
@@ -525,8 +541,11 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       // h -> m via output gate
       y_m[t]->AddMatMatElements(1.0, *y_h[t], *y_o[t], 0.0);
 
-      // mx -> r
-      y_r[t]->AddMatMat(1.0, *y_mx[t], kNoTrans, w_r_m_, kTrans, 0.0);
+      // m -> r
+      y_r[t]->AddMatMat(1.0, *y_m[t], kNoTrans, w_r_m_, kTrans, 0.0);
+
+      // rx -> res projection
+      // y_res[t]->AddMatMat(1.0, *y_rx[t], kNoTrans, w_res_rx_, kTrans, 0.0);
 
       if (DEBUG) {
         std::cerr << "forward-pass frame " << t << "\n";
@@ -541,8 +560,11 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       }
     }
 
+    // rx -> res projection not recurrent, do it all in once
+    YRES->RowRange(1*S,T*S).AddMatMat(1.0, YRX->RowRange(1*S,T*S), kNoTrans, w_res_rx_, kTrans, 0.0);
+
     // recurrent projection layer is also feed-forward as LSTM output
-    out->CopyFromMat(YR->RowRange(1*S,T*S));
+    out->CopyFromMat(YRES->RowRange(1*S,T*S));
 
     // now the last frame state becomes previous network state for next batch
     if (keep_state_indices_.Dim() != nstream_)
@@ -563,7 +585,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     bool reset = backpropagate_buf_.NumRows() != (T+2)*S ? true:false;
 
     // 0:dummy, [1,T] frames, T+1 backward pass history
-    backpropagate_buf_.Resize((T+2)*S, 7 * ncell_ + input_dim_ + nrecur_, kSetZero);
+    backpropagate_buf_.Resize((T+2)*S, 7 * ncell_ + input_dim_ + 2*nrecur_, kSetZero);
 
     if (d_g.size() != T+2 || reset)
     {
@@ -575,9 +597,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
         DC = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(4*ncell_, ncell_));
         DH = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(5*ncell_, ncell_));
         DM = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(6*ncell_, ncell_));
-        DX = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(7*ncell_, input_dim_));
-        DMX = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(6*ncell_, ncell_+input_dim_));
-        DR = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(7*ncell_+input_dim_, nrecur_));
+        DR = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(7*ncell_, nrecur_));
+        DX = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(7*ncell_+nrecur_, input_dim_));
+        DRX = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(7*ncell_, nrecur_+input_dim_));
+        DRES = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(7*ncell_+nrecur_+input_dim_, nrecur_));
 
         DGIFO = new CuSubMatrix<BaseFloat>(backpropagate_buf_.ColRange(0, 4*ncell_));
 
@@ -588,9 +611,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
         d_c.resize(T+2);
         d_h.resize(T+2);
         d_m.resize(T+2);
-        d_x.resize(T+2);
-        d_mx.resize(T+2);
         d_r.resize(T+2);
+        d_x.resize(T+2);
+        d_rx.resize(T+2);
+        d_res.resize(T+2);
         d_gifo.resize(T+2);
 
         for (int t = T+1; t >= 0; t--)
@@ -603,9 +627,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
         	d_c[t] = new CuSubMatrix<BaseFloat>(DC->RowRange(t*S,S));
         	d_h[t] = new CuSubMatrix<BaseFloat>(DH->RowRange(t*S,S));
         	d_m[t] = new CuSubMatrix<BaseFloat>(DM->RowRange(t*S,S));
-        	d_x[t] = new CuSubMatrix<BaseFloat>(DX->RowRange(t*S,S));
-        	d_mx[t] = new CuSubMatrix<BaseFloat>(DMX->RowRange(t*S,S));
         	d_r[t] = new CuSubMatrix<BaseFloat>(DR->RowRange(t*S,S));
+        	d_x[t] = new CuSubMatrix<BaseFloat>(DX->RowRange(t*S,S));
+        	d_rx[t] = new CuSubMatrix<BaseFloat>(DRX->RowRange(t*S,S));
+        	d_res[t] = new CuSubMatrix<BaseFloat>(DRES->RowRange(t*S,S));
 
         	d_gifo[t] = new CuSubMatrix<BaseFloat>(DGIFO->RowRange(t*S,S));
 
@@ -613,7 +638,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     }
 
     // projection layer to LSTM output is not recurrent, so backprop it all in once
-    DR->RowRange(1*S,T*S).CopyFromMat(out_diff);
+    DRES->RowRange(1*S,T*S).CopyFromMat(out_diff);
+
+    // res -> rx
+	DRX->RowRange(1*S,T*S).AddMatMat(1.0, DRES->RowRange(1*S,T*S), kNoTrans, w_res_rx_, kNoTrans, 0.0);
 
     for (int t = T; t >= 1; t--) {
 
@@ -639,8 +667,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       //   CEC(with forget connection) is the only "error-bridge" through time
       */
 
-      // r -> mx
-      d_mx[t]->AddMatMat(1.0, *d_r[t], kNoTrans, w_r_m_, kNoTrans, 0.0);
+      // r -> m
+      d_m[t]->AddMatMat(1.0, *d_r[t], kNoTrans, w_r_m_, kNoTrans, 0.0);
 
       // m -> h via output gate
       d_h[t]->AddMatMatElements(1.0, *d_m[t], *y_o[t], 0.0);
@@ -741,7 +769,10 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 	                                          YC->RowRange(1*S,T*S), kNoTrans, mmt);
 
 	    w_r_m_corr_.AddMatMat(1.0, DR->RowRange(1*S,T*S), kTrans,
-	                               YMX->RowRange(1*S,T*S), kNoTrans, mmt); // residual
+	                               YM->RowRange(1*S,T*S), kNoTrans, mmt);
+
+	    w_res_rx_corr_.AddMatMat(1.0, DRES->RowRange(1*S,T*S), kTrans,
+                					YRX->RowRange(1*S,T*S), kNoTrans, mmt);	// residual
 
 	    if (clip_gradient_ > 0.0) {
 	      w_gifo_x_corr_.ApplyFloor(-clip_gradient_);
@@ -752,6 +783,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 	      bias_corr_.ApplyCeiling(clip_gradient_);
 	      w_r_m_corr_.ApplyFloor(-clip_gradient_);
 	      w_r_m_corr_.ApplyCeiling(clip_gradient_);
+	      w_res_rx_corr_.ApplyFloor(-clip_gradient_);
+	      w_res_rx_corr_.ApplyCeiling(clip_gradient_);
 	      peephole_i_c_corr_.ApplyFloor(-clip_gradient_);
 	      peephole_i_c_corr_.ApplyCeiling(clip_gradient_);
 	      peephole_f_c_corr_.ApplyFloor(-clip_gradient_);
@@ -766,6 +799,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 	      std::cerr << "w_gifo_r_corr_ " << w_gifo_r_corr_;
 	      std::cerr << "bias_corr_ " << bias_corr_;
 	      std::cerr << "w_r_m_corr_ " << w_r_m_corr_;
+	      std::cerr << "w_res_rx_corr_ " << w_res_rx_corr_;
 	      std::cerr << "peephole_i_c_corr_ " << peephole_i_c_corr_;
 	      std::cerr << "peephole_f_c_corr_ " << peephole_f_c_corr_;
 	      std::cerr << "peephole_o_c_corr_ " << peephole_o_c_corr_;
@@ -782,6 +816,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 	    	peephole_o_c_.AddVec(-lr*l2*num_frames, peephole_o_c_);
 
 	    	w_r_m_.AddMat(-lr*l2*num_frames, w_r_m_);
+	    	w_res_rx_.AddMat(-lr*l2*num_frames, w_res_rx_);
 	    }
 
 	    if (y_g.size() != T+2)
@@ -802,6 +837,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 	    peephole_o_c_.AddVec(-lr, peephole_o_c_corr_, 1.0);
 
 	    w_r_m_.AddMat(-lr, w_r_m_corr_);
+	    w_res_rx_.AddMat(-lr, w_res_rx_corr_);
 
         if (clip_cell_ > 0.0) {
           w_gifo_x_.ApplyFloor(-clip_cell_);
@@ -812,6 +848,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
           bias_.ApplyCeiling(clip_cell_);
           w_r_m_.ApplyFloor(-clip_cell_);
           w_r_m_.ApplyCeiling(clip_cell_);
+          w_res_rx_.ApplyFloor(-clip_cell_);
+          w_res_rx_.ApplyCeiling(clip_cell_);
           peephole_i_c_.ApplyFloor(-clip_cell_);
           peephole_i_c_.ApplyCeiling(clip_cell_);
           peephole_f_c_.ApplyFloor(-clip_cell_);
@@ -830,6 +868,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       peephole_f_c_corr_.SetZero();
       peephole_o_c_corr_.SetZero();
       w_r_m_corr_.SetZero();
+      w_res_rx_corr_.SetZero();
   }
 
 
@@ -914,6 +953,15 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
 		pos += w_r_m_.SizeInBytes();
 
+		dim = w_res_rx_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)w_res_rx_.Data());
+		src = (void*) (direction==0 ? (char *)w_res_rx_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += w_res_rx_.SizeInBytes();
+
 
   	  CU_SAFE_CALL(cudaGetLastError());
 
@@ -963,7 +1011,9 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
                                           YC->RowRange(1*S,T*S), kNoTrans, mmt);
 
     w_r_m_corr_.AddMatMat(1.0, DR->RowRange(1*S,T*S), kTrans,
-                               YMX->RowRange(1*S,T*S), kNoTrans, mmt); // residual
+                               YM->RowRange(1*S,T*S), kNoTrans, mmt);
+    w_res_rx_corr_.AddMatMat(1.0, DRES->RowRange(1*S,T*S), kTrans,
+                    		   YRX->RowRange(1*S,T*S), kNoTrans, mmt); // residual
 
     if (clip_gradient_ > 0.0) {
       w_gifo_x_corr_.ApplyFloor(-clip_gradient_);
@@ -974,6 +1024,8 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       bias_corr_.ApplyCeiling(clip_gradient_);
       w_r_m_corr_.ApplyFloor(-clip_gradient_);
       w_r_m_corr_.ApplyCeiling(clip_gradient_);
+      w_res_rx_corr_.ApplyFloor(-clip_gradient_);
+      w_res_rx_corr_.ApplyCeiling(clip_gradient_);
       peephole_i_c_corr_.ApplyFloor(-clip_gradient_);
       peephole_i_c_corr_.ApplyCeiling(clip_gradient_);
       peephole_f_c_corr_.ApplyFloor(-clip_gradient_);
@@ -988,6 +1040,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
       std::cerr << "w_gifo_r_corr_ " << w_gifo_r_corr_;
       std::cerr << "bias_corr_ " << bias_corr_;
       std::cerr << "w_r_m_corr_ " << w_r_m_corr_;
+      std::cerr << "w_res_rx_corr_ " << w_res_rx_corr_;
       std::cerr << "peephole_i_c_corr_ " << peephole_i_c_corr_;
       std::cerr << "peephole_f_c_corr_ " << peephole_f_c_corr_;
       std::cerr << "peephole_o_c_corr_ " << peephole_o_c_corr_;
@@ -1002,6 +1055,7 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
     peephole_o_c_.AddVec(-lr, peephole_o_c_corr_, 1.0);
 
     w_r_m_.AddMat(-lr, w_r_m_corr_);
+    w_res_rx_.AddMat(-lr, w_res_rx_corr_);
 
 //    /*
 //      Here we deal with the famous "vanishing & exploding difficulties" in RNN learning.
@@ -1076,9 +1130,9 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 		  for (int t = 0; t< y_g.size(); t++)
 		  {
 			  delete y_g[t]; delete y_i[t]; delete y_f[t]; delete y_o[t];
-			  delete y_c[t]; delete y_h[t]; delete y_m[t]; delete y_r[t]; delete y_gifo[t]; delete y_x[t]; delete y_mx[t];
+			  delete y_c[t]; delete y_h[t]; delete y_m[t]; delete y_r[t]; delete y_gifo[t]; delete y_x[t]; delete y_rx[t]; delete y_res[t];
 		  }
-		  delete YG; delete YI; delete YF; delete YO; delete YC; delete YH; delete YM; delete YR; delete YGIFO; delete YX; delete YMX;
+		  delete YG; delete YI; delete YF; delete YO; delete YC; delete YH; delete YM; delete YR; delete YGIFO; delete YX; delete YRX; delete YRES;
 		  y_g.resize(0);
 	  }
 
@@ -1087,9 +1141,9 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 		  for (int t = 0; t< d_g.size(); t++)
 		  {
 			  delete d_g[t]; delete d_i[t]; delete d_f[t]; delete d_o[t];
-			  delete d_c[t]; delete d_h[t]; delete d_m[t]; delete d_r[t]; delete d_gifo[t]; delete d_x[t]; delete d_mx[t];
+			  delete d_c[t]; delete d_h[t]; delete d_m[t]; delete d_r[t]; delete d_gifo[t]; delete d_x[t]; delete d_rx[t]; delete d_res[t];
 		  }
-		  delete DG, delete DI; delete DF; delete DO; delete DC; delete DH; delete DM; delete DR; delete DGIFO; delete DX; delete DMX;
+		  delete DG, delete DI; delete DF; delete DO; delete DC; delete DH; delete DM; delete DR; delete DGIFO; delete DX; delete DRX; delete DRES;
 		  d_g.resize(0);
 	  }
 		/*
@@ -1143,8 +1197,11 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
 
   // projection layer r: from m to r
   CuMatrix<BaseFloat> w_r_m_;
-  CuMatrix<BaseFloat> w_r_m_fix_;
   CuMatrix<BaseFloat> w_r_m_corr_;
+
+  // projection layer residual: from (r,input) to res
+  CuMatrix<BaseFloat> w_res_rx_;
+  CuMatrix<BaseFloat> w_res_rx_corr_;
 
   // propagate buffer: output of [g, i, f, o, c, h, m, r]
   CuMatrix<BaseFloat> propagate_buf_;
@@ -1153,15 +1210,15 @@ class LstmProjectedStreamsResidual : public UpdatableComponent {
   CuMatrix<BaseFloat> backpropagate_buf_;
 
   std::vector<CuSubMatrix<BaseFloat>* > y_g, y_i, y_f, y_o,
-  	  	  	  	  	  	  	  	  	  	  y_c, y_h, y_m, y_r, y_gifo, y_x, y_mx;
+  	  	  	  	  	  	  	  	  	  	  y_c, y_h, y_m, y_r, y_gifo, y_x, y_rx, y_res;
   std::vector<CuSubMatrix<BaseFloat>* > d_g, d_i, d_f, d_o,
-    	  	  	  	  	  	  	  	  	  	  d_c, d_h, d_m, d_r, d_gifo, d_x, d_mx;
+    	  	  	  	  	  	  	  	  	  	  d_c, d_h, d_m, d_r, d_gifo, d_x, d_rx, d_res;
 
   CuSubMatrix<BaseFloat> *YG, *YI, *YF, *YO,
-  	  	  	  	  	  	  	  	  	  	  *YC, *YH, *YM, *YR, *YGIFO, *YX, *YMX;
+  	  	  	  	  	  	  	  	  	  	  *YC, *YH, *YM, *YR, *YGIFO, *YX, *YRX, *YRES;
 
   CuSubMatrix<BaseFloat> *DG, *DI, *DF, *DO,
-   	  	  	  	  	  	  	  	  	  	  *DC, *DH, *DM, *DR, *DGIFO, *DX, *DMX;
+   	  	  	  	  	  	  	  	  	  	  *DC, *DH, *DM, *DR, *DGIFO, *DX, *DRX, *DRES;
 
   BaseFloat learn_rate_coef_;
   BaseFloat bias_learn_rate_coef_;
