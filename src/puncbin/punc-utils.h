@@ -41,9 +41,9 @@ vector<size_t> Transform(const string &words, const map<string, size_t> &vocab) 
     while (stream >> word) {
         auto map_it = vocab.find(word);
         if (map_it == vocab.end()) {
-            map_it = vocab.find("<unk>");
+            map_it = vocab.find("<UNK>");
             if (map_it == vocab.end()) {
-                std::cout << "Your Vocab Should include <unk>" << std::endl;
+                std::cout << "Your Vocab Should include <UNK> (not <unk>)" << std::endl;
                 exit(0);
             }
         }
