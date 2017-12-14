@@ -42,36 +42,62 @@ int main(int argc, char *argv[])
 
 	    ParseOptions po(usage);
 
-	    std::string wav_rspecifier;
-	    po.Register("wavscp", &wav_rspecifier, "wav list for decode");
+	    std::string wavlist_rspecifier;
+	    po.Register("wavscp", &wavlist_rspecifier, "wav list for decode");
 
 	    std::string cfg;
 	    po.Register("cfg", &cfg, "decoder config file");
+
+        std::string audio_format = "wav";
+        po.Register("audio-format", &audio_format, "input audio format(e.g. wav, pcm)");
         po.Read(argc, argv);
 
 	    OnlineFstDecoder decoder(cfg);
 	    decoder.InitDecoder();
 
-	    std::ifstream wav_reader(wav_rspecifier);
+	    std::ifstream wavlist_reader(wavlist_rspecifier);
 
-	    BaseFloat chunk_length_secs = 0.2, total_frames = 0;
+	    BaseFloat chunk_length_secs = 0.2, total_frames = 0, samp_freq = 16000;
+        size_t size;
+        Matrix<BaseFloat> audio_data;
 	    Result *result;
 	    FeatState state;
         char fn[1024];
 
         Timer timer;
-	    while (wav_reader.getline(fn, 1024)) {
-			WaveHolder holder;
-			bool binary;
-			Input ki(fn, &binary);
-			holder.Read(ki.Stream());
+	    while (wavlist_reader.getline(fn, 1024)) {
+            if (audio_format == "wav") {
+			    bool binary;
+			    Input ki(fn, &binary);
+			    WaveHolder holder;
+			    holder.Read(ki.Stream());
 
-			const WaveData &wave_data = holder.Value();
+			    const WaveData &wave_data = holder.Value();
+                audio_data = wave_data.Data();
+                samp_freq = wave_data.SampFreq();
+            }
+            else if (audio_format == "pcm") {
+                std::ifstream pcm_reader(fn, ios::binary);
+                // get length of file:  
+                pcm_reader.seekg(0, ios::end);
+                int length = pcm_reader.tellg();
+                pcm_reader.seekg(0, ios::beg);
+                size = length/sizeof(short);   
+                std::vector<short> buffer(size);
+                // read data as a block:  
+                pcm_reader.read((char*)&buffer.front(), length);   
+                audio_data.Resize(1, size);
+                for (int i = 0; i < size; i++)
+                    audio_data(0, i) = buffer[i];
+                pcm_reader.close();
+            }
+            else
+                KALDI_ERR << "Unsupported input audio format, now only support wav or pcm.";
+
 			// get the data for channel zero (if the signal is not mono, we only
 			// take the first channel).
-			SubVector<BaseFloat> data(wave_data.Data(), 0);
+			SubVector<BaseFloat> data(audio_data, 0);
 
-            BaseFloat samp_freq = wave_data.SampFreq();
             int32 chunk_length;
 			if (chunk_length_secs > 0) {
 				chunk_length = int32(samp_freq * chunk_length_secs);
@@ -92,8 +118,15 @@ int main(int argc, char *argv[])
 				samp_offset += num_samp;
 				state = samp_offset >= data.Dim() ? FEAT_END : FEAT_APPEND;
 
+                /*
 				// feed part data
-				decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), state);
+				if (state == FEAT_END) {
+				    decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), FEAT_APPEND);
+				    decoder.FeedData((void*)wave_part.Data(), 0, FEAT_END);
+                }
+                else 
+                */
+				    decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), state);
 				// get part result
 				result = decoder.GetResult(state);
                 result->utt = std::string(fn);
@@ -102,7 +135,7 @@ int main(int argc, char *argv[])
 			total_frames += result->num_frames;
 	    }
 
-	    wav_reader.close();
+	    wavlist_reader.close();
 
 	    double elapsed = timer.Elapsed();
 		KALDI_LOG << "Time taken [excluding initialization] "<< elapsed

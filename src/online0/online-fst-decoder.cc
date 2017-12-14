@@ -156,7 +156,7 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 	int32 samp_remaining = len_ - sample_offset_;
 	int32 batch_size = forward_opts_->batch_size * decoding_opts_->skip_frames;
 
-	if (sample_offset_ < len_) {
+	if (sample_offset_ <= len_) {
 		SubVector<BaseFloat> wave_part(wav_buffer_, sample_offset_, samp_remaining);
 		feature_pipeline_->AcceptWaveform(feature_opts_->samp_freq, wave_part);
 		sample_offset_ += samp_remaining;

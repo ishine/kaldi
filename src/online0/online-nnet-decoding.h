@@ -224,15 +224,17 @@ public:
                 {
 					utt = decoder_sync_->GetUtt();
 
-					decoder_->Decode(decodable_);
+                    if (frame_ready > 0) {
+					    decoder_->Decode(decodable_);
 
-					decoder_->FinishTraceBack(&out_fst);
-					fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
-					for (int i = 0; i < word_ids.size(); i++)
-						result_->word_ids_.push_back(word_ids[i]);
-					for (int i = 0; i < tids.size(); i++)
-						result_->tids_.push_back(tids[i]);
-					//PrintPartialResult(word_ids, &word_syms_, true);
+					    decoder_->FinishTraceBack(&out_fst);
+					    fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
+					    for (int i = 0; i < word_ids.size(); i++)
+						    result_->word_ids_.push_back(word_ids[i]);
+					    for (int i = 0; i < tids.size(); i++)
+						    result_->tids_.push_back(tids[i]);
+					    //PrintPartialResult(word_ids, &word_syms_, true);
+					}
 
 
                     /*
