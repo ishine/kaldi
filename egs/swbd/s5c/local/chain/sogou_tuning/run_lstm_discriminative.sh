@@ -12,7 +12,7 @@ set -e
 . cmd.sh
 
 
-stage=4
+stage=0
 train_stage=-10 # can be used to start training in the middle.
 get_egs_stage=-10
 use_gpu=true  # for training
@@ -21,7 +21,7 @@ cleanup=false  # run with --cleanup true --stage 6 to clean up (remove large thi
 
 # Frame chunk options that will be used for blstm models.
 frames_per_chunk=150
-extra_left_context=40
+extra_left_context=50
 extra_right_context=0
 extra_left_context_initial=0
 extra_right_context_final=0
@@ -31,7 +31,7 @@ extra_right_context_final=0
 . ./utils/parse_options.sh
 
 srcdir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5
-train_data_dir=data/train_sogou_fbank4dt
+train_data_dir=data/train_sogou_fbank_500h
 online_ivector_dir=
 degs_dir=                     # If provided, will skip the degs directory creation
 lats_dir=                     # If provided, will skip denlats creation
@@ -163,6 +163,7 @@ if [ -z "$degs_dir" ]; then
       --cmd "$decode_cmd --max-jobs-run $max_jobs --mem 20G" --stage $get_egs_stage --cmvn-opts "$cmvn_opts" \
       --adjust-priors false --acwt 1.0 \
       --left-context $left_context --right-context $right_context \
+      --left_context_initial $model_left_context --right_context_final $model_right_context \
       $frame_subsampling_opt \
       --frames-per-eg $frames_per_eg --frames-overlap-per-eg $frames_overlap_per_eg \
       $train_data_dir $lang ${srcdir}_ali${affix} $lats_dir $srcdir/final.mdl $degs_dir ;
@@ -176,27 +177,22 @@ if [ $stage -le 4 ]; then
     --criterion $criterion --drop-frames true --acoustic-scale 1.0 \
     --num-epochs $num_epochs --one-silence-class $one_silence_class --minibatch-size $minibatch_size \
     --num-jobs-nnet $num_jobs_nnet --num-threads $num_threads \
+    --keep-model-iters 50 \
     --regularization-opts "$regularization_opts" --use-frame-shift false \
       ${degs_dir} $dir ;
 fi
-
-graph_dir=$srcdir/graph_sw1_tg
+exit 1;
+graph_dir=$srcdir/graph_offline
 if [ $stage -le 5 ]; then
   for x in `seq $decode_start_epoch $num_epochs`; do
-    for decode_set in train_dev eval2000 rt03; do
+    for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
       (
-      num_jobs=`cat data/${decode_set}_hires/utt2spk|cut -d' ' -f2|sort -u|wc -l`
       iter=epoch$x_adj
 
-      steps/nnet3/decode.sh --nj $num_jobs --cmd "$decode_cmd" --iter $iter \
+      steps/nnet3/decode_sogou.sh --nj 6 --cmd "$decode_cmd" --iter $iter \
         --acwt 1.0 --post-decode-acwt 10.0 \
-        --online-ivector-dir exp/nnet3/ivectors_${decode_set} $context_opts \
-        $graph_dir data/${decode_set}_hires $dir/decode_${decode_set}_sw1_tg_$iter ;
-      if $has_fisher; then
-        steps/lmrescore_const_arpa.sh --cmd "$decode_cmd" \
-          data/lang_sw1_{tg,fsh_fg} data/${decode_set}_hires \
-          $dir/decode_${decode_set}_sw1_{tg,fsh_fg}_$iter ;
-      fi
+        $context_opts \
+        $graph_dir data/${decode_set} dir/decode_${decode_set}_$iter ;
       ) &
     done
   done

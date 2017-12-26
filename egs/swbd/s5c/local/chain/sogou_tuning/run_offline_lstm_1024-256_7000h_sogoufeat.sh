@@ -218,6 +218,8 @@ fi
 
 decode_suff=offline
 graph_dir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5/graph_offline
+#decode_suff=online
+#graph_dir=$dir/graph_online
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -229,7 +231,7 @@ if [ $stage -le 15 ]; then
   for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
       (
        steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
-          --nj 10 --cmd "$decode_cmd" $iter_opts \
+          --nj 6 --cmd "$decode_cmd" $iter_opts \
           --extra-left-context $extra_left_context  \
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \

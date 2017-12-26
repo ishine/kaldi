@@ -265,6 +265,10 @@ if [ $stage -le 2 ]; then
 
   for id in $(seq $num_lat_jobs); do cat $dir/lat.$id.scp; done > $dir/lat.scp
 fi
+echo "sorting lat.scp..."
+sort -k1,1 -u <$dir/lat.scp >$dir/lat.scp.tmp
+mv $dir/lat.scp.tmp $dir/lat.scp
+rm $dir/lat.scp.tmp
 
 
 egs_opts="--left-context=$left_context --right-context=$right_context --num-frames=$frames_per_eg --frame-subsampling-factor=$frame_subsampling_factor --compress=$compress"

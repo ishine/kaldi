@@ -88,7 +88,7 @@ while($layer_cnt < $lstm_layers)
       }
 
       ########## write nne1 cifo_x ###########
-      print OUT "<LstmProjectedStreams> $output_dim $input_dim\n";
+      print OUT "<LstmProjectedNnet3Streams> $output_dim $input_dim\n";
       print OUT "<CellDim> $cell_dim <ClipGradient> 5\n";
       print OUT " [\n";
       $cnt = 0;

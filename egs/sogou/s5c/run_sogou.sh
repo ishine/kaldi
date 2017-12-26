@@ -157,7 +157,7 @@ fi
 
 
 
-if [ $stage -le 9 ]; then 
+if [ $stage -le 10 ]; then 
 # nnet3-chain LSTM recipe
 # local/chain/run_lstm_sogou.sh
 

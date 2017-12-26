@@ -21,12 +21,12 @@
 set -e
 
 # configs for 'chain'
-stage=15
+stage=12
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/lstm_6j_offline_1536_512_sogoufeat_7000h_sp1.2_3epoch # Note: _sp will get added to this if $speed_perturb == true.
-decode_iter=6000
+dir=exp/chain/lstm_6j_1024_256_sogoufeat_500h_LM3000states # Note: _sp will get added to this if $speed_perturb == true.
+decode_iter=
 decode_dir_affix=
 
 # training options
@@ -43,7 +43,7 @@ extra_right_context=0
 frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=
+common_egs_dir=exp/chain/lstm_6j_1024_256_sogoufeat_500h_ld5/egs
 
 affix=
 # End configuration section.
@@ -73,9 +73,9 @@ fi
 dir=$dir${affix:+_$affix}
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_7300h_sp1.0_1.2
-ali_dir=exp/tri3b_ali
-treedir=exp/chain/tri5_7000houres_tree$suffix
+train_set=train_sogou_fbank_500h
+ali_dir=exp/tri3b_ali_7000GMM_ali
+treedir=exp/chain/tri5_7000houres_tree
 lang=data/lang_chain_2y
 mfcc_data=data/train_mfcc
 
@@ -146,9 +146,9 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 input=Append(-2,-1,0,1,2) cell-dim=1536 recurrent-projection-dim=512 delay=-3
-  fast-lstmr-layer name=fastlstm2 cell-dim=1536 recurrent-projection-dim=512 delay=-3
-  fast-lstmr-layer name=fastlstm3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=fastlstm1 input=Append(-2,-1,0,1,2) cell-dim=1024 recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=256 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -181,11 +181,11 @@ if [ $stage -le 13 ]; then
     --chain.leaky-hmm-coefficient 0.1 \
     --chain.l2-regularize 0.00005 \
     --chain.apply-deriv-weights false \
-    --chain.lm-opts="--num-extra-lm-states=2000" \
+    --chain.lm-opts="--num-extra-lm-states=3000" \
     --trainer.num-chunk-per-minibatch 64 \
     --trainer.frames-per-iter 1200000 \
     --trainer.max-param-change 2.0 \
-    --trainer.num-epochs 3 \
+    --trainer.num-epochs 4 \
     --trainer.optimization.shrink-value 0.99 \
     --trainer.optimization.num-jobs-initial 3 \
     --trainer.optimization.num-jobs-final 8 \
@@ -198,13 +198,11 @@ if [ $stage -le 13 ]; then
     --egs.chunk-width $chunk_width \
     --egs.chunk-left-context $chunk_left_context \
     --egs.chunk-right-context $chunk_right_context \
-    --egs.chunk-left-context-initial 0 \
-    --egs.chunk-right-context-final 0 \
     --egs.dir "$common_egs_dir" \
     --cleanup.remove-egs $remove_egs \
     --feat-dir data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir exp/tri3b_lats_7300h_sp12_comb \
+    --lat-dir exp/tri3b_lats_nodup$suffix \
     --dir $dir  || exit 1;
 fi
 <<!
@@ -212,12 +210,12 @@ if [ $stage -le 14 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
-  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_offline_bin $dir $dir/graph_offline_bin
+  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_online $dir $dir/graph_online
 fi
 !
+
 decode_suff=online
-graph_dir=exp/chain/lstm_6j_offline_1536_512_sogoufeat_7000h_ld5/graph_online
-#graph_dir=$dir/graph_online
+graph_dir=exp/chain/lstm_6j_online_sogoufeat_7000h_ld5/graph_online
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -226,14 +224,12 @@ if [ $stage -le 15 ]; then
   if [ ! -z $decode_iter ]; then
     iter_opts=" --iter $decode_iter "
   fi
-  for decode_set in test8000_sogou testIOS_sogou not_on_screen_sogou testset_testND_sogou; do
+  for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou ; do 
       (
        steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
           --nj 10 --cmd "$decode_cmd" $iter_opts \
           --extra-left-context $extra_left_context  \
           --extra-right-context $extra_right_context  \
-          --extra-left-context-initial 0 \
-          --extra-right-context-final 0 \
           --frames-per-chunk "$frames_per_chunk" \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}${decode_dir_affix:+_$decode_dir_affix}_${decode_suff} || exit 1;
