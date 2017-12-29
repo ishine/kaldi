@@ -19,6 +19,7 @@
 // limitations under the License.
 
 #include <numeric>
+#include <queue>
 
 #include "nnet/nnet-trnopts.h"
 #include "nnet/nnet-nnet.h"

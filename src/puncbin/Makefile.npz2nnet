@@ -1,3 +1,7 @@
+CNPY_PATH = /data1/home/kaituoxu/tc-punc/tools/cnpy-master/install
+
 all:
-	g++ -o npz2nnet npz2nnet.cc -I$(HOME)/tools/cnpy/include -L$(HOME)/tools/cnpy/lib -lcnpy -lz --std=c++11
-	g++ -o npz2nnet_pt npz2nnet_pt.cc -I$(HOME)/tools/cnpy/include -L$(HOME)/tools/cnpy/lib -lcnpy -lz --std=c++11
+	g++ -o npz2nnet npz2nnet.cc -I$(CNPY_PATH)/include -L$(CNPY_PATH)/lib -lcnpy -lz --std=c++11
+	g++ -o npz2nnet_pt npz2nnet_pt.cc -I$(CNPY_PATH)/include -L$(CNPY_PATH)/lib -lcnpy -lz --std=c++11
+clean:
+	rm npz2nnet npz2nnet_pt
