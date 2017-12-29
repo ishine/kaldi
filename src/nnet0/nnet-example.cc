@@ -51,10 +51,13 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	if (opts->frame_weights != "") {
 		frames_weights = weights_reader->Value(utt);
 	} else { // all per-frame weights are 1.0
-		frames_weights.Resize(input_frames.NumRows());
+		frames_weights.Resize(targes.size());
 		frames_weights.Set(1.0);
 	}
 
+	// split feature
+	int32 skip_frames = opts->skip_frames;
+	int32 sweep_time = opts->sweep_time;
 
 	// correct small length mismatch ... or drop sentence
 	{
@@ -67,7 +70,11 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	  int32 min = *std::min_element(lenght.begin(),lenght.end());
 	  int32 max = *std::max_element(lenght.begin(),lenght.end());
 	  // fix or drop ?
-	  if (max - min < opts->length_tolerance) {
+	  if (skip_frames > 1 && (max+skip_frames-1)/skip_frames >= min && (max+skip_frames-1)/skip_frames - min < opts->length_tolerance) {
+		  if((input_frames.NumRows()+skip_frames-1)/skip_frames > min) input_frames.Resize(min*skip_frames, input_frames.NumCols(), kCopyData);
+		  if(targets.size() != min) targets.resize(min);
+		  if(frames_weights.Dim() != min) frames_weights.Resize(min, kCopyData);
+	  } else if (max - min < opts->length_tolerance) {
 		if(input_frames.NumRows() != min) input_frames.Resize(min, input_frames.NumCols(), kCopyData);
 		if(targets.size() != min) targets.resize(min);
 		if(frames_weights.Dim() != min) frames_weights.Resize(min, kCopyData);
@@ -82,10 +89,6 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	}
 
 	examples.resize(1);
-
-	// split feature
-	int32 skip_frames = opts->skip_frames;
-	int32 sweep_time = opts->sweep_time;
 
 	if (sweep_time>skip_frames)
 	{
@@ -111,6 +114,8 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	DNNNnetExample *example = NULL;
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
+	bool ali_skip = (utt_len+skip_frames-1)/skip_frames == targets.size() ? false : true;
+
 	for (int i = 0; i < sweep_frames.size(); i++) {
 		example = new DNNNnetExample(feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
 		example->utt = utt;
@@ -128,11 +133,11 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 			if (cur >= utt_len) cur = utt_len-1;
 		}
 
-		cur = sweep_frames[i];
+		cur = ali_skip ? sweep_frames[i] : 0;
 		for (int j = 0; j < lent; j++) {
 			example->targets[j] = targets[cur];
 			example->frames_weights(j) = frames_weights(cur);
-			cur += skip_frames;
+			cur += ali_skip ? skip_frames : 0;
 		}
 		examples[i] = example;
 	}
