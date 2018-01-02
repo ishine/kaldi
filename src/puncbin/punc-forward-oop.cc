@@ -47,9 +47,9 @@ int main(int argc, char *argv[]) {
     }
 
     std::string models_filename_list = po.GetArg(1),
-        vocab_filename = po.GetArg(2),
-        punc_vocab_filename = po.GetArg(3),
-        txt_file_path = po.GetArg(4);
+                vocab_filename = po.GetArg(2),
+                punc_vocab_filename = po.GetArg(3),
+                txt_file_path = po.GetArg(4);
 
     // Select the GPU
 #if HAVE_CUDA == 1
@@ -63,10 +63,10 @@ int main(int argc, char *argv[]) {
     std::ifstream txt_file(txt_file_path);
     std::string txt_line;
     int32 num_done = 0;
-	// For each line in txt file
+    // For each line in txt file
     while (getline(txt_file, txt_line)) {
       std::string txt_line_with_punc;
-	  int32 model_id = 0;
+      int32 model_id = 0;
 
       // 2. Add Punctuation
       punctuator.AddPunc(txt_line, model_id, &txt_line_with_punc);

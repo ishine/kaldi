@@ -34,6 +34,10 @@ class Punctuator {
  public:
   Punctuator();
   ~Punctuator();
+  // disable copy
+  Punctuator(const Punctuator &) = delete;
+  // disable assignment
+  Punctuator& operator=(const Punctuator &) = delete;
 
  public:
   /// Load models, word list, punctuation list and init scws
@@ -53,8 +57,7 @@ class Punctuator {
 
   std::string WordSegment(const std::string &in);
 
-  std::vector<size_t> WordsToIds(const std::string &words,
-                                 const std::map<std::string, size_t> &vocab);
+  std::vector<size_t> WordsToIds(const std::string &words);
 
   void IdsToMatrix(const std::vector<size_t> &ids, Matrix<BaseFloat> *m);
 

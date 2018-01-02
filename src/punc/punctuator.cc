@@ -77,7 +77,7 @@ void Punctuator::AddPunc(const std::string &in, const int32 &model_id,
   std::string in_seg = WordSegment(in);
   // 1. words to ids
   std::vector<size_t> ids;
-  ids = WordsToIds(in_seg + " <END>", word_to_id_);
+  ids = WordsToIds(in_seg + " <END>");
   // 2. ids to Matrix
   Matrix<BaseFloat> mat;
   IdsToMatrix(ids, &mat);
@@ -140,21 +140,19 @@ std::string Punctuator::WordSegment(const std::string &in) {
   return result;
 }
 
-std::vector<size_t> Punctuator::WordsToIds(
-    const std::string &words, const std::map<std::string, size_t> &vocab) {
+std::vector<size_t> Punctuator::WordsToIds(const std::string &words) {
   std::vector<size_t> ids;
   std::istringstream stream(words);
   std::string word;
   size_t id;
 
+  if (word_to_id_.find("<UNK>") == word_to_id_.end()) {
+    KALDI_ERR << "Check BuildWordToId(), word_to_id_ should include <UNK>";
+  }
   while (stream >> word) {
-    auto map_it = vocab.find(word);
-    if (map_it == vocab.end()) {
-      map_it = vocab.find("<UNK>");
-      if (map_it == vocab.end()) {
-        std::cout << "Your Vocab Should include <UNK> (not <unk>)" << std::endl;
-        exit(0);
-      }
+    auto map_it = word_to_id_.find(word);
+    if (map_it == word_to_id_.end()) {
+      map_it = word_to_id_.find("<UNK>");
     }
     id = map_it->second;
     ids.push_back(id);
