@@ -406,11 +406,13 @@ public:
 void NnetForwardParallel(const NnetForwardOptions *opts,
 						std::string	model_filename,
 						std::string feature_rspecifier,
+						std::string sweep_frames_rspecifier,
 						std::string feature_wspecifier,
 						NnetForwardStats *stats)
 {
     ExamplesRepository repository;
     SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
+    RandomAccessInt32VectorReader sweep_frames_reader(sweep_frames_rspecifier);
     BaseFloatMatrixWriter feature_writer(feature_wspecifier);
     Mutex examples_mutex;
 
@@ -443,7 +445,7 @@ void NnetForwardParallel(const NnetForwardOptions *opts,
 					idx = (idx+1)%nframes;
 				}
 
-				example = new FeatureExample(&feature_reader, opts);
+				example = new FeatureExample(&feature_reader, &sweep_frames_rspecifier, opts);
 				example->SetSweepFrames(loop_frames, opts->skip_inner);
 				if (example->PrepareData(examples)) {
 					for (int i = 0; i < examples.size(); i++) {

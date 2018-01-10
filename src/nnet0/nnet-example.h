@@ -109,6 +109,7 @@ struct SequentialNnetExample : NnetExample
 {
 	RandomAccessLatticeReader *den_lat_reader;
 	RandomAccessInt32VectorReader *num_ali_reader;
+	RandomAccessInt32VectorReader *sweep_frames_reader;
 	NnetModelSync *model_sync;
 	NnetSequentialStats *stats;
 	const NnetSequentialUpdateOptions *opts;
@@ -121,11 +122,13 @@ struct SequentialNnetExample : NnetExample
 	SequentialNnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 							RandomAccessLatticeReader *den_lat_reader,
 							RandomAccessInt32VectorReader *num_ali_reader,
+							RandomAccessInt32VectorReader *sweep_frames_reader,
 							NnetModelSync *model_sync,
 							NnetSequentialStats *stats,
 							const NnetSequentialUpdateOptions *opts):
 								NnetExample(feature_reader), den_lat_reader(den_lat_reader),
-								num_ali_reader(num_ali_reader), model_sync(model_sync), stats(stats), opts(opts)
+								num_ali_reader(num_ali_reader), sweep_frames_reader(sweep_frames_reader),
+								model_sync(model_sync), stats(stats), opts(opts)
 	{
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
@@ -140,9 +143,11 @@ struct SequentialNnetExample : NnetExample
 struct FeatureExample: NnetExample
 {
 	const NnetForwardOptions *opts;
+	RandomAccessInt32VectorReader *sweep_frames_reader;
 
-	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader, const NnetForwardOptions *opts)
-	:NnetExample(feature_reader), opts(opts) {
+	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader,
+			RandomAccessInt32VectorReader *sweep_frames_reader, const NnetForwardOptions *opts)
+			:NnetExample(feature_reader), sweep_frames_reader(sweep_frames_reader), opts(opts) {
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
 

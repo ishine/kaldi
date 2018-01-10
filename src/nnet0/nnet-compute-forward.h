@@ -106,6 +106,7 @@ struct NnetForwardStats {
 void NnetForwardParallel(const NnetForwardOptions *opts,
 						std::string	model_filename,
 						std::string feature_rspecifier,
+						std::string sweep_frames_rspecifier,
 						std::string feature_wspecifier,
 						NnetForwardStats *stats);
 

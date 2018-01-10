@@ -220,19 +220,28 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 {
 	utt = feature_reader->Key();
 	if (!den_lat_reader->HasKey(utt)) {
-	KALDI_WARN << "Utterance " << utt << ": found no lattice.";
-	model_sync->LockStates();
-	stats->num_no_den_lat++;
-	model_sync->UnlockStates();
-	return false;
+		KALDI_WARN << "Utterance " << utt << ": found no lattice.";
+		model_sync->LockStates();
+		stats->num_no_den_lat++;
+		model_sync->UnlockStates();
+		return false;
 	}
 	if (!num_ali_reader->HasKey(utt)) {
-	KALDI_WARN << "Utterance " << utt << ": found no reference alignment.";
-	model_sync->LockStates();
-	stats->num_no_num_ali++;
-	model_sync->UnlockStates();
+		KALDI_WARN << "Utterance " << utt << ": found no reference alignment.";
+		model_sync->LockStates();
+		stats->num_no_num_ali++;
+		model_sync->UnlockStates();
 
-	return false;
+		return false;
+	}
+
+	if (sweep_frames_reader->IsOpen() && !sweep_frames_reader->HasKey(utt)) {
+		KALDI_WARN << "Utterance " << utt << ": found no sweep frames index.";
+		model_sync->LockStates();
+		stats->num_other_error++;
+		model_sync->UnlockStates();
+
+		return false;
 	}
 
 	// 1) get the features, numerator alignment
@@ -303,6 +312,10 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		return true;
 	}
 
+	if (sweep_frames_reader->IsOpen()) {
+		sweep_frames = sweep_frames_reader->Value(utt);
+	}
+
 	SequentialNnetExample *example = NULL;
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
@@ -345,6 +358,10 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 	if (skip_frames <= 1) {
 		examples[0] = this;
 		return true;
+	}
+
+	if (sweep_frames_reader->IsOpen()) {
+		sweep_frames = sweep_frames_reader->Value(utt);
 	}
 
 	FeatureExample *example = NULL;

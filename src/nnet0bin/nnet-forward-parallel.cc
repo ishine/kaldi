@@ -37,9 +37,9 @@ int main(int argc, char *argv[]) {
     const char *usage =
         "Perform forward pass through Neural Network in Parallel.\n"
         "\n"
-        "Usage:  nnet-forward-parallel [options] <model-in> <feature-rspecifier> <feature-wspecifier>\n"
+        "Usage:  nnet-forward-parallel [options] <model-in> <feature-rspecifier> <sweep_frames_rspecifier>(optional) <feature-wspecifier>\n"
         "e.g.: \n"
-        " nnet-forward-parallel --num-thread=2 nnet ark:features.ark ark:mlpoutput.ark\n";
+        " nnet-forward-parallel --num-thread=2 nnet ark:features.ark scp:sweep.scp(optional) ark:mlpoutput.ark\n";
 
     ParseOptions po(usage);
 
@@ -49,17 +49,31 @@ int main(int argc, char *argv[]) {
     NnetForwardOptions opts(&prior_opts);
     opts.Register(&po);
 
+    std::string model_filename,
+            feature_rspecifier,
+            feature_wspecifier,
+			sweep_frames_rspecifier = "";
+
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 3) {
-      po.PrintUsage();
-      exit(1);
+    if (po.NumArgs() == 3) {
+    		model_filename = po.GetArg(1);
+    		feature_rspecifier = po.GetArg(2);
+    		feature_wspecifier = po.GetArg(3);
+    }
+    if (po.NumArgs() == 4) {
+		model_filename = po.GetArg(1);
+		feature_rspecifier = po.GetArg(2);
+		sweep_frames_rspecifier = po.GetArg(3);
+		feature_wspecifier = po.GetArg(4);
+	}
+    else {
+    		po.PrintUsage();
+    		exit(1);
     }
 
-    std::string model_filename = po.GetArg(1),
-        feature_rspecifier = po.GetArg(2),
-        feature_wspecifier = po.GetArg(3);
+
         
     //Select the GPU
 #if HAVE_CUDA==1
@@ -77,7 +91,7 @@ int main(int argc, char *argv[]) {
     KALDI_LOG << "Nnet Forward STARTED";
 
     NnetForwardParallel(&opts, model_filename,
-    					feature_rspecifier, feature_wspecifier, &stats);
+    					feature_rspecifier, sweep_frames_rspecifier, feature_wspecifier, &stats);
 
     KALDI_LOG << "Nnet Forward FINISHED; ";
 
