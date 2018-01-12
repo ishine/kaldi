@@ -142,8 +142,8 @@ struct SequentialNnetExample : NnetExample
 
 struct FeatureExample: NnetExample
 {
-	const NnetForwardOptions *opts;
 	RandomAccessInt32VectorReader *sweep_frames_reader;
+	const NnetForwardOptions *opts;
 
 	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader,
 			RandomAccessInt32VectorReader *sweep_frames_reader, const NnetForwardOptions *opts)

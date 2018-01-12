@@ -62,13 +62,12 @@ int main(int argc, char *argv[]) {
     		feature_rspecifier = po.GetArg(2);
     		feature_wspecifier = po.GetArg(3);
     }
-    if (po.NumArgs() == 4) {
+    else if (po.NumArgs() == 4) {
 		model_filename = po.GetArg(1);
 		feature_rspecifier = po.GetArg(2);
 		sweep_frames_rspecifier = po.GetArg(3);
 		feature_wspecifier = po.GetArg(4);
-	}
-    else {
+	}else {
     		po.PrintUsage();
     		exit(1);
     }

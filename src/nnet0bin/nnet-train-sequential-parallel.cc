@@ -52,9 +52,9 @@ int main(int argc, char *argv[]) {
         "gradient descent.\n"
         "The network weights are updated on each utterance.\n"
         "Usage:  nnet-compute-sequential-parallel [options] <model-in> <transition-model-in>(optional) "
-        "<feature-rspecifier> <den-lat-rspecifier> <ali-rspecifier> <sweep_frames_rspecifier>(optional) [<model-out>]\n"
+        "<feature-rspecifier> <sweep_frames_rspecifier>(optional) <den-lat-rspecifier> <ali-rspecifier> [<model-out>]\n"
         "e.g.: \n"
-        " nnet-compute-sequential-parallel nnet.init trans.mdl(optional) scp:train.scp scp:denlats.scp ark:train.ali scp:sweep.scp(optional) "
+        " nnet-compute-sequential-parallel nnet.init trans.mdl(optional) scp:train.scp scp:sweep.scp(optional) scp:denlats.scp ark:train.ali "
         "nnet.iter1\n";
 
     ParseOptions po(usage);
@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
     std::string model_filename, transition_model_filename,
 				feature_rspecifier, den_lat_rspecifier,
 				num_ali_rspecifier, sweep_frames_rspecifier, target_model_filename;
-    transition_model_filename = "", sweep_frames_rspecifier = "";
+                transition_model_filename = "", sweep_frames_rspecifier = "";
 
     if (po.NumArgs() == 6)
     {
@@ -99,9 +99,9 @@ int main(int argc, char *argv[]) {
     		model_filename = po.GetArg(1),
     		transition_model_filename = po.GetArg(2),
     		feature_rspecifier = po.GetArg(3),
-    		den_lat_rspecifier = po.GetArg(4),
-    		num_ali_rspecifier = po.GetArg(5);
-    		sweep_frames_rspecifier = po.GetArg(6);
+    		sweep_frames_rspecifier = po.GetArg(4);
+    		den_lat_rspecifier = po.GetArg(5),
+    		num_ali_rspecifier = po.GetArg(6);
     		target_model_filename = po.GetArg(7);
     }
     else if (po.NumArgs() == 5)
@@ -114,8 +114,8 @@ int main(int argc, char *argv[]) {
     }
     else
     {
-      po.PrintUsage();
-      exit(1);
+        po.PrintUsage();
+        exit(1);
     }
 
     using namespace kaldi;

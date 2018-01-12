@@ -51,7 +51,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	if (opts->frame_weights != "") {
 		frames_weights = weights_reader->Value(utt);
 	} else { // all per-frame weights are 1.0
-		frames_weights.Resize(targes.size());
+		frames_weights.Resize(targets.size());
 		frames_weights.Set(1.0);
 	}
 
@@ -244,6 +244,11 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		return false;
 	}
 
+    // sweep frame filename
+	if (sweep_frames_reader->IsOpen()) {
+		sweep_frames = sweep_frames_reader->Value(utt);
+	}
+
 	// 1) get the features, numerator alignment
 	input_frames = feature_reader->Value();
 	num_ali = num_ali_reader->Value(utt);
@@ -251,7 +256,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	//int32 utt_frames = (input_frames.NumRows()+skip_frames-1)/skip_frames; //
 	int32 utt_frames = input_frames.NumRows(), ali_frames = num_ali.size();
 	//for CTC
-	if (ali_frames == utt_frames || ali_frames == utt_frames-1 ||
+	if (ali_frames == utt_frames - sweep_frames[0] ||
 		  ali_frames == utt_frames/skip_frames || ali_frames == utt_frames/skip_frames+1)
 		utt_frames = ali_frames;
 
@@ -312,16 +317,12 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		return true;
 	}
 
-	if (sweep_frames_reader->IsOpen()) {
-		sweep_frames = sweep_frames_reader->Value(utt);
-	}
-
 	SequentialNnetExample *example = NULL;
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
 	for (int i = 0; i < 1; i++) {
 		example = new SequentialNnetExample(feature_reader,
-				den_lat_reader, num_ali_reader, model_sync, stats, opts);
+				den_lat_reader, num_ali_reader, sweep_frames_reader, model_sync, stats, opts);
 		example->utt = utt;
 		example->den_lat = den_lat;
 		example->num_ali = num_ali;
@@ -368,7 +369,7 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
 	for (int i = 0; i < 1; i++) {
-		example = new FeatureExample(feature_reader, opts);
+		example = new FeatureExample(feature_reader, sweep_frames_reader, opts);
 		example->utt = utt;
 
 		lent = utt_len/skip_frames;

@@ -445,7 +445,7 @@ void NnetForwardParallel(const NnetForwardOptions *opts,
 					idx = (idx+1)%nframes;
 				}
 
-				example = new FeatureExample(&feature_reader, &sweep_frames_rspecifier, opts);
+				example = new FeatureExample(&feature_reader, &sweep_frames_reader, opts);
 				example->SetSweepFrames(loop_frames, opts->skip_inner);
 				if (example->PrepareData(examples)) {
 					for (int i = 0; i < examples.size(); i++) {
