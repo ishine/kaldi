@@ -75,6 +75,8 @@ class FasterDecoder {
 
   void Decode(DecodableInterface *decodable);
 
+  void DecodeCtc(DecodableInterface *decodable);
+
   /// Returns true if a final state was active on the last frame.
   bool ReachedFinal();
 
@@ -97,6 +99,9 @@ class FasterDecoder {
   /// that many frames.
   void AdvanceDecoding(DecodableInterface *decodable,
                        int32 max_num_frames = -1);
+
+  void AdvanceDecodingCtc(DecodableInterface *decodable,
+                         int32 max_num_frames = -1);
 
   /// Returns the number of frames already decoded.
   int32 NumFramesDecoded() const { return num_frames_decoded_; }
@@ -154,12 +159,17 @@ class FasterDecoder {
   double GetCutoff(Elem *list_head, size_t *tok_count,
                    BaseFloat *adaptive_beam, Elem **best_elem);
 
+  double GetCutoffCtc(Elem *list_head, size_t *tok_count,
+                     BaseFloat *adaptive_beam, Elem **best_elem);
+
   void PossiblyResizeHash(size_t num_toks);
 
   // ProcessEmitting returns the likelihood cutoff used.
   // It decodes the frame num_frames_decoded_ of the decodable object
   // and then increments num_frames_decoded_
   double ProcessEmitting(DecodableInterface *decodable);
+
+  double ProcessEmittingCtc(DecodableInterface *decodable);
 
   // TODO: first time we go through this, could avoid using the queue.
   void ProcessNonemitting(double cutoff);
