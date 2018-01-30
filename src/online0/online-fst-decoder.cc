@@ -74,22 +74,27 @@ void OnlineFstDecoder::Destory() {
 	}
 }
 
-void OnlineFstDecoder::InitDecoder() {
+void OnlineFstDecoder::() {
 #if HAVE_CUDA==1
     if (forward_opts_->use_gpu == "yes")
         CuDevice::Instantiate().Initialize();
 #endif
 	// trainsition model
 	bool binary;
-	Input ki(decoding_opts_->model_rspecifier, &binary);
-	trans_model_.Read(ki.Stream(), binary);
+	if (decoding_opts_->model_rspecifier != "") {
+		Input ki(decoding_opts_->model_rspecifier, &binary);
+		trans_model_.Read(ki.Stream(), binary);
+	}
 
 	// HCLG fst graph
 	decode_fst_ = fst::ReadFstKaldi(decoding_opts_->fst_rspecifier);
 	if (!(word_syms_ = fst::SymbolTable::ReadText(decoding_opts_->word_syms_filename)))
 		KALDI_ERR << "Could not read symbol table from file " << decoding_opts_->word_syms_filename;
 	// decodable feature pipe to decoder
-	decodable_ = new OnlineDecodableMatrixMapped(trans_model_, decoding_opts_->acoustic_scale);
+	if (decoding_opts_->model_rspecifier != "")
+		decodable_ = new OnlineDecodableMatrixMapped(trans_model_, decoding_opts_->acoustic_scale);
+	else
+		decodable_ = new OnlineDecodableMatrixCtc(decoding_opts_->acoustic_scale);
 
 	if (decoding_opts_->words_wspecifier != "")
 		words_writer_ = new Int32VectorWriter(decoding_opts_->words_wspecifier);
@@ -221,8 +226,6 @@ Result* OnlineFstDecoder::GetResult(FeatState state) {
 	PrintPartialResult(word_ids, word_syms_, newutt);
     std::cout.flush();
 
-    if (newutt)
-	    KALDI_LOG << "Finish decode utterance: " << result_.utt;
 	cur_result_idx_ = size;
 	return &result_;
 }

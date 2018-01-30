@@ -56,12 +56,13 @@ struct OnlineNnetDecodingOptions {
 	std::string model_rspecifier;
 	std::string words_wspecifier;
 	std::string alignment_wspecifier;
+	std::string model_type;  // hybrid, ctc
 
 	OnlineNnetDecodingOptions():
 							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(16),
 							skip_frames(1), copy_posterior(true), skip_inner(false), silence_phones_str(""),
                             word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
-                            words_wspecifier(""), alignment_wspecifier("")
+                            words_wspecifier(""), alignment_wspecifier(""), model_type("hybrid")
     { }
 
 	void Register(OptionsItf *po)
@@ -169,7 +170,7 @@ class OnlineNnetDecodingClass : public MultiThreadable
 public:
 	OnlineNnetDecodingClass(const OnlineNnetDecodingOptions &opts,
 			OnlineNnetFasterDecoder *decoder,
-			OnlineDecodableMatrixMapped *decodable,
+			DecodableInterface *decodable,
 			DecoderSync *decoder_sync,
 			Result *result):
 				opts_(opts),
@@ -265,7 +266,7 @@ private:
 
 	const OnlineNnetDecodingOptions &opts_;
 	OnlineNnetFasterDecoder *decoder_;
-	OnlineDecodableMatrixMapped *decodable_;
+	DecodableInterface *decodable_;
 	DecoderSync *decoder_sync_;
 	Result *result_;
 };

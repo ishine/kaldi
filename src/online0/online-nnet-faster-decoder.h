@@ -39,12 +39,13 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	  int32 update_interval; // beam update period in # of frames
 	  BaseFloat beam_update; // rate of adjustment of the beam
 	  BaseFloat max_beam_update; // maximum rate of beam adjustment
+	  std::string cutoff;
 
 	  OnlineNnetFasterDecoderOptions() :
 	    rt_min(0.7), rt_max(0.75), batch_size(18),
 	    inter_utt_sil(50), max_utt_len_(1500),
 	    update_interval(3), beam_update(0.01),
-	    max_beam_update(0.05) {}
+	    max_beam_update(0.05), cutoff("hybrid") {}
 
 	  void Register(OptionsItf *opts, bool full = true) {
 	    FasterDecoderOptions::Register(opts, full);
@@ -63,6 +64,8 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	    opts->Register("max-utt-length", &max_utt_len_,
 	                   "If the utterance becomes longer than this number of frames, "
 	                   "shorter silence is acceptable as an utterance separator");
+	    opts->Register("cutoff", &cutoff,
+	    					"token cutoff algorithm, e.g. ctc or hmm-dnn hybrid");
 	  }
 };
 

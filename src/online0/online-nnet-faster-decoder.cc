@@ -215,6 +215,7 @@ OnlineNnetFasterDecoder::Decode(DecodableInterface *decodable) {
     return state_;
 
   ProcessNonemitting(std::numeric_limits<float>::max());
+
   int32 batch_frame = 0;
   Timer timer;
   double64 tstart = timer.Elapsed(), tstart_batch = tstart;
@@ -237,17 +238,24 @@ OnlineNnetFasterDecoder::Decode(DecodableInterface *decodable) {
       }
       tstart = tend;
     }
+
     if (batch_frame != 0 && (frame_ % 200) == 0)
       // one log message at every 2 seconds assuming 10ms frames
       KALDI_VLOG(3) << "Beam: " << effective_beam_
           << "; Speed: "
           << ((timer.Elapsed() - tstart_batch) * 1000) / (batch_frame*10)
           << " xRT";
-    BaseFloat weight_cutoff = ProcessEmitting(decodable);
+
+    BaseFloat weight_cutoff;
+    if (opts_.cutoff == "hybrid")
+    		weight_cutoff = ProcessEmitting(decodable);
+    else
+    		weight_cutoff = ProcessEmittingCtc(decodable);
+
     ProcessNonemitting(weight_cutoff);
   }
 
-	  state_ = kEndBatch;
+  state_ = kEndBatch;
   if (decodable->IsLastFrame(frame_ - 1))
 	  state_ = kEndFeats;
 

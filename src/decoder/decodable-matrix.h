@@ -329,6 +329,67 @@ class DecodableMatrixScaledCtc: public DecodableInterface {
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecodableMatrixScaledCtc);
 };
 
+class OnlineDecodableMatrixCtc: public DecodableInterface {
+ public:
+	OnlineDecodableMatrixCtc(BaseFloat scale):
+      scale_(scale), input_is_finished_(false), num_frames_(0) {
+		loglikes_.Resize(1024, 121, 0);
+	}
+
+  virtual int32 NumFramesReady() const { return num_frames_; }
+
+  // This function is destructive of the input "loglikes" because it may
+  // under some circumstances do a shallow copy using Swap().  This function
+  // appends loglikes to any existing likelihoods you've previously supplied.
+  // frames_to_discard, if nonzero, will discard that number of previously
+  // available frames, from the left, advancing FirstAvailableFrame() by
+  // a number equal to frames_to_discard.  You should only set frames_to_discard
+  // to nonzero if you know your decoder won't want to access the loglikes
+  // for older frames.
+  void AcceptLoglikes(const Matrix<BaseFloat> *loglikes) {
+	int num_frames = loglikes->NumRows();
+	int num_cols = loglikes->NumCols();
+	if (num_frames == 0) return;
+
+    if (loglikes_.NumRows() < num_frames_ + num_frames || loglikes_.NumCols() != num_cols) {
+        int step = num_frames > 1024 ? num_frames : 1024;
+    		Matrix<BaseFloat> tmp(loglikes_.NumRows()+step, num_cols, kUndefined);
+    		tmp.RowRange(0, num_frames_).CopyFromMat(loglikes_.RowRange(0, num_frames_));
+    		loglikes_.Swap(&tmp);
+    }
+    loglikes_.RowRange(num_frames_, num_frames).CopyFromMat(*loglikes);
+    num_frames_ += num_frames;
+  }
+
+  void InputIsFinished() { input_is_finished_ = true; }
+  bool IsInputFinished() { return input_is_finished_;}
+
+  virtual bool IsLastFrame(int32 frame) const {
+    KALDI_ASSERT(frame < NumFramesReady());
+    return (frame == NumFramesReady() - 1 && input_is_finished_);
+  }
+
+  virtual BaseFloat LogLikelihood(int32 frame, int32 tid) {
+	  return scale_ * loglikes_(frame, loglikes_.NumCols());
+  }
+
+  void Reset() {
+	  input_is_finished_ = false;
+	  loglikes_.Resize(1024, 121, 0);
+	  num_frames_ = 0;
+  }
+
+  virtual int32 NumIndices() const { return loglikes_.NumCols(); }
+
+  // nothing special to do in destructor.
+  virtual ~OnlineDecodableMatrixCtc() { }
+ private:
+  Matrix<BaseFloat> loglikes_;
+  BaseFloat scale_;
+  bool input_is_finished_;
+  int num_frames_;
+  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineDecodableMatrixCtc);
+};
 
 
 }  // namespace kaldi

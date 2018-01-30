@@ -126,10 +126,12 @@ int main(int argc, char *argv[])
                 }
                 else 
                 */
-				    decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), state);
+				decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), state);
 				// get part result
 				result = decoder.GetResult(state);
                 result->utt = std::string(fn);
+                if (state == FEAT_END)
+            	    		KALDI_LOG << "Finish decode utterance: " << result->utt;
                 //usleep(chunk_length_secs/2*1e6);
 			}
 			total_frames += result->num_frames;
