@@ -38,8 +38,8 @@ class OnlineDecodableInterface: public DecodableInterface {
 
     virtual void Reset() {}
     virtual void AcceptLoglikes(const Matrix<BaseFloat> *loglikes) {}
-    void InputIsFinished() { input_is_finished_ = true; }
-    bool IsInputFinished() { return input_is_finished_;}
+    virtual void InputIsFinished() { input_is_finished_ = true; }
+    virtual bool IsInputFinished() { return input_is_finished_;}
  protected:
     bool input_is_finished_;
 };
@@ -152,7 +152,6 @@ class OnlineDecodableMatrixMapped: public OnlineDecodableInterface {
   const TransitionModel &trans_model_;  // for tid to pdf mapping
   Matrix<BaseFloat> loglikes_;
   BaseFloat scale_;
-  bool input_is_finished_;
   int num_frames_;
   KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineDecodableMatrixMapped);
 };
@@ -378,7 +377,7 @@ class OnlineDecodableMatrixCtc: public OnlineDecodableInterface {
   }
 
   virtual BaseFloat LogLikelihood(int32 frame, int32 tid) {
-	  return scale_ * loglikes_(frame, loglikes_.NumCols());
+	  return scale_ * loglikes_(frame, tid-1);
   }
 
   void Reset() {

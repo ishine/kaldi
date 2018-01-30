@@ -109,7 +109,7 @@ OnlineNnetFeaturePipeline::OnlineNnetFeaturePipeline(
 
   /// add deltas feature
   if (opts.add_deltas) {
-	delta_feature_ = new OnlineDeltaFeature(opts.delta_opts, cmvn_feature_);
+	delta_feature_ = new OnlineDeltaFeature(opts.delta_opts, final_feature_);
 	final_feature_ = delta_feature_;
   } else {
 	delta_feature_ = NULL;
@@ -117,7 +117,7 @@ OnlineNnetFeaturePipeline::OnlineNnetFeaturePipeline(
 
   /// add splice feature
   if (opts.splice_feats) {
-	  splice_feature_ = new OnlineSpliceFeature(opts.splice_opts, delta_feature_);
+	  splice_feature_ = new OnlineSpliceFeature(opts.splice_opts, final_feature_);
 	  final_feature_ = splice_feature_;
   } else {
 	  splice_feature_ = NULL;

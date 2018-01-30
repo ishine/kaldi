@@ -59,7 +59,7 @@ struct OnlineNnetDecodingOptions {
 	std::string model_type;  // hybrid, ctc
 
 	OnlineNnetDecodingOptions():
-							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(16),
+							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(18),
 							skip_frames(1), copy_posterior(true), skip_inner(false), silence_phones_str(""),
                             word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
                             words_wspecifier(""), alignment_wspecifier(""), model_type("hybrid")

@@ -45,8 +45,8 @@ struct OnlineNnetForwardOptions {
     PdfPriorOptions prior_opts;
 
     OnlineNnetForwardOptions()
-    	:feature_transform(""),network_model(""),no_softmax(true),apply_log(false),
-		 use_gpu("no"),gpuid(-1),num_threads(1),batch_size(8),num_stream(1),blank_posterior_scale(-1.0)
+    	:feature_transform(""),network_model(""),no_softmax(false),apply_log(false),
+		 use_gpu("no"),gpuid(-1),num_threads(1),batch_size(6),num_stream(1),blank_posterior_scale(-1.0)
     {
 
     }
