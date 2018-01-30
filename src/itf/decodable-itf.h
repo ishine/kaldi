@@ -117,6 +117,8 @@ class DecodableInterface {
 
   virtual ~DecodableInterface() {}
 };
+
+
 /// @}
 }  // namespace Kaldi
 

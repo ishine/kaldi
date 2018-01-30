@@ -170,7 +170,7 @@ class OnlineNnetDecodingClass : public MultiThreadable
 public:
 	OnlineNnetDecodingClass(const OnlineNnetDecodingOptions &opts,
 			OnlineNnetFasterDecoder *decoder,
-			DecodableInterface *decodable,
+			OnlineDecodableInterface *decodable,
 			DecoderSync *decoder_sync,
 			Result *result):
 				opts_(opts),
@@ -266,7 +266,7 @@ private:
 
 	const OnlineNnetDecodingOptions &opts_;
 	OnlineNnetFasterDecoder *decoder_;
-	DecodableInterface *decodable_;
+	OnlineDecodableInterface *decodable_;
 	DecoderSync *decoder_sync_;
 	Result *result_;
 };

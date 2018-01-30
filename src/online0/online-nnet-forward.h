@@ -40,12 +40,13 @@ struct OnlineNnetForwardOptions {
 
     int32 batch_size;
     int32 num_stream;
+    float blank_posterior_scale;
 
     PdfPriorOptions prior_opts;
 
     OnlineNnetForwardOptions()
     	:feature_transform(""),network_model(""),no_softmax(true),apply_log(false),
-		 use_gpu("no"),gpuid(-1),num_threads(1),batch_size(8),num_stream(1)
+		 use_gpu("no"),gpuid(-1),num_threads(1),batch_size(8),num_stream(1),blank_posterior_scale(-1.0)
     {
 
     }
@@ -59,6 +60,8 @@ struct OnlineNnetForwardOptions {
     	po->Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA");
         po->Register("gpuid", &gpuid, "gpuid < 0 for automatic select gpu, gpuid >= 0 for select specified gpu, only has effect if compiled with CUDA");
     	po->Register("num-threads", &num_threads, "Number of threads(GPUs) to use");
+        po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
+
 
 
         //<jiayu>
@@ -90,6 +93,7 @@ public:
 		bool no_softmax = opts_.no_softmax;
 		bool apply_log = opts_.apply_log;
 		int32 num_stream = opts_.num_stream;
+        float blank_posterior_scale = opts_.blank_posterior_scale;
 		//int32 batch_size = opts_.batch_size;
 		std::string feature_transform = opts_.feature_transform;
 		std::string model_filename = opts_.network_model;
@@ -114,6 +118,10 @@ public:
 	    if (apply_log && no_softmax) {
 	      KALDI_ERR << "Cannot use both --apply-log=true --no-softmax=true, use only one of the two!";
 	    }
+
+        if (blank_posterior_scale >= 0 && opts_.prior_opts.class_frame_counts != "") {
+          KALDI_ERR << "Cannot use both --blank-posterior-scale --class-frame-counts, use only one of the two!";
+        }
 
         // we will subtract log-priors later,
     	if (opts_.prior_opts.class_frame_counts != "") 
@@ -141,6 +149,11 @@ public:
 		nnet_.ResetLstmStreams(new_utt_flags_);
 		// forward pass
 		nnet_.Propagate(feats_transf, &feat_out_);
+
+        // ctc prior, only scale blank label posterior
+        if (opts_.blank_posterior_scale >= 0) {
+            feat_out_.ColRange(0, 1).Scale(opts_.blank_posterior_scale);
+        }
 
     	// convert posteriors to log-posteriors,
     	if (opts_.apply_log) {

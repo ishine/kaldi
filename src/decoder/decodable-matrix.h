@@ -29,6 +29,20 @@
 
 namespace kaldi {
 
+class OnlineDecodableInterface: public DecodableInterface {
+ public:
+    OnlineDecodableInterface():
+    input_is_finished_(false) {}
+
+    virtual ~OnlineDecodableInterface() {}
+
+    virtual void Reset() {}
+    virtual void AcceptLoglikes(const Matrix<BaseFloat> *loglikes) {}
+    void InputIsFinished() { input_is_finished_ = true; }
+    bool IsInputFinished() { return input_is_finished_;}
+ protected:
+    bool input_is_finished_;
+};
 
 class DecodableMatrixScaledMapped: public DecodableInterface {
  public:
@@ -83,10 +97,10 @@ class DecodableMatrixScaledMapped: public DecodableInterface {
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecodableMatrixScaledMapped);
 };
 
-class OnlineDecodableMatrixMapped: public DecodableInterface {
+class OnlineDecodableMatrixMapped: public OnlineDecodableInterface {
  public:
 	OnlineDecodableMatrixMapped(const TransitionModel &tm, BaseFloat scale):
-      trans_model_(tm), scale_(scale), input_is_finished_(false), num_frames_(0) {
+      trans_model_(tm), scale_(scale), num_frames_(0) {
 		loglikes_.Resize(1024, trans_model_.NumPdfs(), kUndefined);
 	}
 
@@ -114,9 +128,6 @@ class OnlineDecodableMatrixMapped: public DecodableInterface {
     loglikes_.RowRange(num_frames_, num_frames).CopyFromMat(*loglikes);
     num_frames_ += num_frames;
   }
-
-  void InputIsFinished() { input_is_finished_ = true; }
-  bool IsInputFinished() { return input_is_finished_;}
 
   virtual bool IsLastFrame(int32 frame) const {
     KALDI_ASSERT(frame < NumFramesReady());
@@ -329,11 +340,11 @@ class DecodableMatrixScaledCtc: public DecodableInterface {
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecodableMatrixScaledCtc);
 };
 
-class OnlineDecodableMatrixCtc: public DecodableInterface {
+class OnlineDecodableMatrixCtc: public OnlineDecodableInterface {
  public:
 	OnlineDecodableMatrixCtc(BaseFloat scale):
-      scale_(scale), input_is_finished_(false), num_frames_(0) {
-		loglikes_.Resize(1024, 121, 0);
+      scale_(scale), num_frames_(0) {
+		loglikes_.Resize(1024, 121, kUndefined);
 	}
 
   virtual int32 NumFramesReady() const { return num_frames_; }
@@ -361,9 +372,6 @@ class OnlineDecodableMatrixCtc: public DecodableInterface {
     num_frames_ += num_frames;
   }
 
-  void InputIsFinished() { input_is_finished_ = true; }
-  bool IsInputFinished() { return input_is_finished_;}
-
   virtual bool IsLastFrame(int32 frame) const {
     KALDI_ASSERT(frame < NumFramesReady());
     return (frame == NumFramesReady() - 1 && input_is_finished_);
@@ -375,7 +383,7 @@ class OnlineDecodableMatrixCtc: public DecodableInterface {
 
   void Reset() {
 	  input_is_finished_ = false;
-	  loglikes_.Resize(1024, 121, 0);
+	  loglikes_.Resize(1024, 121, kUndefined);
 	  num_frames_ = 0;
   }
 
@@ -386,7 +394,6 @@ class OnlineDecodableMatrixCtc: public DecodableInterface {
  private:
   Matrix<BaseFloat> loglikes_;
   BaseFloat scale_;
-  bool input_is_finished_;
   int num_frames_;
   KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineDecodableMatrixCtc);
 };

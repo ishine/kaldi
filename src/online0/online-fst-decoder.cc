@@ -74,7 +74,7 @@ void OnlineFstDecoder::Destory() {
 	}
 }
 
-void OnlineFstDecoder::() {
+void OnlineFstDecoder::InitDecoder() {
 #if HAVE_CUDA==1
     if (forward_opts_->use_gpu == "yes")
         CuDevice::Instantiate().Initialize();
@@ -90,6 +90,7 @@ void OnlineFstDecoder::() {
 	decode_fst_ = fst::ReadFstKaldi(decoding_opts_->fst_rspecifier);
 	if (!(word_syms_ = fst::SymbolTable::ReadText(decoding_opts_->word_syms_filename)))
 		KALDI_ERR << "Could not read symbol table from file " << decoding_opts_->word_syms_filename;
+
 	// decodable feature pipe to decoder
 	if (decoding_opts_->model_rspecifier != "")
 		decodable_ = new OnlineDecodableMatrixMapped(trans_model_, decoding_opts_->acoustic_scale);

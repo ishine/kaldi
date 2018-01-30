@@ -71,7 +71,7 @@ private:
 	TransitionModel trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
 	fst::SymbolTable *word_syms_;
-	DecodableInterface *decodable_;
+	OnlineDecodableInterface *decodable_;
 
 	// decoder
 	DecoderSync decoder_sync_;
