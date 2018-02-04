@@ -20,7 +20,7 @@
 #ifndef EESEN_GPUCOMPUTE_CTC_UTILS_H_
 #define EESEN_GPUCOMPUTE_CTC_UTILS_H_
 
-#if HAVE_CUDA == 1
+//#if HAVE_CUDA == 1
 
 /*
  * Some numeric limits and operations. These limits and operations
