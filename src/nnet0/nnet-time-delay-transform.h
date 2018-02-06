@@ -249,7 +249,7 @@ class TimeDelayTransform : public UpdatableComponent {
 	  // multiply error derivative by weights
 	  diff_output_.AddMatMat(1.0, diff_patches_, kNoTrans, linearity_, kNoTrans, 0.0);
 
-	  for(int i = 0; i < num_output_context_  ;i++)
+	  for(int i = 0; i < num_output_context_; i++)
 	  	  for(int j = 0; j < num_indexes_; j++)
 	  		  in_diff->ColRange(input_context_indexes_[i][j]*dim_in_, dim_in_).AddMat(1.0, diff_output_.RowRange(i*num_frames, num_frames).ColRange(j*dim_in_, dim_in_));
   }
