@@ -112,12 +112,12 @@ private:
 };
 
 
-class OnlineNnetFeaturePipeline: public OnlineFeatureInterface {
+class OnlineNnetFeaturePipeline: public OnlineStreamFeatureInterface {
 public:
 	explicit OnlineNnetFeaturePipeline(const OnlineNnetFeaturePipelineOptions &opts);
 	virtual ~OnlineNnetFeaturePipeline();
 
-	/// Member functions from OnlineFeatureInterface:
+	/// Member functions from OnlineStreamFeatureInterface:
 	virtual int32 Dim() const;
 	virtual bool IsLastFrame(int32 frame) const;
 	virtual int32 NumFramesReady() const;
@@ -141,16 +141,16 @@ private:
 
 	const OnlineNnetFeaturePipelineOptions &opts_;
 
-	OnlineBaseFeature *base_feature_;		// MFCC/PLP/filterbank
+	OnlineStreamBaseFeature *base_feature_;		// MFCC/PLP/filterbank
 	//OnlinePitchFeature *pitch_;              // Raw pitch, if used
 	//OnlineProcessPitch *pitch_feature_;  // Processed pitch, if pitch used
-	//OnlineFeatureInterface *feature_;        // CMVN (+ processed pitch)
+	//OnlineStreamFeatureInterface *feature_;        // CMVN (+ processed pitch)
 
-	OnlineCmvnFeature *cmvn_feature_;
-	OnlineDeltaFeature *delta_feature_;
-	OnlineSpliceFeature *splice_feature_;  // This may be NULL if we're not
+	OnlineStreamCmvnFeature *cmvn_feature_;
+	OnlineStreamDeltaFeature *delta_feature_;
+	OnlineStreamSpliceFeature *splice_feature_;  // This may be NULL if we're not
 	                                             // doing splicing or deltas.
-	OnlineFeatureInterface *final_feature_;
+	OnlineStreamFeatureInterface *final_feature_;
 };
 
 } // kaldi namespace

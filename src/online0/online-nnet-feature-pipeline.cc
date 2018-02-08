@@ -88,11 +88,11 @@ OnlineNnetFeaturePipeline::OnlineNnetFeaturePipeline(
     const OnlineNnetFeaturePipelineOptions &opts):
 		opts_(opts) {
   if (opts.feature_type == "mfcc") {
-    base_feature_ = new OnlineMfcc(opts.mfcc_opts);
+    base_feature_ = new OnlineStreamMfcc(opts.mfcc_opts);
   } else if (opts.feature_type == "plp") {
-    base_feature_ = new OnlinePlp(opts.plp_opts);
+    base_feature_ = new OnlineStreamPlp(opts.plp_opts);
   } else if (opts.feature_type == "fbank") {
-    base_feature_ = new OnlineFbank(opts.fbank_opts);
+    base_feature_ = new OnlineStreamFbank(opts.fbank_opts);
   } else {
     KALDI_ERR << "Code error: invalid feature type " << opts.feature_type;
   }
@@ -101,7 +101,7 @@ OnlineNnetFeaturePipeline::OnlineNnetFeaturePipeline(
 
   /// online cmvn feature
   if (opts.add_cmvn) {
-	cmvn_feature_ = new OnlineCmvnFeature(opts.cmvn_opts, base_feature_);
+	cmvn_feature_ = new OnlineStreamCmvnFeature(opts.cmvn_opts, base_feature_);
 	final_feature_ = cmvn_feature_;
   } else {
 	cmvn_feature_ = NULL;
@@ -109,7 +109,7 @@ OnlineNnetFeaturePipeline::OnlineNnetFeaturePipeline(
 
   /// add deltas feature
   if (opts.add_deltas) {
-	delta_feature_ = new OnlineDeltaFeature(opts.delta_opts, final_feature_);
+	delta_feature_ = new OnlineStreamDeltaFeature(opts.delta_opts, final_feature_);
 	final_feature_ = delta_feature_;
   } else {
 	delta_feature_ = NULL;
@@ -117,7 +117,7 @@ OnlineNnetFeaturePipeline::OnlineNnetFeaturePipeline(
 
   /// add splice feature
   if (opts.splice_feats) {
-	  splice_feature_ = new OnlineSpliceFeature(opts.splice_opts, final_feature_);
+	  splice_feature_ = new OnlineStreamSpliceFeature(opts.splice_opts, final_feature_);
 	  final_feature_ = splice_feature_;
   } else {
 	  splice_feature_ = NULL;

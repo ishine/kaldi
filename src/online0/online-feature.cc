@@ -26,20 +26,20 @@
 namespace kaldi {
 
 template<class C>
-void OnlineGenericBaseFeature<C>::GetFrame(int32 frame,
+void OnlineStreamGenericBaseFeature<C>::GetFrame(int32 frame,
                                            VectorBase<BaseFloat> *feat) {
   // 'at' does size checking.
   feat->CopyFromVec(*(features_.at(frame)));
 };
 
 template<class C>
-OnlineGenericBaseFeature<C>::OnlineGenericBaseFeature(
+OnlineStreamGenericBaseFeature<C>::OnlineStreamGenericBaseFeature(
     const typename C::Options &opts):
     computer_(opts), window_function_(computer_.GetFrameOptions()),
     input_finished_(false), waveform_offset_(0) { }
 
 template<class C>
-void OnlineGenericBaseFeature<C>::AcceptWaveform(BaseFloat sampling_rate,
+void OnlineStreamGenericBaseFeature<C>::AcceptWaveform(BaseFloat sampling_rate,
                                                  const VectorBase<BaseFloat> &waveform) {
   BaseFloat expected_sampling_rate = computer_.GetFrameOptions().samp_freq;
   if (sampling_rate != expected_sampling_rate)
@@ -61,7 +61,7 @@ void OnlineGenericBaseFeature<C>::AcceptWaveform(BaseFloat sampling_rate,
 }
 
 template<class C>
-void OnlineGenericBaseFeature<C>::ComputeFeatures() {
+void OnlineStreamGenericBaseFeature<C>::ComputeFeatures() {
   const FrameExtractionOptions &frame_opts = computer_.GetFrameOptions();
   int64 num_samples_total = waveform_offset_ + waveform_remainder_.Dim();
   int32 num_frames_old = features_.size(),
@@ -107,17 +107,17 @@ void OnlineGenericBaseFeature<C>::ComputeFeatures() {
 }
 
 // instantiate the templates defined here for MFCC, PLP and filterbank classes.
-template class OnlineGenericBaseFeature<MfccComputer>;
-template class OnlineGenericBaseFeature<PlpComputer>;
-template class OnlineGenericBaseFeature<FbankComputer>;
+template class OnlineStreamGenericBaseFeature<MfccComputer>;
+template class OnlineStreamGenericBaseFeature<PlpComputer>;
+template class OnlineStreamGenericBaseFeature<FbankComputer>;
 
 
-int32 OnlineDeltaFeature::Dim() const {
+int32 OnlineStreamDeltaFeature::Dim() const {
   int32 src_dim = src_->Dim();
   return src_dim * (1 + opts_.order);
 }
 
-int32 OnlineDeltaFeature::NumFramesReady() const {
+int32 OnlineStreamDeltaFeature::NumFramesReady() const {
   int32 num_frames = src_->NumFramesReady(),
       context = opts_.order * opts_.window;
   // "context" is the number of frames on the left or (more relevant
@@ -128,7 +128,7 @@ int32 OnlineDeltaFeature::NumFramesReady() const {
     return std::max<int32>(0, num_frames - context);
 }
 
-void OnlineDeltaFeature::GetFrame(int32 frame,
+void OnlineStreamDeltaFeature::GetFrame(int32 frame,
                                       VectorBase<BaseFloat> *feat) {
   KALDI_ASSERT(frame >= 0 && frame < NumFramesReady());
   KALDI_ASSERT(feat->Dim() == Dim());
@@ -155,8 +155,8 @@ void OnlineDeltaFeature::GetFrame(int32 frame,
 }
 
 
-OnlineDeltaFeature::OnlineDeltaFeature(const DeltaFeaturesOptions &opts,
-                                       OnlineFeatureInterface *src):
+OnlineStreamDeltaFeature::OnlineStreamDeltaFeature(const DeltaFeaturesOptions &opts,
+                                       OnlineStreamFeatureInterface *src):
     src_(src), opts_(opts), delta_features_(opts) { }
 
 
@@ -169,8 +169,8 @@ OnlineDeltaFeature::OnlineDeltaFeature(const DeltaFeaturesOptions &opts,
    We normally only do so in the "online" nnet-based decoding, e.g.nnet0
 */
 
-OnlineCmvnFeature::OnlineCmvnFeature(const OnlineCmvnOptions &opts,
-                   OnlineFeatureInterface *src):
+OnlineStreamCmvnFeature::OnlineStreamCmvnFeature(const OnlineCmvnOptions &opts,
+                   OnlineStreamFeatureInterface *src):
                 		   opts_(opts), src_(src)
 {
 	KALDI_ASSERT(opts_.min_window >= 0);
@@ -182,7 +182,7 @@ OnlineCmvnFeature::OnlineCmvnFeature(const OnlineCmvnOptions &opts,
 	features_.resize(0);
 }
 
-int32 OnlineCmvnFeature::NumFramesReady() const
+int32 OnlineStreamCmvnFeature::NumFramesReady() const
 {
 	int src_frames_ready = src_->NumFramesReady();
 	bool isfinished = src_->IsLastFrame(src_frames_ready-1);
@@ -192,7 +192,7 @@ int32 OnlineCmvnFeature::NumFramesReady() const
 	return src_frames_ready;
 }
 
-void OnlineCmvnFeature::ComputeCmvnInternal()
+void OnlineStreamCmvnFeature::ComputeCmvnInternal()
 {
 	int src_frames_ready = src_->NumFramesReady();
 	int curt_frames_ready = features_.size();
@@ -260,7 +260,7 @@ void OnlineCmvnFeature::ComputeCmvnInternal()
 
 }
 
-void OnlineCmvnFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *feat)
+void OnlineStreamCmvnFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *feat)
 {
     ComputeCmvnInternal();
 
@@ -272,13 +272,13 @@ void OnlineCmvnFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *feat)
 /**
  * splice feature
  */
-OnlineSpliceFeature::OnlineSpliceFeature(const OnlineSpliceOptions &opts,
-                     OnlineFeatureInterface *src): src_(src) {
+OnlineStreamSpliceFeature::OnlineStreamSpliceFeature(const OnlineSpliceOptions &opts,
+                     OnlineStreamFeatureInterface *src): src_(src) {
 	left_context_ = opts.custom_splice ? opts.left_context : opts.context;
 	right_context_ = opts.custom_splice ? opts.right_context : opts.context;
 }
 
-int32 OnlineSpliceFeature::NumFramesReady() const {
+int32 OnlineStreamSpliceFeature::NumFramesReady() const {
   int32 num_frames = src_->NumFramesReady();
   if (num_frames > 0 && src_->IsLastFrame(num_frames-1))
     return num_frames;
@@ -286,7 +286,7 @@ int32 OnlineSpliceFeature::NumFramesReady() const {
     return std::max<int32>(0, num_frames - right_context_);
 }
 
-void OnlineSpliceFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *feat) {
+void OnlineStreamSpliceFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *feat) {
   KALDI_ASSERT(left_context_ >= 0 && right_context_ >= 0);
   KALDI_ASSERT(frame >= 0 && frame < NumFramesReady());
   int32 dim_in = src_->Dim();
