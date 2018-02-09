@@ -1,4 +1,4 @@
-// online0bin/online-decoder-test.cc
+// online0bin/online-ivector-test.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -19,7 +19,8 @@
 
 #include "base/timer.h"
 #include "feat/wave-reader.h"
-#include "online0/online-fst-decoder.h"
+#include "base/kaldi-common.h"
+#include "online0/online-ivector-extractor.h"
 
 int main(int argc, char *argv[])
 {
@@ -31,13 +32,13 @@ int main(int argc, char *argv[])
 	    typedef kaldi::int32 int32;
 
 	    const char *usage =
-	    		"Reads in wav file(s) and simulates online decoding with neural nets "
-	    		"(nnet0 or nnet1 setup), Note: some configuration values and inputs are\n"
+	    		"Reads in wav file(s) and simulates extract ivector online per utterance"
+	    		"Note: some configuration values and inputs are\n"
 	    	"set via config files whose filenames are passed as options\n"
 	    	"\n"
-	        "Usage: online-ivector-test [config option]\n"
+	        "Usage: online-ivector-test [config option] <wavscp> <ivector-wspecifier>\n"
 	    	"e.g.: \n"
-	        "	online-decoder-test --cfg=conf/ivector.conf wav.scp\n";
+	        "	online-ivector-test --cfg=conf/decode.conf wav.scp ark,t:ivectors.1.ark \n";
 
 	    ParseOptions po(usage);
 
@@ -49,23 +50,24 @@ int main(int argc, char *argv[])
 
         po.Read(argc, argv);
 
-        if (po.NumArgs() < 1) {
+        if (po.NumArgs() < 2) {
         		po.PrintUsage();
         		exit(1);
         }
 
-        std::string wavlist_rspecifier = po.GetArg(1);
+        std::string wavlist_rspecifier = po.GetArg(1),
+        			    ivectors_wspecifier = po.GetArg(2);
 
-	    OnlineFstDecoder decoder(cfg);
-	    decoder.InitDecoder();
+        BaseFloatVectorWriter ivector_writer(ivectors_wspecifier);
+        OnlineIvectorExtractor extractor(cfg);
+        extractor.InitExtractor();
 
 	    std::ifstream wavlist_reader(wavlist_rspecifier);
 
-	    BaseFloat chunk_length_secs = 0.2, total_frames = 0, samp_freq = 16000;
+	    BaseFloat total_frames = 0, samp_freq = 16000;
         size_t size;
         Matrix<BaseFloat> audio_data;
-	    Result *result;
-	    FeatState state;
+	    Ivector *ivector;
         char fn[1024];
 
         Timer timer;
@@ -101,44 +103,17 @@ int main(int argc, char *argv[])
 			// get the data for channel zero (if the signal is not mono, we only
 			// take the first channel).
 			SubVector<BaseFloat> data(audio_data, 0);
-
-            int32 chunk_length;
-			if (chunk_length_secs > 0) {
-				chunk_length = int32(samp_freq * chunk_length_secs);
-				if (chunk_length == 0) chunk_length = 1;
-			} else {
-				chunk_length = std::numeric_limits<int32>::max();
-			}
+			extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float));
 
 			// one utterance
-			decoder.Reset();
+			extractor.Reset();
 
-			int32 samp_offset = 0;
-			while (samp_offset < data.Dim()) {
-				int32 samp_remaining = data.Dim() - samp_offset;
-				int32 num_samp = chunk_length < samp_remaining ? chunk_length : samp_remaining;
+			ivector = extractor.GetCurrentIvector();
+			ivector->utt = std::string(fn);
+			KALDI_LOG << "Finish extractor utterance: " << ivector->utt;
+			ivector_writer.Write(ivector->utt, ivector->ivector_);
 
-				SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
-				samp_offset += num_samp;
-				state = samp_offset >= data.Dim() ? FEAT_END : FEAT_APPEND;
-
-                /*
-				// feed part data
-				if (state == FEAT_END) {
-				    decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), FEAT_APPEND);
-				    decoder.FeedData((void*)wave_part.Data(), 0, FEAT_END);
-                }
-                else 
-                */
-				decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), state);
-				// get part result
-				result = decoder.GetResult(state);
-                result->utt = std::string(fn);
-                if (state == FEAT_END)
-            	    		KALDI_LOG << "Finish decode utterance: " << result->utt;
-                //usleep(chunk_length_secs/2*1e6);
-			}
-			total_frames += result->num_frames;
+			total_frames += ivector->tot_frames_;
 	    }
 
 	    wavlist_reader.close();
