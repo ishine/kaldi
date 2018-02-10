@@ -97,13 +97,13 @@ struct OnlineNnetFeaturePipelineOptions {
 	//ProcessPitchOptions pitch_process_opts;  // Options for pitch post-processing
 
 	bool add_cmvn;
-	OnlineCmvnOptions cmvn_opts;  // Options for online CMN/CMVN computation.
+	OnlineStreamCmvnOptions cmvn_opts;  // Options for online CMN/CMVN computation.
 
 	bool add_deltas;
 	DeltaFeaturesOptions delta_opts;  // Options for delta computation, if done.
 
 	bool splice_feats;
-	OnlineSpliceOptions splice_opts;  // Options for frame splicing, if done.
+	OnlineStreamSpliceOptions splice_opts;  // Options for frame splicing, if done.
 
 	BaseFloat samp_freq;
 

@@ -33,7 +33,7 @@ void OnlineIvectorExtractor::InitExtractor() {
 	adaptation_state_ = new OnlineIvectorExtractorAdaptationState(*ivector_info_);
 
 	// ivector feature pipeline
-	ivector_feature_ = new OnlineStreamIvectorFeature(*ivector_info_);
+	ivector_feature_ = new OnlineIvectorFeature(*ivector_info_);
 
 	// init ivector extractor state
 	ivector_feature_->SetAdaptationState(*adaptation_state_);
@@ -51,7 +51,7 @@ int OnlineIvectorExtractor::FeedData(void *data, int nbytes) {
 	return 0;
 }
 
-Ivector OnlineIvectorExtractor::GetCurrentIvector() {
+Ivector* OnlineIvectorExtractor::GetCurrentIvector() {
 
 	int num_frame_ready = ivector_feature_->NumFramesReady();
 
@@ -70,7 +70,7 @@ void OnlineIvectorExtractor::Reset() {
 		delete ivector_feature_;
 	}
 	adaptation_state_ = new OnlineIvectorExtractorAdaptationState(*ivector_info_);
-	ivector_feature_ = new OnlineStreamIvectorFeature(*ivector_info_);
+	ivector_feature_ = new OnlineIvectorFeature(*ivector_info_);
 	ivector_feature_->SetAdaptationState(*adaptation_state_);
 }
 

@@ -180,13 +180,13 @@ class OnlineStreamDeltaFeature: public OnlineStreamFeatureInterface {
 };
 
 
-struct OnlineCmvnOptions {
+struct OnlineStreamCmvnOptions {
   int32 min_window;
   int32 cmn_window;
   bool normalize_mean;
   bool normalize_variance;
 
-  OnlineCmvnOptions():
+  OnlineStreamCmvnOptions():
 	  min_window(100),
       cmn_window(600),
 	  normalize_mean(true),
@@ -253,7 +253,7 @@ class OnlineStreamCmvnFeature: public OnlineStreamFeatureInterface {
   //
   // Next, functions that are not in the interface.
   //
-  OnlineStreamCmvnFeature(const OnlineCmvnOptions &opts,
+  OnlineStreamCmvnFeature(const OnlineStreamCmvnOptions &opts,
 		  OnlineStreamFeatureInterface *src);
 
   virtual ~OnlineStreamCmvnFeature() {
@@ -263,7 +263,7 @@ class OnlineStreamCmvnFeature: public OnlineStreamFeatureInterface {
  private:
   void ComputeCmvnInternal();
 
-  const OnlineCmvnOptions &opts_;
+  const OnlineStreamCmvnOptions &opts_;
   OnlineStreamFeatureInterface *src_;  // Not owned here
 
   Vector<double> sum_;
@@ -279,12 +279,12 @@ class OnlineStreamCmvnFeature: public OnlineStreamFeatureInterface {
 /**
  * splice feature
  */
-struct OnlineSpliceOptions {
+struct OnlineStreamSpliceOptions {
   int32 left_context;
   int32 right_context;
   int32 context;
   bool  custom_splice;
-  OnlineSpliceOptions(): left_context(0), right_context(0), context(0), custom_splice(false) { }
+  OnlineStreamSpliceOptions(): left_context(0), right_context(0), context(0), custom_splice(false) { }
   void Register(OptionsItf *opts) {
 	  opts->Register("left-context", &left_context, "Left-context for frame ");
 	  opts->Register("right-context", &right_context, "Right-context for frame ");
@@ -321,7 +321,7 @@ class OnlineStreamSpliceFeature: public OnlineStreamFeatureInterface {
   //
   // Next, functions that are not in the interface.
   //
-  OnlineStreamSpliceFeature(const OnlineSpliceOptions &opts,
+  OnlineStreamSpliceFeature(const OnlineStreamSpliceOptions &opts,
 		  OnlineStreamFeatureInterface *src);
 
  private:

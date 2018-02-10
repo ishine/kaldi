@@ -161,11 +161,11 @@ void OnlineIvectorExtractorAdaptationState::Read(std::istream &is, bool binary) 
   ExpectToken(is, binary, "</OnlineIvectorExtractorAdaptationState>");
 }
 
-int32 OnlineStreamIvectorFeature::Dim() const {
+int32 OnlineIvectorFeature::Dim() const {
   return info_.extractor.IvectorDim();
 }
 
-bool OnlineStreamIvectorFeature::IsLastFrame(int32 frame) const {
+bool OnlineIvectorFeature::IsLastFrame(int32 frame) const {
   // Note: it might be more logical to return, say, lda_->IsLastFrame()
   // since this is the feature the iVector extractor directly consumes,
   // but it will give the same answer as base_->IsLastFrame() anyway.
@@ -174,16 +174,16 @@ bool OnlineStreamIvectorFeature::IsLastFrame(int32 frame) const {
   return base_->IsLastFrame(frame);
 }
 
-int32 OnlineStreamIvectorFeature::NumFramesReady() const {
+int32 OnlineIvectorFeature::NumFramesReady() const {
   KALDI_ASSERT(lda_ != NULL);
   return lda_->NumFramesReady();
 }
 
-BaseFloat OnlineStreamIvectorFeature::FrameShiftInSeconds() const {
+BaseFloat OnlineIvectorFeature::FrameShiftInSeconds() const {
   return lda_->FrameShiftInSeconds();
 }
 
-void OnlineStreamIvectorFeature::UpdateFrameWeights(
+void OnlineIvectorFeature::UpdateFrameWeights(
     const std::vector<std::pair<int32, BaseFloat> > &delta_weights) {
   // add the elements to delta_weights_, which is a priority queue.  The top
   // element of the priority queue is the lowest numbered frame (we ensured this
@@ -202,7 +202,7 @@ void OnlineStreamIvectorFeature::UpdateFrameWeights(
   delta_weights_provided_ = true;
 }
 
-void OnlineStreamIvectorFeature::UpdateStatsForFrame(int32 t,
+void OnlineIvectorFeature::UpdateStatsForFrame(int32 t,
                                                BaseFloat weight) {
   int32 feat_dim = lda_normalized_->Dim();
   Vector<BaseFloat> feat(feat_dim),  // features given to iVector extractor
@@ -220,7 +220,7 @@ void OnlineStreamIvectorFeature::UpdateStatsForFrame(int32 t,
   ivector_stats_.AccStats(info_.extractor, feat, posterior);
 }
 
-void OnlineStreamIvectorFeature::UpdateStatsUntilFrame(int32 frame) {
+void OnlineIvectorFeature::UpdateStatsUntilFrame(int32 frame) {
   KALDI_ASSERT(frame >= 0 && frame < this->NumFramesReady() &&
                !delta_weights_provided_);
   updated_with_no_delta_weights_ = true;
@@ -243,7 +243,7 @@ void OnlineStreamIvectorFeature::UpdateStatsUntilFrame(int32 frame) {
   }
 }
 
-void OnlineStreamIvectorFeature::UpdateStatsUntilFrameWeighted(int32 frame) {
+void OnlineIvectorFeature::UpdateStatsUntilFrameWeighted(int32 frame) {
   KALDI_ASSERT(frame >= 0 && frame < this->NumFramesReady() &&
                delta_weights_provided_ &&
                ! updated_with_no_delta_weights_ &&
@@ -285,7 +285,7 @@ void OnlineStreamIvectorFeature::UpdateStatsUntilFrameWeighted(int32 frame) {
 }
 
 
-void OnlineStreamIvectorFeature::GetFrame(int32 frame,
+void OnlineIvectorFeature::GetFrame(int32 frame,
                                     VectorBase<BaseFloat> *feat) {
   int32 frame_to_update_until = (info_.greedy_ivector_extractor ?
                                  lda_->NumFramesReady() - 1 : frame);
@@ -315,7 +315,7 @@ void OnlineStreamIvectorFeature::GetFrame(int32 frame,
   }
 }
 
-void OnlineStreamIvectorFeature::PrintDiagnostics() const {
+void OnlineIvectorFeature::PrintDiagnostics() const {
   if (num_frames_stats_ == 0) {
     KALDI_VLOG(3) << "Processed no data.";
   } else {
@@ -335,7 +335,7 @@ void OnlineStreamIvectorFeature::PrintDiagnostics() const {
   }
 }
 
-OnlineStreamIvectorFeature::~OnlineStreamIvectorFeature() {
+OnlineIvectorFeature::~OnlineIvectorFeature() {
   PrintDiagnostics();
   // Delete objects owned here.
 
@@ -352,7 +352,7 @@ OnlineStreamIvectorFeature::~OnlineStreamIvectorFeature() {
     delete ivectors_history_[i];
 }
 
-void OnlineStreamIvectorFeature::GetAdaptationState(
+void OnlineIvectorFeature::GetAdaptationState(
     OnlineIvectorExtractorAdaptationState *adaptation_state) const {
   // Note: the following call will work even if cmvn_->NumFramesReady() == 0; in
   // that case it will return the unmodified adaptation state that cmvn_ was
@@ -365,7 +365,7 @@ void OnlineStreamIvectorFeature::GetAdaptationState(
 }
 
 
-OnlineStreamIvectorFeature::OnlineStreamIvectorFeature(
+OnlineIvectorFeature::OnlineIvectorFeature(
     const OnlineIvectorExtractionInfo &info,
     OnlineFeatureInterface *base_feature):
     info_(info), base_(base_feature),
@@ -393,7 +393,7 @@ OnlineStreamIvectorFeature::OnlineStreamIvectorFeature(
   current_ivector_(0) = info_.extractor.PriorOffset();
 }
 
-OnlineStreamIvectorFeature::OnlineStreamIvectorFeature(
+OnlineIvectorFeature::OnlineIvectorFeature(
     const OnlineIvectorExtractionInfo &info):
     info_(info), base_(NULL),
     ivector_stats_(info_.extractor.IvectorDim(),
@@ -431,7 +431,7 @@ OnlineStreamIvectorFeature::OnlineStreamIvectorFeature(
   current_ivector_(0) = info_.extractor.PriorOffset();
 }
 
-void OnlineStreamIvectorFeature::SetAdaptationState(
+void OnlineIvectorFeature::SetAdaptationState(
     const OnlineIvectorExtractorAdaptationState &adaptation_state) {
   KALDI_ASSERT(num_frames_stats_ == 0 &&
                "SetAdaptationState called after frames were processed.");
@@ -441,22 +441,22 @@ void OnlineStreamIvectorFeature::SetAdaptationState(
   cmvn_->SetState(adaptation_state.cmvn_state);
 }
 
-BaseFloat OnlineStreamIvectorFeature::UbmLogLikePerFrame() const {
+BaseFloat OnlineIvectorFeature::UbmLogLikePerFrame() const {
   if (NumFrames() == 0) return 0;
   else return tot_ubm_loglike_ / NumFrames();
 }
 
-BaseFloat OnlineStreamIvectorFeature::ObjfImprPerFrame() const {
+BaseFloat OnlineIvectorFeature::ObjfImprPerFrame() const {
   return ivector_stats_.ObjfChange(current_ivector_);
 }
 
-void OnlineStreamIvectorFeature::AcceptWaveform(
+void OnlineIvectorFeature::AcceptWaveform(
     BaseFloat sampling_rate,
     const VectorBase<BaseFloat> &waveform) {
 	base_->AcceptWaveform(sampling_rate, waveform);
 }
 
-void OnlineStreamIvectorFeature::InputFinished() {
+void OnlineIvectorFeature::InputFinished() {
 	base_->InputFinished();
 }
 

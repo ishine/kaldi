@@ -169,7 +169,7 @@ OnlineStreamDeltaFeature::OnlineStreamDeltaFeature(const DeltaFeaturesOptions &o
    We normally only do so in the "online" nnet-based decoding, e.g.nnet0
 */
 
-OnlineStreamCmvnFeature::OnlineStreamCmvnFeature(const OnlineCmvnOptions &opts,
+OnlineStreamCmvnFeature::OnlineStreamCmvnFeature(const OnlineStreamCmvnOptions &opts,
                    OnlineStreamFeatureInterface *src):
                 		   opts_(opts), src_(src)
 {
@@ -272,7 +272,7 @@ void OnlineStreamCmvnFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *feat)
 /**
  * splice feature
  */
-OnlineStreamSpliceFeature::OnlineStreamSpliceFeature(const OnlineSpliceOptions &opts,
+OnlineStreamSpliceFeature::OnlineStreamSpliceFeature(const OnlineStreamSpliceOptions &opts,
                      OnlineStreamFeatureInterface *src): src_(src) {
 	left_context_ = opts.custom_splice ? opts.left_context : opts.context;
 	right_context_ = opts.custom_splice ? opts.right_context : opts.context;

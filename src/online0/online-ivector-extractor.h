@@ -64,7 +64,7 @@ private:
 	OnlineIvectorExtractionInfo *ivector_info_;
 	OnlineIvectorExtractorAdaptationState *adaptation_state_;
 
-	OnlineStreamIvectorFeature *ivector_feature_;
+	OnlineIvectorFeature *ivector_feature_;
 	Ivector ivector;
 };
 

@@ -1,4 +1,4 @@
-// online2/online-ivector-feature.h
+// online0/online-ivector-feature.h
 
 // Copyright 2013-2014   Johns Hopkins University (author: Daniel Povey)
 
@@ -18,8 +18,8 @@
 // limitations under the License.
 
 
-#ifndef KALDI_ONLINE2_ONLINE_IVECTOR_FEATURE_H_
-#define KALDI_ONLINE2_ONLINE_IVECTOR_FEATURE_H_
+#ifndef KALDI_ONLINE0_ONLINE_IVECTOR_FEATURE_H_
+#define KALDI_ONLINE0_ONLINE_IVECTOR_FEATURE_H_
 
 #include <string>
 #include <vector>
@@ -28,10 +28,11 @@
 #include "matrix/matrix-lib.h"
 #include "util/common-utils.h"
 #include "base/kaldi-error.h"
-#include "online0/online-feature.h"
+#include "itf/online-feature-itf.h"
 #include "gmm/diag-gmm.h"
 #include "feat/online-feature.h"
 #include "ivector/ivector-extractor.h"
+#include "decoder/lattice-faster-online-decoder.h"
 
 namespace kaldi {
 /// @addtogroup  onlinefeat OnlineFeatureExtraction
@@ -265,7 +266,7 @@ struct OnlineIvectorExtractorAdaptationState {
 /// the CMVN-normalized features, and with those and the unnormalized features
 /// it obtains iVectors.
 
-class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
+class OnlineIvectorFeature: public OnlineFeatureInterface {
  public:
   /// Constructor.  base_feature is for example raw MFCC or PLP or filterbank
   /// features, whatever was used to train the iVector extractor.
@@ -273,10 +274,10 @@ class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
   /// things like the iVector extractor that we won't be modifying.
   /// Caution: the class keeps a const reference to "info", so don't
   /// delete it while this class or others copied from it still exist.
-  explicit OnlineStreamIvectorFeature(const OnlineIvectorExtractionInfo &info,
+  explicit OnlineIvectorFeature(const OnlineIvectorExtractionInfo &info,
                                 OnlineFeatureInterface *base_feature);
 
-  explicit OnlineStreamIvectorFeature(const OnlineIvectorExtractionInfo &info);
+  explicit OnlineIvectorFeature(const OnlineIvectorExtractionInfo &info);
 
   // This version of the constructor accepts per-frame weights (relates to
   // downweighting silence).  This is intended for use in offline operation,
@@ -320,7 +321,7 @@ class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
   void GetAdaptationState(
       OnlineIvectorExtractorAdaptationState *adaptation_state) const;
 
-  virtual ~OnlineStreamIvectorFeature();
+  virtual ~OnlineIvectorFeature();
 
   // Some diagnostics (not present in generic interface):
   // UBM log-like per frame:
@@ -428,5 +429,5 @@ class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
 /// @} End of "addtogroup onlinefeat"
 }  // namespace kaldi
 
-#endif  // KALDI_ONLINE2_ONLINE_IVECTOR_FEATURE_H_
+#endif  // KALDI_ONLINE0_ONLINE_IVECTOR_FEATURE_H_
 
