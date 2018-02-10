@@ -112,7 +112,7 @@ private:
 };
 
 
-class OnlineNnetFeaturePipeline: public OnlineStreamFeatureInterface {
+class OnlineNnetFeaturePipeline: public OnlineStreamBaseFeature {
 public:
 	explicit OnlineNnetFeaturePipeline(const OnlineNnetFeaturePipelineOptions &opts);
 	virtual ~OnlineNnetFeaturePipeline();

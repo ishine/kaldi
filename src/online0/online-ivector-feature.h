@@ -28,11 +28,10 @@
 #include "matrix/matrix-lib.h"
 #include "util/common-utils.h"
 #include "base/kaldi-error.h"
-#include "itf/online-feature-itf.h"
 #include "gmm/diag-gmm.h"
-#include "feat/online-feature.h"
 #include "ivector/ivector-extractor.h"
-#include "decoder/lattice-faster-online-decoder.h"
+#include "online0/online-feature.h"
+
 
 namespace kaldi {
 /// @addtogroup  onlinefeat OnlineFeatureExtraction
@@ -51,19 +50,10 @@ namespace kaldi {
 /// classes as well as various objects that are needed.  The principle is that
 /// any code should be callable from other code, so we didn't want to force
 /// configuration classes to be read from disk.
-struct OnlineIvectorExtractionConfig {
-	// base feature
-	std::string feature_type;
-	std::string mfcc_config;
-	std::string plp_config;
-	std::string fbank_config;
+struct OnlineStreamIvectorExtractionConfig {
 
-  std::string lda_mat_rxfilename;  // to read the LDA+MLLT matrix
-  std::string global_cmvn_stats_rxfilename; // to read matrix of global CMVN
-                                            // stats
-  std::string splice_config_rxfilename;  // to read OnlineSpliceOptions
-  std::string cmvn_config_rxfilename;  // to read in OnlineCmvnOptions
   std::string diag_ubm_rxfilename;  // reads type DiagGmm.
+  std::string full_ubm_rxfilename;  // reads tyep fgmm.
   std::string ivector_extractor_rxfilename;  // reads type IvectorExtractor
 
   // the following four configuration values should in principle match those
@@ -105,7 +95,7 @@ struct OnlineIvectorExtractionConfig {
   // by calling SetAdaptationState()).
   BaseFloat max_remembered_frames;
   
-  OnlineIvectorExtractionConfig(): feature_type(""), ivector_period(10), num_gselect(5),
+  OnlineStreamIvectorExtractionConfig(): ivector_period(10), num_gselect(5),
                                    min_post(0.025), posterior_scale(0.1),
                                    max_count(0.0), num_cg_iters(15),
                                    use_most_recent_ivector(true),
@@ -113,33 +103,12 @@ struct OnlineIvectorExtractionConfig {
                                    max_remembered_frames(1000) { }
   
   void Register(OptionsItf *opts) {
-	//base feature
-	opts->Register("feature-type", &feature_type,
-				   "Base feature type [mfcc, plp, fbank]");
-	opts->Register("mfcc-config", &mfcc_config, "Configuration file for "
-				   "MFCC features (e.g. conf/mfcc.conf)");
-	opts->Register("plp-config", &plp_config, "Configuration file for "
-				   "PLP features (e.g. conf/plp.conf)");
-	opts->Register("fbank-config", &fbank_config, "Configuration file for "
-				   "filterbank features (e.g. conf/fbank.conf)");
-
-    opts->Register("lda-matrix", &lda_mat_rxfilename, "Filename of LDA matrix, "
-                   "e.g. final.mat; used for iVector extraction. ");
-    opts->Register("global-cmvn-stats", &global_cmvn_stats_rxfilename,
-                   "(Extended) filename for global CMVN stats, used in iVector "
-                   "extraction, obtained for example from "
-                   "'matrix-sum scp:data/train/cmvn.scp -', only used for "
-                   "iVector extraction");
-    opts->Register("cmvn-config", &cmvn_config_rxfilename, "Configuration "
-                   "file for online CMVN features (e.g. conf/online_cmvn.conf),"
-                   "only used for iVector extraction.  Contains options "
-                   "as for the program 'apply-cmvn-online'");
-    opts->Register("splice-config", &splice_config_rxfilename, "Configuration file "
-                   "for frame splicing (--left-context and --right-context "
-                   "options); used for iVector extraction.");
     opts->Register("diag-ubm", &diag_ubm_rxfilename, "Filename of diagonal UBM "
                    "used to obtain posteriors for iVector extraction, e.g. "
                    "final.dubm");
+    opts->Register("full-ubm", &full_ubm_rxfilename, "Filename of full covariance UBM "
+                   "used to obtain posteriors for iVector extraction in speaker-id systems, e.g. "
+                   "final.ubm");
     opts->Register("ivector-extractor", &ivector_extractor_rxfilename,
                    "Filename of iVector extractor, e.g. final.ie");
     opts->Register("ivector-period", &ivector_period, "Frequency with which "
@@ -172,23 +141,9 @@ struct OnlineIvectorExtractionConfig {
 
 /// This struct contains various things that are needed (as const references)
 /// by class OnlineIvectorExtractor.
-struct OnlineIvectorExtractionInfo {
-	// base feature
-	std::string feature_type;  // "mfcc" or "plp" or "fbank"
-
-	MfccOptions mfcc_opts;    	// options for MFCC computation, if feature_type == "mfcc"
-	PlpOptions plp_opts;  		// options for PLP computation, if feature_type == "plp"
-	FbankOptions fbank_opts;  	// options for filterbank computation, if feature_type == "fbank"
-
-
-  Matrix<BaseFloat> lda_mat;  // LDA+MLLT matrix.
-  Matrix<double> global_cmvn_stats;  // Global CMVN stats.
-
-  OnlineCmvnOptions cmvn_opts;  // Options for online CMN/CMVN computation.
-  OnlineSpliceOptions splice_opts;  // Options for frame splicing
-                                    // (--left-context,--right-context)
-
+struct OnlineStreamIvectorExtractionInfo {
   DiagGmm diag_ubm;
+  FullGmm full_ubm;
   IvectorExtractor extractor;
 
   // the following configuration variables are copied from
@@ -205,57 +160,18 @@ struct OnlineIvectorExtractionInfo {
 
   BaseFloat samp_freq;
 
-  OnlineIvectorExtractionInfo(const OnlineIvectorExtractionConfig &config);
+  OnlineStreamIvectorExtractionInfo(const OnlineStreamIvectorExtractionConfig &config);
 
-  void Init(const OnlineIvectorExtractionConfig &config);
+  void Init(const OnlineStreamIvectorExtractionConfig &config);
 
   // This constructor creates a version of this object where everything
   // is empty or zero.
-  OnlineIvectorExtractionInfo();
+  OnlineStreamIvectorExtractionInfo();
 
   void Check() const;
  private:
-  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineIvectorExtractionInfo);
+  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineStreamIvectorExtractionInfo);
 };
-
-/// This class stores the adaptation state from the online iVector extractor,
-/// which can help you to initialize the adaptation state for the next utterance
-/// of the same speaker in a more informed way.
-struct OnlineIvectorExtractorAdaptationState {
-  // CMVN state for the features used to get posteriors for iVector extraction;
-  // online CMVN is not used for the features supplied to the neural net,
-  // instead the iVector is used.
-
-  // Adaptation state for online CMVN (used for getting posteriors for iVector)
-  OnlineCmvnState cmvn_state;  
-
-  /// Stats for online iVector estimation.
-  OnlineIvectorEstimationStats ivector_stats;
-
-  /// This constructor initializes adaptation-state with no prior speaker history.
-  OnlineIvectorExtractorAdaptationState(const OnlineIvectorExtractionInfo &info):
-      cmvn_state(info.global_cmvn_stats),
-      ivector_stats(info.extractor.IvectorDim(),
-                    info.extractor.PriorOffset(),
-                    info.max_count) { }
-  
-  /// Copy constructor
-  OnlineIvectorExtractorAdaptationState(
-      const OnlineIvectorExtractorAdaptationState &other);
-
-  /// Scales down the stats if needed to ensure the number of frames in the
-  /// speaker-specific CMVN stats does not exceed max_remembered_frames
-  /// and the data-count in the iVector stats does not exceed
-  /// max_remembered_frames * posterior_scale.  [the posterior_scale
-  /// factor is necessary because those stats have already been scaled
-  /// by that factor.]
-  void LimitFrames(BaseFloat max_remembered_frames,
-                   BaseFloat posterior_scale);
-
-  void Write(std::ostream &os, bool binary) const;
-  void Read(std::istream &is, bool binary);
-};
-
 
 
 
@@ -266,7 +182,7 @@ struct OnlineIvectorExtractorAdaptationState {
 /// the CMVN-normalized features, and with those and the unnormalized features
 /// it obtains iVectors.
 
-class OnlineIvectorFeature: public OnlineFeatureInterface {
+class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
  public:
   /// Constructor.  base_feature is for example raw MFCC or PLP or filterbank
   /// features, whatever was used to train the iVector extractor.
@@ -274,19 +190,11 @@ class OnlineIvectorFeature: public OnlineFeatureInterface {
   /// things like the iVector extractor that we won't be modifying.
   /// Caution: the class keeps a const reference to "info", so don't
   /// delete it while this class or others copied from it still exist.
-  explicit OnlineIvectorFeature(const OnlineIvectorExtractionInfo &info,
-                                OnlineFeatureInterface *base_feature);
+  explicit OnlineStreamIvectorFeature(const OnlineStreamIvectorExtractionInfo &info,
+		  	  	  	  	  OnlineStreamFeatureInterface *base_feature);
 
-  explicit OnlineIvectorFeature(const OnlineIvectorExtractionInfo &info);
+  virtual ~OnlineStreamIvectorFeature();
 
-  // This version of the constructor accepts per-frame weights (relates to
-  // downweighting silence).  This is intended for use in offline operation,
-  // i.e. during training.  [will implement this when needed.]
-  //explicit OnlineIvectorFeature(const OnlineIvectorExtractionInfo &info,
-  //     std::vector<BaseFloat> frame_weights,
-  //OnlineFeatureInterface *base_feature);
-
-  
   // Member functions from OnlineFeatureInterface:
 
   /// Dim() will return the iVector dimension.
@@ -295,6 +203,7 @@ class OnlineIvectorFeature: public OnlineFeatureInterface {
   virtual int32 NumFramesReady() const;
   virtual BaseFloat FrameShiftInSeconds() const;
   virtual void GetFrame(int32 frame, VectorBase<BaseFloat> *feat);
+  virtual void Reset() {};
 
 	/// Accept more data to process.  It won't actually process it until you call
 	/// GetFrame() [probably indirectly via (decoder).AdvanceDecoding()], when you
@@ -308,21 +217,6 @@ class OnlineIvectorFeature: public OnlineFeatureInterface {
 	// (making them more accurate).
 	void InputFinished();
 
-  /// Set the adaptation state to a particular value, e.g. reflecting previous
-  /// utterances of the same speaker; this will generally be called after
-  /// constructing a new instance of this class.
-  void SetAdaptationState(
-      const OnlineIvectorExtractorAdaptationState &adaptation_state);
-  
-
-  /// Get the adaptation state; you may want to call this before destroying this
-  /// object, to get adaptation state that can be used to improve decoding of
-  /// later utterances of this speaker.
-  void GetAdaptationState(
-      OnlineIvectorExtractorAdaptationState *adaptation_state) const;
-
-  virtual ~OnlineIvectorFeature();
-
   // Some diagnostics (not present in generic interface):
   // UBM log-like per frame:
   BaseFloat UbmLogLikePerFrame() const;
@@ -335,45 +229,19 @@ class OnlineIvectorFeature: public OnlineFeatureInterface {
     return ivector_stats_.NumFrames() / info_.posterior_scale;
   }
 
-
-  // If you are downweighting silence, you can call
-  // OnlineSilenceWeighting::GetDeltaWeights and supply the output to this class
-  // using UpdateFrameWeights().  The reason why this call happens outside this
-  // class, rather than this class pulling in the data weights, relates to
-  // multi-threaded operation and also from not wanting this class to have
-  // excessive dependencies.
-  //
-  // You must either always call this as soon as new data becomes available
-  // (ideally just after calling AcceptWaveform), or never call it for the
-  // lifetime of this object.
-  void UpdateFrameWeights(
-      const std::vector<std::pair<int32, BaseFloat> > &delta_weights);
+  void PrintDiagnostics() const;
   
  private:
-  // this function adds "weight" to the stats for frame "frame".
-  void UpdateStatsForFrame(int32 frame,
-                           BaseFloat weight);
+  // the stats for frame "frame".
+  void UpdateStatsForFrame(int32 frame);
 
   // This is the original UpdateStatsUntilFrame that is called when there is
   // no data-weighting involved.
   void UpdateStatsUntilFrame(int32 frame);
 
-  // This is the new UpdateStatsUntilFrame that is called when there is
-  // data-weighting (i.e. when the user has been calling UpdateFrameWeights()).
-  void UpdateStatsUntilFrameWeighted(int32 frame);
-  
-  void PrintDiagnostics() const;
-  
-  const OnlineIvectorExtractionInfo &info_;
+  const OnlineStreamIvectorExtractionInfo &info_;
 
-  // base_ is the base feature; it is not owned here.
-  OnlineBaseFeature *base_;
-  // the following online-feature-extractor pointers are owned here:
-  OnlineSpliceFrames *splice_; // splice on top of raw features.
-  OnlineTransform *lda_;  // LDA on top of raw+splice features.
-  OnlineCmvn *cmvn_;
-  OnlineSpliceFrames *splice_normalized_; // splice on top of CMVN feats.
-  OnlineTransform *lda_normalized_;  // LDA on top of CMVN+splice
+  OnlineStreamFeatureInterface *base_feature_;
 
   /// the iVector estimation stats
   OnlineIvectorEstimationStats ivector_stats_;
@@ -385,30 +253,6 @@ class OnlineIvectorFeature: public OnlineFeatureInterface {
   /// called, this variable is still used but you may later have to revisit
   /// earlier frames to adjust their weights... see the code.
   int32 num_frames_stats_;
-
-  /// delta_weights_ is written to by UpdateFrameWeights,
-  /// in the case where the iVector estimation is silence-weighted using the decoder
-  /// traceback.  Its elements are consumed by UpdateStatsUntilFrameWeighted().
-  /// We provide std::greater<std::pair<int32, BaseFloat> > > as the comparison type
-  /// (default is std::less) so that the lowest-numbered frame, not the highest-numbered
-  /// one, will be returned by top().
-  std::priority_queue<std::pair<int32, BaseFloat>,
-                      std::vector<std::pair<int32, BaseFloat> >,
-                      std::greater<std::pair<int32, BaseFloat> > > delta_weights_;
-
-  /// this is only used for validating that the frame-weighting code is not buggy.
-  std::vector<BaseFloat> current_frame_weight_debug_;
-  
-  /// delta_weights_provided_ is set to true if UpdateFrameWeights was ever called; it's
-  /// used to detect wrong usage of this class.
-  bool delta_weights_provided_;
-  /// The following is also used to detect wrong usage of this class; it's set
-  /// to true if UpdateStatsUntilFrame() was ever called.
-  bool updated_with_no_delta_weights_;
-  
-  /// if delta_weights_ was ever called, this keeps track of the most recent
-  /// frame that ever had a weight.  It's mostly for detecting errors.
-  int32 most_recent_frame_with_weight_;
   
   /// The following is only needed for diagnostics.
   double tot_ubm_loglike_;

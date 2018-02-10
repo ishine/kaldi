@@ -20,6 +20,7 @@
 #define ONLINE0_ONLINE_IVECTOR_EXTRACTOR_H_
 
 #include "online0/online-ivector-feature.h"
+#include "online0/online-nnet-feature-pipeline.h"
 
 namespace kaldi {
 
@@ -60,11 +61,15 @@ public:
 private:
 	void Destory();
 
-	OnlineIvectorExtractionConfig *ivector_config_;
-	OnlineIvectorExtractionInfo *ivector_info_;
-	OnlineIvectorExtractorAdaptationState *adaptation_state_;
+	/// feature pipeline config
+	OnlineNnetFeaturePipelineConfig *feature_cfg_;
+	OnlineNnetFeaturePipelineOptions *feature_opts_;
+	OnlineStreamIvectorExtractionConfig *ivector_config_;
+	OnlineStreamIvectorExtractionInfo *ivector_info_;
 
-	OnlineIvectorFeature *ivector_feature_;
+	// feature pipeline
+	OnlineNnetFeaturePipeline *base_feature_pipeline_;
+	OnlineStreamIvectorFeature *ivector_feature_;
 	Ivector ivector;
 };
 
