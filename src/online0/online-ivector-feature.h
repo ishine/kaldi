@@ -31,6 +31,7 @@
 #include "gmm/diag-gmm.h"
 #include "ivector/ivector-extractor.h"
 #include "online0/online-feature.h"
+#include "online0/online-nnet-feature-pipeline.h"
 
 
 namespace kaldi {
@@ -52,6 +53,7 @@ namespace kaldi {
 /// configuration classes to be read from disk.
 struct OnlineStreamIvectorExtractionConfig {
 
+  OnlineNnetFeaturePipelineConfig base_feature_cfg;
   std::string diag_ubm_rxfilename;  // reads type DiagGmm.
   std::string full_ubm_rxfilename;  // reads tyep fgmm.
   std::string ivector_extractor_rxfilename;  // reads type IvectorExtractor
@@ -103,6 +105,8 @@ struct OnlineStreamIvectorExtractionConfig {
                                    max_remembered_frames(1000) { }
   
   void Register(OptionsItf *opts) {
+    base_feature_cfg.Register(opts);
+
     opts->Register("diag-ubm", &diag_ubm_rxfilename, "Filename of diagonal UBM "
                    "used to obtain posteriors for iVector extraction, e.g. "
                    "final.dubm");
@@ -204,18 +208,6 @@ class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
   virtual BaseFloat FrameShiftInSeconds() const;
   virtual void GetFrame(int32 frame, VectorBase<BaseFloat> *feat);
   virtual void Reset() {};
-
-	/// Accept more data to process.  It won't actually process it until you call
-	/// GetFrame() [probably indirectly via (decoder).AdvanceDecoding()], when you
-	/// call this function it will just copy it).  sampling_rate is necessary just
-	/// to assert it equals what's in the config.
-	void AcceptWaveform(BaseFloat sampling_rate, const VectorBase<BaseFloat> &waveform);
-
-	// InputFinished() tells the class you won't be providing any
-	// more waveform.  This will help flush out the last few frames
-	// of delta or LDA features, and finalize the pitch features
-	// (making them more accurate).
-	void InputFinished();
 
   // Some diagnostics (not present in generic interface):
   // UBM log-like per frame:

@@ -25,12 +25,14 @@
 namespace kaldi {
 
 typedef struct Ivector_ {
+    bool    isvalid_;
 	Vector<BaseFloat> ivector_;
 	double	tot_ubm_loglike_;
 	double	tot_objf_impr_;
 	double	tot_frames_;
 	std::string utt;
 	void clear() {
+        isvalid_ = false;
 		tot_ubm_loglike_ = 0;
 		tot_objf_impr_ = 0;
 		tot_frames_ = 0;
@@ -62,7 +64,6 @@ private:
 	void Destory();
 
 	/// feature pipeline config
-	OnlineNnetFeaturePipelineConfig *feature_cfg_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineStreamIvectorExtractionConfig *ivector_config_;
 	OnlineStreamIvectorExtractionInfo *ivector_info_;

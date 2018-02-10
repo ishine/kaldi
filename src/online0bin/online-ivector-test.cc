@@ -32,8 +32,8 @@ int main(int argc, char *argv[])
 	    typedef kaldi::int32 int32;
 
 	    const char *usage =
-	    		"Reads in wav file(s) and simulates extract ivector online per utterance"
-	    		"Note: some configuration values and inputs are\n"
+	    		"Reads in wav file(s) and simulates extract ivector online per utterance.\n"
+	    		"Note: some configuration values and inputs are"
 	    	"set via config files whose filenames are passed as options\n"
 	    	"\n"
 	        "Usage: online-ivector-test [config option] <wavscp> <ivector-wspecifier>\n"
@@ -83,11 +83,11 @@ int main(int argc, char *argv[])
                 samp_freq = wave_data.SampFreq();
             }
             else if (audio_format == "pcm") {
-                std::ifstream pcm_reader(fn, ios::binary);
+                std::ifstream pcm_reader(fn, std::ios::binary);
                 // get length of file:  
-                pcm_reader.seekg(0, ios::end);
+                pcm_reader.seekg(0, std::ios::end);
                 int length = pcm_reader.tellg();
-                pcm_reader.seekg(0, ios::beg);
+                pcm_reader.seekg(0, std::ios::beg);
                 size = length/sizeof(short);   
                 std::vector<short> buffer(size);
                 // read data as a block:  
@@ -100,13 +100,13 @@ int main(int argc, char *argv[])
             else
                 KALDI_ERR << "Unsupported input audio format, now only support wav or pcm.";
 
+			// one utterance
+			extractor.Reset();
+
 			// get the data for channel zero (if the signal is not mono, we only
 			// take the first channel).
 			SubVector<BaseFloat> data(audio_data, 0);
 			extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float));
-
-			// one utterance
-			extractor.Reset();
 
 			ivector = extractor.GetCurrentIvector();
 			ivector->utt = std::string(fn);

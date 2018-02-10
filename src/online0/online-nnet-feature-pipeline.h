@@ -26,6 +26,7 @@
 namespace kaldi {
 
 struct OnlineNnetFeaturePipelineConfig {
+    BaseFloat samp_freq;
 	std::string feature_type;
 	std::string mfcc_config;
 	std::string plp_config;
@@ -44,10 +45,12 @@ struct OnlineNnetFeaturePipelineConfig {
 	std::string splice_config;
 
 	OnlineNnetFeaturePipelineConfig():
-		feature_type("fbank"), add_pitch(false),
+		samp_freq(16000), feature_type("fbank"), add_pitch(false),
 		add_cmvn(false), add_deltas(false), splice_feats(false) { }
 
 	void Register(OptionsItf *opts) {
+	    opts->Register("sample-frequency", &samp_freq,
+	                   "Waveform data sample frequency (must match the waveform file, if specified there)");
 	    opts->Register("feature-type", &feature_type,
 	                   "Base feature type [mfcc, plp, fbank]");
 	    opts->Register("mfcc-config", &mfcc_config, "Configuration file for "
