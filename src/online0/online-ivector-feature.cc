@@ -43,19 +43,28 @@ void OnlineStreamIvectorExtractionInfo::Init(
     use_most_recent_ivector = true;
   }
   max_remembered_frames = config.max_remembered_frames;
+  lda_linear_term = NULL;
+  lda_constant_term = NULL;
 
   std::string note = "(note: this may be needed "
       "in the file supplied to --ivector-extractor-config)";
 
   if (config.diag_ubm_rxfilename == "")
 	  KALDI_ERR << "--diag-ubm option must be set " << note;
-	ReadKaldiObject(config.diag_ubm_rxfilename, &diag_ubm);
+  ReadKaldiObject(config.diag_ubm_rxfilename, &diag_ubm);
   if (config.full_ubm_rxfilename == "")
 	  KALDI_ERR << "--full-ubm option must be set " << note;
-	ReadKaldiObject(config.full_ubm_rxfilename, &full_ubm);
+  ReadKaldiObject(config.full_ubm_rxfilename, &full_ubm);
   if (config.ivector_extractor_rxfilename == "")
 	  KALDI_ERR << "--ivector-extractor option must be set " << note;
-	ReadKaldiObject(config.ivector_extractor_rxfilename, &extractor);
+  ReadKaldiObject(config.ivector_extractor_rxfilename, &extractor);
+  if (config.lda_transform_rxfilename != "") {
+	  ReadKaldiObject(config.lda_transform_rxfilename, &lda_transform);
+	  lda_linear_term = lda_transform.ColRange(0, lda_transform.NumCols()-1);
+	  lda_constant_term.Resize(lda_transform.NumRows());
+	  lda_constant_term.CopyColFromMat(lda_transform, lda_transform.NumCols()-1);
+  }
+
   this->Check();
 }
 
@@ -78,7 +87,10 @@ OnlineStreamIvectorExtractionInfo::OnlineStreamIvectorExtractionInfo():
     max_remembered_frames(0), samp_freq(16000) { }
 
 int32 OnlineStreamIvectorFeature::Dim() const {
-  return info_.extractor.IvectorDim();
+	int32 dim = info_.extractor.IvectorDim();
+	if (info_.lda_transform.NumRows() > 0)
+		dim = info_.lda_transform.NumRows();
+  return dim;
 }
 
 bool OnlineStreamIvectorFeature::IsLastFrame(int32 frame) const {
@@ -151,22 +163,40 @@ void OnlineStreamIvectorFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *fe
 
   KALDI_ASSERT(feat->Dim() == this->Dim());
 
+  // ivector
+  Vector<BaseFloat> ivector(this->Dim());
   if (info_.use_most_recent_ivector) {
     KALDI_VLOG(5) << "due to --use-most-recent-ivector=true, using iVector "
                   << "from frame " << num_frames_stats_ << " for frame "
                   << frame;
     // use the most recent iVector we have, even if 'frame' is significantly in
     // the past.
-    feat->CopyFromVec(current_ivector_);
+    ivector.CopyFromVec(current_ivector_);
     // Subtract the prior-mean from the first dimension of the output feature so
     // it's approximately zero-mean.
-    (*feat)(0) -= info_.extractor.PriorOffset();
+    ivector(0) -= info_.extractor.PriorOffset();
   } else {
     int32 i = frame / info_.ivector_period;  // rounds down.
     // if the following fails, UpdateStatsUntilFrame would have a bug.
-    KALDI_ASSERT(static_cast<size_t>(i) <  ivectors_history_.size());
-    feat->CopyFromVec(*(ivectors_history_[i]));
-    (*feat)(0) -= info_.extractor.PriorOffset();
+    KALDI_ASSERT(static_cast<size_t>(i) < ivectors_history_.size());
+    ivector.CopyFromVec(*(ivectors_history_[i]));
+    ivector(0) -= info_.extractor.PriorOffset();
+  }
+
+  // ivector lda transform
+  int32 lda_dim = info_.lda_transform.NumRows();
+  if(lda_dim <= 0) {
+	  feat->CopyFromVec(ivector);
+  } else {
+	  Vector<BaseFloat> transformed_ivector(lda_dim);
+	  if (ivector.Dim() == info_.lda_transform.NumCols()) {
+		  transformed_ivector.AddMatVec(1.0, info_.lda_transform, kNoTrans, ivector, 0.0);
+	  } else {
+		  KALDI_ASSERT(ivector.Dim() == info_.lda_transform.NumCols()-1);
+		  transformed_ivector.CopyFromVec(info_.lda_constant_term);
+		  transformed_ivector.AddMatVec(1.0, info_.lda_linear_term, kNoTrans, ivector, 1.0);
+	  }
+	  feat->CopyFromVec(transformed_ivector);
   }
 }
 

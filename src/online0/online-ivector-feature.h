@@ -57,6 +57,7 @@ struct OnlineStreamIvectorExtractionConfig {
   std::string diag_ubm_rxfilename;  // reads type DiagGmm.
   std::string full_ubm_rxfilename;  // reads tyep fgmm.
   std::string ivector_extractor_rxfilename;  // reads type IvectorExtractor
+  std::string lda_transform_rxfilename; // read ivector lda transform matrix
 
   // the following four configuration values should in principle match those
   // given to the script extract_ivectors_online.sh, although none of them are
@@ -115,6 +116,8 @@ struct OnlineStreamIvectorExtractionConfig {
                    "final.ubm");
     opts->Register("ivector-extractor", &ivector_extractor_rxfilename,
                    "Filename of iVector extractor, e.g. final.ie");
+    opts->Register("ivector-lda-transform", &lda_transform_rxfilename,
+                   "Filename of iVector lda transform matrix, e.g. transform.mat");
     opts->Register("ivector-period", &ivector_period, "Frequency with which "
                    "we extract iVectors for neural network adaptation");
     opts->Register("num-gselect", &num_gselect, "Number of Gaussians to select "
@@ -149,6 +152,9 @@ struct OnlineStreamIvectorExtractionInfo {
   DiagGmm diag_ubm;
   FullGmm full_ubm;
   IvectorExtractor extractor;
+  Matrix<BaseFloat> lda_transform;
+  Matrix<BaseFloat> lda_linear_term;
+  Vector<BaseFloat> lda_constant_term;
 
   // the following configuration variables are copied from
   // OnlineIvectorExtractionConfig, see comments there.
