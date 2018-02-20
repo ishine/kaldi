@@ -43,8 +43,6 @@ void OnlineStreamIvectorExtractionInfo::Init(
     use_most_recent_ivector = true;
   }
   max_remembered_frames = config.max_remembered_frames;
-  lda_linear_term = NULL;
-  lda_constant_term = NULL;
 
   std::string note = "(note: this may be needed "
       "in the file supplied to --ivector-extractor-config)";
@@ -125,7 +123,7 @@ void OnlineStreamIvectorFeature::UpdateStatsForFrame(int32 t) {
 
   // "posterior" stores the pruned posteriors for Gaussians in the UBM.
   std::vector<std::pair<int32, BaseFloat> > posterior;
-  tot_ubm_loglike_ += VectorToPosteriorEntry(log_likes, info_.num_gselect, info_.min_post, &posterior);
+  tot_ubm_loglike_ += VectorToPosteriorEntry(log_likes, gselect, info_.min_post, &posterior);
 
   for (size_t i = 0; i < posterior.size(); i++)
 	  posterior[i].second *= info_.posterior_scale;
