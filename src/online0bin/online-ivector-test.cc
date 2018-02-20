@@ -68,6 +68,7 @@ int main(int argc, char *argv[])
         size_t size;
         Matrix<BaseFloat> audio_data;
 	    Ivector *ivector;
+        FeatState state;
         char fn[1024];
 
         Timer timer;
@@ -106,7 +107,8 @@ int main(int argc, char *argv[])
 			// get the data for channel zero (if the signal is not mono, we only
 			// take the first channel).
 			SubVector<BaseFloat> data(audio_data, 0);
-			extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float));
+            state = FEAT_END;
+			extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float), state);
 
 			ivector = extractor.GetCurrentIvector();
 			ivector->utt = std::string(fn);

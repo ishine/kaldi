@@ -228,7 +228,7 @@ OnlineStreamIvectorFeature::~OnlineStreamIvectorFeature() {
 
 OnlineStreamIvectorFeature::OnlineStreamIvectorFeature(
     const OnlineStreamIvectorExtractionInfo &info,
-    OnlineStreamFeatureInterface *base_feature):
+    OnlineStreamBaseFeature *base_feature):
     info_(info), base_feature_(base_feature),
     ivector_stats_(info_.extractor.IvectorDim(),
                    info_.extractor.PriorOffset(),
