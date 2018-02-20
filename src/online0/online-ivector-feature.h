@@ -192,7 +192,7 @@ struct OnlineStreamIvectorExtractionInfo {
 /// the CMVN-normalized features, and with those and the unnormalized features
 /// it obtains iVectors.
 
-class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
+class OnlineStreamIvectorFeature: public OnlineStreamBaseFeature {
  public:
   /// Constructor.  base_feature is for example raw MFCC or PLP or filterbank
   /// features, whatever was used to train the iVector extractor.
@@ -201,7 +201,7 @@ class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
   /// Caution: the class keeps a const reference to "info", so don't
   /// delete it while this class or others copied from it still exist.
   explicit OnlineStreamIvectorFeature(const OnlineStreamIvectorExtractionInfo &info,
-		  	  	  	  	  OnlineStreamFeatureInterface *base_feature);
+		  	  	  	  	  	  	  	  OnlineStreamBaseFeature *base_feature);
 
   virtual ~OnlineStreamIvectorFeature();
 
@@ -214,6 +214,18 @@ class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
   virtual BaseFloat FrameShiftInSeconds() const;
   virtual void GetFrame(int32 frame, VectorBase<BaseFloat> *feat);
   virtual void Reset() {};
+
+	/// Accept more data to process.  It won't actually process it until you call
+	/// GetFrame() [probably indirectly via (decoder).AdvanceDecoding()], when you
+	/// call this function it will just copy it).  sampling_rate is necessary just
+	/// to assert it equals what's in the config.
+	void AcceptWaveform(BaseFloat sampling_rate, const VectorBase<BaseFloat> &waveform);
+
+	// InputFinished() tells the class you won't be providing any
+	// more waveform.  This will help flush out the last few frames
+	// of delta or LDA features, and finalize the pitch features
+	// (making them more accurate).
+	void InputFinished();
 
   // Some diagnostics (not present in generic interface):
   // UBM log-like per frame:
@@ -239,7 +251,7 @@ class OnlineStreamIvectorFeature: public OnlineStreamFeatureInterface {
 
   const OnlineStreamIvectorExtractionInfo &info_;
 
-  OnlineStreamFeatureInterface *base_feature_;
+  OnlineStreamBaseFeature *base_feature_;
 
   /// the iVector estimation stats
   OnlineIvectorEstimationStats ivector_stats_;

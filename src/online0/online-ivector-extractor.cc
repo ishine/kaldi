@@ -40,7 +40,7 @@ void OnlineIvectorExtractor::InitExtractor() {
     ivector.clear();
 }
 
-int OnlineIvectorExtractor::FeedData(void *data, int nbytes) {
+int OnlineIvectorExtractor::FeedData(void *data, int nbytes, FeatState state) {
 
 	if (nbytes <= 0)
 		return 0;
@@ -49,6 +49,10 @@ int OnlineIvectorExtractor::FeedData(void *data, int nbytes) {
 	Vector<BaseFloat> wave_part(size, kSetZero);
 	memcpy((char*)(wave_part.Data()), (char*)data, nbytes);
 	base_feature_pipeline_->AcceptWaveform(ivector_config_->base_feature_cfg.samp_freq, wave_part);
+
+	if (state == FEAT_END)
+		base_feature_pipeline_->InputFinished();
+
 	return 0;
 }
 

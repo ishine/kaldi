@@ -40,6 +40,12 @@ typedef struct Ivector_ {
 	}
 }Ivector;
 
+typedef enum {
+	FEAT_START,
+	FEAT_APPEND,
+	FEAT_END,
+}FeatState;
+
 class OnlineIvectorExtractor {
 
 public:
@@ -50,7 +56,7 @@ public:
 	void InitExtractor();
 
 	// feed wave data to extractor
-	int FeedData(void *data, int nbytes);
+	int FeedData(void *data, int nbytes, FeatState state);
 
 	// get current frame ivector
 	Ivector* GetCurrentIvector();

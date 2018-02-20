@@ -252,4 +252,14 @@ BaseFloat OnlineStreamIvectorFeature::ObjfImprPerFrame() const {
   return ivector_stats_.ObjfChange(current_ivector_);
 }
 
+void OnlineStreamIvectorFeature::AcceptWaveform(
+    BaseFloat sampling_rate,
+    const VectorBase<BaseFloat> &waveform) {
+  base_feature_->AcceptWaveform(sampling_rate, waveform);
+}
+
+void OnlineStreamIvectorFeature::InputFinished() {
+  base_feature_->InputFinished();
+}
+
 }  // namespace kaldi
