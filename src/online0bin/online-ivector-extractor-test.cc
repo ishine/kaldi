@@ -1,4 +1,4 @@
-// online0bin/online-ivector-test.cc
+// online0bin/online-ivector-extractor-test.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -36,14 +36,14 @@ int main(int argc, char *argv[])
 	    		"Note: some configuration values and inputs are"
 	    	"set via config files whose filenames are passed as options\n"
 	    	"\n"
-	        "Usage: online-ivector-test [config option] <wavscp> <ivector-wspecifier>\n"
+	        "Usage: online-ivector-extractor-test [config option] <wavscp> <ivector-wspecifier>\n"
 	    	"e.g.: \n"
-	        "	online-ivector-test --cfg=conf/decode.conf wav.scp ark,t:ivectors.1.ark \n";
+	        "	online-ivector-extractor-test --cfg=conf/ivector.conf wav.scp ark,t:ivectors.1.ark \n";
 
 	    ParseOptions po(usage);
 
 	    std::string cfg;
-	    po.Register("cfg", &cfg, "decoder config file");
+	    po.Register("cfg", &cfg, "ivector extractor config file");
 
         std::string audio_format = "wav";
         po.Register("audio-format", &audio_format, "input audio format(e.g. wav, pcm)");
