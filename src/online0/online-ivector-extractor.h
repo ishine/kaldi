@@ -33,6 +33,7 @@ typedef struct Ivector_ {
 	std::string utt;
 	void clear() {
         isvalid_ = false;
+        ivector_.Resize(0);
         ubm_loglike_perframe_ = 0;
         objf_impr_perframe_ = 0;
         num_frames_ = 0;
@@ -63,7 +64,8 @@ public:
 	Ivector* GetCurrentIvector(int type = 1);
 
 	// compute ivector score
-	BaseFloat GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2);
+	// type: 0, raw ivector; 1, lda transformed ivector
+	BaseFloat GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2, int type = 1);
 
 	// compute enroll ivector for a speaker
 	// type: 0, raw ivector; 1, lda transformed ivector

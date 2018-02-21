@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
 				    const WaveData &audio_data = wav_reader.Value(utt);
 				    SubVector<BaseFloat> data(audio_data.Data(), 0);
 				    // one utterance
-				    	extractor.Reset();
+				    extractor.Reset();
 				    extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float), FEAT_END);
 				    ivector = extractor.GetCurrentIvector(0);
 				    ivectors[i] = ivector->ivector_;
@@ -108,10 +108,11 @@ int main(int argc, char *argv[])
 						 << " since no utterances had iVectors";
         			num_spk_err++;
 			} else {
-				extractor.GetEnrollSpeakerIvector(ivectors, spk_mean, 0);
+				extractor.GetEnrollSpeakerIvector(ivectors, spk_mean, 1);
 				ivector_writer.Write(spk, spk_mean);
 				if (num_utts_wspecifier != "")
 					num_utts_writer.Write(spk, utt_count);
+                KALDI_LOG << "Finish speaker " << spk << " " << utt_count << " Utterances";
 				num_spk_done++;
 			}
 

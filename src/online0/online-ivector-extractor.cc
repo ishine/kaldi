@@ -76,20 +76,22 @@ Ivector* OnlineIvectorExtractor::GetCurrentIvector(int type) {
 	return &ivector;
 }
 
-BaseFloat OnlineIvectorExtractor::GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2) {
+BaseFloat OnlineIvectorExtractor::GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2, int type) {
 	KALDI_ASSERT(ivec1.Dim() == ivec2.Dim());
 
 	BaseFloat norm, ratio;
 	Vector<BaseFloat> norm_ivec1(ivec1),  norm_ivec2(ivec2);
 
-	// normalize
-	norm = norm_ivec1.Norm(2.0);
-	ratio = norm / sqrt(norm_ivec1.Dim());
-	if (ratio != 0.0) norm_ivec1.Scale(1.0 / ratio);
+	// raw ivector normalize
+    if (type == 0) {
+	    norm = norm_ivec1.Norm(2.0);
+	    ratio = norm / sqrt(norm_ivec1.Dim());
+	    if (ratio != 0.0) norm_ivec1.Scale(1.0 / ratio);
 
-	norm = norm_ivec2.Norm(2.0);
-	ratio = norm / sqrt(norm_ivec2.Dim());
-	if (ratio != 0.0) norm_ivec2.Scale(1.0 / ratio);
+	    norm = norm_ivec2.Norm(2.0);
+	    ratio = norm / sqrt(norm_ivec2.Dim());
+	    if (ratio != 0.0) norm_ivec2.Scale(1.0 / ratio);
+    }
 
 	// dot product
 	return VecVec(norm_ivec1, norm_ivec2);
@@ -120,9 +122,6 @@ void OnlineIvectorExtractor::GetEnrollSpeakerIvector(const std::vector<Vector<Ba
 		}
 		else if (type == 1) {
 			// normalize
-			norm = mean_ivector.Norm(2.0);
-			ratio = norm / sqrt(mean_ivector.Dim());
-			if (ratio != 0.0) mean_ivector.Scale(1.0 / ratio);
 			ivector_feature_->LdaTransform(mean_ivector, spk_ivector);
 		}
 	}

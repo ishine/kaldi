@@ -29,7 +29,7 @@ extern "C" {
 void *CreateIvectorExtractor(const char *cfg_path);
 int	FeedData(void *lp_extractor, void *data, int nbytes, int state);
 int GetCurrentIvector(void *lp_extractor, float *result, int type = 1);
-float GetScore(void *lp_extractor, float *ivec1, float *ivec2, int size);
+float GetScore(void *lp_extractor, float *ivec1, float *ivec2, int size, int type = 1);
 int GetEnrollSpeakerIvector(void *lp_extractor, float *spk_ivector, float *ivectors,
 		int ivec_dim, int num_ivec, int type = 1);
 void Reset(void *lp_extractor);
