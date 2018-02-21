@@ -60,7 +60,6 @@ Ivector* OnlineIvectorExtractor::GetCurrentIvector(int type) {
 
 	int num_frame_ready = ivector_feature_->NumFramesReady();
 	int dim = ivector_feature_->Dim();
-	int lda_dim = ivector_feature_->LdaDim();
 
     if (num_frame_ready > 0) {
     		Vector<BaseFloat> raw_ivec(dim);

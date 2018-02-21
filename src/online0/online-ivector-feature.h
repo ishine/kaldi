@@ -245,7 +245,7 @@ class OnlineStreamIvectorFeature: public OnlineStreamBaseFeature {
     return ivector_stats_.NumFrames() / info_.posterior_scale;
   }
 
-  void LdaTransform(const VectorBase<BaseFloat> &ivector, Vector<BaseFloat> &transformed_ivector)
+  void LdaTransform(const VectorBase<BaseFloat> &ivector, Vector<BaseFloat> &transformed_ivector);
   int32 LdaDim();
 
   void PrintDiagnostics() const;

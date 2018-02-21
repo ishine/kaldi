@@ -184,9 +184,11 @@ void OnlineStreamIvectorFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *fe
 
 void OnlineStreamIvectorFeature::LdaTransform(const VectorBase<BaseFloat> &ivector,
 		Vector<BaseFloat> &transformed_ivector) {
+    KALDI_ASSERT(info_.lda_transform.NumRows() > 0);
+    if (info_.lda_transform.NumRows() > 0) {
 	  // Normalize length of iVectors to equal sqrt(feature-dimension)
 	  int32 lda_dim = info_.lda_transform.NumRows();
-	  VectorBase<BaseFloat> norm_ivector(ivector);
+	  Vector<BaseFloat> norm_ivector(ivector);
 	  BaseFloat norm = norm_ivector.Norm(2.0);
 	  BaseFloat ratio = norm / sqrt(norm_ivector.Dim()); // how much larger it is
 														  // than it would be, in
@@ -209,6 +211,7 @@ void OnlineStreamIvectorFeature::LdaTransform(const VectorBase<BaseFloat> &ivect
 	  ratio = norm / sqrt(transformed_ivector.Dim());
 	  if (ratio != 0.0 && info_.normalize)
 		  transformed_ivector.Scale(1.0 / ratio);
+    }
 }
 
 int32 OnlineStreamIvectorFeature::LdaDim() {

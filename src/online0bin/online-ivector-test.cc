@@ -110,12 +110,12 @@ int main(int argc, char *argv[])
             state = FEAT_END;
 			extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float), state);
 
-			ivector = extractor.GetCurrentIvector(0);
+			ivector = extractor.GetCurrentIvector(1);
 			ivector->utt = std::string(fn);
 			KALDI_LOG << "Finish extractor utterance: " << ivector->utt;
 			ivector_writer.Write(ivector->utt, ivector->ivector_);
 
-			total_frames += ivector->tot_frames_;
+			total_frames += ivector->num_frames_;
 	    }
 
 	    wavlist_reader.close();

@@ -66,6 +66,7 @@ public:
 	BaseFloat GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2);
 
 	// compute enroll ivector for a speaker
+	// type: 0, raw ivector; 1, lda transformed ivector
 	void GetEnrollSpeakerIvector(const std::vector<Vector<BaseFloat> > &ivectors,
 			Vector<BaseFloat> &spk_ivector, int type = 1);
 

@@ -43,13 +43,14 @@ int	FeedData(void *lp_extractor, void *data, int nbytes, int state) {
         audio[i] = ((short *)data)[i];
     extractor->FeedData(audio, num_samples*sizeof(float), state);
     delete [] audio;
+    return nbytes;
 }
 
 int GetCurrentIvector(void *lp_extractor, float *result, int type) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
-	Ivector ivector = extractor->GetCurrentIvector(type);
-	int dim = ivector.ivector_.Dim();
-	memcpy(result, ivector.ivector_.Data(), dim*sizeof(float));
+	Ivector *ivector = extractor->GetCurrentIvector(type);
+	int dim = ivector->ivector_.Dim();
+	memcpy(result, ivector->ivector_.Data(), dim*sizeof(float));
 	return dim;
 }
 
@@ -86,7 +87,7 @@ void DestroyIvectorExtractor(void *lp_extractor) {
     printf("destroy ivector extractor instance.\n");
 #endif
     if (lp_extractor!=nullptr) {
-        delete (DestroyIvectorExtractor *)lp_extractor;
+        delete (OnlineIvectorExtractor *)lp_extractor;
         lp_extractor = nullptr;
     }
 
