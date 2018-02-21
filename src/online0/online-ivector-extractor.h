@@ -26,16 +26,16 @@ namespace kaldi {
 
 typedef struct Ivector_ {
     bool    isvalid_;
-	Vector<BaseFloat> ivector_;
-	double	tot_ubm_loglike_;
-	double	tot_objf_impr_;
-	double	tot_frames_;
+	Vector<float> ivector_;
+	double	ubm_loglike_perframe_;
+	double	objf_impr_perframe_;
+	double	num_frames_;
 	std::string utt;
 	void clear() {
         isvalid_ = false;
-		tot_ubm_loglike_ = 0;
-		tot_objf_impr_ = 0;
-		tot_frames_ = 0;
+        ubm_loglike_perframe_ = 0;
+        objf_impr_perframe_ = 0;
+        num_frames_ = 0;
 		utt = "";
 	}
 }Ivector;
@@ -58,8 +58,16 @@ public:
 	// feed wave data to extractor
 	int FeedData(void *data, int nbytes, FeatState state);
 
-	// get current frame ivector
-	Ivector* GetCurrentIvector();
+	// get current frame ivector,
+	// type: 0, raw ivector; 1, lda transformed ivector
+	Ivector* GetCurrentIvector(int type = 1);
+
+	// compute ivector score
+	BaseFloat GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2);
+
+	// compute enroll ivector for a speaker
+	void GetEnrollSpeakerIvector(const std::vector<Vector<BaseFloat> > &ivectors,
+			Vector<BaseFloat> &spk_ivector, int type = 1);
 
 	// Reset Extractor
 	void Reset();

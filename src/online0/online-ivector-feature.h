@@ -97,13 +97,15 @@ struct OnlineStreamIvectorExtractionConfig {
   // (assuming you provided info from a previous utterance of the same speaker
   // by calling SetAdaptationState()).
   BaseFloat max_remembered_frames;
-  
+
+  bool normalize;
+
   OnlineStreamIvectorExtractionConfig(): ivector_period(10), num_gselect(5),
                                    min_post(0.025), posterior_scale(0.1),
                                    max_count(0.0), num_cg_iters(15),
                                    use_most_recent_ivector(true),
                                    greedy_ivector_extractor(false),
-                                   max_remembered_frames(1000) { }
+                                   max_remembered_frames(1000), normalize(true) { }
   
   void Register(OptionsItf *opts) {
     base_feature_cfg.Register(opts);
@@ -143,6 +145,9 @@ struct OnlineStreamIvectorExtractionConfig {
                    "number allows the speaker adaptation state to change over "
                    "time).  Interpret as a real frame count, i.e. not a count "
                    "scaled by --posterior-scale.");
+    opts->Register("normalize", &normalize,
+                    "Normalize length of iVectors to equal sqrt(feature-dimension) "
+                    "before lda transform.");
   }
 };
 
@@ -169,6 +174,7 @@ struct OnlineStreamIvectorExtractionInfo {
   BaseFloat max_remembered_frames;
 
   BaseFloat samp_freq;
+  bool normalize;
 
   OnlineStreamIvectorExtractionInfo(const OnlineStreamIvectorExtractionConfig &config);
 
@@ -238,6 +244,9 @@ class OnlineStreamIvectorFeature: public OnlineStreamBaseFeature {
   BaseFloat NumFrames() const {
     return ivector_stats_.NumFrames() / info_.posterior_scale;
   }
+
+  void LdaTransform(const VectorBase<BaseFloat> &ivector, Vector<BaseFloat> &transformed_ivector)
+  int32 LdaDim();
 
   void PrintDiagnostics() const;
   

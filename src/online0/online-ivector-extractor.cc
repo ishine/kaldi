@@ -56,18 +56,77 @@ int OnlineIvectorExtractor::FeedData(void *data, int nbytes, FeatState state) {
 	return 0;
 }
 
-Ivector* OnlineIvectorExtractor::GetCurrentIvector() {
+Ivector* OnlineIvectorExtractor::GetCurrentIvector(int type) {
 
 	int num_frame_ready = ivector_feature_->NumFramesReady();
+	int dim = ivector_feature_->Dim();
+	int lda_dim = ivector_feature_->LdaDim();
 
     if (num_frame_ready > 0) {
-		ivector.ivector_.Resize(ivector_feature_->Dim());
-		ivector_feature_->GetFrame(num_frame_ready-1, &ivector.ivector_);
-		ivector.tot_frames_ = num_frame_ready;
-		ivector.tot_ubm_loglike_ = ivector_feature_->UbmLogLikePerFrame() * num_frame_ready;
-		ivector.tot_objf_impr_ = ivector_feature_->ObjfImprPerFrame() * num_frame_ready;
+    		Vector<BaseFloat> raw_ivec(dim);
+		ivector_feature_->GetFrame(num_frame_ready-1, &raw_ivec);
+		if (type == 0)
+			ivector.ivector_ = raw_ivec;
+		else if (type == 1)
+			ivector_feature_->LdaTransform(raw_ivec, ivector.ivector_);
+
+		ivector.num_frames_ = num_frame_ready;
+		ivector.ubm_loglike_perframe_ = ivector_feature_->UbmLogLikePerFrame();
+		ivector.objf_impr_perframe_ = ivector_feature_->ObjfImprPerFrame();
     }
 	return &ivector;
+}
+
+BaseFloat OnlineIvectorExtractor::GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2) {
+	KALDI_ASSERT(ivec1.Dim() == ivec2.Dim());
+
+	BaseFloat norm, ratio;
+	Vector<BaseFloat> norm_ivec1(ivec1),  norm_ivec2(ivec2);
+
+	// normalize
+	norm = norm_ivec1.Norm(2.0);
+	ratio = norm / sqrt(norm_ivec1.Dim());
+	if (ratio != 0.0) norm_ivec1.Scale(1.0 / ratio);
+
+	norm = norm_ivec2.Norm(2.0);
+	ratio = norm / sqrt(norm_ivec2.Dim());
+	if (ratio != 0.0) norm_ivec2.Scale(1.0 / ratio);
+
+	// dot product
+	return VecVec(norm_ivec1, norm_ivec2);
+}
+
+void OnlineIvectorExtractor::GetEnrollSpeakerIvector(const std::vector<Vector<BaseFloat> > &ivectors,
+											Vector<BaseFloat> &spk_ivector, int type) {
+	int size = ivectors.size();
+	BaseFloat norm, ratio;
+
+	if (size > 0) {
+		Vector<BaseFloat> mean_ivector(ivectors[0].Dim());
+
+		for (int i = 0; i < size; i++) {
+			Vector<BaseFloat> ivector(ivectors[i]);
+			// normalize
+			norm = ivector.Norm(2.0);
+			ratio = norm / sqrt(ivector.Dim());
+			if (ratio != 0.0) ivector.Scale(1.0 / ratio);
+			// sum
+			mean_ivector.AddVec(1.0, ivector);
+		}
+		// mean
+		mean_ivector.Scale(1.0/size);
+
+		if (type == 0) {
+			spk_ivector = mean_ivector;
+		}
+		else if (type == 1) {
+			// normalize
+			norm = mean_ivector.Norm(2.0);
+			ratio = norm / sqrt(mean_ivector.Dim());
+			if (ratio != 0.0) mean_ivector.Scale(1.0 / ratio);
+			ivector_feature_->LdaTransform(mean_ivector, spk_ivector);
+		}
+	}
 }
 
 void OnlineIvectorExtractor::Reset() {

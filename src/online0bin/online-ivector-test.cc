@@ -110,7 +110,7 @@ int main(int argc, char *argv[])
             state = FEAT_END;
 			extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float), state);
 
-			ivector = extractor.GetCurrentIvector();
+			ivector = extractor.GetCurrentIvector(0);
 			ivector->utt = std::string(fn);
 			KALDI_LOG << "Finish extractor utterance: " << ivector->utt;
 			ivector_writer.Write(ivector->utt, ivector->ivector_);

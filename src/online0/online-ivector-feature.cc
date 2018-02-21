@@ -43,6 +43,7 @@ void OnlineStreamIvectorExtractionInfo::Init(
     use_most_recent_ivector = true;
   }
   max_remembered_frames = config.max_remembered_frames;
+  normalize = config.normalize;
 
   std::string note = "(note: this may be needed "
       "in the file supplied to --ivector-extractor-config)";
@@ -85,10 +86,7 @@ OnlineStreamIvectorExtractionInfo::OnlineStreamIvectorExtractionInfo():
     max_remembered_frames(0), samp_freq(16000) { }
 
 int32 OnlineStreamIvectorFeature::Dim() const {
-	int32 dim = info_.extractor.IvectorDim();
-	if (info_.lda_transform.NumRows() > 0)
-		dim = info_.lda_transform.NumRows();
-  return dim;
+	return info_.extractor.IvectorDim();
 }
 
 bool OnlineStreamIvectorFeature::IsLastFrame(int32 frame) const {
@@ -181,21 +179,40 @@ void OnlineStreamIvectorFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *fe
     ivector(0) -= info_.extractor.PriorOffset();
   }
 
-  // ivector lda transform
-  int32 lda_dim = info_.lda_transform.NumRows();
-  if(lda_dim <= 0) {
-	  feat->CopyFromVec(ivector);
-  } else {
-	  Vector<BaseFloat> transformed_ivector(lda_dim);
+  feat->CopyFromVec(ivector);
+}
+
+void OnlineStreamIvectorFeature::LdaTransform(const VectorBase<BaseFloat> &ivector,
+		Vector<BaseFloat> &transformed_ivector) {
+	  // Normalize length of iVectors to equal sqrt(feature-dimension)
+	  int32 lda_dim = info_.lda_transform.NumRows();
+	  VectorBase<BaseFloat> norm_ivector(ivector);
+	  BaseFloat norm = norm_ivector.Norm(2.0);
+	  BaseFloat ratio = norm / sqrt(norm_ivector.Dim()); // how much larger it is
+														  // than it would be, in
+														  // expectation, if normally
+	  if (ratio != 0.0 && info_.normalize)
+		  norm_ivector.Scale(1.0 / ratio);
+
+	  // ivector lda transform
+	  transformed_ivector.Resize(lda_dim);
 	  if (ivector.Dim() == info_.lda_transform.NumCols()) {
-		  transformed_ivector.AddMatVec(1.0, info_.lda_transform, kNoTrans, ivector, 0.0);
+		  transformed_ivector.AddMatVec(1.0, info_.lda_transform, kNoTrans, norm_ivector, 0.0);
 	  } else {
-		  KALDI_ASSERT(ivector.Dim() == info_.lda_transform.NumCols()-1);
+		  KALDI_ASSERT(norm_ivector.Dim() == info_.lda_transform.NumCols()-1);
 		  transformed_ivector.CopyFromVec(info_.lda_constant_term);
-		  transformed_ivector.AddMatVec(1.0, info_.lda_linear_term, kNoTrans, ivector, 1.0);
+		  transformed_ivector.AddMatVec(1.0, info_.lda_linear_term, kNoTrans, norm_ivector, 1.0);
 	  }
-	  feat->CopyFromVec(transformed_ivector);
-  }
+
+	  // Normalize
+	  norm = transformed_ivector.Norm(2.0);
+	  ratio = norm / sqrt(transformed_ivector.Dim());
+	  if (ratio != 0.0 && info_.normalize)
+		  transformed_ivector.Scale(1.0 / ratio);
+}
+
+int32 OnlineStreamIvectorFeature::LdaDim() {
+	return info_.lda_transform.NumRows();
 }
 
 void OnlineStreamIvectorFeature::PrintDiagnostics() const {
