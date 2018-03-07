@@ -363,9 +363,10 @@ class OnlineDecodableMatrixCtc: public OnlineDecodableInterface {
 
     if (loglikes_.NumRows() < num_frames_ + num_frames || loglikes_.NumCols() != num_cols) {
         int step = num_frames > 1024 ? num_frames : 1024;
-    		Matrix<BaseFloat> tmp(loglikes_.NumRows()+step, num_cols, kUndefined);
-    		tmp.RowRange(0, num_frames_).CopyFromMat(loglikes_.RowRange(0, num_frames_));
-    		loglikes_.Swap(&tmp);
+    	Matrix<BaseFloat> tmp(loglikes_.NumRows()+step, num_cols, kUndefined);
+        if (num_frames_ > 0)
+            tmp.RowRange(0, num_frames_).CopyFromMat(loglikes_.RowRange(0, num_frames_));
+    	loglikes_.Swap(&tmp);
     }
     loglikes_.RowRange(num_frames_, num_frames).CopyFromMat(*loglikes);
     num_frames_ += num_frames;
