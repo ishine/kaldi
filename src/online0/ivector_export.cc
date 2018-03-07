@@ -32,7 +32,7 @@ void *CreateIvectorExtractor(const char *cfg_path) {
 	return (void *)extractor;
 }
 
-int	FeedData(void *lp_extractor, void *data, int nbytes, int state) {
+int	IvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int state) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
     if (state==FEAT_START)
     	extractor->Reset();
@@ -77,7 +77,7 @@ int GetEnrollSpeakerIvector(void *lp_extractor, float *spk_ivec, float *ivecs,
 	return dim;
 }
 
-void Reset(void *lp_extractor) {
+void IvectorExtractorReset(void *lp_extractor) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
 	extractor->Reset();
 }
