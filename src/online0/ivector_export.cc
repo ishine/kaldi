@@ -46,6 +46,11 @@ int	IvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int sta
     return nbytes;
 }
 
+int GetIvectorDim(void *lp_extractor) {
+    OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
+    return extractor->GetIvectorDim();
+}
+
 int GetCurrentIvector(void *lp_extractor, float *result, int type) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
 	Ivector *ivector = extractor->GetCurrentIvector(type);
