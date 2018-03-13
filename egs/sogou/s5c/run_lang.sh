@@ -21,13 +21,13 @@ train_LM=false
 ###utils/fix_data_dir.sh data/local/train
 
 # Now prepare the "lang" data and train LM if train_LM=true. 
-LM=data/local/dict_offline_bin/lm.gz
+LM=data/local/dict_online_if/lm.arpa.gz
 srilm_opts="-subset -prune-lowprobs -unk -tolower -order 3"
 
 if [ $stage -le 1 ]; then
-  utils/prepare_lang.sh --position-dependent-phones false data/local/dict_offline_bin \
-  '!SIL'  data/local/lang data/lang_offline_bin
+  utils/prepare_lang.sh --position-dependent-phones false data/local/dict_online_if \
+  '!SIL'  data/local/lang data/lang_online_if
   # Compiles G for swbd trigram LM
   utils/format_lm_sri.sh --srilm-opts "$srilm_opts" \
-    data/lang_offline_bin $LM data/local/dict_offline_bin/lexicon.txt data/lang_offline_bin_G
+    data/lang_online_if $LM data/local/dict_online_if/lexicon.txt data/lang_online_if_G
 fi

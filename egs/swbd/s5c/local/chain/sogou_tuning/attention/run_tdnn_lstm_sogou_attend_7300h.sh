@@ -1,18 +1,16 @@
 #!/bin/bash
 
-# run_tdnn_lstm_1c.sh is like run_tdnn_lstm_1b.sh but using the
-# new 'fast-lstm' layer.  Results are slightly improved, plus
-# it's faster.  See PR #1243 on github, and issue #1237.
-# This used to be called run_tdnn_fastlstm_1b.sh.
+# run_tdnn_lstm_attend_sogou_7300h.sh is like run_tdnn_lstm_sogou_7300h.sh but add one multi-head-attention layer at the top of NN
+# kernel size 3*15 
 
 set -e
 
 # configs for 'chain'
-stage=9
+stage=12
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_7000hours # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_attend_1c_sogoufeat_7300hours # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -59,7 +57,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_fbank
+train_set=train_sogou_fbank_7300h
 ali_dir=exp/tri3b_ali
 treedir=exp/chain/tri5_7000houres_tree$suffix
 lang=data/lang_chain_2y
@@ -128,26 +126,26 @@ if [ $stage -le 12 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  input dim=40 name=input
+  input dim=71 name=input
 
   # please note that it is important to have input layer with the name=input
   # as the layer immediately preceding the fixed-affine-layer to enable
   # the use of short notation for the descriptor
-  fixed-affine-layer name=lda input=Append(-2,-1,0,1,2) affine-transform-file=$dir/configs/lda.mat
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-renorm-layer name=tdnn1 dim=1024
+  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=1024
   relu-renorm-layer name=tdnn2 input=Append(-1,0,1) dim=1024
   relu-renorm-layer name=tdnn3 input=Append(-1,0,1) dim=1024
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmp-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=256 non-recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm1 cell-dim=1536 recurrent-projection-dim=512 delay=-3
   relu-renorm-layer name=tdnn4 input=Append(-3,0,3) dim=1024
   relu-renorm-layer name=tdnn5 input=Append(-3,0,3) dim=1024
-  fast-lstmp-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=256 non-recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm2 cell-dim=1536 recurrent-projection-dim=512 delay=-3
   relu-renorm-layer name=tdnn6 input=Append(-3,0,3) dim=1024
-  relu-renorm-layer name=tdnn7 input=Append(-3,0,3) dim=1024
-  fast-lstmp-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=256 non-recurrent-projection-dim=256 delay=-3
+  attention-relu-renorm-layer name=attention1 num-heads=16 value-dim=120 key-dim=80 num-left-inputs=5 num-right-inputs=2 time-stride=3
+  relu-renorm-layer name=tdnn7 dim=1024
+  fast-lstmr-layer name=fastlstm3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -198,19 +196,19 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir exp/tri3b_lats_nodup$suffix \
+    --lat-dir exp/tri3b_lats_nodup \
     --dir $dir  || exit 1;
 fi
-
+<<!
 if [ $stage -le 14 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
   utils/mkgraph.sh --self-loop-scale 1.0 data/lang_bigG $dir $dir/graph_bigG
 fi
-
-decode_suff=final_bigG
-graph_dir=$dir/graph_bigG
+!
+decode_suff=online
+graph_dir=exp/chain/lstm_6j_offline_1536_512_sogoufeat_7000h_ld5/graph_online
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -219,12 +217,14 @@ if [ $stage -le 15 ]; then
   if [ ! -z $decode_iter ]; then
     iter_opts=" --iter $decode_iter "
   fi
-  for decode_set in not_on_screen test8000 testIOS; do
+  for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
       (
        steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
-          --nj 6 --cmd "$decode_cmd" $iter_opts \
+          --nj 10 --cmd "$decode_cmd" $iter_opts \
           --extra-left-context $extra_left_context  \
           --extra-right-context $extra_right_context  \
+          --extra-left-context-initial 0 \
+          --extra-right-context-final 0 \
           --frames-per-chunk "$frames_per_chunk" \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
