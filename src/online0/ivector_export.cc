@@ -82,7 +82,7 @@ int GetEnrollSpeakerIvector(void *lp_extractor, float *spk_ivec, float *ivecs,
 	return dim;
 }
 
-void IvectorExtractorReset(void *lp_extractor) {
+void ResetIvectorExtractor(void *lp_extractor) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
 	extractor->Reset();
 }
