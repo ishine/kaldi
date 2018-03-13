@@ -136,6 +136,7 @@ def process_args(args):
 
         run_opts.train_queue_opt = "--gpu 1"
         run_opts.parallel_train_opts = ""
+        run_opts.combine_gpu_opt = ""
         run_opts.combine_queue_opt = "--gpu 1"
         run_opts.prior_gpu_opt = "--use-gpu=yes"
         run_opts.prior_queue_opt = "--gpu 1"
@@ -146,6 +147,7 @@ def process_args(args):
 
         run_opts.train_queue_opt = ""
         run_opts.parallel_train_opts = "--use-gpu=no"
+        run_opts.combine_gpu_opt = "--use-gpu=no"
         run_opts.combine_queue_opt = ""
         run_opts.prior_gpu_opt = "--use-gpu=no"
         run_opts.prior_queue_opt = ""
@@ -356,6 +358,7 @@ def train(args, run_opts):
                     args.dropout_schedule,
                     float(num_archives_processed) / num_archives_to_process,
                     iter),
+                train_opts=' '.join(args.train_opts),
                 minibatch_size_str=args.minibatch_size,
                 frames_per_eg=args.frames_per_eg,
                 momentum=args.momentum,
@@ -398,7 +401,7 @@ def train(args, run_opts):
                 models_to_combine=models_to_combine, egs_dir=egs_dir,
                 minibatch_size_str=args.minibatch_size, run_opts=run_opts,
                 get_raw_nnet_from_am=False,
-                sum_to_one_penalty=args.combine_sum_to_one_penalty,
+                max_objective_evaluations=args.max_objective_evaluations,
                 use_multitask_egs=use_multitask_egs)
         else:
             common_lib.force_symlink("{0}.raw".format(num_iters),
