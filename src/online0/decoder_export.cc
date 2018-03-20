@@ -28,15 +28,16 @@ int DecoderFeedData(void * lpDecoder, void *data, int nbytes, int state)
     float * audio = new float[numOfSamples];
     for (int i=0; i<numOfSamples; i++)
         audio[i] = ((short *)data)[i];
-    decoder->FeedData(audio, numOfSamples * sizeof(float), state);
+    decoder->FeedData(audio, numOfSamples * sizeof(float), (kaldi::FeatState)state);
     delete [] audio;
+    return 0;
 }
 
 int GetResult(void * lpDecoder, int * words_id, int state)
 {
     OnlineFstDecoder * decoder = (OnlineFstDecoder *)lpDecoder;
     Result *result;
-    result = decoder->GetResult(state);
+    result = decoder->GetResult((kaldi::FeatState)state);
     int idx = 0;
     for (auto word_id : result->word_ids_){
         words_id[idx++] = word_id;

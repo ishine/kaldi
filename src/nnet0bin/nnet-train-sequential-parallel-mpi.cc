@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-// nnetbin/nnet-train-sequential-parallel.cc
-=======
 // nnetbin/nnet-train-sequential-parallel-mpi.cc
->>>>>>> upstream/master
 
 // Copyright 2014-2015  Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -58,17 +54,10 @@ int main(int argc, char *argv[]) {
         "Perform one iteration of DNN-MMI training by stochastic "
         "gradient descent.\n"
         "The network weights are updated on each utterance.\n"
-<<<<<<< HEAD
-        "Usage:  nnet-train-mmi-sequential [options] <model-in> <transition-model-in> "
-        "<feature-rspecifier> <den-lat-rspecifier> <ali-rspecifier> [<model-out>]\n"
-        "e.g.: \n"
-        " nnet-train-mmi-sequential nnet.init trans.mdl scp:train.scp scp:denlats.scp ark:train.ali "
-=======
         "Usage:  nnet-train-mmi-sequential [options] <model-in> <transition-model-in>(optional) "
         "<feature-rspecifier> <sweep_frames_rspecifier>(optional) <den-lat-rspecifier> <ali-rspecifier> [<model-out>]\n"
         "e.g.: \n"
         " nnet-train-sequential-parallel-mpi nnet.init trans.mdl(optional) scp:train.scp scp:sweep.scp(optional) scp:denlats.scp ark:train.ali "
->>>>>>> upstream/master
         "nnet.iter1\n";
 
 
@@ -101,14 +90,6 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-<<<<<<< HEAD
-    if (po.NumArgs() != 6) {
-      po.PrintUsage();
-      exit(1);
-    }
-
-    std::string model_filename = po.GetArg(1),
-=======
     std::string model_filename, transition_model_filename,
                 feature_rspecifier, den_lat_rspecifier,
                 num_ali_rspecifier, sweep_frames_rspecifier, target_model_filename;
@@ -117,17 +98,10 @@ int main(int argc, char *argv[]) {
     if (po.NumArgs() == 6)
     {
         model_filename = po.GetArg(1),
->>>>>>> upstream/master
         transition_model_filename = po.GetArg(2),
         feature_rspecifier = po.GetArg(3),
         den_lat_rspecifier = po.GetArg(4),
         num_ali_rspecifier = po.GetArg(5);
-<<<<<<< HEAD
-
-    std::string target_model_filename;
-    target_model_filename = po.GetArg(6);
-
-=======
         target_model_filename = po.GetArg(6);
     }
     else if (po.NumArgs() == 7)
@@ -153,7 +127,6 @@ int main(int argc, char *argv[]) {
         po.PrintUsage();
         exit(1);
     }
->>>>>>> upstream/master
 
     //mpi
     	NnetParallelUtil util;
@@ -212,10 +185,7 @@ int main(int argc, char *argv[]) {
 								feature_rspecifier,
 								den_lat_rspecifier,
 								num_ali_rspecifier,
-<<<<<<< HEAD
-=======
                                 sweep_frames_rspecifier,
->>>>>>> upstream/master
 								&nnet,
 								&stats);
 

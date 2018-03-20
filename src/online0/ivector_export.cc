@@ -41,7 +41,7 @@ int	IvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int sta
     float *audio = new float[num_samples];
     for (int i = 0; i < num_samples; i++)
         audio[i] = ((short *)data)[i];
-    extractor->FeedData(audio, num_samples*sizeof(float), state);
+    extractor->FeedData(audio, num_samples*sizeof(float), (kaldi::FeatState)state);
     delete [] audio;
     return nbytes;
 }

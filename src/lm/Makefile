@@ -12,21 +12,13 @@ TESTFILES = arpa-file-parser-test arpa-lm-compiler-test
 
 OBJFILES = arpa-file-parser.o arpa-lm-compiler.o const-arpa-lm.o \
 			kaldi-rnnlm.o mikolov-rnnlm-lib.o \
-<<<<<<< HEAD
 		   	kaldi-lmtable.o kaldi-lm.o kaldi-nnlm.o \
 			lm-model-sync.o lm-compute-lstm-parallel.o \
 			seqlabel-compute-lstm-parallel.o slu-compute-lstm-parallel.o
-=======
-		   	kaldi-lmtable.o kaldi-lm.o \
->>>>>>> upstream/master
 
 LIBNAME = kaldi-lm
 
 ADDLIBS = ../fstext/kaldi-fstext.a ../util/kaldi-util.a ../thread/kaldi-thread.a \
-<<<<<<< HEAD
           ../base/kaldi-base.a ../nnet0/kaldi-nnet0.a ../cudamatrix/kaldi-cudamatrix.a ../matrix/kaldi-matrix.a
-=======
-          ../base/kaldi-base.a ../matrix/kaldi-matrix.a
->>>>>>> upstream/master
 
 include ../makefiles/default_rules.mk

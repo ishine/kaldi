@@ -184,7 +184,9 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 				frame_ready_ = batch_size;
 
 			for (int i = 0; i < frame_ready_; i += in_skip_) {
-				feature_pipeline_->GetFrame(frame_offset_+i, &feat_in_.Row(i/in_skip_));
+				// feature_pipeline_->GetFrame(frame_offset_+i, &feat_in_.Row(i/in_skip_));
+                SubVector<BaseFloat> row(feat_in_, i/in_skip_);
+                feature_pipeline_->GetFrame(frame_offset_+i, &row);
 			}
 
 			frame_offset_ += frame_ready_;
