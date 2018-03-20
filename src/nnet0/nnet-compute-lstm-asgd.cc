@@ -322,7 +322,7 @@ private:
 	            }
 	        }
 
-			num_frames = batch_size*num_stream;
+			num_frames = minibatch;
 			// report the speed
 			if (num_done % 5000 == 0) {
 			  time_now = time.Elapsed();

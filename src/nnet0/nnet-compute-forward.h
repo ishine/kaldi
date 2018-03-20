@@ -44,14 +44,17 @@ struct NnetForwardOptions {
     int32 skip_frames;
     int32 sweep_time;
     std::string sweep_frames_str;
+    bool  sweep_loop;
     bool  skip_inner;
+    float blank_posterior_scale;
 
     const PdfPriorOptions *prior_opts;
 
     NnetForwardOptions(const PdfPriorOptions *prior_opts)
     	:feature_transform(""),no_softmax(false),apply_log(false),copy_posterior(true),use_gpu("no"),num_threads(1),
 		 	 	 	 	 	 	 time_shift(0),batch_size(20),num_stream(0),dump_interval(0), 
-                                 skip_frames(1), sweep_time(1), sweep_frames_str("0"), skip_inner(false), prior_opts(prior_opts)
+                                 skip_frames(1), sweep_time(1), sweep_frames_str("0"), sweep_loop(false), skip_inner(false),
+								 blank_posterior_scale(-1.0), prior_opts(prior_opts)
     {
 
     }
@@ -73,11 +76,12 @@ struct NnetForwardOptions {
         po->Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
         po->Register("dump-interval", &dump_interval, "---LSTM--- num utts between model dumping [ 0 == disabled ]");
         po->Register("skip-frames", &skip_frames, "LSTM model skip frames for next input");
+        po->Register("sweep-loop", &sweep_loop, "Sweep all frames indexes for each utterance in skip frames training if true, "
+        	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
         po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
-
-        sweep_time = skip_frames;
         po->Register("sweep-time", &sweep_time, "Sweep times for each utterance in skip frames training(Deprecated, use --sweep-frames instead)");
         po->Register("sweep-frames", &sweep_frames_str, "Sweep frames index for each utterance in skip frames decoding, e.g. 0");
+        po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
     }
 
 };
@@ -102,6 +106,7 @@ struct NnetForwardStats {
 void NnetForwardParallel(const NnetForwardOptions *opts,
 						std::string	model_filename,
 						std::string feature_rspecifier,
+						std::string sweep_frames_rspecifier,
 						std::string feature_wspecifier,
 						NnetForwardStats *stats);
 

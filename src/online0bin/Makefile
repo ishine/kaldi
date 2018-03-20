@@ -8,7 +8,8 @@ LDLIBS += $(CUDA_LDLIBS)
 LDLIBS += $(MPICH_LDLIBS)
 
 BINFILES = online-nnet-ipc-decoder  online-nnet-ipc-forward \
-		   online-nnet-wav-decoder  online-feature-extractor online-fast-decoder
+		   online-nnet-wav-decoder  online-feature-extractor online-decoder-test \
+		   online-ivector-extractor-test online-ivector-enroll-test
 
 OBJFILES =
 

@@ -23,6 +23,7 @@
 #define KALDI_NNET_CUDNN_CONVOLUTIONAL_2D_COMPONENT_H_ 
 
 //#include <cudnn.h>
+#if HAVE_CUDA == 1
 #include "nnet/nnet-component.h"
 #include "base/kaldi-utils.h"
 namespace kaldi{
@@ -564,6 +565,6 @@ public:
 
 }//end of namespace nnet1
 }//end of namespace kaldi
-
+#endif
 
 #endif //NNET_CUDNN_CONVOLUTIONAL_2D_COMPONENT_H_

@@ -40,12 +40,13 @@ struct OnlineNnetForwardOptions {
 
     int32 batch_size;
     int32 num_stream;
+    float blank_posterior_scale;
 
     PdfPriorOptions prior_opts;
 
     OnlineNnetForwardOptions()
-    	:feature_transform(""),network_model(""),no_softmax(true),apply_log(false),
-		 use_gpu("no"),gpuid(-1),num_threads(1),batch_size(8),num_stream(1)
+    	:feature_transform(""),network_model(""),no_softmax(false),apply_log(false),
+		 use_gpu("no"),gpuid(-1),num_threads(1),batch_size(6),num_stream(1),blank_posterior_scale(-1.0)
     {
 
     }
@@ -59,6 +60,8 @@ struct OnlineNnetForwardOptions {
     	po->Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA");
         po->Register("gpuid", &gpuid, "gpuid < 0 for automatic select gpu, gpuid >= 0 for select specified gpu, only has effect if compiled with CUDA");
     	po->Register("num-threads", &num_threads, "Number of threads(GPUs) to use");
+        po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
+
 
 
         //<jiayu>
@@ -90,7 +93,8 @@ public:
 		bool no_softmax = opts_.no_softmax;
 		bool apply_log = opts_.apply_log;
 		int32 num_stream = opts_.num_stream;
-		int32 batch_size = opts_.batch_size;
+        float blank_posterior_scale = opts_.blank_posterior_scale;
+		//int32 batch_size = opts_.batch_size;
 		std::string feature_transform = opts_.feature_transform;
 		std::string model_filename = opts_.network_model;
 
@@ -115,16 +119,20 @@ public:
 	      KALDI_ERR << "Cannot use both --apply-log=true --no-softmax=true, use only one of the two!";
 	    }
 
+        if (blank_posterior_scale >= 0 && opts_.prior_opts.class_frame_counts != "") {
+          KALDI_ERR << "Cannot use both --blank-posterior-scale --class-frame-counts, use only one of the two!";
+        }
+
         // we will subtract log-priors later,
     	if (opts_.prior_opts.class_frame_counts != "") 
 	        pdf_prior_ = new PdfPrior(opts.prior_opts);
 
-	    int input_dim = feature_transform != "" ? nnet_transf_.InputDim() : nnet_.InputDim();
-	    int output_dim = nnet_.OutputDim();
-	    feat_.Resize(batch_size * num_stream, input_dim, kSetZero, kStrideEqualNumCols);
-	    feat_out_.Resize(batch_size * num_stream, output_dim, kSetZero, kStrideEqualNumCols);
+	    //int input_dim = feature_transform != "" ? nnet_transf_.InputDim() : nnet_.InputDim();
+	    //int output_dim = nnet_.OutputDim();
+	    //feat_.Resize(batch_size * num_stream, input_dim, kSetZero, kStrideEqualNumCols);
+	    //feat_out_.Resize(batch_size * num_stream, output_dim, kSetZero, kStrideEqualNumCols);
 
-	    new_utt_flags_.resize(opts.num_stream, 1);
+	    new_utt_flags_.resize(num_stream, 1);
 	}
 
     virtual ~OnlineNnetForward() {
@@ -134,12 +142,18 @@ public:
 
 	void Forward(const MatrixBase<BaseFloat> &in, Matrix<BaseFloat> *out) {
 		CuMatrix<BaseFloat> feats_transf;
+        feat_.Resize(in.NumRows(), in.NumCols(), kUndefined, kStrideEqualNumCols);
 		feat_.CopyFromMat(in);
 		nnet_transf_.Propagate(feat_, &feats_transf); // Feedforward
 		// for streams with new utterance, history states need to be reset
 		nnet_.ResetLstmStreams(new_utt_flags_);
 		// forward pass
 		nnet_.Propagate(feats_transf, &feat_out_);
+
+        // ctc prior, only scale blank label posterior
+        if (opts_.blank_posterior_scale >= 0) {
+            feat_out_.ColRange(0, 1).Scale(opts_.blank_posterior_scale);
+        }
 
     	// convert posteriors to log-posteriors,
     	if (opts_.apply_log) {
@@ -154,7 +168,7 @@ public:
 
         out->Resize(feat_out_.NumRows(), feat_out_.NumCols(), kUndefined);
     	out->CopyFromMat(feat_out_);
-	    new_utt_flags_.resize(opts_.num_stream, 0);
+		new_utt_flags_[0] = 0;
 	}
 
 	void ResetHistory() {

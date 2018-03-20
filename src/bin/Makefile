@@ -10,7 +10,7 @@ BINFILES = align-equal align-equal-compiled acc-tree-stats \
         compile-train-graphs compile-train-graphs-fsts \
         make-pdf-to-tid-transducer make-ilabel-transducer show-transitions \
         ali-to-phones ali-to-post weight-silence-post acc-lda est-lda \
-        ali-to-pdf est-mllt build-tree build-tree-two-level decode-faster \
+        ali-to-pdf est-mllt build-tree build-tree-two-level decode-faster decode-faster-ctc \
         decode-faster-mapped vector-scale copy-transition-model rand-prune-post \
         phones-to-prons prons-to-wordali copy-gselect copy-tree scale-post \
         compute-mce-scale get-silence-probs post-to-weights reverse-weights \
@@ -25,7 +25,7 @@ BINFILES = align-equal align-equal-compiled acc-tree-stats \
         vector-sum matrix-sum-rows est-pca sum-lda-accs sum-mllt-accs \
         transform-vec align-text matrix-dim copy-align ali-join-to-post latgen-faster-ctc \
 		compile-train-graphs-ctc align-compiled-mapped-ctc copy-fst arpa2fst \
-		latgen-faster-ctc-mapped-parallel
+		latgen-faster-ctc-mapped-parallel analyze-pdf-acc triphone-to-pdf compile-questions-phone
 
 
 OBJFILES =

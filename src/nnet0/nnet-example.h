@@ -25,6 +25,7 @@
 #include "nnet0/nnet-compute-ctc-parallel.h"
 #include "nnet0/nnet-compute-lstm-lm-parallel.h"
 #include "nnet0/nnet-compute-chain-parallel.h"
+#include "nnet0/nnet-compute-forward.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -108,6 +109,7 @@ struct SequentialNnetExample : NnetExample
 {
 	RandomAccessLatticeReader *den_lat_reader;
 	RandomAccessInt32VectorReader *num_ali_reader;
+	RandomAccessInt32VectorReader *sweep_frames_reader;
 	NnetModelSync *model_sync;
 	NnetSequentialStats *stats;
 	const NnetSequentialUpdateOptions *opts;
@@ -120,11 +122,13 @@ struct SequentialNnetExample : NnetExample
 	SequentialNnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 							RandomAccessLatticeReader *den_lat_reader,
 							RandomAccessInt32VectorReader *num_ali_reader,
+							RandomAccessInt32VectorReader *sweep_frames_reader,
 							NnetModelSync *model_sync,
 							NnetSequentialStats *stats,
 							const NnetSequentialUpdateOptions *opts):
 								NnetExample(feature_reader), den_lat_reader(den_lat_reader),
-								num_ali_reader(num_ali_reader),model_sync(model_sync),stats(stats),opts(opts)
+								num_ali_reader(num_ali_reader), sweep_frames_reader(sweep_frames_reader),
+								model_sync(model_sync), stats(stats), opts(opts)
 	{
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
@@ -134,7 +138,24 @@ struct SequentialNnetExample : NnetExample
 	}
 
 	bool PrepareData(std::vector<NnetExample*> &examples);
+};
 
+struct FeatureExample: NnetExample
+{
+	RandomAccessInt32VectorReader *sweep_frames_reader;
+	const NnetForwardOptions *opts;
+
+	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader,
+			RandomAccessInt32VectorReader *sweep_frames_reader, const NnetForwardOptions *opts)
+			:NnetExample(feature_reader), sweep_frames_reader(sweep_frames_reader), opts(opts) {
+		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+
+		if (sweep_frames[0] > opts->skip_frames || sweep_frames.size() > 1)
+			KALDI_ERR << "invalid sweep frame index";
+	}
+
+	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
 struct LmNnetExample : NnetExample
@@ -227,22 +248,6 @@ struct LstmNnetExample: NnetExample
     	new_utt_flags = flags;
     }
     bool PrepareData(std::vector<NnetExample*> &examples);
-};
-
-struct FeatureExample: NnetExample
-{
-	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader)
-	:NnetExample(feature_reader){}
-
-	bool PrepareData(std::vector<NnetExample*> &examples)
-	{
-		examples.resize(1);
-		utt = feature_reader->Key();
-		input_frames = feature_reader->Value();
-		examples[0] = this;
-		return true;
-	}
-
 };
 
 /** This struct stores neural net training examples to be used in

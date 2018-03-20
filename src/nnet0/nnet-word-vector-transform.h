@@ -199,9 +199,13 @@ class WordVectorTransform : public UpdatableComponent {
   void UpdateGradient()
   {
 	    // update
+#if HAVE_CUDA == 1
 	  	SetStream(update_wordvector_patches_, streamlist_);
+#endif
 	  	AddRowSumMatStreamed(local_lrate, update_wordvector_patches_, diff_patches_, static_cast<BaseFloat>(1.0f));
+#if HAVE_CUDA == 1
 	  	ResetStream(update_wordvector_patches_);
+#endif
 	  	//wordvector_.AddMatToRows(local_lrate, wordvector_corr_, wordid_);
   }
 

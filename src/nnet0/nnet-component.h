@@ -50,6 +50,7 @@ class Component {
      
     kUpdatableComponent = 0x0100, 
     kAffineTransform,
+	kTimeDelayTransform,
 	kWordVectorTransform,
 	kClassAffineTransform,
 	kBatchNormTransform,
@@ -64,6 +65,7 @@ class Component {
 	kLstmProjectedStreamsFast,
 	kLstmProjectedStreamsFixedPoint,
 	kLstmProjectedStreamsSimple,
+	kLstmProjectedStreamsResidual,
     kBLstmProjectedStreams,
 	kBLstmStreams,
 	kGruStreams,
@@ -145,6 +147,9 @@ class Component {
     return 1;
   }
  
+  virtual int32 GetStream() {
+	return 1;
+  }
   /// Perform forward pass propagation Input->Output
   void Propagate(const CuMatrixBase<BaseFloat> &in, CuMatrix<BaseFloat> *out); 
   /// Perform backward pass propagation, out_diff -> in_diff
@@ -264,8 +269,10 @@ inline void Component::Propagate(const CuMatrixBase<BaseFloat> &in,
               << " input-dim : " << input_dim_ << " data : " << in.NumCols();
   }
   int nsubsample = this->GetSubSampleRate();
+  int S = this->GetStream();
+  int T = (in.NumRows()/S + nsubsample-1)/nsubsample;
   // Allocate target buffer
-  out->Resize(in.NumRows()/nsubsample, output_dim_, kSetZero, kStrideEqualNumCols); // reset
+  out->Resize(T*S, output_dim_, kSetZero, kStrideEqualNumCols); // reset
   // Call the propagation implementation of the component
   PropagateFnc(in, out);
 }
@@ -291,12 +298,14 @@ inline void Component::Backpropagate(const CuMatrixBase<BaseFloat> &in,
       return;
     }
   } else {
-    int nsubsample = this->GetSubSampleRate();
     // Allocate target buffer
-    in_diff->Resize(out_diff.NumRows()*nsubsample, input_dim_, kUndefined, kStrideEqualNumCols); // reset
+    in_diff->Resize(in.NumRows(), input_dim_, kUndefined, kStrideEqualNumCols); // reset
     // Asserts on the dims
-    KALDI_ASSERT((in.NumRows() == out.NumRows()*nsubsample) &&
-                 (in.NumRows() == out_diff.NumRows()*nsubsample) &&
+    int nsubsample = this->GetSubSampleRate();
+    int S = this->GetStream();
+    int T = (in.NumRows()/S + nsubsample-1)/nsubsample;
+    KALDI_ASSERT((T*S == out.NumRows()) &&
+                 (T*S == out_diff.NumRows()) &&
                  (in.NumRows() == in_diff->NumRows()));
     KALDI_ASSERT(in.NumCols() == in_diff->NumCols());
     KALDI_ASSERT(out.NumCols() == out_diff.NumCols());

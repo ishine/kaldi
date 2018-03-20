@@ -26,6 +26,7 @@
 namespace kaldi {
 
 struct OnlineNnetFeaturePipelineConfig {
+    BaseFloat samp_freq;
 	std::string feature_type;
 	std::string mfcc_config;
 	std::string plp_config;
@@ -44,10 +45,12 @@ struct OnlineNnetFeaturePipelineConfig {
 	std::string splice_config;
 
 	OnlineNnetFeaturePipelineConfig():
-		feature_type("fbank"), add_pitch(false),
+		samp_freq(16000), feature_type("fbank"), add_pitch(false),
 		add_cmvn(false), add_deltas(false), splice_feats(false) { }
 
 	void Register(OptionsItf *opts) {
+	    opts->Register("sample-frequency", &samp_freq,
+	                   "Waveform data sample frequency (must match the waveform file, if specified there)");
 	    opts->Register("feature-type", &feature_type,
 	                   "Base feature type [mfcc, plp, fbank]");
 	    opts->Register("mfcc-config", &mfcc_config, "Configuration file for "
@@ -82,7 +85,7 @@ struct OnlineNnetFeaturePipelineConfig {
 struct OnlineNnetFeaturePipelineOptions {
 	OnlineNnetFeaturePipelineOptions():
 		feature_type("fbank"), add_pitch(false),
-		add_cmvn(false), add_deltas(false), splice_feats(false) { }
+		add_cmvn(false), add_deltas(false), splice_feats(false), samp_freq(16000) { }
 
 	OnlineNnetFeaturePipelineOptions(const OnlineNnetFeaturePipelineConfig &config);
 
@@ -97,25 +100,27 @@ struct OnlineNnetFeaturePipelineOptions {
 	//ProcessPitchOptions pitch_process_opts;  // Options for pitch post-processing
 
 	bool add_cmvn;
-	OnlineCmvnOptions cmvn_opts;  // Options for online CMN/CMVN computation.
+	OnlineStreamCmvnOptions cmvn_opts;  // Options for online CMN/CMVN computation.
 
 	bool add_deltas;
 	DeltaFeaturesOptions delta_opts;  // Options for delta computation, if done.
 
 	bool splice_feats;
-	OnlineSpliceOptions splice_opts;  // Options for frame splicing, if done.
+	OnlineStreamSpliceOptions splice_opts;  // Options for frame splicing, if done.
+
+	BaseFloat samp_freq;
 
 private:
 	KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNnetFeaturePipelineOptions);
 };
 
 
-class OnlineNnetFeaturePipeline: public OnlineFeatureInterface {
+class OnlineNnetFeaturePipeline: public OnlineStreamBaseFeature {
 public:
 	explicit OnlineNnetFeaturePipeline(const OnlineNnetFeaturePipelineOptions &opts);
 	virtual ~OnlineNnetFeaturePipeline();
 
-	/// Member functions from OnlineFeatureInterface:
+	/// Member functions from OnlineStreamFeatureInterface:
 	virtual int32 Dim() const;
 	virtual bool IsLastFrame(int32 frame) const;
 	virtual int32 NumFramesReady() const;
@@ -139,16 +144,16 @@ private:
 
 	const OnlineNnetFeaturePipelineOptions &opts_;
 
-	OnlineBaseFeature *base_feature_;		// MFCC/PLP/filterbank
+	OnlineStreamBaseFeature *base_feature_;		// MFCC/PLP/filterbank
 	//OnlinePitchFeature *pitch_;              // Raw pitch, if used
 	//OnlineProcessPitch *pitch_feature_;  // Processed pitch, if pitch used
-	//OnlineFeatureInterface *feature_;        // CMVN (+ processed pitch)
+	//OnlineStreamFeatureInterface *feature_;        // CMVN (+ processed pitch)
 
-	OnlineCmvnFeature *cmvn_feature_;
-	OnlineDeltaFeature *delta_feature_;
-	OnlineSpliceFeature *splice_feature_;  // This may be NULL if we're not
+	OnlineStreamCmvnFeature *cmvn_feature_;
+	OnlineStreamDeltaFeature *delta_feature_;
+	OnlineStreamSpliceFeature *splice_feature_;  // This may be NULL if we're not
 	                                             // doing splicing or deltas.
-	OnlineFeatureInterface *final_feature_;
+	OnlineStreamFeatureInterface *final_feature_;
 };
 
 } // kaldi namespace

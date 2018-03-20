@@ -54,6 +54,7 @@ struct NnetSequentialUpdateOptions {
   std::string silence_phones_str; // colon-separated list of integer ids of silence phones,
                                   // for MPE/SMBR only.
   std::string sweep_frames_str;
+  std::string sweep_frames_filename;
 
   int32 update_frames;
   int32 max_frames; // Allow segments maximum of one minute by default
@@ -71,6 +72,9 @@ struct NnetSequentialUpdateOptions {
   int32 dump_time;
   //lstm
 
+  bool  sweep_loop;
+  bool  skip_inner;
+
   const NnetTrainOptions *trn_opts;
   const PdfPriorOptions *prior_opts;
   const NnetParallelOptions *parallel_opts;
@@ -78,13 +82,14 @@ struct NnetSequentialUpdateOptions {
 
   NnetSequentialUpdateOptions(const NnetTrainOptions *trn_opts, const PdfPriorOptions *prior_opts, const NnetParallelOptions *parallel_opts): criterion("mmi"),
 		  	  	  	  	  	  	 acoustic_scale(0.1), lm_scale(0.1), old_acoustic_scale(0.0), kld_scale(-1.0), frame_smooth(-1.0),
-		  	  	  	  	  	  	 drop_frames(true), one_silence_class(false), boost(0.0), sweep_frames_str("0"),
+		  	  	  	  	  	  	 drop_frames(true), one_silence_class(false), boost(0.0), sweep_frames_str("0"), sweep_frames_filename(""),
 								 update_frames(-1),
 				                 max_frames(6000),
   	  	  	  	  	  	  	  	 use_gpu("yes"),
 								 si_model_filename(""),
 								 use_psgd(false),
 								 targets_delay(0), batch_size(0), num_stream(0), dump_interval(0),frame_limit(10000),skip_frames(1),dump_time(0),
+								 sweep_loop(false), skip_inner(false),
 								 trn_opts(trn_opts),
 								 prior_opts(prior_opts),
 								 parallel_opts(parallel_opts){ }
@@ -119,6 +124,7 @@ struct NnetSequentialUpdateOptions {
                      "For MPFE or SMBR, colon-separated list of integer ids of "
                      "silence phones, e.g. 1:2:3");
       po->Register("sweep-frames", &sweep_frames_str, "Sweep frames index for each utterance in skip frames training, e.g. 0");
+      po->Register("sweep-frames-filename", &sweep_frames_filename, "Sweep frames index in skip frames training which can be custom setting for each utterance, this would cover sweep-frames option.");
 
       po->Register("update-frames",&update_frames, "Every update-frames frames each client exchange gradient");
       po->Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA");
@@ -143,6 +149,9 @@ struct NnetSequentialUpdateOptions {
       po->Register("dump-time", &dump_time, "num hours frames between model dumping [ 0 == disabled ]");
       //</jiayu>
 
+      po->Register("sweep-loop", &sweep_loop, "Sweep all frames indexes for each utterance in skip frames training if true, "
+      	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
+      po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
   }
 };
 
@@ -224,6 +233,7 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		std::string feature_rspecifier,
 		std::string den_lat_rspecifier,
 		std::string num_ali_rspecifier,
+		std::string sweep_frames_rspecifier,
 		Nnet *nnet,
 		NnetSequentialStats *stats);
 

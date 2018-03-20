@@ -28,6 +28,8 @@ namespace nnet0 {
 void
 NnetModelSync::Init(Nnet *nnet)
 {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
 	if (NULL != this->free_data_)
 		return;
 
@@ -52,6 +54,12 @@ NnetModelSync::Init(Nnet *nnet)
 	{
 	    throw std::bad_alloc();
 	}
+ }else
+#endif
+        {
+                // not implemented for CPU yet
+                // return 0;
+        }
 
 }
 
@@ -80,6 +88,8 @@ NnetModelSync::InitMergeFunction()
 void
 NnetModelSync::Destory()
 {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
 	if (NULL != this->free_data_)
 	{
 		CU_SAFE_CALL(cudaFreeHost(this->free_data_));
@@ -87,6 +97,12 @@ NnetModelSync::Destory()
 		this->data_ = NULL;
 		this->dim_ = 0;
 	}
+ }else
+#endif
+        {
+                // not implemented for CPU yet
+                // return 0;
+        }
 
 }
 

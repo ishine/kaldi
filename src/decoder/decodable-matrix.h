@@ -29,6 +29,20 @@
 
 namespace kaldi {
 
+class OnlineDecodableInterface: public DecodableInterface {
+ public:
+    OnlineDecodableInterface():
+    input_is_finished_(false) {}
+
+    virtual ~OnlineDecodableInterface() {}
+
+    virtual void Reset() {}
+    virtual void AcceptLoglikes(const Matrix<BaseFloat> *loglikes) {}
+    virtual void InputIsFinished() { input_is_finished_ = true; }
+    virtual bool IsInputFinished() { return input_is_finished_;}
+ protected:
+    bool input_is_finished_;
+};
 
 class DecodableMatrixScaledMapped: public DecodableInterface {
  public:
@@ -83,10 +97,10 @@ class DecodableMatrixScaledMapped: public DecodableInterface {
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecodableMatrixScaledMapped);
 };
 
-class OnlineDecodableMatrixMapped: public DecodableInterface {
+class OnlineDecodableMatrixMapped: public OnlineDecodableInterface {
  public:
 	OnlineDecodableMatrixMapped(const TransitionModel &tm, BaseFloat scale):
-      trans_model_(tm), scale_(scale), input_is_finished_(false), num_frames_(0) {
+      trans_model_(tm), scale_(scale), num_frames_(0) {
 		loglikes_.Resize(1024, trans_model_.NumPdfs(), kUndefined);
 	}
 
@@ -115,9 +129,6 @@ class OnlineDecodableMatrixMapped: public DecodableInterface {
     num_frames_ += num_frames;
   }
 
-  void InputIsFinished() { input_is_finished_ = true; }
-  bool IsInputFinished() { return input_is_finished_;}
-
   virtual bool IsLastFrame(int32 frame) const {
     KALDI_ASSERT(frame < NumFramesReady());
     return (frame == NumFramesReady() - 1 && input_is_finished_);
@@ -141,7 +152,6 @@ class OnlineDecodableMatrixMapped: public DecodableInterface {
   const TransitionModel &trans_model_;  // for tid to pdf mapping
   Matrix<BaseFloat> loglikes_;
   BaseFloat scale_;
-  bool input_is_finished_;
   int num_frames_;
   KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineDecodableMatrixMapped);
 };
@@ -329,6 +339,64 @@ class DecodableMatrixScaledCtc: public DecodableInterface {
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecodableMatrixScaledCtc);
 };
 
+class OnlineDecodableMatrixCtc: public OnlineDecodableInterface {
+ public:
+	OnlineDecodableMatrixCtc(BaseFloat scale):
+      scale_(scale), num_frames_(0) {
+		loglikes_.Resize(1024, 121, kUndefined);
+	}
+
+  virtual int32 NumFramesReady() const { return num_frames_; }
+
+  // This function is destructive of the input "loglikes" because it may
+  // under some circumstances do a shallow copy using Swap().  This function
+  // appends loglikes to any existing likelihoods you've previously supplied.
+  // frames_to_discard, if nonzero, will discard that number of previously
+  // available frames, from the left, advancing FirstAvailableFrame() by
+  // a number equal to frames_to_discard.  You should only set frames_to_discard
+  // to nonzero if you know your decoder won't want to access the loglikes
+  // for older frames.
+  void AcceptLoglikes(const Matrix<BaseFloat> *loglikes) {
+	int num_frames = loglikes->NumRows();
+	int num_cols = loglikes->NumCols();
+	if (num_frames == 0) return;
+
+    if (loglikes_.NumRows() < num_frames_ + num_frames || loglikes_.NumCols() != num_cols) {
+        int step = num_frames > 1024 ? num_frames : 1024;
+    	Matrix<BaseFloat> tmp(loglikes_.NumRows()+step, num_cols, kUndefined);
+        if (num_frames_ > 0)
+            tmp.RowRange(0, num_frames_).CopyFromMat(loglikes_.RowRange(0, num_frames_));
+    	loglikes_.Swap(&tmp);
+    }
+    loglikes_.RowRange(num_frames_, num_frames).CopyFromMat(*loglikes);
+    num_frames_ += num_frames;
+  }
+
+  virtual bool IsLastFrame(int32 frame) const {
+    KALDI_ASSERT(frame < NumFramesReady());
+    return (frame == NumFramesReady() - 1 && input_is_finished_);
+  }
+
+  virtual BaseFloat LogLikelihood(int32 frame, int32 tid) {
+	  return scale_ * loglikes_(frame, tid-1);
+  }
+
+  void Reset() {
+	  input_is_finished_ = false;
+	  loglikes_.Resize(1024, 121, kUndefined);
+	  num_frames_ = 0;
+  }
+
+  virtual int32 NumIndices() const { return loglikes_.NumCols(); }
+
+  // nothing special to do in destructor.
+  virtual ~OnlineDecodableMatrixCtc() { }
+ private:
+  Matrix<BaseFloat> loglikes_;
+  BaseFloat scale_;
+  int num_frames_;
+  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineDecodableMatrixCtc);
+};
 
 
 }  // namespace kaldi

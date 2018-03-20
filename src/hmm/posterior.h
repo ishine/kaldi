@@ -198,6 +198,13 @@ BaseFloat VectorToPosteriorEntry(
     BaseFloat min_post,
     std::vector<std::pair<int32, BaseFloat> > *post_entry);
 
+BaseFloat VectorToPosteriorEntry(
+    const VectorBase<BaseFloat> &log_likes,
+    const std::vector<int32> &gselect,
+    BaseFloat min_post,
+    std::vector<std::pair<int32, BaseFloat> > *post_entry);
+
+
 /// Convert an alignment to a posterior (with a scale of 1.0 on
 /// each entry).
 void AlignmentToPosterior(const std::vector<int32> &ali,

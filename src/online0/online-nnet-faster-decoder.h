@@ -39,12 +39,13 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	  int32 update_interval; // beam update period in # of frames
 	  BaseFloat beam_update; // rate of adjustment of the beam
 	  BaseFloat max_beam_update; // maximum rate of beam adjustment
+	  std::string cutoff;
 
 	  OnlineNnetFasterDecoderOptions() :
-	    rt_min(0.7), rt_max(0.75), batch_size(16),
+	    rt_min(0.7), rt_max(0.75), batch_size(18),
 	    inter_utt_sil(50), max_utt_len_(1500),
 	    update_interval(3), beam_update(0.01),
-	    max_beam_update(0.05) {}
+	    max_beam_update(0.05), cutoff("hybrid") {}
 
 	  void Register(OptionsItf *opts, bool full = true) {
 	    FasterDecoderOptions::Register(opts, full);
@@ -52,6 +53,8 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	                   "Approximate minimum decoding run time factor");
 	    opts->Register("rt-max", &rt_max,
 	                   "Approximate maximum decoding run time factor");
+	    opts->Register("batch-size", &batch_size,
+	                   "number of features decoded in one go");
 	    opts->Register("update-interval", &update_interval,
 	                   "Beam update interval in frames");
 	    opts->Register("beam-update", &beam_update, "Beam update rate");
@@ -61,6 +64,8 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	    opts->Register("max-utt-length", &max_utt_len_,
 	                   "If the utterance becomes longer than this number of frames, "
 	                   "shorter silence is acceptable as an utterance separator");
+	    opts->Register("cutoff", &cutoff,
+	    					"token cutoff algorithm, e.g. ctc or hmm-dnn hybrid");
 	  }
 };
 
@@ -70,15 +75,16 @@ class OnlineNnetFasterDecoder : public FasterDecoder {
 public:
 	// Codes returned by Decode() to show the current state of the decoder
 	enum DecodeState {
-		kEndFeats = 1, // No more scores are available from the Decodable
-		kEndBatch = 2, // End of batch - end of utterance not reached yet
+		kStartFeats = 1, // Start from the Decodable
+		kEndFeats = 2, // No more scores are available from the Decodable
+		kEndBatch = 3, // End of batch - end of utterance not reached yet
 	};
 
 	OnlineNnetFasterDecoder(const fst::Fst<fst::StdArc> &fst,
 							const OnlineNnetFasterDecoderOptions &opts):
 								FasterDecoder(fst, opts), opts_(opts),
 								max_beam_(opts.beam), effective_beam_(FasterDecoder::config_.beam),
-								state_(kEndFeats), frame_(0), utt_frames_(0),
+								state_(kStartFeats), frame_(0), utt_frames_(0),
 								immortal_tok_(NULL), prev_immortal_tok_(NULL)
 							{
 

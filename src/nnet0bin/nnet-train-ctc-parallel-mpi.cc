@@ -88,9 +88,13 @@ int main(int argc, char *argv[]) {
 	    targets_rspecifier = util.AddSuffix(targets_rspecifier, parallel_opts.myid);
 	    scpfile = util.GetFilename(feature_rspecifier);
 	    if (parallel_opts.myid == 0)
+<<<<<<< HEAD
 	    {
 	    	parallel_opts.num_merge = util.NumofCEMerge(scpfile, parallel_opts.merge_size);
 	    }
+=======
+	    	parallel_opts.num_merge = util.NumofCEMerge(scpfile, parallel_opts.merge_size);
+>>>>>>> upstream/master
 
 		MPI_Barrier(MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.merge_size), 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -107,9 +111,13 @@ int main(int argc, char *argv[]) {
 	    fd = dup(fileno(stderr));
 	    FILE * logfile = freopen(logfn.c_str(), "w", stderr);
 	    if (NULL == logfile)
+<<<<<<< HEAD
 	    {
 	    	KALDI_ERR << "log path must be specified [--log-file]";
 	    }
+=======
+	    	KALDI_ERR << "log path must be specified [--log-file]";
+>>>>>>> upstream/master
 	    setvbuf(logfile, NULL, _IONBF, 0);
 
     using namespace kaldi;
@@ -168,12 +176,20 @@ int main(int argc, char *argv[]) {
      fsetpos(stderr, &pos);
 
      //merge global statistic data
+<<<<<<< HEAD
      stats.MergeStats(&opts, 0);
+=======
+     stats->MergeStats(&opts, 0);
+>>>>>>> upstream/master
 
      if (parallel_opts.myid == 0)
      {
          time_now = time.Elapsed();
+<<<<<<< HEAD
          stats.Print(&opts, time_now);
+=======
+         stats->Print(&opts, time_now);
+>>>>>>> upstream/master
      }
 
      MPI_Finalize();

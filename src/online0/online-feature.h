@@ -48,7 +48,7 @@ namespace kaldi {
 /// it's templated on a class like MfccComputer or PlpComputer
 /// that does the basic feature extraction.
 template<class C>
-class OnlineGenericBaseFeature: public OnlineBaseFeature {
+class OnlineStreamGenericBaseFeature: public OnlineStreamBaseFeature {
  public:
   //
   // First, functions that are present in the interface:
@@ -81,7 +81,7 @@ class OnlineGenericBaseFeature: public OnlineBaseFeature {
 
 
   // Constructor from options class
-  explicit OnlineGenericBaseFeature(const typename C::Options &opts);
+  explicit OnlineStreamGenericBaseFeature(const typename C::Options &opts);
 
   // This would be called from the application, when you get
   // more wave data.  Note: the sampling_rate is only provided so
@@ -100,7 +100,7 @@ class OnlineGenericBaseFeature: public OnlineBaseFeature {
     ComputeFeatures();
   }
 
-  virtual ~OnlineGenericBaseFeature() {
+  virtual ~OnlineStreamGenericBaseFeature() {
     DeletePointers(&features_);
   }
 
@@ -138,12 +138,12 @@ class OnlineGenericBaseFeature: public OnlineBaseFeature {
   Vector<BaseFloat> waveform_remainder_;
 };
 
-typedef OnlineGenericBaseFeature<MfccComputer> OnlineMfcc;
-typedef OnlineGenericBaseFeature<PlpComputer> OnlinePlp;
-typedef OnlineGenericBaseFeature<FbankComputer> OnlineFbank;
+typedef OnlineStreamGenericBaseFeature<MfccComputer> OnlineStreamMfcc;
+typedef OnlineStreamGenericBaseFeature<PlpComputer> OnlineStreamPlp;
+typedef OnlineStreamGenericBaseFeature<FbankComputer> OnlineStreamFbank;
 
 
-class OnlineDeltaFeature: public OnlineFeatureInterface {
+class OnlineStreamDeltaFeature: public OnlineStreamFeatureInterface {
  public:
   //
   // First, functions that are present in the interface:
@@ -169,24 +169,24 @@ class OnlineDeltaFeature: public OnlineFeatureInterface {
   //
   // Next, functions that are not in the interface.
   //
-  OnlineDeltaFeature(const DeltaFeaturesOptions &opts,
-                     OnlineFeatureInterface *src);
+  OnlineStreamDeltaFeature(const DeltaFeaturesOptions &opts,
+                     OnlineStreamFeatureInterface *src);
 
  private:
-  OnlineFeatureInterface *src_;  // Not owned here
+  OnlineStreamFeatureInterface *src_;  // Not owned here
   DeltaFeaturesOptions opts_;
   DeltaFeatures delta_features_;  // This class contains just a few
                                   // coefficients.
 };
 
 
-struct OnlineCmvnOptions {
+struct OnlineStreamCmvnOptions {
   int32 min_window;
   int32 cmn_window;
   bool normalize_mean;
   bool normalize_variance;
 
-  OnlineCmvnOptions():
+  OnlineStreamCmvnOptions():
 	  min_window(100),
       cmn_window(600),
 	  normalize_mean(true),
@@ -221,7 +221,7 @@ struct OnlineCmvnOptions {
    We normally only do so in the "online" nnet-based decoding, e.g.nnet0
 */
 
-class OnlineCmvnFeature: public OnlineFeatureInterface {
+class OnlineStreamCmvnFeature: public OnlineStreamFeatureInterface {
  public:
   //
   // First, functions that are present in the interface:
@@ -253,18 +253,18 @@ class OnlineCmvnFeature: public OnlineFeatureInterface {
   //
   // Next, functions that are not in the interface.
   //
-  OnlineCmvnFeature(const OnlineCmvnOptions &opts,
-                     OnlineFeatureInterface *src);
+  OnlineStreamCmvnFeature(const OnlineStreamCmvnOptions &opts,
+		  OnlineStreamFeatureInterface *src);
 
-  virtual ~OnlineCmvnFeature() {
+  virtual ~OnlineStreamCmvnFeature() {
     DeletePointers(&features_);
   }
 
  private:
   void ComputeCmvnInternal();
 
-  const OnlineCmvnOptions &opts_;
-  OnlineFeatureInterface *src_;  // Not owned here
+  const OnlineStreamCmvnOptions &opts_;
+  OnlineStreamFeatureInterface *src_;  // Not owned here
 
   Vector<double> sum_;
   Vector<double> sumsq_;
@@ -272,19 +272,19 @@ class OnlineCmvnFeature: public OnlineFeatureInterface {
   std::vector<Vector<BaseFloat>*> features_;
 
 
-  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineCmvnFeature);
+  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineStreamCmvnFeature);
 };
 
 
 /**
  * splice feature
  */
-struct OnlineSpliceOptions {
+struct OnlineStreamSpliceOptions {
   int32 left_context;
   int32 right_context;
   int32 context;
   bool  custom_splice;
-  OnlineSpliceOptions(): left_context(0), right_context(0), context(0), custom_splice(false) { }
+  OnlineStreamSpliceOptions(): left_context(0), right_context(0), context(0), custom_splice(false) { }
   void Register(OptionsItf *opts) {
 	  opts->Register("left-context", &left_context, "Left-context for frame ");
 	  opts->Register("right-context", &right_context, "Right-context for frame ");
@@ -293,7 +293,7 @@ struct OnlineSpliceOptions {
   }
 };
 
-class OnlineSpliceFeature: public OnlineFeatureInterface {
+class OnlineStreamSpliceFeature: public OnlineStreamFeatureInterface {
  public:
   //
   // First, functions that are present in the interface:
@@ -321,13 +321,13 @@ class OnlineSpliceFeature: public OnlineFeatureInterface {
   //
   // Next, functions that are not in the interface.
   //
-  OnlineSpliceFeature(const OnlineSpliceOptions &opts,
-                     OnlineFeatureInterface *src);
+  OnlineStreamSpliceFeature(const OnlineStreamSpliceOptions &opts,
+		  OnlineStreamFeatureInterface *src);
 
  private:
   int32 left_context_;
   int32 right_context_;
-  OnlineFeatureInterface *src_;  // Not owned here
+  OnlineStreamFeatureInterface *src_;  // Not owned here
 };
 
 

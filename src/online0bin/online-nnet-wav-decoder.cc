@@ -22,8 +22,18 @@
 #include "base/timer.h"
 #include "feat/wave-reader.h"
 
-#include "online/onlinebin-util.h"
+#include "online0/online-util.h"
 #include "online0/online-nnet-decoding.h"
+
+void PrintResult(int &curt, fst::SymbolTable *word_syms, kaldi::Result &result, bool state) {
+	std::vector<int32> word_ids;
+	int size = result.word_ids_.size();
+	for (int i = curt; i < size; i++)
+		word_ids.push_back(result.word_ids_[i]);
+
+	kaldi::PrintPartialResult(word_ids, word_syms, state == true );
+	curt = size;
+}
 
 int main(int argc, char *argv[])
 {
@@ -45,8 +55,7 @@ int main(int argc, char *argv[])
 
 	    ParseOptions po(usage);
 
-	    OnlineNnetFasterDecoderOptions decoder_opts;
-	    OnlineNnetDecodingOptions decoding_opts(decoder_opts);
+	    OnlineNnetDecodingOptions decoding_opts;
 	    decoding_opts.Register(&po);
 
 	    std::string wav_rspecifier;
@@ -60,6 +69,7 @@ int main(int argc, char *argv[])
 	    }
 
 
+	    OnlineNnetFasterDecoderOptions decoder_opts;
 	    OnlineNnetForwardOptions forward_opts;
 	    OnlineNnetFeaturePipelineOptions feature_opts(decoding_opts.feature_cfg);
 		ReadConfigFromFile(decoding_opts.decoder_cfg, &decoder_opts);
@@ -72,6 +82,7 @@ int main(int argc, char *argv[])
 
 	    Int32VectorWriter words_writer(decoding_opts.words_wspecifier);
 	    Int32VectorWriter alignment_writer(decoding_opts.alignment_wspecifier);
+        Result result;
 
 	    //SequentialTableReader<WaveHolder> wav_reader(wav_rspecifier);
 	    std::ifstream wav_reader(wav_rspecifier);
@@ -91,8 +102,7 @@ int main(int argc, char *argv[])
 
 	    OnlineNnetFasterDecoder decoder(*decode_fst, decoder_opts);
 	    OnlineNnetDecodingClass decoding(decoding_opts,
-	    								&decoder, &decodable, &decoder_sync,
-										*word_syms, words_writer, alignment_writer);
+	    								&decoder, &decodable, &decoder_sync, &result);
 		// The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
 	    MultiThreader<OnlineNnetDecodingClass> m(1, decoding);
@@ -105,8 +115,12 @@ int main(int argc, char *argv[])
         BaseFloat chunk_length_secs = decoding_opts.chunk_length_secs;
         int feat_dim = feature_pipeline.Dim();
         int skip_frames = decoding_opts.skip_frames;
+        bool skip_inner = decoding_opts.skip_inner;
+        bool copy_posterior = decoding_opts.copy_posterior;
         int batch_size = forward_opts.batch_size * skip_frames;
-        Matrix<BaseFloat> feat(forward_opts.batch_size, feat_dim);
+        int in_skip = skip_inner ? 1:skip_frames,
+        out_skip = skip_inner ? skip_frames : 1;
+        Matrix<BaseFloat> feat(out_skip*forward_opts.batch_size, feat_dim);
         Matrix<BaseFloat> feat_out, feat_out_ready;
         char fn[1024];
 
@@ -135,7 +149,7 @@ int main(int argc, char *argv[])
 			feature_pipeline.Reset();
 			decodable.Reset();
 			forward.ResetHistory();
-			int32 samp_offset = 0, frame_offset = 0, frame_ready;
+			int32 samp_offset = 0, frame_offset = 0, frame_ready, curt = 0;
 			while (samp_offset < data.Dim()) {
 				int32 samp_remaining = data.Dim() - samp_offset;
 				int32 num_samp = chunk_length < samp_remaining ? chunk_length : samp_remaining;
@@ -159,8 +173,8 @@ int main(int argc, char *argv[])
 					else
 						frame_ready = batch_size;
 
-					for (int i = 0; i < frame_ready; i += skip_frames) {
-						feature_pipeline.GetFrame(frame_offset+i, &feat.Row(i/skip_frames));
+					for (int i = 0; i < frame_ready; i += in_skip) {
+						feature_pipeline.GetFrame(frame_offset+i, &feat.Row(i/in_skip));
 					}
 					frame_offset += frame_ready;
 
@@ -168,13 +182,20 @@ int main(int argc, char *argv[])
 					forward.Forward(feat, &feat_out);
 
 					// copy posterior
-					feat_out_ready.Resize(frame_ready, feat_out.NumCols(), kUndefined);
-					for (int i = 0; i < frame_ready; i++) {
-						feat_out_ready.Row(i).CopyFromVec(feat_out.Row(i/skip_frames));
+					if (copy_posterior) {
+						feat_out_ready.Resize(frame_ready, feat_out.NumCols(), kUndefined);
+						for (int i = 0; i < frame_ready; i++)
+							feat_out_ready.Row(i).CopyFromVec(feat_out.Row(i/skip_frames));
+
+						decodable.AcceptLoglikes(&feat_out_ready);
 					}
-					decodable.AcceptLoglikes(&feat_out_ready);
+					else
+						decodable.AcceptLoglikes(&feat_out);
+
 					decoder_sync.DecoderSignal();
 				} // part wav data
+
+				PrintResult(curt, word_syms, result, false);
 			} // finish a wav 
 
 			frame_count += frame_offset;
@@ -182,6 +203,9 @@ int main(int argc, char *argv[])
 			decoder_sync.DecoderSignal();
 			// waiting a utterance finished
 			decoder_sync.UtteranceWait();
+
+			PrintResult(curt, word_syms, result, true);
+            result.clear();
 			KALDI_LOG << "Finish decode utterance: " << fn;
         }
 
@@ -195,9 +219,11 @@ int main(int argc, char *argv[])
 
 	    //delete decode_fst;
 	    //delete word_syms;
+	    usleep(0.1*1e6);
+		decoder_sync.DecoderSignal();
 	    return 0;
 	} catch(const std::exception& e) {
 	    std::cerr << e.what();
 	    return -1;
-	  }
+	}
 } // main()

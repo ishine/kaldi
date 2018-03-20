@@ -496,7 +496,7 @@ protected:
   CuMatrix<BaseFloat> linearity_fix_;
   CuVector<BaseFloat> linearity_row_max_;  
   CuMatrix<BaseFloat> input_fix_;
-  const CuMatrix<BaseFloat> *p_input_;
+  const CuMatrixBase<BaseFloat> *p_input_;
 
   BaseFloat learn_rate_coef_;
   BaseFloat bias_learn_rate_coef_;

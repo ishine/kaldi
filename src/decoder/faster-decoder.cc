@@ -53,6 +53,14 @@ void FasterDecoder::Decode(DecodableInterface *decodable) {
   }
 }
 
+void FasterDecoder::DecodeCtc(DecodableInterface *decodable) {
+  InitDecoding();
+  while (!decodable->IsLastFrame(num_frames_decoded_ - 1)) {
+    double weight_cutoff = ProcessEmittingCtc(decodable);
+    ProcessNonemitting(weight_cutoff);
+  }
+}
+
 void FasterDecoder::AdvanceDecoding(DecodableInterface *decodable,
                                       int32 max_num_frames) {
   KALDI_ASSERT(num_frames_decoded_ >= 0 &&
@@ -74,6 +82,26 @@ void FasterDecoder::AdvanceDecoding(DecodableInterface *decodable,
   }    
 }
 
+void FasterDecoder::AdvanceDecodingCtc(DecodableInterface *decodable,
+                                      int32 max_num_frames) {
+  KALDI_ASSERT(num_frames_decoded_ >= 0 &&
+               "You must call InitDecoding() before AdvanceDecoding()");
+  int32 num_frames_ready = decodable->NumFramesReady();
+  // num_frames_ready must be >= num_frames_decoded, or else
+  // the number of frames ready must have decreased (which doesn't
+  // make sense) or the decodable object changed between calls
+  // (which isn't allowed).
+  KALDI_ASSERT(num_frames_ready >= num_frames_decoded_);
+  int32 target_frames_decoded = num_frames_ready;
+  if (max_num_frames >= 0)
+    target_frames_decoded = std::min(target_frames_decoded,
+                                     num_frames_decoded_ + max_num_frames);
+  while (num_frames_decoded_ < target_frames_decoded) {
+    // note: ProcessEmittingCtc() increments num_frames_decoded_
+    double weight_cutoff = ProcessEmittingCtc(decodable);
+    ProcessNonemitting(weight_cutoff);
+  }
+}
 
 bool FasterDecoder::ReachedFinal() {
   for (const Elem *e = toks_.GetList(); e != NULL; e = e->tail) {
@@ -212,6 +240,71 @@ double FasterDecoder::GetCutoff(Elem *list_head, size_t *tok_count,
   }
 }
 
+// Gets the weight cutoff.  Also counts the active tokens.
+double FasterDecoder::GetCutoffCtc(Elem *list_head, size_t *tok_count,
+                                BaseFloat *adaptive_beam, Elem **best_elem) {
+  double best_cost = std::numeric_limits<double>::infinity();
+  size_t count = 0;
+  if (config_.max_active == std::numeric_limits<int32>::max() &&
+      config_.min_active == 0) {
+    for (Elem *e = list_head; e != NULL; e = e->tail, count++) {
+      double w = e->val->cost_;
+      if (w < best_cost) {
+        best_cost = w;
+        if (best_elem) *best_elem = e;
+      }
+    }
+    if (tok_count != NULL) *tok_count = count;
+    if (adaptive_beam != NULL) *adaptive_beam = config_.beam;
+    return best_cost + config_.beam;
+  } else {
+    tmp_array_.clear();
+    for (Elem *e = list_head; e != NULL; e = e->tail, count++) {
+      double w = e->val->cost_;
+      tmp_array_.push_back(w);
+      if (w < best_cost) {
+        best_cost = w;
+        if (best_elem) *best_elem = e;
+      }
+    }
+    if (tok_count != NULL) *tok_count = count;
+    double beam_cutoff = best_cost + config_.beam,
+        min_active_cutoff = std::numeric_limits<double>::infinity(),
+        max_active_cutoff = std::numeric_limits<double>::infinity();
+
+    if (tmp_array_.size() > static_cast<size_t>(config_.max_active)) {
+      std::nth_element(tmp_array_.begin(),
+                       tmp_array_.begin() + config_.max_active,
+                       tmp_array_.end());
+      max_active_cutoff = tmp_array_[config_.max_active];
+    }
+    if (tmp_array_.size() > static_cast<size_t>(config_.min_active)) {
+      if (config_.min_active == 0) min_active_cutoff = best_cost;
+      else {
+        std::nth_element(tmp_array_.begin(),
+                         tmp_array_.begin() + config_.min_active,
+                         tmp_array_.size() > static_cast<size_t>(config_.max_active) ?
+                         tmp_array_.begin() + config_.max_active :
+                         tmp_array_.end());
+        min_active_cutoff = tmp_array_[config_.min_active];
+      }
+    }
+
+    if (max_active_cutoff < beam_cutoff) { // max_active is tighter than beam.
+      if (adaptive_beam)
+        *adaptive_beam = max_active_cutoff - best_cost + config_.beam_delta;
+      return max_active_cutoff;
+    } else if (min_active_cutoff > beam_cutoff) { // min_active is looser than beam.
+      if (adaptive_beam)
+        *adaptive_beam = min_active_cutoff - best_cost + config_.beam_delta;
+      return min_active_cutoff;
+    } else {
+      *adaptive_beam = config_.beam;
+      return beam_cutoff;
+    }
+  }
+}
+
 void FasterDecoder::PossiblyResizeHash(size_t num_toks) {
   size_t new_sz = static_cast<size_t>(static_cast<BaseFloat>(num_toks)
                                       * config_.hash_ratio);
@@ -237,6 +330,88 @@ double FasterDecoder::ProcessEmitting(DecodableInterface *decodable) {
   // on the next frame.
   double next_weight_cutoff = std::numeric_limits<double>::infinity();
   
+  // First process the best token to get a hopefully
+  // reasonably tight bound on the next cutoff.
+  if (best_elem) {
+    StateId state = best_elem->key;
+    Token *tok = best_elem->val;
+    for (fst::ArcIterator<fst::Fst<Arc> > aiter(fst_, state);
+         !aiter.Done();
+         aiter.Next()) {
+      const Arc &arc = aiter.Value();
+      if (arc.ilabel != 0) {  // we'd propagate..
+        BaseFloat ac_cost = - decodable->LogLikelihood(frame, arc.ilabel);
+        double new_weight = arc.weight.Value() + tok->cost_ + ac_cost;
+        if (new_weight + adaptive_beam < next_weight_cutoff)
+          next_weight_cutoff = new_weight + adaptive_beam;
+      }
+    }
+  }
+
+  // int32 n = 0, np = 0;
+
+  // the tokens are now owned here, in last_toks, and the hash is empty.
+  // 'owned' is a complex thing here; the point is we need to call TokenDelete
+  // on each elem 'e' to let toks_ know we're done with them.
+  for (Elem *e = last_toks, *e_tail; e != NULL; e = e_tail) {  // loop this way
+    // n++;
+    // because we delete "e" as we go.
+    StateId state = e->key;
+    Token *tok = e->val;
+    if (tok->cost_ < weight_cutoff) {  // not pruned.
+      // np++;
+      KALDI_ASSERT(state == tok->arc_.nextstate);
+      for (fst::ArcIterator<fst::Fst<Arc> > aiter(fst_, state);
+           !aiter.Done();
+           aiter.Next()) {
+        Arc arc = aiter.Value();
+        if (arc.ilabel != 0) {  // propagate..
+          BaseFloat ac_cost =  - decodable->LogLikelihood(frame, arc.ilabel);
+          double new_weight = arc.weight.Value() + tok->cost_ + ac_cost;
+          if (new_weight < next_weight_cutoff) {  // not pruned..
+            Token *new_tok = new Token(arc, ac_cost, tok);
+            Elem *e_found = toks_.Find(arc.nextstate);
+            if (new_weight + adaptive_beam < next_weight_cutoff)
+              next_weight_cutoff = new_weight + adaptive_beam;
+            if (e_found == NULL) {
+              toks_.Insert(arc.nextstate, new_tok);
+            } else {
+              if ( *(e_found->val) < *new_tok ) {
+                Token::TokenDelete(e_found->val);
+                e_found->val = new_tok;
+              } else {
+                Token::TokenDelete(new_tok);
+              }
+            }
+          }
+        }
+      }
+    }
+    e_tail = e->tail;
+    Token::TokenDelete(e->val);
+    toks_.Delete(e);
+  }
+  num_frames_decoded_++;
+  return next_weight_cutoff;
+}
+
+// ProcessEmittingCtc returns the likelihood cutoff used.
+double FasterDecoder::ProcessEmittingCtc(DecodableInterface *decodable) {
+  int32 frame = num_frames_decoded_;
+  Elem *last_toks = toks_.Clear();
+  size_t tok_cnt;
+  BaseFloat adaptive_beam;
+  Elem *best_elem = NULL;
+  double weight_cutoff = GetCutoffCtc(last_toks, &tok_cnt,
+                                   &adaptive_beam, &best_elem);
+  KALDI_VLOG(3) << tok_cnt << " tokens active.";
+  PossiblyResizeHash(tok_cnt);  // This makes sure the hash is always big enough.
+
+  // This is the cutoff we use after adding in the log-likes (i.e.
+  // for the next frame).  This is a bound on the cutoff we will use
+  // on the next frame.
+  double next_weight_cutoff = std::numeric_limits<double>::infinity();
+
   // First process the best token to get a hopefully
   // reasonably tight bound on the next cutoff.
   if (best_elem) {
