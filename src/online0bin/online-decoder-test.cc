@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 	    	"\n"
 	        "Usage: online-ivector-test [config option]\n"
 	    	"e.g.: \n"
-	        "	online-decoder-test --cfg=conf/ivector.conf wav.scp\n";
+	        "	online-decoder-test --cfg=conf/decode.conf wav.scp\n";
 
 	    ParseOptions po(usage);
 
