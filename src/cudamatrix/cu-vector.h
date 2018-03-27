@@ -5,6 +5,7 @@
 //                      Lucas Ondel
 //           2013       Xiaohui Zhang
 //           2015       Guoguo Chen
+//           2017       Daniel Galvez
 
 // See ../../COPYING for clarification regarding multiple authors
 //
@@ -141,11 +142,23 @@ class CuVectorBase {
 
   void InvertElements();
 
+
+  /// Copies selected elements from 'mat' to *this.  Expects this->Dim()
+  /// to equal elements.Dim(). If trans == kNoTrans,
+  /// expects mat.NumRows() to equal this.Dim(), and for each i,
+  /// copies mat(i, elements[i]) to (*this)(i).
+  /// If trans == kTrans,
+  /// expects mat.NumCols() to equal this.Dim(), and for each i,
+  /// copies mat(elements[i], i) to (*this)(i).
+  void CopyElements(const CuMatrixBase<Real> &mat,
+                    const MatrixTransposeType trans,
+                    const CuArrayBase<int32> &elements);
+
   void ApplySoftMax();
   void ApplyExp();
   void ApplyLog();
-  MatrixIndexT ApplyFloor(Real floor_val);
-  MatrixIndexT ApplyCeiling(Real ceiling_val);
+  void ApplyFloor(Real floor_val, MatrixIndexT *floored_count = NULL);
+  void ApplyCeiling(Real ceiling_val, MatrixIndexT *ceiled_count = NULL);
   void ApplyPow(Real power);
   void ApplyFixed(Real resolution, int32 mode=1);
   Real Sum() const;
@@ -217,9 +230,13 @@ class CuVectorBase {
 
   // Set each element to y = (x == orig ? changed : x).
   void ReplaceValue(Real orig, Real changed);
-  
 
+  // Multiplies (*this) by v elementwise: (*this)[i] *= v
   void MulElements(const CuVectorBase<Real> &v);
+
+  // Divides (*this) by v elementwise: (*this)[i] /= v
+  void DivElements(const CuVectorBase<Real> &v);
+
   // The following two functions should only be called if we did not compile
   // with CUDA or could not get a CUDA card; in that case the contents are
   // interpreted the same as a regular vector.
@@ -284,11 +301,10 @@ class CuVectorBase {
 #endif
 
  protected:
-  
+
   /// Default constructor: make it protected so the user cannot
   /// instantiate this class.
-  CuVectorBase<Real>(): data_(NULL), dim_(0)
-  {
+  CuVectorBase<Real>(): data_(NULL), dim_(0) {
 #if HAVE_CUDA == 1
 	  handle_ = NULL;
       cuda_stream_ = NULL;
@@ -363,12 +379,13 @@ class CuVector: public CuVectorBase<Real> {
     return *this;
   }
 
+  void Swap(CuVector<Real> *vec);
+  void Swap(Vector<Real> *vec);
 
   /// I/O
   void Read(std::istream &is, bool binary);
   void Write(std::ostream &is, bool binary) const;
 
-  void Swap(Vector<Real> *vec);
 
  private:
   void Destroy();
@@ -405,7 +422,7 @@ class CuSubVector: public CuVectorBase<Real> {
     CuVectorBase<Real>::data_ = const_cast<Real*>(matrix.RowData(row));
     CuVectorBase<Real>::dim_ = matrix.NumCols();
   }
-  
+
   ~CuSubVector()
   { 
 #if HAVE_CUDA == 1
@@ -460,6 +477,12 @@ Vector<Real>::Vector(const CuVectorBase<OtherReal> &cu) {
   Init(cu.Dim());
   cu.CopyToVec(this);
 }
+
+/// Returns \f$ v_1^T M v_2  \f$ .
+template<typename Real>
+Real VecMatVec(const CuVectorBase<Real> &v1, const CuMatrixBase<Real> &M,
+               const CuVectorBase<Real> &v2);
+
 
 } // namespace
 

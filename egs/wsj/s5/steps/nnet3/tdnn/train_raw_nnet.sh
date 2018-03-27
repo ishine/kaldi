@@ -97,9 +97,9 @@ if [ $# != 3 ]; then
   echo "  --num-threads <num-threads|16>                   # Number of parallel threads per job, for CPU-based training (will affect"
   echo "                                                   # results as well as speed; may interact with batch size; if you increase"
   echo "                                                   # this, you may want to decrease the batch size."
-  echo "  --parallel-opts <opts|\"-pe smp 16 -l ram_free=1G,mem_free=1G\">      # extra options to pass to e.g. queue.pl for processes that"
-  echo "                                                   # use multiple threads... note, you might have to reduce mem_free,ram_free"
-  echo "                                                   # versus your defaults, because it gets multiplied by the -pe smp argument."
+  echo "  --parallel-opts <opts|\"--num-threads 16 --mem 1G\">      # extra options to pass to e.g. queue.pl for processes that"
+  echo "                                                   # use multiple threads... note, you might have to reduce --mem"
+  echo "                                                   # versus your defaults, because it gets multiplied by the --num-threads argument."
   echo "  --minibatch-size <minibatch-size|128>            # Size of minibatch to process (note: product with --num-threads"
   echo "                                                   # should not get too large, e.g. >2k)."
   echo "  --samples-per-iter <#samples|400000>             # Number of samples of data to process per iteration, per"
@@ -191,7 +191,6 @@ fi
 if [ $stage -le -4 ] && [ -z "$egs_dir" ]; then
   extra_opts=()
   [ ! -z "$cmvn_opts" ] && extra_opts+=(--cmvn-opts "$cmvn_opts")
-  [ ! -z "$feat_type" ] && extra_opts+=(--feat-type $feat_type)
   [ ! -z "$online_ivector_dir" ] && extra_opts+=(--online-ivector-dir $online_ivector_dir)
   extra_opts+=(--transform-dir "$transform_dir")
   extra_opts+=(--left-context $left_context)

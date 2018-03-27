@@ -37,6 +37,6 @@ TESTFILES =
 ADDLIBS = ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a ../nnet3/kaldi-nnet3.a ../chain/kaldi-chain.a \
 		  ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a ../fstext/kaldi-fstext.a \
           ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../util/kaldi-util.a \
-          ../matrix/kaldi-matrix.a ../thread/kaldi-thread.a ../base/kaldi-base.a 
+          ../matrix/kaldi-matrix.a ../base/kaldi-base.a 
 
 include ../makefiles/default_rules.mk

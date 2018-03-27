@@ -16,8 +16,8 @@ if [ -f path.sh ]; then . ./path.sh; fi
 
 
 if [ $# != 1 ]; then
-  echo >$2 "Usage: $0 <directory>"
-  echo >$2 " e.g.: $0 exp/nnet3/extractor"
+  echo >&2 "Usage: $0 <directory>"
+  echo >&2 " e.g.: $0 exp/nnet3/extractor"
   exit 1
 fi
 
@@ -30,8 +30,8 @@ elif [ -f $ivecdir/final.ie ] ; then
   # is not read-only media or the user des not have access rights
   # in that case we will just behave as if the id is not available
   id=$(md5sum $ivecdir/final.ie | awk '{print $1}')
-  echo "$id" > $ivecdir/final.ie.id || exit 1
-  cat $ivecdir/final.ie.id
+  echo "$id" > $ivecdir/final.ie.id || true
+  echo "$id"
 else
   exit 0
 fi

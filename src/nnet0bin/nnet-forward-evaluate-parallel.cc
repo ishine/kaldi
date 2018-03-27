@@ -26,9 +26,9 @@
 #include "util/common-utils.h"
 #include "base/timer.h"
 
-#include "thread/kaldi-semaphore.h"
-#include "thread/kaldi-mutex.h"
-#include "thread/kaldi-thread.h"
+#include "util/kaldi-semaphore.h"
+#include "util/kaldi-mutex.h"
+#include "util/kaldi-thread.h"
 
 namespace kaldi {
 namespace nnet0 {

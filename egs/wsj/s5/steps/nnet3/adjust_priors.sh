@@ -1,6 +1,6 @@
 #!/bin/bash
 
-. path.sh
+. ./path.sh
 
 # This script computes the DNN output averaged over a small subset of
 # training egs and stores it in post.$iter.vec.
@@ -65,9 +65,10 @@ if [ $num_jobs_compute_prior -gt $num_archives ]; then
   num_jobs_compute_prior=$num_archives
 fi
 
+
 if [ $egs_type != "degs" ]; then
   $cmd JOB=1:$num_jobs_compute_prior $prior_queue_opt $dir/log/get_post.$iter.JOB.log \
-    nnet3-copy-egs ark:$egs_dir/$egs_type.$JOB.ark ark:- \| \
+    nnet3-copy-egs ark:$egs_dir/$egs_type.JOB.ark ark:- \| \
     nnet3-subset-egs --srand=JOB --n=$prior_subset_size ark:- ark:- \| \
     nnet3-merge-egs --minibatch-size=$minibatch_size ark:- ark:- \| \
     nnet3-compute-from-egs $prior_gpu_opt --apply-exp=true \

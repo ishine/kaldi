@@ -159,6 +159,7 @@ struct SlidingWindowCmnOptions {
   int32 cmn_window;
   int32 min_window;
   int32 update_window;
+  int32 max_warnings;
   bool normalize_variance;
   bool center;
 
@@ -166,6 +167,7 @@ struct SlidingWindowCmnOptions {
       cmn_window(600),
       min_window(100),
 	  update_window(0),
+      max_warnings(5),
       normalize_variance(false),
       center(false) { }
 
@@ -176,6 +178,8 @@ struct SlidingWindowCmnOptions {
                    "used at start of decoding (adds latency only at start). "
                    "Only applicable if center == false, ignored if center==true");
     opts->Register("update-window", &update_window, "Window in frames for update CMN");
+    opts->Register("max-warnings", &max_warnings, "Maximum warnings to report "
+                   "per utterance. 0 to disable, -1 to show all.");
     opts->Register("norm-vars", &normalize_variance, "If true, normalize "
                    "variance to one."); // naming this as in apply-cmvn.cc
     opts->Register("center", &center, "If true, use a window centered on the "

@@ -617,6 +617,16 @@ void ComputationGraphBuilder::Prune() {
   computable_info_.resize(new_num_cindex_ids, (char)kComputable);
   usable_count_.resize(start_cindex_id);
   usable_count_.resize(new_num_cindex_ids, 1);
+  // depend_on_this_ is a vector of vectors-- keeping track of the reverse of
+  // the dependencies-- and I believe we won't be needing this information any
+  // more past this point.
+  depend_on_this_.resize(start_cindex_id);
+  depend_on_this_.resize(new_num_cindex_ids);
+  // computable_queued_ also shouldn't be queried past this point, but
+  // I believe they should all be false at this point anyway (note that
+  // we assert below that computable_queue_ is empty).
+  computable_queued_.resize(new_num_cindex_ids);
+
   KALDI_ASSERT(computable_queue_.empty());
   graph_->segment_ends.push_back(new_num_cindex_ids);
 }
@@ -1612,7 +1622,9 @@ int32 ComputationStepsComputer::AddStep(const std::vector<Cindex> &cindexes,
   std::vector<int32>::iterator out_iter = step.begin();
   std::pair<int32, int32> *locations = &((*locations_)[0]);
   if (!add_if_absent) {
-    // this version of GetCindexId will not add CindexIds.
+    // this version of GetCindexId will not add CindexIds, and
+    // will crash if CindexIds not present in the graph are
+    // encountered.
     for (; iter != end; ++iter, ++out_iter, ++row_index) {
       int32 cindex_id = graph_->GetCindexId(*iter);
       *out_iter = cindex_id;
@@ -1623,13 +1635,15 @@ int32 ComputationStepsComputer::AddStep(const std::vector<Cindex> &cindexes,
     for (; iter != end; ++iter, ++out_iter, ++row_index) {
       bool is_input = false;  // only relevant if we have to add the cindex to
                               // the computation graph, which we won't for
-                              // inputs (we only might for dim-range nodes).
+                              // inputs (we only might for dim-range nodes
+                              // and for the component-input and component
+                              // steps of non-simple Components.
       bool added;
       int32 cindex_id = graph_->GetCindexId(*iter, is_input, &added);
       *out_iter = cindex_id;
       if (added) {
         KALDI_ASSERT(cindex_id == static_cast<int32>(locations_->size()));
-        locations_->resize(cindex_id + 1);
+        locations_->resize(cindex_id + 1, std::pair<int32, int32>(-1, -1));
         locations_->back().first = step_index;
         locations_->back().second = row_index;
         locations = &((*locations_)[0]);  // in case it was reallocated
@@ -1783,17 +1797,24 @@ void ComputationStepsComputer::ProcessComponentStep(
       ConvertToIndexes(input_step, &input_indexes);
       ConvertToIndexes(step, &indexes);
 
+
+      size_t orig_size = indexes.size() + input_indexes.size();
+
       // the component wants to have the opportunity to change the
       // order of these indexes from their default.
       component->ReorderIndexes(&input_indexes, &indexes);
+
+      bool added_padding = (orig_size != indexes.size() + input_indexes.size());
 
       // Now convert back from indexes to cindexes (we know the
       // node-index in each case)
       std::vector<Cindex> reordered_step;
       ConvertToCindexes(indexes, component_node_index, &reordered_step);
       ConvertToCindexes(input_indexes, component_input_index, &input_step);
-      AddStep(input_step);
-      AddStep(reordered_step);
+      // the 'added_padding' argument becomes the 'add_if_absent' arg of
+      // AddStep, so it knows to expect that it might have to add new CindexIds.
+      AddStep(input_step, added_padding);
+      AddStep(reordered_step, added_padding);
     } else {
       AddStep(input_step);
       // it's more efficient to add the step with cindex_ids; and we have these
@@ -1846,68 +1867,52 @@ void ComputationStepsComputer::ProcessDimRangeSubPhase(
   ConvertToCindexIds(input_cindexes, &input_cindex_ids);
   std::vector<std::pair<int32, int32> > locations;
   ConvertToLocations(input_cindex_ids, &locations);
-  std::sort(locations.begin(), locations.end());
+
+  // get a list of the source step indexes (corresponding to computations for the
+  // source component-node)
+  std::unordered_set<int32> source_step_indexes;
   KALDI_ASSERT(!locations.empty());
   std::vector<std::pair<int32, int32> >::const_iterator
       locations_iter = locations.begin(),
       locations_end = locations.end();
-  // Each unique .first number in locations (i.e. each source step, and they
-  // will all correspond to component-output or input steps) will generate one
-  // 'step' of type kDimRange.  Because dim-range nodes must be contiguous
-  // ranges of a source step (since they are represented as sub-matrices), for
-  // each source step we work out the first and last row-index (i.e. first and
-  // last .second member of locations) and use that to reconstruct the range.
 
-  // each element of 'steps' will be (source_step, (begin_row, end_row)) so that
-  // the source of the dim-range node is indexes begin_row ... end_row-1 in that
-  // source step.
-  std::vector<std::pair<int32, std::pair<int32, int32> > > steps;
-
-  int32 cur_source_step = locations_iter->first,
-      cur_row_begin = locations_iter->second,
-      cur_row_end = cur_row_begin + 1;
-  while (1) {
-    ++locations_iter;
-    if (locations_iter == locations_end ||
-        locations_iter->first != cur_source_step) {
-      // we reached the end of a run of the same step.
-      std::pair<int32, std::pair<int32, int32> > this_step;
-      this_step.first = cur_source_step;
-      this_step.second.first = cur_row_begin;
-      this_step.second.second = cur_row_end;
-      steps.push_back(this_step);
-      if (locations_iter != locations_end) {
-        cur_source_step = locations_iter->first;
-        cur_row_begin = locations_iter->second;
-        cur_row_end = cur_row_begin + 1;
-      } else {
-        break;
-      }
-    } else {
-      cur_row_end = locations_iter->second + 1;
+  // 'cur_source_step_index' is just an optimization to prevent unnecessary
+  // unordered_set inserts.
+  int32 cur_source_step_index = -1;
+  for (; locations_iter != locations_end; ++locations_iter) {
+    int32 source_step_index = locations_iter->first;
+    if (source_step_index != cur_source_step_index) {
+      cur_source_step_index = source_step_index;
+      source_step_indexes.insert(cur_source_step_index);
     }
   }
 
-  for (size_t i = 0; i < steps.size(); i++) {
-    // iterating over different source steps, although normally
-    // there will be just one.
-    int32 source_step = steps[i].first,
-        row_begin = steps[i].second.first,
-        row_end = steps[i].second.second;
-    // 'source' is just the elements of the source step that we're consuming.
-    std::vector<int32> source((*steps_)[source_step].begin() + row_begin,
-                              (*steps_)[source_step].begin() + row_end);
+  std::unordered_set<int32>::const_iterator
+      source_step_iter = source_step_indexes.begin(),
+      source_step_end = source_step_indexes.end();
+  // iterating over the indexes of the source steps.
+  for (; source_step_iter != source_step_end; ++source_step_iter) {
+    int32 source_step_index = *source_step_iter;
+    std::pair<int32, int32> p(source_step_index, dim_range_node);
+    if (dim_range_nodes_.count(p) > 0) {
+      // We don't need to do anything; a dim-range node already exists for this
+      // step and this node index.
+      continue;
+    }
+    dim_range_nodes_.insert(p);
+    const std::vector<int32> &source_step = (*steps_)[source_step_index];
+    // 'cindexes' will be the cindexes of the new step that we're going to add.
     std::vector<Cindex> cindexes;
-    ConvertToCindexes(source, &cindexes);
+    ConvertToCindexes(source_step, &cindexes);
     std::vector<Cindex>::iterator iter = cindexes.begin(),
         end = cindexes.end();
     for (; iter != end; ++iter)
       iter->first = dim_range_node;
     bool add_if_absent = true;
     // this add_if_absent says, even if cindexes were not in the graph,
-    // add them.  This is possible in principle; it's to satisfy the
-    // requirement that DimRangeNodes be implemented as contiguous ranges
-    // of rows of component nodes or input nodes.
+    // add them.  This is possible; the step will contain all cindexes for the
+    // input step, even if they won't be needed.  (This is costless; it's just
+    // setting up a sub-matrix).
     AddStep(cindexes, add_if_absent);
   }
 }
@@ -1944,8 +1949,18 @@ void ComputationStepsComputer::Check() const {
   for (int32 c = 0; c < num_cindexes; c++) {
     int32 step = (*locations_)[c].first,
         row = (*locations_)[c].second;
-    KALDI_ASSERT(step >= 0 && row >= 0 &&
-                 (*steps_)[step][row] == c);
+    if (!(step >= 0 && row >= 0 && (*steps_)[step][row] == c)) {
+      // normally the 'locations' of cindexes should be unique, so we should
+      // never normally reach this point; but it's not an error to have
+      // duplicates of the cindexes used for 'padding' by the ReorderIndexes()
+      // function of non-simple Components.  So we check whether that's the case
+      // before we die.
+      if (graph_->cindexes[c].second.t != kNoTime) {
+        // if this happens it will likely require some debugging by Dan.
+        KALDI_ERR << "Error in computing computation steps (likely code error)";
+      }
+    }
+
   }
 }
 

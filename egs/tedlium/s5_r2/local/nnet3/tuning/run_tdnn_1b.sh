@@ -1,5 +1,8 @@
 #!/bin/bash
 
+
+# 1b is as 1a but uses xconfigs.
+
 #    This is the standard "tdnn" system, built in nnet3; this script
 # is the version that's meant to run with data-cleanup, that doesn't
 # support parallel alignments.
@@ -51,7 +54,7 @@ reporting_email=dpovey@gmail.com
 # set common_egs_dir to use previously dumped egs.
 common_egs_dir=
 
-. cmd.sh
+. ./cmd.sh
 . ./path.sh
 . ./utils/parse_options.sh
 

@@ -158,6 +158,15 @@ void Nnet::SetComponent(int32 c, Component *component) {
   components_[c] = component;
 }
 
+int32 Nnet::AddComponent(const std::string &name,
+                         Component *component) {
+  int32 ans = components_.size();
+  KALDI_ASSERT(IsValidName(name) && component != NULL);
+  components_.push_back(component);
+  component_names_.push_back(name);
+  return ans;
+}
+
 /// Returns true if this is component-input node, i.e. a node of type kDescriptor
 /// that immediately precedes a node of type kComponent.
 bool Nnet::IsComponentInputNode(int32 node) const {
@@ -717,7 +726,13 @@ void Nnet::Check(bool warn_for_orphans) const {
         KALDI_ASSERT(n > 0 && nodes_[n-1].node_type == kDescriptor);
         const NetworkNode &src_node = nodes_[n-1];
         const Component *c = GetComponent(node.u.component_index);
-        int32 src_dim = src_node.Dim(*this), input_dim = c->InputDim();
+        int32 src_dim, input_dim = c->InputDim();
+        try {
+          src_dim = src_node.Dim(*this);
+        } catch (...) {
+          KALDI_ERR << "Error in Descriptor for network-node "
+                    << node_name << " (see error above)";
+        }
         if (src_dim != input_dim) {
           KALDI_ERR << "Dimension mismatch for network-node "
                     << node_name << ": input-dim "
@@ -904,8 +919,6 @@ void Nnet::RemoveSomeNodes(const std::vector<int32> &nodes_to_remove) {
       new_nodes[n].u.node_index = new_node_index;
     }
   }
-  KALDI_LOG << "Removed " << (old_num_nodes - new_num_nodes)
-            << " orphan nodes.";
   nodes_ = new_nodes;
   node_names_ = new_node_names;
   bool warn_for_orphans = false;
@@ -923,7 +936,16 @@ void Nnet::RemoveOrphanNodes(bool remove_orphan_inputs) {
     for (int32 i = 0; i < orphan_nodes.size(); i++)
       if (IsInputNode(orphan_nodes[i]))
         orphan_nodes.erase(orphan_nodes.begin() + i);
+  // For each component-node, its component-input node (which is kind of a
+  // "hidden" node) would be included in 'orphan_nodes', but for diagnostic
+  // purposes we want to exclude these from 'num_nodes_removed' to avoid
+  // confusing users.
+  int32 num_nodes_removed = 0;
+  for (int32 i = 0; i < orphan_nodes.size(); i++)
+    if (!IsComponentInputNode(orphan_nodes[i]))
+      num_nodes_removed++;
   RemoveSomeNodes(orphan_nodes);
+  KALDI_LOG << "Removed " << num_nodes_removed << " orphan nodes.";
 }
 
 void Nnet::ResetGenerators() {

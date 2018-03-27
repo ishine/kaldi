@@ -20,9 +20,9 @@
 #include <deque>
 #include "hmm/posterior.h"
 #include "lat/lattice-functions.h"
-#include "thread/kaldi-semaphore.h"
-#include "thread/kaldi-mutex.h"
-#include "thread/kaldi-thread.h"
+#include "util/kaldi-semaphore.h"
+#include "util/kaldi-mutex.h"
+#include "util/kaldi-thread.h"
 
 #include "lat/kaldi-lattice.h"
 #include "lat/lattice-functions.h"

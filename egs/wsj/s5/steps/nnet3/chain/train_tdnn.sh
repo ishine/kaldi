@@ -93,7 +93,6 @@ egs_opts=
 transform_dir=     # If supplied, this dir used instead of latdir to find transforms.
 cmvn_opts=  # will be passed to get_lda.sh and get_egs.sh, if supplied.
             # only relevant for "raw" features, not lda.
-feat_type=raw  # or set to 'lda' to use LDA features.
 frames_per_eg=25   # number of frames of output per chunk.  To be passed on to get_egs.sh.
 left_deriv_truncate=   # number of time-steps to avoid using the deriv of, on the left.
 right_deriv_truncate=  # number of time-steps to avoid using the deriv of, on the right.
@@ -127,10 +126,10 @@ if [ $# != 4 ]; then
   echo "  --num-threads <num-threads|16>                   # Number of parallel threads per job, for CPU-based training (will affect"
   echo "                                                   # results as well as speed; may interact with batch size; if you increase"
   echo "                                                   # this, you may want to decrease the batch size."
-  echo "  --parallel-opts <opts|\"-pe smp 16 -l ram_free=1G,mem_free=1G\">      # extra options to pass to e.g. queue.pl for processes that"
-  echo "                                                   # use multiple threads... note, you might have to reduce mem_free,ram_free"
-  echo "                                                   # versus your defaults, because it gets multiplied by the -pe smp argument."
-  echo "  --io-opts <opts|\"-tc 10\">                      # Options given to e.g. queue.pl for jobs that do a lot of I/O."
+  echo "  --parallel-opts <opts|\"--num-threads 16 --mem 1G\">      # extra options to pass to e.g. queue.pl for processes that"
+  echo "                                                   # use multiple threads... note, you might have to reduce --mem"
+  echo "                                                   # versus your defaults, because it gets multiplied by the --num-threads argument."
+  echo "  --io-opts <opts|\"--max-jobs-run 10\">                      # Options given to e.g. queue.pl for jobs that do a lot of I/O."
   echo "  --minibatch-size <minibatch-size|128>            # Size of minibatch to process (note: product with --num-threads"
   echo "                                                   # should not get too large, e.g. >2k)."
   echo "  --frames-per-iter <#frames|400000>               # Number of frames of data to process per iteration, per"
@@ -159,6 +158,9 @@ for f in $data/feats.scp $treedir/ali.1.gz $treedir/final.mdl $treedir/tree \
   [ ! -f $f ] && echo "$0: no such file $f" && exit 1;
 done
 
+# Copy phones.txt from tree-dir to dir. Later, steps/nnet3/decode.sh will
+# use it to check compatibility between training and decoding phone-sets.
+cp $treedir/phones.txt $dir
 
 # Set some variables.
 nj=`cat $treedir/num_jobs` || exit 1;  # number of jobs in alignment dir...
@@ -172,17 +174,9 @@ cp $treedir/tree $dir
 
 
 # First work out the feature and iVector dimension, needed for tdnn config creation.
-case $feat_type in
-  raw) feat_dim=$(feat-to-dim --print-args=false scp:$data/feats.scp -) || \
-      { echo "$0: Error getting feature dim"; exit 1; }
-    ;;
-  lda)  [ ! -f $treedir/final.mat ] && echo "$0: With --feat-type lda option, expect $treedir/final.mat to exist."
-   # get num-rows in lda matrix, which is the lda feature dim.
-   feat_dim=$(matrix-dim --print-args=false $treedir/final.mat | cut -f 1)
-    ;;
-  *)
-   echo "$0: Bad --feat-type '$feat_type';"; exit 1;
-esac
+feat_dim=$(feat-to-dim --print-args=false scp:$data/feats.scp -) || \
+  { echo "$0: Error getting feature dim"; exit 1; }
+
 if [ -z "$online_ivector_dir" ]; then
   ivector_dim=0
 else
@@ -273,7 +267,6 @@ fi
 if [ $stage -le -4 ] && [ -z "$egs_dir" ]; then
   extra_opts=()
   [ ! -z "$cmvn_opts" ] && extra_opts+=(--cmvn-opts "$cmvn_opts")
-  [ ! -z "$feat_type" ] && extra_opts+=(--feat-type $feat_type)
   [ ! -z "$online_ivector_dir" ] && extra_opts+=(--online-ivector-dir $online_ivector_dir)
   extra_opts+=(--transform-dir $transform_dir)
   # we need a bit of extra left-context and right-context to allow for frame

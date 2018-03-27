@@ -48,15 +48,16 @@ struct NnetOptimizeOptions;  // Forward declaration.
    Then the triple (C, s1, s2) is a candidate for merging.  We support two types
    of merging: 'right merging', in which we delete s1 and use s2 instead; and
    'left merging' in which we delete s2 and use s1 instead.  The two types of
-   merging may seem to be the same thing, but remember that in general s1 and s2
-   may be sub-matrices of larger matrices.
+   merging may seem to be essentially equivalent, but they they are not because
+   in general s1 and s2 may be sub-matrices of larger matrices.
 
-   Note: the following
+   Note the following definitions:
      - Define last-access(submatrix) as the
        last command that accesses that submatrix for either read or write.  [note:
        deallocation does not count as a read or write operation].
-     - Define first-access(submatrix) as the first command not of type kAlloc*
-       that accessed that submatrix for either read or write.
+     - Define first-nontrivial-access(submatrix) as the first command
+       other than zeroing (kSetConst with 0.0) that accessed that submatrix for
+       either read or write.
      - Define last-write-access(submatrix) as the last command-index that accessed
        the submatrix in a write operation, or -1 if there is no such command (this
        could happen for inputs).
@@ -87,14 +88,13 @@ struct NnetOptimizeOptions;  // Forward declaration.
        [note: because of condition c4, we can assume that s1 is the entirety of
        m1.]
 
-
    If the command C is case (a), i.e. an assignment operation, then the following
    conditions must apply:
-     - first-access(s2) == C
+     - first-nontrivial-access(s2) == C
      - last-write-access(s1) < C
      - last-access(s1) < data-invalidated-command(C, s2)
    Otherwise (cases (b) and (c), in-place propagate or backprop), we insist that:
-     - first-access(s2) == C
+     - first-nontrivial-access(s2) == C
      - last-access(s1) == C
    Note: in either case, these conditions imply that m2/s2 is not an input and m1/s1 is
    not an output.  [i.e. s1 *may* be an input and s2 *may* be an output].
@@ -181,6 +181,16 @@ class VariableMergingOptimizer {
   bool already_called_merge_variables_;
 };
 
+/**
+   This is not really an optimization in itself but it can make things easier
+   for class VariableMergingOptimizer (usually called by its wrapper
+   VariableMergingOptimization()).  It looks for a case where most of a matrix
+   (but not its final rows) are copied to some submatrix of another matrix,
+   where the row-range of that submatrix extends to the last row of the other
+   matrix; and it extends the other matrix with additional rows so that the
+   entire source matrix can be copied to the destination.
+ */
+void ExtendMatrices(NnetComputation *computation);
 
 
 /**
@@ -238,6 +248,13 @@ class DerivativeTimeLimiter {
   // matrices are allocated (it may remove some matrices entirely).
   void PruneMatrices();
 
+  // this function modifies commands of type kPropagate to set the memo indexes
+  // to zero if the memo indexes appear in the list memos_to_delete_.  It's
+  // because if a backprop command has been deleted, the propagate command
+  // should no longer store a memo.
+  void RemoveUnusedMemos();
+
+
   // called from PruneMatrices only for matrices that are derivatives,
   // not inputs or outputs of the computation, and which are partly
   // inside the time range, this function returns true if we can
@@ -291,6 +308,13 @@ class DerivativeTimeLimiter {
                              int32 *left_prune,
                              int32 *right_prune) const;
 
+  // This helper function, used while mapping commands, returns true if the
+  // Cindex represented by the pair (submatrix, row_index) has a 't' value
+  // within the range [min_deriv_time_, max_deriv_time_].
+  bool RowIsKept(int32 submatrix,
+                 int32 row_index) const;
+
+
   struct MatrixPruneInfo {
     bool is_deriv;  // true if the matrix represents a derivative (copied from
                     // the debug-info; repeated here for convenience).
@@ -334,6 +358,10 @@ class DerivativeTimeLimiter {
   std::vector<int32> submatrix_map_if_deriv_;
 
   std::vector<MatrixPruneInfo> prune_info_;
+
+  // List of indexes of memos that will no longer be stored because the backprop
+  // commands using them were deleted.
+  std::unordered_set<int32> memos_to_delete_;
 };
 
 
@@ -361,23 +389,12 @@ void LimitDerivativeTimes(const Nnet &nnet,
 
       - All of its inputs and outputs contain 'n' values for all 0 <= n < N,
         for some N > 2.  [we output this 'N' as 'num_n_values'].
-      - All of its inputs and outputs have 'regular' structure.
-
-        What it means for an input or output (i.e. an IoSpecification) to have a
-        'regular' structure, is as follows:
-          - The 't' and 'x' values present are the same for each 'n',
-          - The order in which the indexes appear is EITHER of the following:
-             - The 'n' index varies 'fast', i.e. the order is:
-                 (t1,x1,0), (t1,x1,1) ... (t1,x1,N-1) \
-                 (t2,x2,0), (t2,x2,1) ... (t2,x2,N-1)  ...
-             - The 'n' index varies 'slowly', i.e. the order is:
-                 (t1,x1,0), (t2,x2,0) ...  \
-                 (t1,x1,1), (t2,x2,1) ...  \
-                 ...                       \
-                 (t1,x2,N-1), (t2,x2,N-1) ...
-            In either case, there does not have to be any particular rhyme or
-            reason to the order of the t and x values; the regularity on 'n' is
-            all that we care about.
+      - All of its inputs and outputs have 'regular' structure: chiefly, that
+        within vectors of Indexes, each (t, x) pair should be present for the
+        same set of 'n' values (0, 1, ... N-1), and that we should be able to
+        identify the stride of the 'n' index.  For more precise details on this
+        regular structure, look at the comment for the function FindNStride(),
+        in nnet-optimize-utils.cc.
  */
 bool RequestIsDecomposable(const ComputationRequest &request,
                            ComputationRequest *mini_request,
@@ -438,13 +455,31 @@ bool ReplaceRowWithMatrixOps(NnetComputation *computation);
 /// computation->indexes.
 bool SnipRowOps(NnetComputation *computation);
 
+
+/// This function detects cases where commands of type kAddRowsMulti,
+/// kAddToRowsMulti, kCopyRowsMulti, kCopyToRowsMulti use indexes that
+/// correspond to at most two submatrices, in two distinct ranges without gaps
+/// filled by -1's, and could be converted to at most two commands of type
+/// kMatrixAdd, kMatrixCopy, kAddRows or kCopyRows.  (Note: it's important that
+/// this optimization takes place after SnipRowOps, because it doesn't remove
+/// the -1's from the edges of the indexes, it relies on that operation doing
+/// so).  The "without-gaps" stipulation is just for convenience of
+/// implementation, to have fewer cases to worry about.
+///
+/// This function returns true if it made any changes to the computation; if it
+/// returns true, then after calling this you should at some point do
+/// RenumberComputation(), which will remove any now-unused members of
+/// computation->indexes.
+bool SplitRowOps(NnetComputation *computation);
+
 /// This function detects submatrices and matrices that are never used (e.g. due
 /// to changes made in other optimization code), and members of indexes,
-/// indexes_multi and indexes_ranges that are unused or are duplicates, and
-/// removes them from the computation by way of suitable renumbering.  It does
-/// not remove no-ops from computation->commands_; to do that, call
-/// RemoveNoOps(computation).
+/// indexes_multi and indexes_ranges that are unused or are duplicates, and memo
+/// indexes that are unused; and it removes them from the computation by way of
+/// suitable renumbering.  It does not remove no-ops from
+/// computation->commands_; to do that, call RemoveNoOps(computation).
 void RenumberComputation(NnetComputation *computation);
+
 
 /// Removes commands of type kNoOperation in the computation.
 void RemoveNoOps(NnetComputation *computation);
@@ -455,6 +490,24 @@ void RemoveNoOps(NnetComputation *computation);
 /// pointers may point to a zero value, for optional submatrix args.
 void IdentifySubmatrixArgs(NnetComputation::Command *command,
                            std::vector<int32*> *submatrix_args);
+
+/// This function returns true if matrix 1 <= m < computation->matrices.size()
+/// is unused, defined as: it is not an input or an output, and is not
+/// accessed other than via commands of type kAllocMatrix, kDeallocMatrix, and
+/// kSetConst.
+bool MatrixIsUnused(const Analyzer &analyzer,
+                    const NnetComputation &computation,
+                    int32 m);
+
+/// This function removes from 'computation' the commands accessing matrix 'm',
+/// which is assumed to be unused according to the MatrixIsUnused() command
+/// above.  Specifically, it changes the types of the relevant commands in
+/// 'computation' to kNoOperation.  (The commands changed in this way will be of
+/// type kAllocMatrix, kDeallocMatrix and kSetConst).  The index for the matrix
+/// may later be removed entirely by RenumberComputation().
+void RemoveCommandsForUnusedMatrix(const Analyzer &analyzer,
+                                   int32 m,
+                                   NnetComputation *computation);
 
 
 /// This function outputs to "submatrix_args" the addresses of the args
@@ -498,12 +551,52 @@ void IdentifyIndexesArgs(std::vector<NnetComputation::Command> *commands,
 void IdentifyIndexesRangesArgs(std::vector<NnetComputation::Command> *commands,
                                std::vector<int32*> *indexes_ranges_args);
 
+/// Inserts commands into the computation at the requested places.  'commands'
+/// is a list of pairs (command-index, command) that is expected to be sorted on
+/// command-index.  For each entry (c, command) in 'commands', 'command' is
+/// inserted into 'computation' just *before* the command that (at entry) is in
+/// computation->commands[c].  If there are multiple pairs with the same index
+/// c, they will remain in the same order in which they were present in
+/// 'commands'; however, 'commands' does not have to be sorted on 'c'.  As a
+/// special case, if c == computation->commands.size(), the corresponding
+/// commands are inserted at the beginning of the computation.  This function
+/// will appropriately renumber the argument of the kGotoLabel command of any
+/// 'looped' computation.  Command indexes c in commands[*].first must be in the
+/// range [0, computation->commands.size()].  This function may modify
+/// 'commands' by sorting it.
+void InsertCommands(
+    std::vector<std::pair<int32, NnetComputation::Command> > *commands,
+    NnetComputation *computation);
+
+/// Performs optimization to reduce memory usage where possible,
+/// making use of the kCompressMatrix and kDecompressMatrix commands.
+/// Should only be done after most other optimizations, because some
+/// optimizations (such as variable-merging) would not work correctly
+/// after doing this optimization.  This does nothing for looped
+/// computations.  It's OK, though, to expand a shortcut computation
+/// (i.e. call ExpandComputation) after doing this.
+///
+/// memory_compression_level determines how aggressive the compression
+/// is.  Allowed values:
+///       0 = no compression at all
+///       1 = compression that doesn't affect results (e.g. compress
+///           ReLU outputs to 1 byte, as just the sign is needed).
+///       2 = compression that may affect the results slightly (e.g. 16-bit
+///           compression of the output of NormalizeComponent and the like),
+///           but this is not implemented yet, so equivalent to 1.
+///       3 = compression that may affect the results more than just
+///           slightly.  Not implemented yet, so equivalent to 1.
+void OptimizeMemoryCompression(const Nnet &nnet,
+                               int32 memory_compression_level,
+                               NnetComputation *computation);
+
+
 /// This function tries to optimize computation 'computation' for an 'looped'
 /// computation.  It expects as input a computation with no backprop but with
-/// multiple 'segments' separated by command kNoOperation, where each segment
-/// corresponds to a new chunk of input and output.  It tries to locate a pair
-/// of segment boundaries, with command indexes c1 and c2, where the active
-/// matrices have the same debug-info other than a time offset and can be
+/// multiple 'segments' separated by command kNoOperationLabel, where each
+/// segment corresponds to a new chunk of input and output.  It tries to locate
+/// a pair of segment boundaries, with command indexes c1 and c2, where the
+/// active matrices have the same debug-info other than a time offset and can be
 /// identified with each other, and the no-op command at c2 can be replaced with
 /// 'got c1', creating a computation that 'goes on forever'.
 /// If it can't do this, it does nothing.  You can figure out that this is the

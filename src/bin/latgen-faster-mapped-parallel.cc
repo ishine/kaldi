@@ -29,7 +29,7 @@
 #include "decoder/decoder-wrappers.h"
 #include "decoder/decodable-matrix.h"
 #include "base/timer.h"
-#include "thread/kaldi-task-sequence.h"
+#include "util/kaldi-thread.h"
 
 int main(int argc, char *argv[]) {
   try {
@@ -154,8 +154,10 @@ int main(int argc, char *argv[]) {
           delete loglikes;
           continue;
         }
-        LatticeFasterDecoder *decoder = 
-          new LatticeFasterDecoder(fst_reader.Value(), config);
+        fst::VectorFst<StdArc> *fst = 
+          new fst::VectorFst<StdArc>(fst_reader.Value());
+        LatticeFasterDecoder *decoder =
+          new LatticeFasterDecoder(config, fst);
         DecodableMatrixScaledMapped *decodable = new
             DecodableMatrixScaledMapped(trans_model, acoustic_scale, loglikes);
         DecodeUtteranceLatticeFasterClass *task =

@@ -21,7 +21,6 @@
 #include "nnet3/nnet-optimize-utils.h"
 #include "nnet3/nnet-optimize.h"
 
-
 namespace kaldi {
 namespace nnet3 {
 
@@ -30,22 +29,18 @@ void IdentifySubmatrixArgs(NnetComputation::Command *c,
                            std::vector<int32*> *submatrix_args) {
   submatrix_args->clear();
   switch (c->command_type) {
-    case kAllocMatrixZeroed:
-    case kAllocMatrixUndefined:
+    case kAllocMatrix:
     case kDeallocMatrix:
+    case kSetConst:
       submatrix_args->push_back(&c->arg1);
       break;
-    case kAllocMatrixFromOther:
-    case kAllocMatrixFromOtherZeroed:
+    case kSwapMatrix:
       submatrix_args->push_back(&c->arg1);
       submatrix_args->push_back(&c->arg2);
       break;
     case kPropagate:
       submatrix_args->push_back(&c->arg3);
       submatrix_args->push_back(&c->arg4);
-      break;
-    case kStoreStats:
-      submatrix_args->push_back(&c->arg2);
       break;
     case kBackprop:
     case kBackpropNoModelUpdate:
@@ -72,6 +67,7 @@ void IdentifySubmatrixArgs(NnetComputation::Command *c,
       submatrix_args->push_back(&c->arg1);
       break;
     case kNoOperation:
+    case kNoOperationPermanent:
     case kNoOperationMarker:
     case kNoOperationLabel:
     case kGotoLabel:
@@ -185,10 +181,12 @@ class ComputationRenumberer {
   void RenumberIndexes();
   // removes unused elements and duplicates within 'computation->indexes_ranges'
   void RenumberIndexesRanges();
+  // renumbers memos, removing any gaps between memo indexes.
+  void RenumberMemos();
 
   struct SubMatrixHasher {
     SubMatrixHasher() { }
-    size_t operator () (const NnetComputation::SubMatrixInfo &submat) const {
+    size_t operator () (const NnetComputation::SubMatrixInfo &submat) const noexcept {
       // these numbers are arbitrarily chosen primes.
       return submat.matrix_index +
           19553 * submat.row_offset +
@@ -294,6 +292,50 @@ void ComputationRenumberer::CreateRenumbering(
                static_cast<int32>(to_remove.size()));
 }
 
+
+void ComputationRenumberer::RenumberMemos() {
+  // this is indexed by memo-index, and maps to the
+  // (propagate, backprop) commands that use that memo-index, or
+  // (-1, -1) if there are no such commands.
+  std::vector<std::pair<int32, int32> > memo_to_commands;
+  std::vector<int32> memo_indexes_used;
+  std::pair<int32, int32> blank(-1, -1);
+  int32 num_commands = computation_->commands.size();
+  for (int32 c = 0; c < num_commands; c++) {
+    NnetComputation::Command &command = computation_->commands[c];
+    if (command.command_type == kPropagate) {
+      int32 memo_index = command.arg5;
+      if (memo_index > 0) {
+        if (memo_to_commands.size() <= static_cast<size_t>(memo_index))
+          memo_to_commands.resize(memo_index + 1, blank);
+        KALDI_ASSERT(memo_to_commands[memo_index].first == -1);
+        memo_to_commands[memo_index].first = c;
+        memo_indexes_used.push_back(memo_index);
+      }
+    } else if (command.command_type == kBackprop) {
+      int32 memo_index = command.arg7;
+      if (memo_index > 0) {
+        if (memo_to_commands.size() <= static_cast<size_t>(memo_index))
+          memo_to_commands.resize(memo_index + 1, blank);
+        KALDI_ASSERT(memo_to_commands[memo_index].first > 0 &&
+                     memo_to_commands[memo_index].second == -1);
+        memo_to_commands[memo_index].second = c;
+      }
+    }
+  }
+  int32 new_memo_index = 1;
+  for (std::vector<int32>::iterator iter = memo_indexes_used.begin();
+       iter != memo_indexes_used.end(); ++iter) {
+    int32 memo_index = *iter;
+    int32 propagate_command = memo_to_commands[memo_index].first,
+        backprop_command = memo_to_commands[memo_index].second;
+    KALDI_ASSERT(backprop_command > 0 &&
+                 "Propagate generates memo but backprop doesn't use it.");
+    computation_->commands[propagate_command].arg5 = new_memo_index;
+    computation_->commands[backprop_command].arg7 = new_memo_index;
+    new_memo_index++;
+  }
+}
 
 void IdentifySubmatrixArgsInComputation(NnetComputation *computation,
                                         std::vector<int32*> *submatrix_args) {
@@ -454,6 +496,7 @@ void ComputationRenumberer::Renumber() {
   RemoveIndexesMultiDuplicates();
   RenumberIndexes();
   RenumberIndexesRanges();
+  RenumberMemos();
 }
 
 void ComputationRenumberer::RemoveUnusedIndexesMulti() {
@@ -808,8 +851,12 @@ void VariableMergingOptimizer::DoMerge(int32 command_index,
   const std::vector<MatrixAccesses> &matrix_accesses =
       analyzer_.matrix_accesses;
 
-  //  - If it was case (a), replace the assignment command with a no-op.
-  if (c.command_type == kMatrixCopy) {
+  //  - If it was a matrix-copy (assignment) with scale 1.0, replace the
+  //    assignment command with a no-op.
+  //    If it was matrix-copy with a scale, leave the command there;
+  //    it will have the effect of scaling the matrix (it will be
+  //    mapped so that arg1 == arg2, but that is OK).
+  if (c.command_type == kMatrixCopy && c.alpha == 1.0) {
     // remove the command.
     c.command_type = kNoOperation;
     c.arg1 = -1;
@@ -840,7 +887,8 @@ void VariableMergingOptimizer::DoMerge(int32 command_index,
   {
     //   - Both m_to_keep and m_to_discard will have commands that allocate
     //     them, as all matrices do (note, kAcceptInput counts as an allocation
-    //     command).  If one of them is kAcceptInput, then delete the other one.
+    //     command).  If one of them is kAcceptInput, then delete the other one,
+    //     because the position of the kAcceptInput commands is important.
     //     Otherwise delete the "discard" one.  As a simplification of the logic
     //     of the previous sentence: if the "discard" allocate command is
     //     kAcceptInput then delete the "keep" allocate command, else delete
@@ -850,25 +898,41 @@ void VariableMergingOptimizer::DoMerge(int32 command_index,
     //     submatrix that refers to the entire matrix.  The one we keep will
     //     always refer to the entire matrix.  (In the case where one of
     //     them is an input, both submatrices are guaranteed to refer to the
-    //     entire matrix).
+    //     entire matrix, this is guaranteed by the logic we use to decide
+    //     which matrices we can merge).
     int32 alloc_keep = matrix_accesses[m_to_keep].allocate_command,
         alloc_discard = matrix_accesses[m_to_discard].allocate_command;
 
     KALDI_ASSERT(alloc_keep != -1 && alloc_discard != -1);
-    KALDI_ASSERT(analysis.FirstMatrixAccess(m_to_discard) > alloc_keep);
+    KALDI_ASSERT(analysis.FirstNontrivialMatrixAccess(m_to_discard) >
+                 alloc_keep);
 
     NnetComputation::Command
         &keep_alloc_command = computation_->commands[alloc_keep],
         &discard_alloc_command = computation_->commands[alloc_discard];
+    int32 matrix_whose_zeroing_to_discard;
     if (discard_alloc_command.command_type == kAcceptInput) {
       keep_alloc_command.command_type = kNoOperation;
+      matrix_whose_zeroing_to_discard = m_to_keep;
     } else {
       discard_alloc_command.command_type = kNoOperation;
+      matrix_whose_zeroing_to_discard = m_to_discard;
+    }
+    // Now remove the command that zeroed one of the matrices
+    // (the one whose allocation command we just discarded).
+    int32 zeroing_command_to_discard =
+     matrix_accesses[matrix_whose_zeroing_to_discard].accesses[0].command_index;
+    NnetComputation::Command &zeroing_command =
+        computation_->commands[zeroing_command_to_discard];
+    if (zeroing_command.command_type == kSetConst &&
+        zeroing_command.alpha == 0.0) {
+      // if 'zeroing_command' actually *was* a zeroing command, then remove it.
+      zeroing_command.command_type = kNoOperation;
     }
   }
 
   //  If the matrix to discard had stride_type == kStrideEqualNumCols, set the
-  //  matrix to keep's stride_type to kStrideEqualNumCols.
+  //  stride type of the matrix we're keeping to kStrideEqualNumCols.
   if (computation_->matrices[m_to_discard].stride_type == kStrideEqualNumCols) {
     computation_->matrices[m_to_keep].stride_type = kStrideEqualNumCols;
     // ... and perform an additional check.
@@ -930,17 +994,18 @@ std::pair<bool,bool> VariableMergingOptimizer::MayBeMerged(
   if (!left && !right)  // save some time.
     return std::pair<bool,bool>(false,false);
   bool is_assignment = (computation_->commands[command_index].command_type ==
-                        kMatrixCopy);
+                        kMatrixCopy &&
+                        computation_->commands[command_index].alpha == 1.0);
   ComputationAnalysis analysis(*computation_, analyzer_);
   if (is_assignment) {
-    if (analysis.FirstAccess(s2) == command_index &&
+    if (analysis.FirstNontrivialAccess(s2) == command_index &&
         analysis.LastWriteAccess(s1) < command_index &&
         analysis.LastAccess(s1) <
         analysis.DataInvalidatedCommand(command_index, s2)) {
       return std::pair<bool,bool>(left, right);  // possible success.
     }
   } else {
-    if (analysis.FirstAccess(s2) == command_index &&
+    if (analysis.FirstNontrivialAccess(s2) == command_index &&
         analysis.LastAccess(s1) == command_index) {
       return std::pair<bool,bool>(left, right);  // possible success.
     }
@@ -948,6 +1013,268 @@ std::pair<bool,bool> VariableMergingOptimizer::MayBeMerged(
   // failure.
   return std::pair<bool,bool>(false,false);
 }
+
+
+// This class is used inside the function
+// `void ExtendMatrices(NnetComputation *computation)`;
+// see that function's declaration in nnet-optimize-utils.h for
+// a summary of what this class does.
+class MatrixExtender {
+ public:
+  typedef NnetComputation::SubMatrixInfo SubMatrixInfo;
+  typedef NnetComputation::MatrixInfo MatrixInfo;
+
+  MatrixExtender(NnetComputation *computation);
+
+  void ExtendMatrices();
+
+ private:
+  // This function returns true if a copy command from 'src_submatrix'
+  // to 'dest_submatrix' has the properties we need to be able to
+  // extend its rows to cover all of the source matrix.
+  bool CanBeExtended(int32 dest_submatrix_index,
+                     int32 src_submatrix_index);
+
+  // This actually extends the matrices... it's called only if CanBeExtended()
+  // with the same args returned true.  It modifies 'dest_submatrix_index'
+  // and 'src_submatrix_index'.
+  void Extend(int32 *dest_submatrix_index, int32 *src_submatrix_index);
+
+  // This function modifies the computation to fix certain problems
+  // that might have been introduced by Extend()... allocation, deallocation,
+  void FixComputation();
+
+  // This function modifies the computation to fix the debug info; if needed,
+  // it's called from FixComputation().
+  void FixDebugInfo();
+
+  // don't extend a destination matrix if it wasn't already
+  // at least 'min_proportion' (80%) big enough to store the source.
+  BaseFloat min_proportion_;
+
+  NnetComputation *computation_;
+
+  // Indexed by matrix-index m, orig_num_rows_[m] is the value of
+  // computation_->matrices[m].num_rows when this class was initialized,
+  // i.e. before we changed anything.
+  std::vector<int32> orig_num_rows_;
+
+  // Indexed by matrix-index m, this vector contains true if matrix
+  // m is involved in any AcceptInput() or ProvideOutput() operations.
+  std::vector<bool> is_input_or_output_;
+};
+
+// note: the initializer for min_proportion_ below needs to be kept in sync with
+// the min_proportion variable in
+// ComputationChecker::CheckComputationUndefined() in nnet-analyze.cc.
+MatrixExtender::MatrixExtender(NnetComputation *computation):
+    min_proportion_(0.8),
+    computation_(computation) {
+  int32 num_matrices = computation_->matrices.size();
+
+  { // set up orig_num_rows_.
+    orig_num_rows_.resize(num_matrices);
+    // matrix 0 is not a real matrix so skip that index.
+    for (int32 m = 1; m < num_matrices; m++)
+      orig_num_rows_[m] = computation_->matrices[m].num_rows;
+  }
+  { // set up is_input_or_output_.
+    is_input_or_output_.resize(num_matrices, false);
+    std::vector<NnetComputation::Command>::iterator
+      command_iter = computation_->commands.begin(),
+      command_end = computation_->commands.end();
+    for (; command_iter != command_end; ++command_iter) {
+      const NnetComputation::Command &command = *command_iter;
+      // make sure there are no kSwapMatrix commands; they should not be present
+      // at this stage of optimization.
+      KALDI_ASSERT(command.command_type != kSwapMatrix);
+      if (command.command_type == kProvideOutput ||
+          command.command_type == kAcceptInput) {
+        int32 s = command.arg1,
+            m = computation_->submatrices[s].matrix_index;
+        is_input_or_output_[m] = true;
+      }
+    }
+  }
+}
+
+
+bool MatrixExtender::CanBeExtended(int32 dest_submatrix_index,
+                                   int32 src_submatrix_index) {
+  const SubMatrixInfo
+      &src_submatrix = computation_->submatrices[src_submatrix_index],
+      &dest_submatrix = computation_->submatrices[dest_submatrix_index];
+  if (src_submatrix.matrix_index == dest_submatrix.matrix_index)
+    return false;
+
+  // we can't resize the destination matrix if it's involved in input or output.
+  if (is_input_or_output_[dest_submatrix.matrix_index])
+    return false;
+
+  const MatrixInfo
+      &src_matrix = computation_->matrices[src_submatrix.matrix_index];
+
+  int32 dest_matrix_orig_num_rows = orig_num_rows_[dest_submatrix.matrix_index],
+      src_matrix_orig_num_rows = orig_num_rows_[src_submatrix.matrix_index];
+
+  if (src_submatrix.num_rows < min_proportion_ * src_matrix_orig_num_rows)
+    return false;
+
+  // The following checks that the source submatrix covers be all of the
+  // source matrix except a few final rows, and the destination submatrix goes
+  // to the final row of its matrix.
+  return (src_submatrix.col_offset == 0 &&
+          src_submatrix.num_cols == src_matrix.num_cols &&
+          src_submatrix.row_offset == 0 &&
+          src_submatrix.num_rows < src_matrix.num_rows &&
+          dest_submatrix.row_offset + dest_submatrix.num_rows ==
+          dest_matrix_orig_num_rows);
+}
+
+
+void MatrixExtender::Extend(int32 *dest_submatrix_index,
+                            int32 *src_submatrix_index) {
+  // copy the SubMatrixInfo to avoid iterator invalidation.
+  SubMatrixInfo
+      src_submatrix = computation_->submatrices[*src_submatrix_index],
+      dest_submatrix = computation_->submatrices[*dest_submatrix_index];
+
+  MatrixInfo  &src_matrix = computation_->matrices[src_submatrix.matrix_index],
+      &dest_matrix = computation_->matrices[dest_submatrix.matrix_index];
+
+  int32 new_dest_num_rows = dest_submatrix.row_offset + src_matrix.num_rows;
+
+  // extend the destination matrix so it has enough rows to fit the entire
+  // source matrix.  Note: doing this will break certain invariances in the
+  // computation, principally with allocation and deallocation commands, which
+  // we'll later fix up by calling FixComputation().
+  if (new_dest_num_rows > dest_matrix.num_rows) {
+    dest_matrix.num_rows = new_dest_num_rows;
+    // make sure there's a submatrix index covering the whole of the dest matrix.
+    computation_->submatrices.push_back(
+        SubMatrixInfo(dest_submatrix.matrix_index, 0, new_dest_num_rows,
+                      0, dest_matrix.num_cols));
+  }
+
+  // The following 3 statements create a new submatrix that will be
+  // the destination submatrix; it's the same as the original destination
+  // submatrix, but with a few extra rows.
+  *dest_submatrix_index = computation_->submatrices.size();
+  dest_submatrix.num_rows = src_matrix.num_rows;
+  computation_->submatrices.push_back(
+      SubMatrixInfo(dest_submatrix));
+
+  // The following 3 statements create a new submatrix that will be
+  // the source submatrix; it's the same as the original source
+  // submatrix, but with a few extra rows, and actually will cover
+  // the entire source matrix.
+  *src_submatrix_index = computation_->submatrices.size();
+  computation_->submatrices.push_back(
+      SubMatrixInfo(src_submatrix.matrix_index, 0, src_matrix.num_rows,
+                    0, src_matrix.num_cols));
+}
+
+void MatrixExtender::ExtendMatrices() {
+  std::vector<NnetComputation::Command>::iterator
+      command_iter = computation_->commands.begin(),
+      command_end = computation_->commands.end();
+  bool changed = false;
+  for (; command_iter != command_end; ++command_iter) {
+    NnetComputation::Command &command = *command_iter;
+    if (command.command_type == kMatrixCopy &&
+        command.alpha == 1.0) {
+      int32 dest_submatrix_index = command.arg1,
+          src_submatrix_index = command.arg2;
+      if (CanBeExtended(dest_submatrix_index, src_submatrix_index)) {
+        Extend(&command.arg1, &command.arg2);
+        changed = true;
+      }
+    }
+  }
+  if (changed)
+    FixComputation();
+}
+
+void MatrixExtender::FixComputation() {
+  // make sure that allocation and deallocation commands
+  // operate on whole matrix.
+  std::vector<NnetComputation::Command>::iterator
+      command_iter = computation_->commands.begin(),
+      command_end = computation_->commands.end();
+  std::vector<int32> whole_submatrices;
+  computation_->GetWholeSubmatrices(&whole_submatrices);
+  for (; command_iter != command_end; ++command_iter) {
+    NnetComputation::Command &command = *command_iter;
+    if (command.command_type == kAllocMatrix ||
+        command.command_type == kDeallocMatrix) {
+      int32 s = command.arg1,
+          m = computation_->submatrices[s].matrix_index,
+          new_s = whole_submatrices[m];
+      if (new_s != s) {
+        KALDI_ASSERT(
+            computation_->submatrices[s] == computation_->submatrices[new_s] ||
+            orig_num_rows_[m] != computation_->matrices[m].num_rows);
+        command.arg1 = new_s;
+      }
+    }
+    if (command.command_type == kSetConst && command.alpha == 0.0) {
+      int32 s = command.arg1,
+          m = computation_->submatrices[s].matrix_index,
+          new_s = whole_submatrices[m];
+      if (new_s != s) {
+        {
+          const NnetComputation::SubMatrixInfo &info = computation_->submatrices[
+              command.arg1];
+          const NnetComputation::MatrixInfo &mat_info = computation_->matrices[
+              info.matrix_index];
+          // If this command wasn't zeroing the the entirety of a matrix,
+          // (before we extended the matrix), we don't need to extend it.
+          if (!(info.row_offset == 0 && info.col_offset == 0 &&
+                info.num_cols == mat_info.num_cols &&
+                info.num_rows == orig_num_rows_[info.matrix_index]))
+            continue;
+          // I know doing this via 'continue' is odd, but it's done this way to
+          // avoid invalid iterators still being in scope; I think some runtimes
+          // check for it.
+        }
+        command.arg1 = new_s;
+      }
+    }
+  }
+  if (!computation_->matrix_debug_info.empty())
+    FixDebugInfo();
+  RenumberComputation(computation_);
+}
+
+void MatrixExtender::FixDebugInfo() {
+  int32 num_matrices = computation_->matrices.size();
+  // matrix zero is not a 'real' matrix.
+  for (int32 m = 1; m < num_matrices; m++) {
+    NnetComputation::MatrixDebugInfo &debug_info =
+        computation_->matrix_debug_info[m];
+    int32 new_num_rows = computation_->matrices[m].num_rows,
+        old_num_rows = debug_info.cindexes.size();
+    if (new_num_rows != old_num_rows) {
+      debug_info.cindexes.resize(new_num_rows);
+      int32 num_extra_rows = new_num_rows - old_num_rows;
+      // the following should be true because min_proportion_ > 0.5.
+      KALDI_ASSERT(num_extra_rows <= old_num_rows);
+      for (int32 r = old_num_rows; r < new_num_rows; r++) {
+        Cindex cindex = debug_info.cindexes[r - num_extra_rows];
+        // set the 't' value to kNoTime which indicates that it's not a 'real'
+        // time step, and may avoid errors in checking code.
+        cindex.second.t = kNoTime;
+        debug_info.cindexes[r] = cindex;
+      }
+    }
+  }
+}
+
+void ExtendMatrices(NnetComputation *computation) {
+  MatrixExtender ext(computation);
+  ext.ExtendMatrices();
+}
+
 
 
 /** This class is responsible for consolidating the model-update part of
@@ -1070,11 +1397,13 @@ int32 ModelUpdateConsolidator::ConsolidateSubmatrices(
   // of a new matrix that we are creating.
   int32 new_whole_submatrix = computation_->NewMatrix(num_rows, num_cols,
                                                       stride_type);
-  // Add a command at the very start, to initialize this new matrix.
-  // we can later on optimize this zeroed initialization to an undefined
-  // initialization.
+  // Add commands at the very start, to initialize and then zero this new
+  // matrix.  we can later on remove the zeroing if it is not necessary.
   extra_commands_[0].push_back(
-      NnetComputation::Command(kAllocMatrixZeroed, new_whole_submatrix));
+      NnetComputation::Command(kAllocMatrix, new_whole_submatrix));
+  extra_commands_[0].push_back(
+      NnetComputation::Command(0.0, kSetConst, new_whole_submatrix));
+
   final_deallocate_commands_.push_back(
       NnetComputation::Command(kDeallocMatrix, new_whole_submatrix));
   int32 new_matrix_index =
@@ -1171,11 +1500,12 @@ void ModelUpdateConsolidator::ConsolidateUpdateForComponent(
       output_deriv_submatrix = ConsolidateSubmatrices(backprop_commands,
                                                       output_deriv_submatrices);
   int32 precomputed_indexes_index = 0,  // unused since simple component
-      input_deriv_submatrix = 0;  // we don't need the input-deriv, so this is
-                                  // zero.
+      input_deriv_submatrix = 0,  // we don't need the input-deriv.
+      memo_index = 0;  // we checked that no memos were used.
   NnetComputation::Command c(kBackprop, component_index, precomputed_indexes_index,
                              input_submatrix, output_submatrix,
-                             output_deriv_submatrix, input_deriv_submatrix);
+                             output_deriv_submatrix, input_deriv_submatrix,
+                             memo_index);
   final_commands_.push_back(c);
 }
 
@@ -1189,7 +1519,8 @@ void ModelUpdateConsolidator::ConsolidateModelUpdate() {
   int32 num_components = nnet_.NumComponents(),
       num_commands = computation_->commands.size();
   // 'backprop_commands' is a list, for each component (but nonempty only for
-  // updatable components), of the command indexes for the backprop commands.
+  // updatable simple components), of the command indexes for the backprop
+  // commands.
   std::vector<std::vector<int32> > backprop_commands(num_components);
   for (int32 command_index = 0;
        command_index < num_commands; command_index++) {
@@ -1197,7 +1528,10 @@ void ModelUpdateConsolidator::ConsolidateModelUpdate() {
     if (c.command_type == kBackprop) {
       int32 component_index = c.arg1;
       const Component *component = nnet_.GetComponent(component_index);
-      if (component->Properties() & kUpdatableComponent)
+      int32 properties = component->Properties();
+      if ((properties & kUpdatableComponent) &&
+          (properties & kSimpleComponent) &&
+          !(properties & kUsesMemo))
         backprop_commands[component_index].push_back(command_index);
     }
   }
@@ -1246,43 +1580,54 @@ void DerivativeTimeLimiter::GetPruneValues(int32 initial_submatrix,
   }
 }
 
+bool DerivativeTimeLimiter::RowIsKept(
+    int32 submatrix,
+    int32 row_index) const {
+  KALDI_ASSERT(submatrix > 0 && submatrix < computation_->submatrices.size());
+  const NnetComputation::SubMatrixInfo &info =
+      computation_->submatrices[submatrix];
+  KALDI_ASSERT(row_index >= 0 &&
+               row_index < computation_->submatrices[submatrix].num_rows);
+  int32 matrix_index = info.matrix_index;
+  const NnetComputation::MatrixDebugInfo
+      &debug_info = computation_->matrix_debug_info[matrix_index];
+  if (!debug_info.is_deriv) {
+    // the derivative time limitation doesn't apply to things that aren't
+    // derivatives.
+    return true;
+  }
+  int32 t = debug_info.cindexes[row_index + info.row_offset].second.t;
+  return (t >= min_deriv_time_ && t <= max_deriv_time_);
+}
+
+
 // modify commands to take into account the fact that some matrices are zero or
 // partially zero.  Allocation commands and sizes of underlying matrices are not
 // affected-- we'll work out later on, what to do with them.
 void DerivativeTimeLimiter::ModifyCommand(NnetComputation::Command *command) {
   CommandType command_type = command->command_type;
   switch (command_type) {
-    case kAllocMatrixUndefined:
-    case kAllocMatrixFromOther:
-    case kAllocMatrixFromOtherZeroed:
-      KALDI_ERR << "No undefined initialization or initialization-from-other "
-                << "is allowed before LimitDerivativeTimes";
-      break;
-    case kAllocMatrixZeroed:
+    case kAllocMatrix:
     case kDeallocMatrix:
+    case kSetConst:
+    case kSwapMatrix:
       break;  // we'll deal with allocation and deallocation later on.
     case kPropagate:
-      // Propagate commands are unchanged.
+      // Propagate commands are unchanged, except that if the output of the
+      // propagate is completely outside the accepted time-range (only likely if
+      // we're inside a recurrency), then we don't store stats; this is not
+      // really important, and is mostly done to minimize the difference from an
+      // older version of the code, to reduce the need for testing.
+      if (submatrix_map_[command->arg4] == 0)
+        command->arg6 = 0;
       break;
-    case kStoreStats: {
-      const Component *component = nnet_.GetComponent(command->arg1);
-      if ((component->Properties() & kSimpleComponent)) {
-        // We choose to apply the time-limitation here, as it will save time and
-        // is probably what the user wants.
-        int32 submatrix_mapped = submatrix_map_[command->arg2];
-        if (submatrix_mapped == 0)
-          command->command_type = kNoOperation;
-        else
-          command->arg2 = submatrix_mapped;
-      }
-      break;
-    }
     case kBackpropNoModelUpdate:  // we actually don't expect to encounter this,
                                   // but it's trivial to support as it's the
                                   // same as backprop.
     case kBackprop: {
       const Component *component = nnet_.GetComponent(command->arg1);
-      if (!(component->Properties() & kSimpleComponent)) {
+      int32 properties = component->Properties();
+      if (!(properties & kSimpleComponent)) {
         // we don't (yet) do this optimization for non-simple Components...
         // it would be a bit more complicated as we'd have to recompute the
         // PrecomputedIndexes.
@@ -1304,9 +1649,14 @@ void DerivativeTimeLimiter::ModifyCommand(NnetComputation::Command *command) {
                      mapped_output_submatrix == 0);
         // just delete the command.
         command->command_type = kNoOperation;
+        if (command->arg7 > 0)
+          memos_to_delete_.insert(command->arg7);
       } else if (mapped_output_deriv_submatrix !=
-                 output_deriv_submatrix) {
+                 output_deriv_submatrix &&
+                 !(properties & kUsesMemo)) {
         // we're operating on a range of the input or output.
+        // we can't do this type of mapping of the component uses
+        // a memo, though.
         command->arg3 = mapped_input_submatrix;
         command->arg4 = mapped_output_submatrix;
         command->arg5 = mapped_output_deriv_submatrix;
@@ -1329,7 +1679,7 @@ void DerivativeTimeLimiter::ModifyCommand(NnetComputation::Command *command) {
       break;
     }
     case kAcceptInput: case kProvideOutput:
-    case kNoOperation: case kNoOperationMarker:
+    case kNoOperation: case kNoOperationPermanent: case kNoOperationMarker:
       break;
     default:
       KALDI_ERR << "Un-handled command type.";
@@ -1393,10 +1743,6 @@ void DerivativeTimeLimiter::MapIndexesCommand(NnetComputation::Command *c) {
   // input_submatrix_mapped and output_submatrix_mapped map both submatrices to
   // just the portion that we are treating as nonzero.
 
-  if (input_submatrix_mapped == input_submatrix &&
-      output_submatrix_mapped == output_submatrix) {
-    return;  // nothing is changed.
-  }
   if (input_submatrix_mapped == 0 ||
       output_submatrix_mapped == 0) {
     // Either input or output is all zeros; make the command a no-op.
@@ -1428,18 +1774,17 @@ void DerivativeTimeLimiter::MapIndexesCommand(NnetComputation::Command *c) {
     // the index into the 'new_indexes' vector is the row of the output
     // submatrix; the value is the row of the input submatrix.
     int32 orig_index = old_indexes[i + left_prune_output];
-    if (orig_index == -1) {
+    if (orig_index == -1 ||
+        !RowIsKept(input_submatrix, orig_index) ||
+        !RowIsKept(output_submatrix_mapped, i)) {
       new_indexes[i] = -1;
     } else {
       int32 mapped_index = orig_index - left_prune_input;
-      if (mapped_index >= 0 && mapped_index < new_num_input_rows) {
-        new_indexes[i] = mapped_index;
-        must_keep_command = true;
-      } else {
-        // input was out of range (i.e. it takes a value that we are asserting
-        // is zero)-- use -1 as the index.
-        new_indexes[i] = -1;
-      }
+      // we can do the following assert because the RowIsKept command
+      // would have turned it into a -1 if not.
+      KALDI_ASSERT(mapped_index >= 0 && mapped_index < new_num_input_rows);
+      new_indexes[i] = mapped_index;
+      must_keep_command = true;
     }
   }
   if (!must_keep_command) {
@@ -1454,65 +1799,63 @@ void DerivativeTimeLimiter::MapIndexesCommand(NnetComputation::Command *c) {
 }
 
 void DerivativeTimeLimiter::MapIndexesMultiCommand(NnetComputation::Command *c) {
-  int32 submatrix_arg = c->arg1,
+  int32 dest_submatrix = c->arg1,
       indexes_multi_arg = c->arg2;
-  int32 submatrix_mapped = submatrix_map_if_deriv_[submatrix_arg];
-  if (submatrix_mapped == 0) {
+  int32 dest_submatrix_mapped = submatrix_map_if_deriv_[dest_submatrix];
+  if (dest_submatrix_mapped == 0) {
+    // The destination matrix is completely outside the allowed time range.
     c->command_type = kNoOperation;
     return;
   }
   int32 left_prune;
-  GetPruneValues(submatrix_arg, submatrix_mapped, &left_prune, NULL);
-  int32 new_num_rows = computation_->submatrices[submatrix_mapped].num_rows;
+  GetPruneValues(dest_submatrix, dest_submatrix_mapped, &left_prune, NULL);
+  int32 new_num_rows = computation_->submatrices[dest_submatrix_mapped].num_rows;
   const std::vector<std::pair<int32, int32> > &old_indexes_multi(
       computation_->indexes_multi[indexes_multi_arg]);
   std::vector<std::pair<int32, int32> > new_indexes_multi(new_num_rows);
+  bool must_keep_command = false;
   for (int32 i = 0; i < new_num_rows; i++) {
     std::pair<int32,int32> &this_pair = new_indexes_multi[i];
     this_pair = old_indexes_multi[i + left_prune];
+    // note: 'this_submatrix' is the source submatrix, from where we copy or add
+    // the the data; 'this_row' is the source row.
     int32 this_submatrix = this_pair.first,
         this_row = this_pair.second;
     if (this_submatrix == -1)  // don't map the (-1, -1) pairs.
       continue;
-    int32 this_submatrix_mapped = submatrix_map_if_deriv_[this_submatrix];
-    if (this_submatrix_mapped == this_submatrix) {
-      continue;
-    } else if (this_submatrix_mapped == 0) {  // was completely out of range.
+    if (!RowIsKept(this_submatrix, this_row) ||
+        !RowIsKept(dest_submatrix_mapped, i)) {
       this_pair.first = -1;
       this_pair.second = -1;
-    } else {
-      int32 this_left_prune, this_num_rows =
-          computation_->submatrices[this_submatrix_mapped].num_rows;
-      GetPruneValues(this_submatrix, this_submatrix_mapped,
-                     &this_left_prune, NULL);
-      int32 this_row_mapped = this_row - this_left_prune;
-      if (this_row_mapped >= 0 && this_row_mapped < this_num_rows) {
-        this_pair.first = this_submatrix_mapped;
-        this_pair.second = this_row_mapped;
-      } else {
-        this_pair.first = -1;
-        this_pair.second = -1;
-      }
+      continue;
     }
+    int32 this_submatrix_mapped = submatrix_map_if_deriv_[this_submatrix];
+
+    // Reason for the assert below: if this_submatrix_mapped was 0, then all the
+    // values in it should be not-kept, but RowIsKept above returned true, so
+    // this would be a code error.
+    KALDI_ASSERT(this_submatrix_mapped != 0);
+
+    int32 this_left_prune, this_num_rows =
+        computation_->submatrices[this_submatrix_mapped].num_rows;
+    GetPruneValues(this_submatrix, this_submatrix_mapped,
+                   &this_left_prune, NULL);
+    int32 this_row_mapped = this_row - this_left_prune;
+    // the above assert is there because if it was going to be outside the
+    // kept range, RowIsKept should have returned false above.
+    KALDI_ASSERT(this_row_mapped >= 0 && this_row_mapped < this_num_rows);
+    this_pair.first = this_submatrix_mapped;
+    this_pair.second = this_row_mapped;
+    must_keep_command = true;
   }
-  if (submatrix_mapped == submatrix_arg &&
-      new_indexes_multi == old_indexes_multi)  // nothing changed.
-    return;
-  bool command_can_be_deleted = true;
-  std::vector<std::pair<int32, int32> >::iterator
-      iter = new_indexes_multi.begin(),
-      end = new_indexes_multi.end();
-  for (; iter != end; ++iter) {
-    if (iter->first != -1) {
-      command_can_be_deleted = false;
-      break;
-    }
-  }
-  if (command_can_be_deleted) {
+  if (!must_keep_command) {
     c->command_type = kNoOperation;
     return;
   }
-  c->arg1 = submatrix_mapped;
+  if (dest_submatrix_mapped == dest_submatrix &&
+      new_indexes_multi == old_indexes_multi)  // nothing changed.
+    return;
+  c->arg1 = dest_submatrix_mapped;
   c->arg2 = computation_->indexes_multi.size();
   computation_->indexes_multi.push_back(new_indexes_multi);
 }
@@ -1541,30 +1884,49 @@ void DerivativeTimeLimiter::MapAddRowRangesCommand(
   const std::vector<std::pair<int32,int32> > &old_indexes_ranges(
       computation_->indexes_ranges[indexes_ranges_index]);
   std::vector<std::pair<int32,int32> > new_indexes_ranges(dest_num_rows);
+
+  bool must_keep_command = false;
   for (int32 i = 0; i < dest_num_rows; i++) {
     std::pair<int32, int32> &this_pair = new_indexes_ranges[i];
     this_pair = old_indexes_ranges[i + dest_left_prune];
-    // note: the .first is a start-index in the src matrix, and the .second is
-    // an end-index in the src matrix.
-    int32 new_first = this_pair.first - src_left_prune,
-        new_second = this_pair.second - src_left_prune;
-    if (new_first < 0) new_first = 0;
-    if (new_first >= src_num_rows) new_first = src_num_rows - 1;
-    if (new_second < 0) new_second = 0;
-    if (new_second >= src_num_rows) new_second = src_num_rows - 1;
-    if (new_first == new_second) {
-      // for clarity, represent empty ranges as (-1, -1).
-      new_first = -1;
-      new_second = -1;
+
+    int32 start = this_pair.first, end = this_pair.second;
+    if (!RowIsKept(dest_submatrix_mapped, i)) {
+      start = -1;
+      end = -1;
+    } else if (start >= 0) {
+      // no need to change start, end if they are (-1, -1).
+      // Note: this code is not optimally efficient, as RowIsKept
+      // has a bunch of statements that we could cache some variables
+      // for, but this command is pretty rare so not worth to optimize
+      // at this point.
+      while (start < end && !RowIsKept(src_submatrix, start))
+        start++;
+      while (end > start && !RowIsKept(src_submatrix, end - 1))
+        end--;
+      if (start == end) {
+        start = -1;
+        end = -1;
+      } else {
+        start -= src_left_prune;
+        end -= src_left_prune;
+        must_keep_command = true;
+        // the next assert is because if we were outside the 'kept' part of the
+        // submatrix, RowIsKept() should have instructed us to modify the value.
+        KALDI_ASSERT(start >= 0 && end <= src_num_rows && start < end);
+      }
     }
-    KALDI_ASSERT(new_second >= new_first);
-    this_pair.first = new_first;
-    this_pair.second = new_second;
+    this_pair.first = start;
+    this_pair.second = end;
   }
-  c->arg1 = dest_submatrix_mapped;
-  c->arg2 = src_submatrix_mapped;
-  c->arg3 = computation_->indexes_ranges.size();
-  computation_->indexes_ranges.push_back(new_indexes_ranges);
+  if (must_keep_command) {
+    c->arg1 = dest_submatrix_mapped;
+    c->arg2 = src_submatrix_mapped;
+    c->arg3 = computation_->indexes_ranges.size();
+    computation_->indexes_ranges.push_back(new_indexes_ranges);
+  } else {
+    c->command_type = kNoOperation;
+  }
 }
 
 
@@ -1579,8 +1941,8 @@ DerivativeTimeLimiter::DerivativeTimeLimiter(const Nnet &nnet,
 
 void DerivativeTimeLimiter::LimitDerivTimes() {
   KALDI_ASSERT(max_deriv_time_ >= min_deriv_time_);
-  if (min_deriv_time_ == std::numeric_limits<BaseFloat>::min() &&
-      max_deriv_time_ == std::numeric_limits<BaseFloat>::max())
+  if (min_deriv_time_ == std::numeric_limits<int32>::min() &&
+      max_deriv_time_ == std::numeric_limits<int32>::max())
     return;  // nothing to do.
 
   computation_->GetWholeSubmatrices(&whole_submatrices_);
@@ -1589,7 +1951,25 @@ void DerivativeTimeLimiter::LimitDerivTimes() {
   ModifyCommands();
   PruneMatrices();
   RemoveNoOps(computation_);
+  RemoveUnusedMemos();
   RenumberComputation(computation_);
+}
+
+void DerivativeTimeLimiter::RemoveUnusedMemos() {
+  if (memos_to_delete_.empty())
+    return;
+  size_t num_commands = computation_->commands.size(),
+      num_memos_removed = 0;
+  for (size_t command_index = 0; command_index < num_commands;
+       command_index++) {
+    NnetComputation::Command &c = computation_->commands[command_index];
+    if (c.command_type == kPropagate &&
+        memos_to_delete_.count(c.arg5) != 0) {
+      c.arg5 = 0;
+      num_memos_removed++;
+    }
+  }
+  KALDI_ASSERT(num_memos_removed == memos_to_delete_.size());
 }
 
 void DerivativeTimeLimiter::ComputeMatrixPruneInfo() {
@@ -1693,8 +2073,10 @@ void DerivativeTimeLimiter::ModifyCommands() {
 bool DerivativeTimeLimiter::CanLimitMatrix(const Analyzer &analyzer,
                                            int32 m) const {
   int32 s_whole = whole_submatrices_[m];  // submatrix consisting of
-                                                     // all of the matrix.
-  int32 s_mapped = submatrix_map_[s_whole];  // the matrix limited in time.
+                                          // all of the matrix m
+  int32 s_mapped = submatrix_map_[s_whole];  // submatrix consisting of the time
+                                             // range of the matrix m that we
+                                             // plan to limit it to.
   KALDI_ASSERT(s_mapped != 0 && s_mapped != s_whole);
   std::vector<int32> whole_variables, mapped_variables;
   analyzer.variables.AppendVariablesForSubmatrix(s_whole,
@@ -1709,9 +2091,9 @@ bool DerivativeTimeLimiter::CanLimitMatrix(const Analyzer &analyzer,
                           mapped_variables.begin(), mapped_variables.end(),
                           excluded_variables.begin());
   KALDI_ASSERT(end_iter == excluded_variables.end());
-  // We want to make sure that none of the excluded variables are
-  // ever accessed.  If they are, we cannot prune the matrix.
-  int32 allocate_command = analyzer.matrix_accesses[m].allocate_command;
+  // We want to make sure that none of the excluded variables are ever accessed,
+  // except possibly for zeroing or setting to other constant value.  If they
+  // are, we cannot prune the matrix.
   for (std::vector<int32>::iterator iter = excluded_variables.begin();
        iter != end_iter; ++iter) {
     int32 variable_index = *iter;
@@ -1722,9 +2104,11 @@ bool DerivativeTimeLimiter::CanLimitMatrix(const Analyzer &analyzer,
     for (; viter != vend; ++viter) {
       // if a variable outside the pruned range of the matrix is ever accessed
       // apart from on allocation, we cannot prune.
-      if (viter->command_index != allocate_command) {
+      int32 command_index = viter->command_index;
+      NnetComputation::Command &command = computation_->commands[command_index];
+      if (command.command_type != kSetConst) {
         // we may one day want to look at this.. it's not really expected.
-        KALDI_VLOG(4) << "Cannot prune matrix " << m;
+        KALDI_VLOG(3) << "Cannot prune matrix " << m;
         return false;
       }
     }
@@ -1815,20 +2199,8 @@ void DerivativeTimeLimiter::PruneMatrices() {
     if (!matrix_prune_info.partly_inside_range) {
       // completely outside time range.  we can prune the matrix if it is not an
       // input or output, and is never accessed apart from allocation.
-      if (accesses.accesses.empty() ||
-          (accesses.accesses.size() == 1 &&
-           accesses.accesses[0].command_index == accesses.allocate_command)) {
-        // we prune the matrix away.  the only thing we need to do here is
-        // to remove the allocation and deallocation commands.
-        // they should exist, because we just checked that it's not an input
-        // or an output.
-        KALDI_ASSERT(accesses.allocate_command >= 0 &&
-                     accesses.deallocate_command >= 0);
-        computation_->commands[accesses.allocate_command].command_type =
-            kNoOperation;
-        computation_->commands[accesses.deallocate_command].command_type =
-            kNoOperation;
-      }
+      if (MatrixIsUnused(analyzer, *computation_, m))
+          RemoveCommandsForUnusedMatrix(analyzer, m, computation_);
     } else {
       // the matrix is partly inside the time range, it's a derivative, and not
       // an input or an output.
@@ -2010,16 +2382,12 @@ static bool SnipSingleRowOp(NnetComputation *computation,
   std::vector<int32> new_indexes(indexes.begin() + num_leading_negatives,
                                  indexes.begin() + num_leading_negatives +
                                  new_num_rows);
-  KALDI_ASSERT(new_indexes.back() >= 0);    // TEMP
   c.arg3 = computation->indexes.size();
   computation->indexes.push_back(std::vector<int32>());
   computation->indexes.back().swap(new_indexes);
   c.arg1 = computation->NewSubMatrix(c.arg1,
                                      num_leading_negatives, new_num_rows,
                                      0, -1);
-  if (new_num_rows == 15) {
-    KALDI_LOG << "HERE"; // TEMP
-  }
   return true;  // made a change.
 }
 
@@ -2057,7 +2425,7 @@ static void FindNumLeadingAndTrailingNegatives(
   // at least one nonnegative number.
   while (ptr2->first < 0)
     ptr2--;
-  KALDI_ASSERT(ptr2 != begin);  // would be code error.
+  KALDI_ASSERT(ptr2 >= begin);  // would be code error.
   *num_trailing_negatives = end - 1 - ptr2;
 }
 
@@ -2118,8 +2486,9 @@ static void FindNumLeadingAndTrailingIdenticals(
       *end = ptr + vec.size();
   while (ptr != end && ptr->first == ptr->second)
     ptr++;
-  // note regarding error message: we assume all negative numbers are -1, due to
-  // the way this is called, but it only affects how we describe the error.
+  // note regarding error message: we assume all pairs of identical numbers are
+  // -1, due to the way this is called, but it only affects how we describe the
+  // error.
   KALDI_ASSERT(ptr != end && "Vector consists entirely of -1's.");
   *num_leading_identicals = ptr - begin;
   const std::pair<int32, int32> *ptr2 = end - 1;
@@ -2128,7 +2497,7 @@ static void FindNumLeadingAndTrailingIdenticals(
   // at least one nonnegative number.
   while (ptr2->first == ptr2->second)
     ptr2--;
-  KALDI_ASSERT(ptr2 != begin);  // would be code error.
+  KALDI_ASSERT(ptr2 >= begin);  // would be code error.
   *num_trailing_identicals = end - 1 - ptr2;
 }
 
@@ -2207,9 +2576,568 @@ bool SnipRowOps(NnetComputation *computation) {
 
 
 
+// This class implements the internals of the function SplitRowOps() which is
+// declared in nnet-optimize-utils.h.
+class RowOpsSplitter {
+ public:
+  RowOpsSplitter(NnetComputation *computation): computation_(computation) { }
+
+  // Attempts to perform the optimization.  Returns true if it made any change
+  // to the computation.
+  bool Split() {
+    return SplitIndexes() && SplitCommands();
+  }
+
+ private:
+
+  // This function sets up split_info_, which describes how we can split up
+  // the vectors that are elements of computation_->indexes_multi.
+  // It will return true if it successfully split at least one of those
+  // vectors, and false otherwise.
+  bool SplitIndexes();
+
+  // This function modifies the commands in the computation.  It returns
+  // true if it made any change.
+  bool SplitCommands();
+
+
+  // This function attempts to optimize the command in
+  // computation_->commands[command_index].  It returns true if it made any
+  // change.  If we are going to have to insert an extra command into the
+  // computation, this function will append an element to new_commands_.
+  bool SplitCommand(int32 command_index);
+
+  // Below, define a multi-index as an element of NnetComputation::indexes_multi,
+  // for example,
+  // const std::vector<std::pair<int32,int32> > &multi_index = computation_->indexes_multi[1];
+  // It is a list of pairs.
+
+  // This struct appears as an element of the list inside MultiIndexSplitInfo.
+  // It helps us describe how we can split up a multi-index (a list of pairs)
+  // into a sequence of ranges where the .first value is constant across the
+  // range.
+  struct SingleSplitInfo {
+    // 'offset' is the index into the vector of pairs that forms the
+    // start of this range.  In the example where we are splitting up
+    // ((10,2), (10,3), (10,4), (15,3), (15,5), (15,7))
+    // there would be two instances of struct SingleSplitInfo, with
+    // offset = 0 and offset = 3.
+    int32 offset;
+    // 'size' is the number of pairs in this range; in the example
+    // above, both 'size' elements would be 3.
+    int32 size;
+    // first_value is the value of the .first index throughout this range; in
+    // the example above, it would be 10 and 15 respectively.  It represents a
+    // submatrix index.
+    int32 first_value;
+
+    // initial_second_value is the minimum value of .second for any element in
+    // this range: it would be 2 and 3 respectively in the example above.
+    int32 min_second_value;
+
+    // second_value_range is the highest value of .second for any element in
+    // this range, plus one, minus min_second_value.  (It's the number of rows
+    // in the other submatrix of the operation).
+    int32 second_value_range;
+
+    // If the .second values in the range are consecutive then
+    // 'second_value_offsets' will be empty.  Otherwise it will
+    // be a vector of size 'size', containing numbers in the
+    // range 0 ... second_value_range - 1, such that
+    // min_second_value + second_value_offsets[i] gives
+    // the .second value at the corresponding position in the range.
+    // In the second range of the example above, the range
+    // consisting of ((15,3), (15,5), (15,7)), 'second_value_offsets
+    // would be the vector (0, 2, 4).
+    std::vector<int32> second_value_offsets;
+  };
+
+  // An instance of the struct MultiIndexSplitInfo will be created for each multi-index,
+  // i.e. for each element of  NnetComputation::indexes_multi.
+  struct MultiIndexSplitInfo {
+    // If we can split this multi-index into at most two ranges, this
+    // vector will be nonempty; otherwise it will be empty.
+    std::vector<SingleSplitInfo> splits;
+  };
+
+  // GetSplitInfo() attempts to take a range of a
+  // std::vector<std::pair<int32, int32> >, as represented by begin and end
+  // iterators, and to extract its information into an object of type
+  // SingleSplitInfo.  (all except for the .offset member, which will have
+  // been set by calling code).
+  // It return true if successful, and false otherwise.  The only reasons that
+  // it might return false are that the range contains -1's or does not contain
+  // all-identical .first members).
+  bool GetSplitInfo(std::vector<std::pair<int32, int32> >::const_iterator begin,
+                    std::vector<std::pair<int32, int32> >::const_iterator end,
+                    SingleSplitInfo *info);
+
+  // computation_ is the computation that we are modifying.
+  NnetComputation *computation_;
+  // split_info_ will contain information about how we can split up the members
+  // of computation_->indexes_multi into ranges.
+  std::vector<MultiIndexSplitInfo> split_info_;
+  // The following is a list of additional commands that we are going to insert
+  // into computation_, of the form (command-index, command) where command-index
+  // is a command index just before which we will insert the new command.
+  // (this is the format accepted by the function InsertCommands()).
+  std::vector<std::pair<int32, NnetComputation::Command> > new_commands_;
+
+};
+
+
+bool RowOpsSplitter::GetSplitInfo(
+    std::vector<std::pair<int32, int32> >::const_iterator begin,
+    std::vector<std::pair<int32, int32> >::const_iterator end,
+    SingleSplitInfo *info) {
+  // max_size_ratio must be > 1.0, and could in principle be a float.  It is
+  // there to prevent us from making changes to the computation which would end
+  // up wastefully launching too many kernels that would do nothing.
+  const int32 max_size_ratio = 2;
+
+  int32 size = end - begin;
+  KALDI_ASSERT(size != 0);
+  int32 first = begin->first;
+  if (first < 0)
+    return false;
+  info->size = size;
+  info->first_value = first;
+  int32 initial_second_value = begin->second,
+      min_second_value = initial_second_value,
+      max_second_value = initial_second_value;
+  info->second_value_offsets.resize(size);
+  bool is_consecutive = true;
+  for (int32 i = 0; i < size; i++) {
+    int32 second = begin[i].second;
+    if (begin[i].first != first || second < 0) return false;
+    info->second_value_offsets[i] = second;
+    if (second != initial_second_value + i)
+      is_consecutive = false;
+    if (second < min_second_value) min_second_value = second;
+    if (second > max_second_value) max_second_value = second;
+  }
+  info->min_second_value = min_second_value;
+  info->second_value_range = max_second_value + 1 - min_second_value;
+  if (info->second_value_range > size * max_size_ratio)
+    return false;
+  if (is_consecutive) {
+    info->second_value_offsets.clear();
+  } else {
+    for (int32 i = 0; i < size; i++)
+      info->second_value_offsets[i] -= min_second_value;
+  }
+  return true;
+}
+
+
+bool RowOpsSplitter::SplitIndexes() {
+  bool ans = false;
+  int32 num_indexes_multi = computation_->indexes_multi.size();
+  split_info_.resize(num_indexes_multi);
+  for (int32 i = 0; i < num_indexes_multi; i++) {
+    const std::vector<std::pair<int32,int32> > &multi_index =
+        computation_->indexes_multi[i];
+    MultiIndexSplitInfo &split_info = split_info_[i];
+
+    int32 num_pairs = multi_index.size();
+    KALDI_ASSERT(num_pairs > 0);
+    // 'split_point' will be set to the first index j for which
+    // multi_index[j-1].first != multi_index[j].first, or -1
+    // if no such j exists.
+    int32 split_point = -1, initial_first = multi_index[0].first;
+    for (int32 j = 1; j < num_pairs; j++) {
+      if (multi_index[j].first != initial_first) {
+        split_point = j;
+        break;
+      }
+    }
+    if (split_point == -1) {
+      split_info.splits.resize(1);
+      split_info.splits[0].offset = 0;
+      if (!GetSplitInfo(multi_index.begin(), multi_index.end(),
+                        &(split_info.splits[0]))) {
+        split_info.splits.clear();
+      } else {
+        ans = true;
+      }
+    } else {
+      split_info.splits.resize(2);
+      split_info.splits[0].offset = 0;
+      split_info.splits[1].offset = split_point;
+
+      std::vector<std::pair<int32,int32> >::const_iterator mid_iter =
+          multi_index.begin() + split_point;
+      if (!GetSplitInfo(multi_index.begin(), mid_iter,
+                        &(split_info.splits[0])) ||
+          !GetSplitInfo(mid_iter, multi_index.end(),
+                        &(split_info.splits[1]))) {
+        split_info.splits.clear();
+      } else {
+        ans = true;
+      }
+    }
+  }
+  return ans;
+}
+
+bool RowOpsSplitter::SplitCommand(int32 c) {
+  NnetComputation::Command &command = computation_->commands[c];
+  CommandType command_type = command.command_type;
+  // For commands that are not of the following four types, return false: we
+  // won't be changing these commands.
+  switch (command_type) {
+    case kAddRowsMulti: case kCopyRowsMulti:
+    case kAddToRowsMulti: case kCopyToRowsMulti: break;
+    default: return false;
+  }
+  int32 indexes_multi_index = command.arg2;
+  KALDI_ASSERT(indexes_multi_index <
+               static_cast<int32>(split_info_.size()));
+  const MultiIndexSplitInfo &split_info = split_info_[indexes_multi_index];
+  if (split_info.splits.empty())
+    return false;  // these indexes couldn't be split: e.g. they contained more
+                   // than two distinct .first elements, or there were other
+                   // reasons.
+
+  // we'll be splitting the command into either one or two pieces.
+  std::vector<NnetComputation::Command> split_commands(
+      split_info.splits.size());
+  for (size_t i = 0; i < split_info.splits.size(); i++) {
+    const SingleSplitInfo &split = split_info.splits[i];
+    NnetComputation::Command &command_out = split_commands[i];
+    command_out.alpha = command.alpha;
+    command_out.arg1 = computation_->NewSubMatrix(
+        command.arg1, split.offset, split.size, 0, -1);
+    command_out.arg2 = computation_->NewSubMatrix(
+        split.first_value, split.min_second_value,
+        split.second_value_range, 0, -1);
+
+    if (split.second_value_offsets.empty()) {
+      // The .second elements are consecutive.
+      switch (command_type) {
+        case kAddRowsMulti:
+          command_out.command_type = kMatrixAdd;
+          break;
+        case kCopyRowsMulti:
+          command_out.command_type = kMatrixCopy;
+          break;
+        case kAddToRowsMulti:
+          command_out.command_type = kMatrixAdd;
+          std::swap(command_out.arg1, command_out.arg2);
+          break;
+        case kCopyToRowsMulti:
+          command_out.command_type = kMatrixCopy;
+          std::swap(command_out.arg1, command_out.arg2);
+          break;
+        default:  // will never be reached.
+          break;
+      }
+    } else {
+      // Indexes are not consecutive: it needs to be a kAddRows or kCopyRows
+      // command.
+      command_out.arg3 = computation_->indexes.size();
+      switch (command_type) {
+        case kAddRowsMulti: case kCopyRowsMulti: {
+          command_out.command_type = (command_type == kAddRowsMulti ?
+                                      kAddRows : kCopyRows);
+          computation_->indexes.push_back(split.second_value_offsets);
+          break;
+        }
+        case kCopyToRowsMulti:  {
+          // We can't operate on this command because of what would happen
+          // with values of 'indexes' (see the variable in the block for
+          // kAddToRowsMulti) which were -1.  Rows of the output would be
+          // set to zero, which is not the behavior we want here; we'd want
+          // them to be unaffected.
+          return false;
+        }
+        case kAddToRowsMulti: {
+          command_out.command_type = kAddRows;
+          std::swap(command_out.arg1, command_out.arg2);
+          // invert the indexes.
+          std::vector<int32> indexes(split.second_value_range, -1);
+          for (int32 i = 0; i < split.size; i++) {
+            // the following assert should always succeed because the
+            // AddToRowsMulti and CopyToRowsMulti should never have
+            // duplicate destinations in their indexes.
+            KALDI_ASSERT(indexes[split.second_value_offsets[i]] >= 0);
+            indexes[split.second_value_offsets[i]] = i;
+          }
+          computation_->indexes.push_back(indexes);
+          break;
+        }
+        default:
+          KALDI_ERR << "Code error: un-handled case.";
+      }
+    }
+  }
+  command = split_commands[0];
+  // note: for now, split_commands.size() will be 1 or 2.
+  for (size_t i = 1; i < split_commands.size(); i++) {
+    new_commands_.resize(new_commands_.size() + 1);
+    // we'll want to insert this command right after command c,
+    // which is the same as just before command c + 1.
+    new_commands_.back().first = c + 1;
+    new_commands_.back().second = split_commands[i];
+  }
+  return true;  // We made a change.
+}
+
+bool RowOpsSplitter::SplitCommands() {
+  bool ans = false;
+  int32 num_commands = computation_->commands.size();
+  for (int32 c = 0; c < num_commands; c++)
+    if (SplitCommand(c))
+      ans = true;
+  if (!new_commands_.empty())
+    InsertCommands(&new_commands_, computation_);
+  return ans;
+}
+
+bool SplitRowOps(NnetComputation *computation) {
+  RowOpsSplitter splitter(computation);
+  return splitter.Split();
+}
+
+
+/*
+   This function finds and returns the 'n-stride' of the vector of Indexes, or
+   returns 0 if it does not exist because the Indexes lack the required regular
+   structure.  This function relates to 'shortcut' compilation and is used in
+   class IoSpecificationIsDecomposable().  There is an overloaded version of
+   this function that works with Cindex input, that has almost exactly
+   the same code.
+
+   It is used to discover regular structure in vectors of indexes.  We are
+   interested in the structure on the 'n' index; in particular, the stride on
+   the 'n' index.  We expect the vector 'indexes' to contain 'n' values of the
+   form 0, 1, ... N-1 (where the value of N can be obtained easily by looking at
+   the .n value of the last element of 'indexes').  And we expect the 'n' values
+   of Indexes that are otherwise the same to be separated by a fixed stride,
+   which we will return.
+
+   If the stride is inconsistent or one of our other requirements (see below) is
+   not fulfilled, we will return 0.  If it's always consistent and our
+   requirements are fulfilled we'll return the stride.  If 'full_check' is true
+   we do an exhaustive check for consistency; otherwise we do a randomized
+   check.
+
+   The full definition of 'consistency' is as follows:
+
+   For some n_stride >= 1 (which we'll return), and with N as the number of
+   'n' values (which should be numbered 0, 1, ... N-1):
+
+     - For any Index with n < N-1 located at position i, an Index with one
+       greater 'n' but otherwise the same must exist at position i + n_stride
+     - For any Index with n > 0 located at position i, an Index with one
+       smaller 'n' but otherwise the same must exist at position i - n_stride.
+     - The input must be arranged in blocks of size block_size = n_stride * N,
+       which these strides never cross.  "Strides never cross" is an informal
+       definition: we can formalize this by saying that for an Index with n == 0
+       at position i, we must have (i / block_size) == ((i + n_stride*(N-1)) /
+       block_size), with integer division.
+   The above conditions imply that the size of the input must be a multiple
+   of the n-stride.
+
+   Reminder: we return 0 if the regular structure is not found, and the n-stride
+   if the regular structure is found.
+*/
+static int32 FindNStride(const std::vector<Index> &indexes,
+                         bool full_check) {
+  // First find candidate stride.  Later we'll check for consistency.
+  int32 size = indexes.size();
+  KALDI_ASSERT(size > 0);
+  int32 N = indexes[size-1].n + 1,
+      n_stride;
+  if (N <= 1) {
+    // we wouldn't be able to determine the stride if N <= 1.
+    return 0;
+  }
+  Index index(indexes[0]);
+  if (index.n != 0 || size % N != 0) {
+    // for the n stride to be positive, we must start with an index with n == 0.
+    // if indexes.size() is not divisible by N, we have no hope of finding the
+    // regular structure.
+    return 0;
+  }
+  index.n = 1;
+  // First check the two most common strides, which are 1
+  // and size / N.
+  if (indexes[1] == index) {
+    n_stride = 1;
+  } else if (indexes[size / N] == index) {
+    n_stride = size / N;
+  } else {
+    int32 stride;
+    // try the other possible strides one by one (for subsampling
+    // layers of convnets, we might see strides of 2, for instance).
+    for (stride = 2; stride < size / N; stride++) {
+      if (size % stride == 0 && indexes[stride] == index) {
+        n_stride = stride;
+        break;
+      }
+    }
+    if (stride == size / N) {
+      // if we fell off the loop then we found no candidates, which is strange
+      // and means we did not find the expected structure; we'll return 0 as we
+      // failed.
+      return 0;
+    }
+  }
+  // Now is the checking phase.
+
+  // to understand block_size, see the comment above this functcion.
+  int32 block_size = n_stride * N;
+
+  std::vector<int32> indexes_to_check;
+  if (full_check) {
+    indexes_to_check.resize(size);
+    for (int32 i = 0; i < size; i++)
+      indexes_to_check[i] = i;
+  } else {
+    int32 num_to_check = std::min<int32>(5, size);
+    indexes_to_check.resize(num_to_check);
+    for (int32 j = 0; j < num_to_check; j++)
+      indexes_to_check[j] = RandInt(0, size - 1);
+    SortAndUniq(&indexes_to_check);
+  }
+  for (std::vector<int32>::iterator iter = indexes_to_check.begin();
+       iter != indexes_to_check.end(); ++iter) {
+    int32 i = *iter;
+    Index index = indexes[i];
+    int32 n = index.n;
+    if (n < N - 1) {
+      index.n = n + 1;
+      if (i + n_stride >= size || indexes[i + n_stride] != index)
+        return 0;
+    }
+    if (n == 0) {
+      if (i / block_size != (i + n_stride * (N-1)) / block_size) {
+        // this is a check that the input divides into blocks of size n_stride *
+        // N and the N different versions of the same Index are always within a
+        // block (i.e. that the n stride never crosses over the block; having
+        // the same Index repeated within different blocks actually would not
+        // matter).
+        return 0;
+      }
+    } else { // n > 0
+      index.n = n - 1;
+      if (i - n_stride < 0 || indexes[i - n_stride] != index)
+        return 0;
+    }
+  }
+  return n_stride;
+}
+
+
+// This is almost exactly the same as the version of FindNStride declared above
+// that takes a vector of Indexes as input.  Comments have been removed from
+// this version; see the other version for documentation.
+static int32 FindNStride(const std::vector<Cindex> &cindexes,
+                         bool full_check) {
+  int32 size = cindexes.size();
+  KALDI_ASSERT(size > 0);
+  int32 N = cindexes[size-1].second.n + 1,
+      n_stride;
+  if (N <= 1)
+    return 0;
+  Cindex cindex(cindexes[0]);
+  if (cindex.second.n != 0 || size % N != 0)
+    return 0;
+  cindex.second.n = 1;
+  if (cindexes[1] == cindex) {
+    n_stride = 1;
+  } else if (cindexes[size / N] == cindex) {
+    n_stride = size / N;
+  } else {
+    int32 stride;
+    for (stride = 2; stride < size / N; stride++) {
+      if (size % stride == 0 && cindexes[stride] == cindex) {
+        n_stride = stride;
+        break;
+      }
+    }
+    if (stride == size / N)
+      return 0;
+  }
+  int32 block_size = n_stride * N;
+  std::vector<int32> indexes_to_check;
+  if (full_check) {
+    indexes_to_check.resize(size);
+    for (int32 i = 0; i < size; i++)
+      indexes_to_check[i] = i;
+  } else {
+    int32 num_to_check = std::min<int32>(5, size);
+    indexes_to_check.resize(num_to_check);
+    for (int32 j = 0; j < num_to_check; j++)
+      indexes_to_check[j] = RandInt(0, size - 1);
+    SortAndUniq(&indexes_to_check);
+  }
+  for (std::vector<int32>::iterator iter = indexes_to_check.begin();
+       iter != indexes_to_check.end(); ++iter) {
+    int32 i = *iter;
+    Cindex cindex = cindexes[i];
+    int32 n = cindex.second.n;
+    if (n < N - 1) {
+      cindex.second.n = n + 1;
+      if (i + n_stride >= size || cindexes[i + n_stride] != cindex)
+        return 0;
+    }
+    if (n == 0) {
+      if (i / block_size != (i + n_stride * (N-1)) / block_size)
+        return 0;
+    } else {
+      cindex.second.n = n - 1;
+      if (i - n_stride < 0 || cindexes[i - n_stride] != cindex)
+        return 0;
+    }
+  }
+  return n_stride;
+}
+
+
+/*
+  This function, used in shortcut compilation, converts a vector of Indexes
+  having a range of 'n' values (0, 1, ... old_N - 1), to a vector of
+  Indexes that's otherwise the same, but has a different range of 'n' values
+  (0, 1, ... new_N - 1).
+
+  The input vector is expected to have a stride 'n_stride > 0', as
+  would be returned by FindNStride, and the output vector will be given the
+  same n-stride.
+ */
+static void ConvertNumNValues(int32 n_stride, int32 old_N, int32 new_N,
+                              const std::vector<Index> &indexes_in,
+                              std::vector<Index> *indexes_out) {
+  int32 size_in = indexes_in.size();
+  KALDI_ASSERT(size_in > 0 && indexes_in[size_in - 1].n == old_N - 1);
+  int32 block_size_in = n_stride * old_N,
+      block_size_out = n_stride * new_N;
+
+  indexes_out->resize((size_in / old_N) * new_N);
+  for (int32 i_in = 0; i_in < size_in; i_in++) {
+    if (indexes_in[i_in].n != 0)
+      continue;
+    Index index(indexes_in[i_in]);
+    int32 block_index = i_in / block_size_in,
+        offset_within_block = i_in % block_size_in;
+
+
+    int32 i_out = block_index * block_size_out +
+        offset_within_block;
+    for (int32 n = 0; n < new_N; n++, i_out += n_stride) {
+      index.n = n;
+      (*indexes_out)[i_out] = index;
+    }
+  }
+}
+
+
+
 // This class implements the internals of the ExpandComputation() function (used
 // in shortcut compilation); see comment by the declaration of
-// ExpandComputation() in nnet-optimize-utils.h for overview.
+// ExpandComputation() in nnet-optimize-utils.h for overview.  (It relates to
+// shortcut compilation).
 class ComputationExpander {
  public:
   ComputationExpander(const Nnet &nnet,
@@ -2231,9 +3159,9 @@ class ComputationExpander {
   void Expand();
 
  private:
-  // This function sets up and computes the 'n_fast_' vector (see comment
-  // by the declaration of 'n_fast_' for what this is.
-  void InitFastInfo();
+  // This function sets up and computes the 'n_stride_' vector (see comment
+  // by the declaration of 'n_stride_' for what this is.
+  void InitStrideInfo();
 
   // This function sets up the 'matrices' vector in 'expanded_computation_'.
   // It's quite simple: it just multiplies all the num-rows by num_n_values_ and
@@ -2304,82 +3232,61 @@ class ComputationExpander {
   // Note: it returns true if the index 'old_row_index' into submatrix
   // indexed 'submat_index' corresponds to an Index with n=0; otherwise
   // it returns false and does not set the output values.
+  // If it returns true, it will set '*new_row_index' to be the row-index
+  // into the new submatrix, that corresponds to the same Cindex that
+  // 'old_row_index' points to in the old computation; and it will set
+  // '*n_stride' to the n stride of the corresponding matrix (this is the
+  // same in the old and new computations).
   bool GetNewSubmatLocationInfo(int32 submat_index,
                                 int32 old_row_index,
                                 int32 *new_row_index,
-                                int32 *new_n_stride) const;
+                                int32 *n_stride) const;
 
 
   /// This function is used in mapping row-indexes into matrices, from the
   /// old to the new computation.
-  ///     @param [in] old_matrix_index   The matrix-index > 0, for which we
-  ///                                    are mapping row-indexes.
-  ///     @param [in] old_row_index   The old row-index into the matrix.
-  ///                            This MUST be a row-index for which n=0
-  ///                            in the cindexes information.
-  ///     @param [out] new_row_index  To '*new_row_index' this funtion outputs
-  ///                            the row-index where the cindex referred to in
-  ///                            'old_matrix_index' will reside in the new,
-  ///                            expanded computation.
-  ///     @param [out] new_n_stride   To '*new_n_stride' this function outputs
-  ///                            the 'n stride' in the new computation, which
-  ///                            means the amount the row-index increases
-  ///                            every time we increase the 'n' value in the
-  ///                            cindex by one.
-  void GetNewMatrixLocationInfo(int32 old_matrix_index,
-                                int32 old_row_index,
-                                int32 *new_row_index,
-                                int32 *new_n_stride) const;
-
+  ///    @param [in] matrix_index  The matrix-index > 0, for which we
+  ///                              are mapping row-indexes.  The
+  ///                              matrix-indexes are the same in the old
+  ///                              and new computations.
+  ///    @param [in] old_row_index   The old row-index into the matrix.
+  ///    @return                This function returns the row-index where the
+  ///                           cindex referred to in 'old_matrix_index' will
+  ///                           reside in the new, expanded computation, WITH
+  ///                           THE CAVEAT THAT if the old cindex had n == 1,
+  ///                           we'll output the location of the cindex with n
+  ///                           == num_n_values_ - 1.  This happens to be what
+  ///                           we want (it maps the last n value on the input
+  ///                           to the last n value on the output.
+  int32 GetNewMatrixLocationInfo(int32 old_matrix_index,
+                                 int32 old_row_index) const;
 
 
   // This function 'expands' a set of indexes; it's called from
   // ComputePrecomputedIndexes().  The indexes are expected to
-  // have the normal kind of regularity, with the 'n' varying either
-  // the fastest or the slowest of any index.
+  // have the normal kind of regularity.
   void ExpandIndexes(const std::vector<Index> &indexes,
                      std::vector<Index> *indexes_expanded) const;
 
 
 
-  // This function, used in ExpandIndexes(), works out whether a vector
-  // of indexes varies 'fast' in n, or slowly; see the comment for
-  // ComputationIsDecomposable() in nnet-optimize-utils.h for more explanation
-  // of the meaning.
-  // If the vector of indexes does not have the required regular structure w.r.t
-  // n, this function will throw an exception via KALDI_ERR.
-  bool GetFastInfo(const std::vector<Index> &indexes) const;
-
-  /// This function is analogous to GetNewMatrixLocationInfo, but
-  /// specialized for the case where you have a vector of Indexes
-  /// It's used inside ExpandIndexes().
-  ///
-  ///  @param [in] 'is_fast' should be true if the 'n' varies fast in the input
-  ///               indexes (i.e. n stride is 1)...
-  ///  @param [in] old_index The index into 'indexes'.. should point to an
-  ///                         element with n==0 (note, the element is an Index;
-  ///                         and note the capital I, it affects the meaning).
-  ///  @param [out] new_index  The index into the expanded indexes vector
-  ///                         that this same Index will be located at in the
-  ///                         expanded computation.
-  ///  @param [out] new_n_stride  The stride of n, i.e. the amount by which the
-  ///                          index changes when we increment n by one in the
-  ///                          Index.  This will actually be the same as in
-  ///                          the old computation.
-  void GetNewLocationInfo(const std::vector<Index> &indexes,
-                          bool is_fast,
-                          int32 old_index,
-                          int32 *new_index,
-                          int32 *new_n_stride) const;
-
-
-  // This 'n_fast_' vector is indexed by the matrix-index in the computation,
-  // i.e. the same index as indexes computation_.matrix_info and
+  // This 'n_stride_' vector is indexed by the matrix-index in the computation,
+  // i.e. the same value that you would use to index computation_.matrix_info and
   // expanded_computation_->matrix_info.  For each matrix-index m > 0 it
-  // contains true if the 'n' varies 'fast', or false if the 'n' index varies
-  // 'slowly'.  By 'fast' and 'slow', we mean in the same sense as is desribed
-  // in the comment for ComputationIsDecomposable() in nnet-optimize-utils.h.
-  std::vector<bool> n_fast_;
+  // contains the stride of the 'n' values in the Indexes.  This is worked out
+  // from the debug_info of the input computation.  For example, if
+  // the n stride is 3, and we have an Index (n, t, x) = (0, 50, 88) at the
+  // 11'th row of the matrix, then we would expect to have an Index
+  // (n, t, x) = (1, 50, 88) at the 11 + 3 = 14'th row of the matrix.
+  // The input and output computations will always have the same n-stride, so
+  // there is only one variable.
+  //
+  // Let's define num-n-in = 2, and num-n-out = num_n_values_, and suppose
+  // we're dealing with a matrix that has an n stride of "n-stride".
+  // We expect the (input, output) matrices to be arranged in blocks of num-rows
+  // (n-stride * num-n-in), (n-stride * num-n-out) respectively, where
+  // the n-stride never crosses the block boundaries.  We check this.
+  std::vector<int32> n_stride_;
 
   const Nnet &nnet_;
   const MiscComputationInfo &misc_info_;
@@ -2406,6 +3313,7 @@ void ComputationExpander::ExpandRowsCommand(
   // in the vector are row-indexes into s2.
   int32 old_arg3 = c_out->arg3;
   c_out->arg3 = expanded_computation_->indexes.size();
+  c_out->alpha = c_in.alpha;
   expanded_computation_->indexes.push_back(std::vector<int32>());
   std::vector<int32> &new_indexes = expanded_computation_->indexes.back();
   const std::vector<int32> &old_indexes = computation_.indexes[old_arg3];
@@ -2419,25 +3327,32 @@ void ComputationExpander::ExpandRowsCommand(
 
   new_indexes.resize(new_s1_size, -1);
 
+
+  // A note on the variable names: i1 and i2 are indexes into the destination
+  // submatrix and the source submatrix respectively, of the CopyRows or AddRows
+  // command.
+  // "n0" in the variable name means that this corresponds to an Index with n==0.
+  // things without "new" in the name refer to the old computation; things with
+  // "new" in the name refer to the computation that we are generating.
   for (int32 i1 = 0; i1 < old_size; i1++) {
-    int32 new_i1_n0, new_n_stride1;
-    if (GetNewSubmatLocationInfo(s1, i1, &new_i1_n0, &new_n_stride1)) {
+    int32 new_i1_n0, n_stride1;
+    if (GetNewSubmatLocationInfo(s1, i1, &new_i1_n0, &n_stride1)) {
       // GetNewSubmatLocationInfo() returns true if this corresponds to
       // a Cindex with n == 0.
       int32 i2 = old_indexes[i1];  // note: i2 is the row index into submatrix s2.
-      int32 new_i2_n0, new_n_stride2;
-      if (i2 < 0) {  // if i2 is -1, we'll just fill any relevant positions in
-                     // 'new_indexes' with -1's.
+      int32 new_i2_n0, n_stride2;
+      if (i2 < 0) {  // if i2 is -1, we'll just leave any relevant positions in
+                     // 'new_indexes' with -1's in them.
         continue;
       } else {
-        bool ans = GetNewSubmatLocationInfo(s2, i2, &new_i2_n0, &new_n_stride2);
+        bool ans = GetNewSubmatLocationInfo(s2, i2, &new_i2_n0, &n_stride2);
         KALDI_ASSERT(ans);  // source should also be for n==0, because we don't
                             // (or at least shouldn't) create computations that
                             // mix up the 'n' values
 
         int32 new_i1 = new_i1_n0, new_i2 = new_i2_n0;
         for (int32 n = 0; n < num_n_values;
-             ++n, new_i1 += new_n_stride1, new_i2 += new_n_stride2) {
+             ++n, new_i1 += n_stride1, new_i2 += n_stride2) {
           KALDI_ASSERT(new_i1 < new_s1_size && new_i2 < new_s2_size);
           new_indexes[new_i1] = new_i2;
         }
@@ -2480,19 +3395,19 @@ void ComputationExpander::ExpandRowsMultiCommand(
                            std::pair<int32,int32>(-1, -1));
 
   for (int32 i1 = 0; i1 < num_rows_old; i1++) {
-    int32 new_i1_n0, new_n_stride1;
-    if (GetNewSubmatLocationInfo(s1, i1, &new_i1_n0, &new_n_stride1)) {
+    int32 new_i1_n0, n_stride1;
+    if (GetNewSubmatLocationInfo(s1, i1, &new_i1_n0, &n_stride1)) {
       // GetNewSubmatLocationInfo() returns true if this corresponds to
       // a Cindex with n == 0.
       int32 s2 = old_indexes_multi[i1].first,
           i2 = old_indexes_multi[i1].second;
-      int32 new_i2_n0, new_n_stride2;
+      int32 new_i2_n0, n_stride2;
       if (s2 < 0) {  // if s2 is -1, we don't have to do anything... we'd have
                      // to fill any relevant positions in 'new_indexes_multi'
                      // with (-1,-1)'s, but it's filled with that by default.
         continue;
       } else {
-        bool ans = GetNewSubmatLocationInfo(s2, i2, &new_i2_n0, &new_n_stride2);
+        bool ans = GetNewSubmatLocationInfo(s2, i2, &new_i2_n0, &n_stride2);
         KALDI_ASSERT(ans);  // source should also be for n==0, because we don't
                             // (or at least shouldn't) create computations that
                             // mix up the 'n' values
@@ -2500,7 +3415,7 @@ void ComputationExpander::ExpandRowsMultiCommand(
         int32 new_i1 = new_i1_n0, new_i2 = new_i2_n0;
 
         for (int32 n = 0; n < num_n_values;
-             n++, new_i1 += new_n_stride1, new_i2 += new_n_stride2) {
+             n++, new_i1 += n_stride1, new_i2 += n_stride2) {
           new_indexes_multi[new_i1].first = s2;
           new_indexes_multi[new_i1].second = new_i2;
         }
@@ -2523,9 +3438,7 @@ void ComputationExpander::ExpandRowRangesCommand(
       num_rows_new = expanded_computation_->submatrices[s1].num_rows;
   KALDI_ASSERT(static_cast<size_t>(c_in.arg3) <
                computation_.indexes_ranges.size());
-  KALDI_ASSERT(num_rows_old % 2 == 0);
   int32 num_n_values = num_n_values_;
-
 
   int32 old_arg3 = c_out->arg3;
   c_out->arg3 = expanded_computation_->indexes_ranges.size();
@@ -2547,8 +3460,8 @@ void ComputationExpander::ExpandRowRangesCommand(
                            std::pair<int32,int32>(-1, -1));
 
   for (int32 i1 = 0; i1 < num_rows_old; i1++) {
-    int32 new_i1_n0, new_n_stride1;
-    if (GetNewSubmatLocationInfo(s1, i1, &new_i1_n0, &new_n_stride1)) {
+    int32 new_i1_n0, n_stride1;
+    if (GetNewSubmatLocationInfo(s1, i1, &new_i1_n0, &n_stride1)) {
       // GetNewSubmatLocationInfo() returns true if this corresponds to
       // a Cindex with n == 0.
       int32 i2_begin = old_indexes_ranges[i1].first,
@@ -2560,15 +3473,15 @@ void ComputationExpander::ExpandRowRangesCommand(
                    // elements.
       int32 i2_last = i2_end - 1;
       int32 new_i2_n0_begin, new_i2_n0_last,
-          new_n_stride2;  // only 1 stride variable; both calls will output
+          n_stride2;  // only 1 stride variable; both calls will output
                           // the same value.
 
       bool ans1 = GetNewSubmatLocationInfo(s2, i2_begin, &new_i2_n0_begin,
-                                           &new_n_stride2),
+                                           &n_stride2),
           ans2 = GetNewSubmatLocationInfo(s2, i2_last, &new_i2_n0_last,
-                                          &new_n_stride2);
+                                          &n_stride2);
       KALDI_ASSERT(ans1 && ans2 && new_i2_n0_last >= new_i2_n0_begin &&
-                   new_i2_n0_begin >= 0);
+                   new_i2_n0_begin >= 0 && n_stride1 > 0 && n_stride2 > 0);
       // source should also be for n==0, because we don't (or at least
       // shouldn't) create computations that mix up the 'n' values
 
@@ -2577,8 +3490,8 @@ void ComputationExpander::ExpandRowRangesCommand(
           new_i2_begin = new_i2_n0_begin,
           new_i2_end = new_i2_n0_last + 1;
       for (int32 n = 0; n < num_n_values;
-           n++, new_i1 += new_n_stride1, new_i2_begin += new_n_stride2,
-               new_i2_end += new_n_stride2) {
+           n++, new_i1 += n_stride1, new_i2_begin += n_stride2,
+               new_i2_end += n_stride2) {
         new_indexes_ranges[new_i1].first = new_i2_begin;
         new_indexes_ranges[new_i1].second = new_i2_end;
       }
@@ -2604,10 +3517,11 @@ void ComputationExpander::ComputeCommands() {
     // However, commands that require, 'indexes', 'indexes_multi' or
     // 'indexes_ranges' do need to be modified.
     switch (c.command_type) {
-      case kAllocMatrixUndefined: case kAllocMatrixZeroed:
-      case kDeallocMatrix: case kAllocMatrixFromOther:
-      case kAllocMatrixFromOtherZeroed:
-      case kPropagate: case kStoreStats: case kBackprop:
+      case kAllocMatrix:
+      case kDeallocMatrix:
+      case kSetConst:
+      case kSwapMatrix:
+      case kPropagate: case kBackprop:
       case kBackpropNoModelUpdate: case kMatrixCopy: case kMatrixAdd:
         break;
       case kCopyRows: case kAddRows:
@@ -2620,8 +3534,10 @@ void ComputationExpander::ComputeCommands() {
       case kAddRowRanges:
         ExpandRowRangesCommand(c, &c_out);
         break;
+      case kCompressMatrix: case kDecompressMatrix:
       case kAcceptInput: case kProvideOutput: case kNoOperation:
-      case kNoOperationMarker: case kNoOperationLabel: case kGotoLabel:
+      case kNoOperationPermanent: case kNoOperationMarker:
+      case kNoOperationLabel: case kGotoLabel:
         break;
       default:
         KALDI_ERR << "Un-handled command type";
@@ -2632,92 +3548,33 @@ void ComputationExpander::ComputeCommands() {
 
 
 
-void ComputationExpander::InitFastInfo() {
+void ComputationExpander::InitStrideInfo() {
   // note: the zeroth matrix is not a real matrix, it's the empty matrix.
   int32 num_matrices = computation_.matrices.size();
-  n_fast_.resize(num_matrices);
+  n_stride_.resize(num_matrices);
+  n_stride_[0] = 0;
 
   // the input computation to class ComputationExpander is required to
   // have its debug info set up.
   KALDI_ASSERT(!computation_.matrix_debug_info.empty());
   for (int32 m = 1; m < num_matrices; m++) {
     int32 num_rows = computation_.matrices[m].num_rows;
-    // num-rows should be a multiple of 2 because we assume the input computation
-    // was built for 2 n-values, and has a symmetry where it's doing the same
-    // computation for each n values.
-    KALDI_ASSERT(num_rows % 2 == 0);
     const NnetComputation::MatrixDebugInfo &debug_info = computation_.matrix_debug_info[m];
     KALDI_ASSERT(debug_info.cindexes.size() == num_rows);
-    // We require that the 'n' values be in order, which implies that the first
-    // 'n' value be zero.
-    KALDI_ASSERT(debug_info.cindexes[0].second.n == 0);
-    bool is_fast = (debug_info.cindexes[1].second.n == 1);
-    n_fast_[m] = is_fast;
-
-    bool do_check = (RandInt(0, 2) == 0);
-    if (do_check) {
-      // n_stride is the expected difference in row-index between successive
-      // values of 'n' for otherwise identical cindexes.
-      int32 n_stride = (is_fast ? 1 : num_rows / 2);
-      // 'increment' would be 1 if we were checking everything; we do a partial
-      // check, for speed.
-      int32 increment = RandInt(1, 10);
-      for (int32 i = 0; i + n_stride < num_rows; i += increment) {
-        const Cindex &this_cindex = debug_info.cindexes[i],
-            &next_cindex = debug_info.cindexes[i + n_stride];
-        if (this_cindex.second.n == 0) {
-          if (!(next_cindex.first == this_cindex.first &&
-                next_cindex.second.n == 1 &&
-                next_cindex.second.t == this_cindex.second.t &&
-                next_cindex.second.x == this_cindex.second.x)) {
-            KALDI_ERR << "Problem encountered in 'shortcut' compilation: the computation "
-                      << "does not have the expected structure.  Try compiling with "
-                      << "--use-shortcut=false.";
-          }
-        }
-      }
+    bool full_check = true;  // TODO: eventually change this to false.
+    int32 n_stride = FindNStride(debug_info.cindexes, full_check);
+    if (n_stride == 0) {
+      KALDI_ERR << "Problem encountered in 'shortcut' compilation: the computation "
+                << "does not have the expected structure.  Try compiling with "
+                << "--use-shortcut=false.";
     }
+    n_stride_[m] = n_stride;
   }
-}
-
-
-bool ComputationExpander::GetFastInfo(const std::vector<Index> &indexes) const {
-  KALDI_ASSERT(!indexes.empty());
-  int32 num_rows = indexes.size();
-  // num-rows should be a multiple of 2 because we assume the input computation
-  // was built for 2 n-values, and has a symmetry where it's doing the same
-  // computation for each n values.
-  KALDI_ASSERT(num_rows % 2 == 0);
-
-  KALDI_ASSERT(indexes[0].n == 0);
-  bool is_fast = (indexes[1].n == 1);
-  bool do_check = (RandInt(0, 1) == 0);
-
-  if (do_check) {
-    // n_stride is the expected difference in row-index between successive
-    // values of 'n' for otherwise identical cindexes.
-    int32 n_stride = (is_fast ? 1 : num_rows / 2);
-    // 'increment' would be 1 if we were checking everything; we do a partial
-    // check, for speed.
-    int32 increment = RandInt(1, 5);
-    for (int32 i = 0; i + n_stride < num_rows; i += increment) {
-      const Index &this_index = indexes[i], &next_index = indexes[i + n_stride];
-      if (this_index.n == 0) {
-        if (!(next_index.n == 1 && next_index.t == this_index.t &&
-              next_index.x == this_index.x)) {
-          KALDI_ERR << "Problem encountered in 'shortcut' compilation: the computation "
-                    << "does not have the expected structure.  Try compiling with "
-                    << "--use-shortcut=false.";
-        }
-      }
-    }
-  }
-  return is_fast;
 }
 
 
 void ComputationExpander::Expand() {
-  InitFastInfo();
+  InitStrideInfo();
   ComputeMatrixInfo();
   if (need_debug_info_)
     ComputeDebugInfo();
@@ -2736,10 +3593,13 @@ void ComputationExpander::ComputeMatrixInfo() {
   expanded_computation_->matrices.resize(num_matrices);
   // Matrix zero is a special case; it's the empty matrix.
   expanded_computation_->matrices[0] = computation_.matrices[0];
+  int32 old_num_n_values = 2,
+      new_num_n_values = num_n_values_;
   for (int32 m = 1; m < num_matrices; m++) {
     expanded_computation_->matrices[m] = computation_.matrices[m];
     expanded_computation_->matrices[m].num_rows =
-        (computation_.matrices[m].num_rows / 2) * num_n_values_;
+        (computation_.matrices[m].num_rows / old_num_n_values) *
+        new_num_n_values;
   }
 }
 
@@ -2765,10 +3625,10 @@ void ComputationExpander::ComputeDebugInfo() {
     Cindex *cindexes_out = &(info_out.cindexes[0]);
     for (int32 r = 0; r < num_rows_in; r++) {
       if (info_in.cindexes[r].second.n == 0) {
-        int32 new_r, new_n_stride;
-        GetNewMatrixLocationInfo(m, r, &new_r, &new_n_stride);
+        int32 new_r = GetNewMatrixLocationInfo(m, r),
+            n_stride = n_stride_[m];
         for (int32 n = 0; n < num_n_values; n++) {
-          int32 r_out = new_r + n * new_n_stride;
+          int32 r_out = new_r + n * n_stride;
           cindexes_out[r_out] = cindexes_in[r];
           cindexes_out[r_out].second.n = n;
         }
@@ -2788,29 +3648,23 @@ void ComputationExpander::ComputeSubmatrixInfo() {
     const NnetComputation::MatrixDebugInfo &debug_info_in =
         computation_.matrix_debug_info[m];
 
+    // we may need to change the row_offset and num_rows.
+    int32 first_row_in = info_in.row_offset,
+        last_row_in = first_row_in + info_in.num_rows - 1;
+    if (!(debug_info_in.cindexes[first_row_in].second.n == 0 &&
+          debug_info_in.cindexes[last_row_in].second.n == 1)) {
+      std::ostringstream computation_ss;
+      std::vector<std::string> submat_strings;
+      computation_.GetSubmatrixStrings(nnet_, &submat_strings);
+      computation_.Print(computation_ss, nnet_);
+      KALDI_ERR << "Submatrix s" << s << " = " << submat_strings[s]
+                << " has strange dimensions.  Computation is: "
+                << computation_ss.str();
+    }
 
-    int32 old_n_stride =
-        (n_fast_[m] ? 1 : computation_.matrices[m].num_rows / 2);
-
-     // we may need to change the row_offset and num_rows.
-     int32 first_row_in = info_in.row_offset,
-         last_row_in = first_row_in + info_in.num_rows - 1,
-         last_row_in_n0 = last_row_in - old_n_stride;
-     KALDI_ASSERT(debug_info_in.cindexes[first_row_in].second.n == 0 &&
-                  debug_info_in.cindexes[last_row_in].second.n == 1 &&
-                  debug_info_in.cindexes[last_row_in_n0].second.n == 0);
-     // the function GetNewMatrixLocationInfo() only works for rows that
-     // correspond to n == 0, so we work out a location that's otherwise similar
-     // to the last row but has n == 0, get the 'new' location for that, and
-     // convert to n == (num_n_values_ - 1).
-     int32 first_row_out, last_row_out_n0, new_n_stride;
-     GetNewMatrixLocationInfo(m, first_row_in,
-                              &first_row_out, &new_n_stride);
-     GetNewMatrixLocationInfo(m, last_row_in_n0,
-                              &last_row_out_n0, &new_n_stride);
-     int32 last_row_out = last_row_out_n0 + (new_n_stride * (num_n_values_ - 1)),
-         new_num_rows = (last_row_out + 1 - first_row_out);
-     KALDI_ASSERT(new_num_rows >= info_in.num_rows);
+    int32 first_row_out = GetNewMatrixLocationInfo(m, first_row_in),
+        last_row_out = GetNewMatrixLocationInfo(m, last_row_in),
+        new_num_rows = (last_row_out + 1 - first_row_out);
 
     NnetComputation::SubMatrixInfo &info_out =
         expanded_computation_->submatrices[s];
@@ -2891,7 +3745,7 @@ void ComputationExpander::ComputePrecomputedIndexes() {
 
 bool ComputationExpander::GetNewSubmatLocationInfo(
     int32 submat_index, int32 old_row_index,
-    int32 *new_row_index, int32 *new_n_stride) const {
+    int32 *new_row_index, int32 *n_stride) const {
   int32 matrix_index = computation_.submatrices[submat_index].matrix_index,
    old_row_offset = computation_.submatrices[submat_index].row_offset,
    new_row_offset = expanded_computation_->submatrices[submat_index].row_offset;
@@ -2900,100 +3754,55 @@ bool ComputationExpander::GetNewSubmatLocationInfo(
       computation_.matrix_debug_info[matrix_index];
   if (debug_info_in.cindexes[old_row_index + old_row_offset].second.n != 0)
     return false;
-  GetNewMatrixLocationInfo(matrix_index, old_row_index + old_row_offset,
-                           new_row_index, new_n_stride);
-  *new_row_index -= new_row_offset;
+  *new_row_index = (GetNewMatrixLocationInfo(matrix_index,
+                                             old_row_index + old_row_offset) -
+                    new_row_offset);
+  *n_stride = n_stride_[matrix_index];
   return true;
 }
 
-void ComputationExpander::GetNewMatrixLocationInfo(
-    int32 old_matrix_index, int32 old_row_index,
-    int32 *new_row_index, int32 *new_n_stride) const {
-  bool n_is_fast = n_fast_[old_matrix_index];
-  int32 num_rows = computation_.matrices[old_matrix_index].num_rows;
-  if (n_is_fast) {
-    // If the n index varies fast for this matrix, then the old row-index
-    // should be a multiple of 2 because:
-    //  - we assume that the input computation was built for 2 n-values
-    //  - if n varies fast then the cindexes for this matrix in the input
-    //    computation would come in pairs, for n=(0,1)
-    //  - the cindex that 'old_row_index' represents must be for n=0
-    //    (this is a requirement of this function)
-    KALDI_ASSERT(old_row_index % 2 == 0);
-    *new_n_stride = 1;
-    // the row-index of the element in question with n=0 will get larger if n
-    // varies 'fast', because each block of elements with a certain (x,t) value
-    // grows in size by a factor of num_n_values_ / 2.0.
-    *new_row_index = (old_row_index / 2) * num_n_values_;
-  } else {
-    // n varies more slowly, the cindexes are in blocks where the
-    // first block has n=0, the second has n=1, and so on.
-    // Because we assume that the cindex that lives in this location
-    // has n == 0, its position does not change (so new_row_index ==
-    // old_row_index).
-    *new_row_index = old_row_index;
-    *new_n_stride = (num_rows / 2);
-  }
+int32 ComputationExpander::GetNewMatrixLocationInfo(
+    int32 matrix_index, int32 old_row_index) const {
+  // to understand 'block_size', read the comment for FindNStride().
+  int32 n_stride = n_stride_[matrix_index],
+      old_num_n_values = 2, new_num_n_values = num_n_values_,
+      old_block_size = old_num_n_values * n_stride,
+      new_block_size = new_num_n_values * n_stride,
+      block_index = old_row_index / old_block_size,
+      offset_within_block = old_row_index % old_block_size;
+
+  // within each block, we can show, given our assumptions, that
+  // we must first have a sub-block of 'n_stride' values all with
+  // n == 0, then another sub-clock of 'n_stride' values all with
+  // n == 1, and so on.  [except there is no 'and so on' for the
+  // input computation, where we expect the 'n' values to be the
+  // set {0, 1}.]
+  int32 old_n_value = offset_within_block / n_stride,
+      index_within_subblock = offset_within_block % n_stride;
+  const std::vector<Cindex> &cindexes =
+      computation_.matrix_debug_info[matrix_index].cindexes;
+  KALDI_ASSERT(old_n_value == cindexes[old_row_index].second.n &&
+               (old_n_value == 0 || old_n_value == 1));
+  // Search for CAVEAT in the comment for this function to see what this is
+  // about.  Mapping old_n_value == 1 -> new_n_value == new_num_n_values - 1
+  // just happens to be useful for the way we use this function... it maps the
+  // end of an old submatrix to the end of a new submatrix.
+  int32 new_n_value = (old_n_value == 0 ? 0 : new_num_n_values - 1);
+
+  return block_index * new_block_size + index_within_subblock +
+      new_n_value * n_stride;
 }
 
 
 void ComputationExpander::ExpandIndexes(
     const std::vector<Index> &indexes,
     std::vector<Index> *indexes_expanded) const {
-  bool is_fast = GetFastInfo(indexes);
-  int32 num_n_values = num_n_values_,
-      old_size = indexes.size(),
-      new_size = (old_size / 2) * num_n_values;
-  indexes_expanded->resize(new_size);
-  Index *indexes_expanded_ptr = &((*indexes_expanded)[0]);
-  for (int32 i = 0; i < old_size; i++) {
-    if (indexes[i].n == 0) {
-      int32 new_i_n0, new_n_stride;
-      int32 t = indexes[i].t, x = indexes[i].x;
-      GetNewLocationInfo(indexes, is_fast, i, &new_i_n0, &new_n_stride);
-      for (int32 n = 0; n < num_n_values; n++) {
-        int32 new_i = new_i_n0 + (n * new_n_stride);
-        KALDI_ASSERT(new_i < new_size);
-        indexes_expanded_ptr[new_i].n = n;
-        indexes_expanded_ptr[new_i].t = t;
-        indexes_expanded_ptr[new_i].x = x;
-      }
-    }
-  }
+  bool full_check = false;
+  int32 n_stride = FindNStride(indexes, full_check);
+  KALDI_ASSERT(n_stride > 0);
+  ConvertNumNValues(n_stride, 2, num_n_values_,
+                    indexes, indexes_expanded);
 }
-
-
-void ComputationExpander::GetNewLocationInfo(
-    const std::vector<Index> &indexes, bool is_fast,
-    int32 old_index, int32 *new_index, int32 *new_n_stride) const {
-  int32 num_indexes = indexes.size();
-  KALDI_ASSERT(num_indexes > 0 && num_indexes % 2 == 0 &&
-               indexes.front().n == 0 && indexes.back().n == 1);
-  if (is_fast) {
-    // If the n index varies fast for this matrix, then the old row-index
-    // should be a multiple of 2 because:
-    //  - we assume that the input computation was built for 2 n-values
-    //  - if n varies fast then the cindexes for this matrix in the input
-    //    computation would come in pairs, for n=(0,1)
-    //  - the cindex that 'old_row_index' represents must be for n=0
-    //    (this is a requirement of this function)
-    KALDI_ASSERT(old_index % 2 == 0);
-    *new_n_stride = 1;
-    // the row-index of the element in question with n=0 will get larger if n
-    // varies 'fast', because each block of elements with a certain (x,t) value
-    // grows in size by a factor of num_n_values_ / 2.0.
-    *new_index = (old_index / 2) * num_n_values_;
-  } else {
-    // n varies more slowly; the Indexes are in blocks where the
-    // first block has n=0, the second has n=1, and so on.
-    // Because we assume that the cindex that lives in this location
-    // has n == 0, its position does not change (so new_row_index ==
-    // old_row_index).
-    *new_index = old_index;
-    *new_n_stride = (num_indexes / 2);
-  }
-}
-
 
 void ExpandComputation(const Nnet &nnet,
                        const MiscComputationInfo &misc_info,
@@ -3011,7 +3820,8 @@ void ExpandComputation(const Nnet &nnet,
 
 // This helper function is used in RequestIsDecomposable(); you can work out
 // what it does, and why, from the documentation of RequestIsDecomposable() in
-// the header.
+// the header.  This function does basically the same thing, except
+// at a lower level, for an IoSpecification rather than a ComputationRequest.
 static bool IoSpecificationIsDecomposable(const IoSpecification &io_spec,
                                           IoSpecification *mini_io_spec,
                                           int32 *num_n_values_out) {
@@ -3019,63 +3829,26 @@ static bool IoSpecificationIsDecomposable(const IoSpecification &io_spec,
   mini_io_spec->has_deriv = io_spec.has_deriv;
   const std::vector<Index> &indexes = io_spec.indexes;
   KALDI_ASSERT(!indexes.empty() && "Empty Indexes in computation request");
-  // For a computation to be decomposable, the 'n' values need to vary from 0 to
-  // N-1 for some N > 2, and they need to be in some kind of regular order with
-  // suitable repetition-- either with the 'n' values varying the 'fastest', or
-  // the 'slowest' of all the indexes.
-  if (indexes[0].n != 0 || indexes.back().n < 2) {
+
+  bool full_check = true;  // We might eventually change this to false, for
+                           // efficiency.
+  int32 num_n_values = indexes.back().n + 1;
+  if (num_n_values <= 2) {
+    // Computations with 2 or fewer 'n' values are not decomposable, as there
+    // would be no speed benefit in shortcut compilation (which relies on
+    // compiling an otherwise similar computation with n == 2).
     return false;
   }
-  int32 num_n_values = indexes.back().n + 1,
-      size = indexes.size();
   *num_n_values_out = num_n_values;
-  if (size % num_n_values != 0)
+
+  int32 n_stride = FindNStride(indexes, full_check);
+
+  if (n_stride == 0)
     return false;
-  bool n_fast = (indexes[1].n == 1);
-  // if 'n_fast' is true, then the n index varies the fastest (stride == 1),
-  // otherwise it varies the slowest of any index.  We require that it be one of
-  // these two options, otherwise we declare the computation to be
-  // non-decomposable.
 
-  mini_io_spec->indexes.resize((size / num_n_values) * 2);
-  if (n_fast) {
-    // 'block_size' is the size of blocks with the same x,t values, which are
-    // expected to have n values 0, 1, ... num_n_values - 1.
-    // of course each block is of size num_n_values.
-    int32 num_blocks = size / num_n_values;
-    const Index *indexes_ptr = &(indexes[0]);
-    Index *indexes_out = &(mini_io_spec->indexes[0]);
-    for (int32 block = 0; block < num_blocks; block++) {
-      *(indexes_out++) = indexes_ptr[0];  // for n == 0
-      *(indexes_out++) = indexes_ptr[1];  // for n == 1.
+  ConvertNumNValues(n_stride, num_n_values, 2,
+                    indexes, &(mini_io_spec->indexes));
 
-      // we expect all the indexes in this block to have the same x and t
-      // values, but n values increasing from 0 to num_n_values - 1.
-      int32 t = indexes_ptr->t, x = indexes_ptr->x;
-
-      for (int32 n = 0; n < num_n_values; n++, indexes_ptr++) {
-        if (indexes_ptr->n != n || indexes_ptr->t != t || indexes_ptr->x != x)
-          return false;
-      }
-    }
-  } else {
-    // 'n' varies the slowest.
-    int32 block_size = size / num_n_values;
-    mini_io_spec->indexes.clear();
-    mini_io_spec->indexes.insert(mini_io_spec->indexes.end(),
-                                 indexes.begin(),
-                                 indexes.begin() + 2 * block_size);
-
-    // now verify that it has the expected structure...
-    for (int32 i = 0; i < block_size; i++) {
-      const Index *indexes_ptr = &(indexes[i]);
-      int32 t = indexes_ptr->t, x = indexes_ptr->x;
-      for (int32 n = 0; n < num_n_values; n++, indexes_ptr += block_size) {
-        if (indexes_ptr->n != n || indexes_ptr->t != t || indexes_ptr->x != x)
-          return false;
-      }
-    }
-  }
   return true;
 }
 
@@ -3127,25 +3900,32 @@ class ComputationLoopedOptimizer {
  private:
 
   // Figures out the time shift between the successive computation requests.
-  static int32 FindTimeShift(const NnetComputation &computation,
-                             const std::vector<int32> &segment_ends);
+  static int32 FindTimeShift(const NnetComputation &computation);
 
   // This function creates a mapping from a matrix-index > 0,
   // to a pair (unique_id, time_offset) that represents the debug-info
-  // for that matrix-id in computation.debug_info.
-  // The output vector is indexed by the matrix-index in the computation (the
-  // zeroth member is not valid).  It requires that the
-  // The 'time_offset' is equal to the 't' value of the zeroth element of the
-  // cindexes vetor.  The 'unique_id' is an integer that uniquely identifies
-  // what we get from subtracting the 'time_offset' from each 't' value of
-  // that 'cindexes' vector, and then pairing it up with the 'is_deriv'
-  // value of the DebugInfo.  That is, if two 'cindexes' vectors differ only
-  // by a time offset, and the 'is_deriv' values are the same they will map to the same
-  // unique_id.
-  // The output 'matrix_to_pair' is indexed by matrix index (the zeroth element is
-  // not set).
+  // for that matrix-id in computation.debug_info (these terms are explained
+  // below).
+  //
+  // The output vector 'matrix_to_pair' is indexed by the matrix-index in the
+  // computation (the zeroth member is not valid).
+  //
+  // The 'time_offset' is equal to the 't' value of the first member of the
+  // cindexes vector for with t != kNoTime.  The 'unique_id' is an integer that
+  // uniquely identifies what we get from subtracting the 'time_offset' from
+  // each 't' value of that 'cindexes' vector for which t != kNoTime, and then
+  // pairing it up with the 'is_deriv' value of the DebugInfo.  That is, if two
+  // 'cindexes' vectors differ only by a time offset, and the 'is_deriv' values
+  // are the same they will map to the same unique_id.
   static void CreateMatrixPairs(const NnetComputation &computation,
                                 std::vector<std::pair<int32, int32> > *matrix_to_pair);
+
+  // This helper function, used in CreateMatrixPairs, find the value 't' which
+  // is the first (*cindexes)[i].second.t that is not kNoTime; it then subtracts
+  // that 't' value from all (*cindexes)[i].second.t that are not kNoTime.  If
+  // all the 't' values are kNoTime, which we don't expect to happen, we throw
+  // an error.
+  static inline int32 NormalizeCindexes(std::vector<Cindex> *cindexes);
 
 
   // This very simple helper function reverses the map 'matrix_to_pair' so we can
@@ -3158,7 +3938,7 @@ class ComputationLoopedOptimizer {
 
   // Given a vector of lists, one list for each segment, of the active matrices
   // at the end of that segment, this function converts those lists into a
-  // different representation where each matrix is reprented as a pair instead
+  // different representation where each matrix is represented as a pair instead
   // of as a single int32.  'active_pairs' will have the same dimensions as
   // 'active_matrices'.
   static void ConvertListsToPairLists(
@@ -3166,16 +3946,19 @@ class ComputationLoopedOptimizer {
       const std::vector<std::pair<int32, int32> > &matrix_to_pair,
       std::vector<std::vector<std::pair<int32, int32> > > *active_pairs);
 
-  // This function modifies the lists of active matrices per segment
-  // (represented as pairs) in 'active_pairs' by sorting them and
-  // then subtracting the time-offset of the first pair in each
-  // list ((*active_pair)[seg][0].second), from all elements in that list.
-  // It puts the subtracted offset in (*time_offsets)[seg].  This change
-  // of representation makes it easy to tell whether the sets of active
-  // matrices for different segments are identical up to a time-offset.
-  static void NormalizePairLists(
-      std::vector<std::vector<std::pair<int32, int32> > > *active_pairs,
-      std::vector<int32> *time_offsets);
+  // This function, used in FindFirstRepeat, tells us whether the two lists a
+  // and b are the same except for a possible time-shift.
+  // Each element of a or b is of the form (matrix-unique-index, time-offset).
+  // Let's suppose we have two pairs p1=(m1, o1) and p2=(m2, o2).
+  // For p2 to be equal to p1 except for a possible shift of value 'shift', we
+  // require m2 == m1 and either o2 == o1 + 'shift' or o2 == o1.
+  // This function returns true if a.size() == b.size() and for each
+  // i, b[i].first == a[i].first and b[i].second is either
+  // a[i].second or a[i].second + shift.
+  static bool ListsAreEqualExceptForPossibleShift(
+      const std::vector<std::pair<int32, int32> > &a,
+      const std::vector<std::pair<int32, int32> > &b,
+      int32 shift);
 
   // This function looks in the matrix 'active_pairs' for the first pair of
   // identical values, i.e. it is looking for i < j for which
@@ -3195,18 +3978,23 @@ class ComputationLoopedOptimizer {
   // each segment should be shifted relative to the previous segment, by
   // 'time_shift_per_segment'.
   static bool FindFirstRepeat(
-      const std::vector<std::vector<std::pair<int32, int32> > > &normalized_active_pairs,
-      const std::vector<int32> &time_offsets,
+      const std::vector<std::vector<std::pair<int32, int32> > > &active_pairs,
       int32 time_shift_per_segment,
       int32 *seg1, int32 *seg2);
 
-  // Converts a list of pairs (e.g. one of the elements of the output of
-  // 'ConvertListsToPairLists)', back into a list of matrix indexes, using the
-  // map 'pair_to_matrix'.
-  static void PairListToMatrixList(
-      const std::vector<std::pair<int32, int32> > &pair_list,
+
+  // 'pair_list1' is the list of active (unique-id, time-offset) pairs for one
+  // segment of the computation and 'pair_list2' is the same list for a later
+  // segment.  The map 'pair_to_matrix' can convert these back into matrix
+  // indexes.  This function will output two lists of matrices.  These will just
+  // be 'pair_list1' and 'pair_list2' converted back into matrix indexes,
+  // except we omit pairs which are identical (i.e. the time-offset was zero).
+  static void GetIdentifiedMatrices(
+      const std::vector<std::pair<int32, int32> > &pair_list1,
+      const std::vector<std::pair<int32, int32> > &pair_list2,
       const unordered_map<std::pair<int32, int32>, int32, PairHasher<int32> > &pair_to_matrix,
-      std::vector<int32> *matrix_list);
+      std::vector<int32> *matrix_list1,
+      std::vector<int32> *matrix_list2);
 
 
   // This function just does some checking (via asserts), that
@@ -3234,8 +4022,7 @@ class ComputationLoopedOptimizer {
   // each of the matrices in list 'matrices1' from the corresponding
   // matrix in 'matrices2', using the kAllocMatrixFromOther command.
   // This effectively does, for example, matrices1[i] = matrices2[i],
-  // while initializing matrices1[i] and deallocating matrices2[i];
-  // it's implemented as a shallow swap.
+  // and it's implemented as a shallow swap.
   // It does this in such an order that even if the two lists are
   // not disjoint, the right thing happens.
   static void AddMatrixSwapCommands(
@@ -3258,20 +4045,19 @@ class ComputationLoopedOptimizer {
 
 
 
-  /// Given a list of command indexes ('segment_end_commands') which are
+  /// Given a list of command indexes ('splice_point_commands') which are
   /// expected to be command indexes of the kNoOperationMarker at segment
   /// boundaries, this function outputs for each of these command indexes a list
   /// of matrices which are 'active' at that point in time.  By 'active' we mean
-  /// that the matrix has been written to before that time (note, we don't count
-  /// initialization with zeros as being written to); and will be read after
-  /// that time.  These is the list of matrices that 'need to be in scope'
-  /// at those points in time.  '*active_matrices' is indexed by the
-  /// same index as 'segment_end_commands', and is then a list of active
-  /// matrices, in numerical order of matrix index.
-  /// Note: for each i, (*active_matrices)[i] will be sorted and unique.
+  /// that the matrix has been written to before that time (including zeroing),
+  /// and will be read after that time.  These is the list of matrices that
+  /// 'need to be in scope' at those points in time.  '*active_matrices' is
+  /// indexed by the same index as 'splice_point_commands', and is then a list
+  /// of active matrices, in numerical order of matrix index.  Note: for each i,
+  /// (*active_matrices)[i] will be sorted and unique.
   static void FindActiveMatrices(const NnetComputation &computation,
                                  const Analyzer &analyzer,
-                                 const std::vector<int32> &segment_end_commands,
+                                 const std::vector<int32> &splice_point_commands,
                                  std::vector<std::vector<int32> > *active_matrices);
 
 
@@ -3280,13 +4066,14 @@ class ComputationLoopedOptimizer {
   Analyzer analyzer_;
   std::vector<std::pair<int32, int32> > matrix_to_pair_;
 
-  std::vector<int32> segment_end_commands_;
+  std::vector<int32> splice_point_commands_;
 };
 
 // static
 int32 ComputationLoopedOptimizer::FindTimeShift(
-    const NnetComputation &computation,
-    const std::vector<int32> &segment_ends) {
+    const NnetComputation &computation) {
+  std::vector<int32> segment_ends;
+  GetCommandsOfType(computation, kNoOperationMarker, &segment_ends);
   KALDI_ASSERT(segment_ends.size() >= 3);
   // Ignore the first segment as it tends to be a special case
   // (it has more left context),
@@ -3333,6 +4120,29 @@ int32 ComputationLoopedOptimizer::FindTimeShift(
   return t_offset;
 }
 
+// static inline
+int32 ComputationLoopedOptimizer::NormalizeCindexes(
+    std::vector<Cindex> *cindexes) {
+  std::vector<Cindex>::iterator iter = cindexes->begin(),
+      end = cindexes->end();
+  int32 ans;
+  for (; iter != end; iter++) {
+    if (iter->second.t != kNoTime) {
+      ans = iter->second.t;
+      break;
+    }
+  }
+  if (iter == end) {
+    // this should not happen.
+    KALDI_ERR << "All t values are kNoTime in matrix.";
+  }
+  iter = cindexes->begin();
+  for (; iter != end; iter++)
+    if (iter->second.t != kNoTime)
+      iter->second.t -= ans;
+  return ans;
+}
+
 // static
 void ComputationLoopedOptimizer::CreateMatrixPairs(
     const NnetComputation &computation,
@@ -3350,10 +4160,7 @@ void ComputationLoopedOptimizer::CreateMatrixPairs(
   for (int32 m = 1; m < num_matrices; m++) {
     KALDI_ASSERT(!computation.matrix_debug_info[m].cindexes.empty());
     std::vector<Cindex> cindexes = computation.matrix_debug_info[m].cindexes;
-    int32 t_offset = cindexes[0].second.t;
-    for (std::vector<Cindex>::iterator iter = cindexes.begin();
-         iter != cindexes.end(); ++iter)
-      iter->second.t -= t_offset;
+    int32 t_offset = NormalizeCindexes(&cindexes);
     MapType::const_iterator iter = cindex_map.find(cindexes);
     int32 vector_id;
     if (iter != cindex_map.end()) {
@@ -3406,59 +4213,41 @@ void ComputationLoopedOptimizer::ConvertListsToPairLists(
 }
 
 // static
-void ComputationLoopedOptimizer::NormalizePairLists(
-    std::vector<std::vector<std::pair<int32, int32> > > *active_pairs,
-    std::vector<int32> *time_offsets) {
-  int32 num_segments = active_pairs->size();
-  time_offsets->resize(num_segments);
-  for (int32 seg = 0; seg < num_segments; seg++) {
-    std::vector<std::pair<int32, int32> > &this_pairs = (*active_pairs)[seg];
-    std::sort(this_pairs.begin(), this_pairs.end());
-    int32 this_offset;
-    if (!this_pairs.empty()) {
-      this_offset = this_pairs[0].second;
-    } else {
-      // if this_pairs is empty, produce arbitrary offsets that are increasing
-      // (this will keep some self-testing code happy).
-      if (seg == 0) { this_offset = 0; }
-      else { this_offset = (*time_offsets)[seg - 1] + 1; }
-    }
-    (*time_offsets)[seg] = this_offset;
-    std::vector<std::pair<int32, int32> >::iterator
-        iter = this_pairs.begin(), end = this_pairs.end();
-    for (; iter != end; ++iter)
-      iter->second -= this_offset;
+bool ComputationLoopedOptimizer::ListsAreEqualExceptForPossibleShift(
+    const std::vector<std::pair<int32, int32> > &a,
+    const std::vector<std::pair<int32, int32> > &b,
+    int32 shift) {
+  size_t size = a.size();
+  if (b.size() != size)
+    return false;
+  for (size_t i = 0; i < size; i++) {
+    const std::pair<int32, int32> &p1 = a[i],
+        &p2 = b[i];
+    if (p1.first != p2.first)
+      return false;
+    if (p2.second != p1.second + shift && p2.second != p1.second)
+      return false;
   }
+  return true;
 }
-
 
 // static
 bool ComputationLoopedOptimizer::FindFirstRepeat(
-    const std::vector<std::vector<std::pair<int32, int32> > > &normalized_active_pairs,
-    const std::vector<int32> &time_offsets,
+    const std::vector<std::vector<std::pair<int32, int32> > > &active_pairs,
     int32 time_shift_per_segment,
     int32 *seg1, int32 *seg2) {
-  int32 num_segments = normalized_active_pairs.size();
+  int32 num_segments = active_pairs.size();
   // This algorithm may seem like it would be very slow, but the number of
   // segments will normally be quite small (e.g. 10), and the comparison of
-  // elements of 'normalized_active_pairs' should be fast in cases where they
+  // elements of 'active_pairs' should be fast in cases where they
   // differ.
   KALDI_ASSERT(num_segments >= 2);
 
-  bool perform_time_offset_check = true;
-  if (normalized_active_pairs.back().empty()) {
-    // If there are no variables active after the end of the last-but-one segment
-    // (which is the last element in segment_ends, since we remove the end of the
-    // very last segment), then don't perform the check related to
-    // time-offsets, it's not relevant.  [this would probably be a computation
-    // that doesn't require any context].
-    perform_time_offset_check = false;
-  }
   for (int32 s = 0; s < num_segments; s++) {
     for (int32 t = s + 1; t < num_segments; t++) {
-      if ((!perform_time_offset_check ||
-           time_offsets[t]-time_offsets[s] == (t-s) * time_shift_per_segment) &&
-          normalized_active_pairs[s] == normalized_active_pairs[t]) {
+      if (ListsAreEqualExceptForPossibleShift(active_pairs[s],
+                                              active_pairs[t],
+                                              (t - s) * time_shift_per_segment)) {
         *seg1 = s;
         *seg2 = t;
         return true;
@@ -3469,22 +4258,35 @@ bool ComputationLoopedOptimizer::FindFirstRepeat(
 }
 
 // static
-void ComputationLoopedOptimizer::PairListToMatrixList(
-    const std::vector<std::pair<int32, int32> > &pair_list,
+void ComputationLoopedOptimizer::GetIdentifiedMatrices(
+    const std::vector<std::pair<int32, int32> > &pair_list1,
+    const std::vector<std::pair<int32, int32> > &pair_list2,
     const unordered_map<std::pair<int32, int32>, int32, PairHasher<int32> > &pair_to_matrix,
-    std::vector<int32> *matrix_list) {
-  matrix_list->resize(pair_list.size());
+    std::vector<int32> *matrix_list1,
+    std::vector<int32> *matrix_list2) {
+  size_t size = pair_list1.size();
+  KALDI_ASSERT(pair_list2.size() == size);
+  matrix_list1->clear();
+  matrix_list2->clear();
+  matrix_list1->reserve(size);
+  matrix_list2->reserve(size);
   std::vector<std::pair<int32, int32> >::const_iterator
-      iter = pair_list.begin(), end = pair_list.end();
-  std::vector<int32>::iterator out_iter = matrix_list->begin();
-  for (; iter != end; ++iter, ++out_iter) {
+      iter1 = pair_list1.begin(), end1 = pair_list1.end(),
+      iter2 = pair_list2.begin();
+  for (; iter1 != end1; ++iter1, ++iter2) {
+    if (iter1->second == iter2->second)
+      continue;
+    // skip those that have no time shift, we won't have to do any swapping for
+    // those.
     unordered_map<std::pair<int32, int32>, int32,
                   PairHasher<int32> >::const_iterator
-        map_iter = pair_to_matrix.find(*iter);
-    if (map_iter == pair_to_matrix.end()) {
+        map_iter1 = pair_to_matrix.find(*iter1),
+        map_iter2 = pair_to_matrix.find(*iter2);
+    if (map_iter1 == pair_to_matrix.end() ||
+        map_iter2 == pair_to_matrix.end())
       KALDI_ERR << "Could not find pair in map (code error)";
-    }
-    *out_iter = map_iter->second;
+    matrix_list1->push_back(map_iter1->second);
+    matrix_list2->push_back(map_iter2->second);
   }
 }
 
@@ -3494,16 +4296,16 @@ void ComputationLoopedOptimizer::PairListToMatrixList(
 void ComputationLoopedOptimizer::FindActiveMatrices(
     const NnetComputation &computation,
     const Analyzer &analyzer,
-    const std::vector<int32> &segment_end_commands,
+    const std::vector<int32> &splice_point_commands,
     std::vector<std::vector<int32> > *active_matrices) {
   int32 num_matrices = computation.matrices.size();
-  int32 num_segments = segment_end_commands.size();
+  int32 num_splice_points = splice_point_commands.size();
   active_matrices->clear();
-  active_matrices->resize(num_segments);
+  active_matrices->resize(num_splice_points);
   // this object just makes available some extra functions, vs. the Analyzer
   // object.
   ComputationAnalysis analysis(computation, analyzer);
-  KALDI_ASSERT(IsSortedAndUniq(segment_end_commands));
+  KALDI_ASSERT(IsSortedAndUniq(splice_point_commands));
 
   // the following vector gives us, for each matrix index, a submatrix index
   // that covers the whole of that matrix (needed by interface of 'analysis' object).
@@ -3511,18 +4313,18 @@ void ComputationLoopedOptimizer::FindActiveMatrices(
   computation.GetWholeSubmatrices(&whole_submatrices);
   for (int32 m = 1; m < num_matrices; m++) {
     // the following are command indexes, comparable with the indexes
-    // in 'segment_end_commands'.
+    // in 'splice_point_commands'.
     int32 s = whole_submatrices[m],  // submatrix consisting of the whole of
                                      // 'm'.
-        first_access = analysis.FirstAccess(s),
+        first_access = analysis.FirstNontrivialAccess(s),
         last_access = analysis.LastAccess(s);
-    for (int32 seg = 0; seg < num_segments; seg++) {
-      int32 segment_end = segment_end_commands[seg];
-      if (first_access < segment_end && last_access > segment_end) {
+    for (int32 i = 0; i < num_splice_points; i++) {
+      int32 splice_point = splice_point_commands[i];
+      if (first_access < splice_point && last_access > splice_point) {
         // If the block of time during which the matrix is accessed, includes
-        // this segment end-point, then the matrix is considered 'active' at
-        // that time.
-        (*active_matrices)[seg].push_back(m);
+        // this command index, then the matrix is considered 'active' at this
+        // time.
+        (*active_matrices)[i].push_back(m);
       }
     }
   }
@@ -3556,7 +4358,8 @@ void ComputationLoopedOptimizer::CheckIdentifiedMatrices(
     for (; iter1 != end1; iter1++,iter2++) {
       KALDI_ASSERT(iter2->first == iter1->first &&
                    iter2->second.n == iter1->second.n &&
-                   iter2->second.t == iter1->second.t + time_difference &&
+                   ((iter1->second.t == kNoTime && iter2->second.t == kNoTime) ||
+                    iter2->second.t == iter1->second.t + time_difference) &&
                    iter2->second.x == iter1->second.x);
     }
   }
@@ -3644,8 +4447,7 @@ void ComputationLoopedOptimizer::AddMatrixSwapCommands(
                  static_cast<size_t>(m2) < num_matrices);
     int32 s1 = whole_submatrices[m1], s2 = whole_submatrices[m2];
     computation->commands.push_back(
-        NnetComputation::Command(
-            kAllocMatrixFromOther, s1, s2));
+        NnetComputation::Command(kSwapMatrix, s1, s2));
   }
   computation->commands.push_back(goto_label_command);
 }
@@ -3657,8 +4459,8 @@ void ComputationLoopedOptimizer::FormInfiniteLoop(
   KALDI_ASSERT(static_cast<int32>(computation->commands.size()) >=
                command2 + 1 && command1 < command2);
   KALDI_ASSERT(
-      computation->commands[command1].command_type == kNoOperationMarker &&
-      computation->commands[command2].command_type == kNoOperationMarker);
+      computation->commands[command1].command_type == kNoOperationPermanent &&
+      computation->commands[command2].command_type == kNoOperationPermanent);
   // Remove any commands after 'command2'.
   computation->commands.resize(command2 + 1);
   computation->commands[command2].command_type = kGotoLabel;
@@ -3677,25 +4479,22 @@ bool ComputationLoopedOptimizer::Optimize() {
                "You must request matrix debug info when compiling "
                "looped computations.");
 
-  // get the indexes of the separator commands at the ends of segments.
-  std::vector<int32> segment_ends;
-  GetSegmentEnds(*computation_, &segment_ends);
-  int32 time_shift_per_segment = FindTimeShift(*computation_,
-                                               segment_ends);
-
-  // Ignore the end of the very last segment- it is not a candidate for a
-  // 'splice point'.  What we're doing here is like creating a tape loop; we
-  // have to find a place where the list of variables is the same except for a
-  // time offset.
-  // [note: it's not exactly like a tape loop because the prologue can
-  // vary... the sequence is of the form like a b b b b b .. ]
-  segment_ends.pop_back();
+  // get the indexes of potential splice points, one per segment of the
+  // computation.  We locate the splice points where kNoOperationPermanent is.
+  // This is guaranteed to be after the inputs have been received, and before
+  // the bulk of the computation in the segment, and of course before we provide
+  // the output.  It happens that by choosing this as the splice point we avoid
+  // certain problems that would arise, for instance, if we chose the segment
+  // boundaries (kNoOperationMarker).
+  std::vector<int32> splice_points;
+  GetCommandsOfType(*computation_, kNoOperationPermanent,
+                    &splice_points);
+  int32 time_shift_per_segment = FindTimeShift(*computation_);
 
 
   std::vector<std::vector<int32> > active_matrices;
-  // Find the list of matrices active at each of those segment-end-command
-  // times.
-  FindActiveMatrices(*computation_, analyzer_, segment_ends,
+  // Find the list of matrices active at each of the potential splice points.
+  FindActiveMatrices(*computation_, analyzer_, splice_points,
                      &active_matrices);
 
   // Find a representation of the matrices of the computation as pairs
@@ -3705,44 +4504,35 @@ bool ComputationLoopedOptimizer::Optimize() {
   std::vector<std::pair<int32, int32> > matrix_to_pair;
   CreateMatrixPairs(*computation_, &matrix_to_pair);
 
-  // Create the reverse map from pair to matrix index; we'll need it.
+  // Create the reverse map from pair to matrix index; we'll need it later.
   unordered_map<std::pair<int32, int32>, int32, PairHasher<int32> > pair_to_matrix;
   GetPairToMatrixMap(matrix_to_pair, &pair_to_matrix);
 
-  // get lists of matrix per segment in the pair representation.
+  // get lists of matrix per splice-point in the pair representation.
   std::vector<std::vector<std::pair<int32, int32> > > pair_lists;
   ConvertListsToPairLists(active_matrices, matrix_to_pair,
                           &pair_lists);
 
-  std::vector<int32> time_offsets;
-  NormalizePairLists(&pair_lists, &time_offsets);
-
-  // Note: seg1 and seg2 are indexes into 'segment_ends', representing
-  // points in time (that happen to be the ends of segments).
+  // Note: seg1 and seg2 are indexes into 'splice_points', representing
+  // potential splice points (located near the beginnings of segments).
   int32 seg1, seg2;
   if (!FindFirstRepeat(pair_lists,
-                       time_offsets,
                        time_shift_per_segment,
                        &seg1, &seg2)) {
     KALDI_VLOG(2) << "Could not find repeats of variables.";
     return false;
   }
 
-  // reverse the normalization for segments seg1 and seg2.
-  for (size_t i = 0; i < pair_lists[seg1].size(); i++)
-    pair_lists[seg1][i].second += time_offsets[seg1];
-  for (size_t i = 0; i < pair_lists[seg2].size(); i++)
-    pair_lists[seg2][i].second += time_offsets[seg2];
   std::vector<int32> seg1_matrices, seg2_matrices;
-  PairListToMatrixList(pair_lists[seg1], pair_to_matrix, &seg1_matrices);
-  PairListToMatrixList(pair_lists[seg2], pair_to_matrix, &seg2_matrices);
+  GetIdentifiedMatrices(pair_lists[seg1], pair_lists[seg2],
+                        pair_to_matrix,
+                        &seg1_matrices, &seg2_matrices);
 
-  int32 time_difference = time_offsets[seg2] - time_offsets[seg1];
+  int32 time_difference = time_shift_per_segment * (seg2 - seg1);
   CheckIdentifiedMatrices(*computation_, seg1_matrices, seg2_matrices,
                           time_difference);
 
-
-  FormInfiniteLoop(segment_ends[seg1], segment_ends[seg2], computation_);
+  FormInfiniteLoop(splice_points[seg1], splice_points[seg2], computation_);
 
   AddMatrixSwapCommands(seg1_matrices, seg2_matrices, computation_);
 
@@ -3788,6 +4578,373 @@ void FixGotoLabel(NnetComputation *computation) {
       // if there were, it would be right at the end, possibly followed by
       // kProvideOutput commands.
       break;
+    }
+  }
+}
+
+bool MatrixIsUnused(const Analyzer &analyzer,
+                    const NnetComputation &computation,
+                    int32 m) {
+  const MatrixAccesses &accesses = analyzer.matrix_accesses[m];
+  if (accesses.is_input || accesses.is_output)
+    return false;
+  for (size_t i = 0; i < accesses.accesses.size(); i++) {
+    int32 command_index = accesses.accesses[i].command_index;
+    const NnetComputation::Command &command =
+        computation.commands[command_index];
+    if (command.command_type != kNoOperation &&
+        command.command_type != kSetConst) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void RemoveCommandsForUnusedMatrix(const Analyzer &analyzer,
+                                   int32 m,
+                                   NnetComputation *computation) {
+  const MatrixAccesses &accesses = analyzer.matrix_accesses[m];
+  if (accesses.allocate_command >= 0) {
+    NnetComputation::Command &command = computation->commands[
+        accesses.allocate_command];
+    KALDI_ASSERT(command.command_type == kNoOperation ||
+                 command.command_type == kAllocMatrix);
+    command.command_type = kNoOperation;
+  }
+  if (accesses.deallocate_command >= 0) {
+    NnetComputation::Command &command = computation->commands[
+        accesses.deallocate_command];
+    KALDI_ASSERT(command.command_type == kNoOperation ||
+                 command.command_type == kDeallocMatrix);
+    command.command_type = kNoOperation;
+  }
+  for (size_t i = 0; i < accesses.accesses.size(); i++) {
+    int32 command_index = accesses.accesses[i].command_index;
+    NnetComputation::Command &command = computation->commands[command_index];
+    KALDI_ASSERT(command.command_type == kNoOperation ||
+                 command.command_type == kSetConst);
+    command.command_type = kNoOperation;
+  }
+}
+
+
+
+// This comparison operator is used in the function InsertCommands()
+// to sort a list of these pairs by the .first element.
+struct CommandPairComparator {
+  // operator () should be viewed as a '<' operator that only looks at
+  // the .first element, treating the .second elements as equal.
+  bool operator () (const std::pair<int32, NnetComputation::Command> &p1,
+                    const std::pair<int32, NnetComputation::Command> &p2) const {
+    return p1.first < p2.first;
+  }
+};
+
+void InsertCommands(
+    std::vector<std::pair<int32, NnetComputation::Command> > *new_commands,
+    NnetComputation *computation) {
+  int32 num_new_commands = new_commands->size(),
+      num_old_commands = computation->commands.size();
+  if (num_new_commands == 0)
+    return;
+  CommandPairComparator comparison_operator;
+  // use std::stable_sort so that for entries in 'new_commands' that
+  // have the same .first value, they stay in the same order they were
+  // in before sorting.
+  std::stable_sort(new_commands->begin(), new_commands->end(),
+                   comparison_operator);
+
+  if (RandInt(0, 3) == 0) {   // check 'new_commands'
+    for (int32 i = 0; i + 1 < num_new_commands; i++) {
+      KALDI_ASSERT((*new_commands)[i].first <= (*new_commands)[i+1].first &&
+                   (*new_commands)[i].first >= 0 &&
+                   (*new_commands)[i+1].first <= num_old_commands);
+    }
+  }
+  std::vector<NnetComputation::Command> merged_commands;
+  merged_commands.reserve(num_old_commands + num_new_commands);
+
+  std::vector<std::pair<int32, NnetComputation::Command> >::const_iterator
+      new_commands_iter = new_commands->begin(),
+      new_commands_end = new_commands->end();
+
+  for (int32 old_command_index = 0; old_command_index <= num_old_commands;
+       old_command_index++) {
+    while (new_commands_iter != new_commands_end &&
+           new_commands_iter->first <= old_command_index) {
+      merged_commands.push_back(new_commands_iter->second);
+      ++new_commands_iter;
+    }
+    if (old_command_index < num_old_commands)
+      merged_commands.push_back(computation->commands[old_command_index]);
+  }
+  KALDI_ASSERT(merged_commands.size() == num_old_commands +
+               num_new_commands);
+  // copy to 'computation->commands' via shallow swap.
+  computation->commands.swap(merged_commands);
+  FixGotoLabel(computation);
+}
+
+/**
+   This class is used in the function OptimizeMemoryCompression(),
+   once we determine that there is some potential to do memory compression
+   for this computation.
+ */
+class MemoryCompressionOptimizer {
+ public:
+
+  /** @param [in] nnet         The neural net the computation is for.
+      @param [in] memory_compression_level.  The level of compression:
+         0 = no compression (the constructor should not be calle with this value).
+         1 = compression that doesn't affect the results (but still takes time).
+         2 = compression that affects the results only very slightly
+         3 = compression that affects the results a little more.
+      @param [in] middle_command  Must be the command-index of the
+          command of type kNoOperationMarker in 'computation'.
+      @param [in,out] computation  The computation we're optimizing.
+  */
+  MemoryCompressionOptimizer(const Nnet &nnet,
+                             int32 memory_compression_level,
+                             int32 middle_command,
+                             NnetComputation *computation):
+      nnet_(nnet), memory_compression_level_(memory_compression_level),
+      middle_command_(middle_command), computation_(computation) { }
+
+  void Optimize();
+ private:
+
+  // This function, called from Compress(), figures out whether we can compress
+  // matrix m, and if so, adds an entry to compress_info_.
+  void ProcessMatrix(int32 m);
+
+  // This function modifies the commands in '*computation_', taking
+  // as input the commands in compress_info_.
+  void ModifyComputation();
+
+  // While deciding what matrices to compress we will create a list of structs
+  // of type MatrixCompressInfo.  Later we copy-and-modify the commands in the
+  // computation, putting the compression commands into their appropriate place.
+  struct MatrixCompressInfo {
+    // m is the matrix-index of the matrix we're going to compress.
+    int32 m;
+    // compression_command_index is the command-index of the command
+    // *after* which we will place the compression command.  Normally
+    // this will be some type of propagation.
+    int32 compression_command_index;
+    // compression_command_index is the command-index of the command
+    // *before* which we will place the uncompression command.  Normally
+    // this will be some type of backprop.
+    int32 uncompression_command_index;
+    // 'compression_type' (e.g. kCompressedMatrixInt8) determines the type
+    // we compress the BaseFloats to.
+    CuCompressedMatrixType compression_type;
+    // 'range' determines range of values that the compressed values can
+    // be in: for signed types they are in [-range, range], for unsigned
+    // types, in [0, range].
+    // As a special case, range = 0 means that the compression just stores the
+    // sign (-1, 0 or 1) of the input, and decompresses it to -1, 0 or 1; this
+    // is useful for ReLUs.
+    BaseFloat range;
+    // this is provided to the initializer of CuCompressedMatrix; it should
+    // be true if the values being compressed are potentially outside of
+    // the representable range.
+    bool truncate;
+    MatrixCompressInfo(int32 m, int32 forward_command_index,
+                       int32 backward_command_index,
+                       CuCompressedMatrixType compression_type,
+                       BaseFloat range, bool truncate):
+        m(m), compression_command_index(forward_command_index),
+        uncompression_command_index(backward_command_index),
+        compression_type(compression_type), range(range),
+        truncate(truncate) { }
+
+  };
+  std::vector<MatrixCompressInfo> compress_info_;
+
+  const Nnet &nnet_;
+  int32 memory_compression_level_;
+  int32 middle_command_;
+  NnetComputation *computation_;
+  Analyzer analyzer_;
+};
+
+
+void MemoryCompressionOptimizer::ModifyComputation() {
+  // whole_submatrices[m] is the submatrix-index of the submatrix that
+  // represents the whole of matrix m.
+  std::vector<int32> whole_submatrices;
+  computation_->GetWholeSubmatrices(&whole_submatrices);
+
+  // 'pairs_to_insert' will be a list of pairs (command-index, command),
+  // meaning: (command-index just before which to insert this command; command
+  // to insert).
+  std::vector<std::pair<int32, NnetComputation::Command> >
+      pairs_to_insert;
+  pairs_to_insert.reserve(compress_info_.size() * 2);
+  for (size_t i = 0; i < compress_info_.size(); i++) {
+    const MatrixCompressInfo &info = compress_info_[i];
+    int32 s = whole_submatrices[info.m];
+    // below we use compression_command_index + 1 because we want the
+    // compression to go after the command in 'info.compression_command_index'
+    // (which might be, for instance, a forward propagation command).
+    std::pair<int32, NnetComputation::Command> p1(
+        info.compression_command_index + 1,
+        NnetComputation::Command(info.range, kCompressMatrix,
+                                 s, static_cast<int32>(info.compression_type),
+                                 info.truncate ? 1 : 0));
+    pairs_to_insert.push_back(p1);
+    std::pair<int32, NnetComputation::Command> p2(
+        info.uncompression_command_index,
+        NnetComputation::Command(1.0, kDecompressMatrix, s));
+    pairs_to_insert.push_back(p2);
+  }
+  InsertCommands(&pairs_to_insert,
+                 computation_);
+}
+
+
+void MemoryCompressionOptimizer::Optimize() {
+  analyzer_.Init(nnet_, *computation_);
+  // note: matrix zero is not really a matrix.
+  int32 num_matrices = computation_->matrices.size();
+  for (int32 m = 1; m < num_matrices; m++)
+    ProcessMatrix(m);
+  if (!compress_info_.empty())
+    ModifyComputation();
+}
+
+void MemoryCompressionOptimizer::ProcessMatrix(int32 m) {
+  if (analyzer_.matrix_accesses[m].is_output) {
+    return;  // We can't do this optimization for matrices that are going to be
+             // output to the user.
+  }
+
+  // 'accesses' list the commands that access this matrix.
+  const std::vector<Access> &accesses = analyzer_.matrix_accesses[m].accesses;
+  // the 'kReadAccess' below is actually a don't-care  This is just
+  // to find the position in 'accesses' that corresponds to command-index
+  // 'middle_command'.
+  Access middle_access(middle_command_, kReadAccess);
+  std::vector<Access>::const_iterator iter = std::lower_bound(accesses.begin(),
+                                                              accesses.end(),
+                                                              middle_access);
+  // At this point, 'iter' points to the first access in 'accesses'
+  // whose command index is >= 'middle_command_' (which separates the forward
+  // and backward passes), or accesses.end() if this matrix was not
+  // accessed during the backward pass.
+  if (iter == accesses.end()) {
+    return;  // There is nothing to do: this matrix was not accessed during the
+             // backward pass.
+  }
+  if (iter == accesses.begin()) {
+    return;  // There is nothing to do: this matrix was not accessed during the
+             // forward pass.
+  }
+  // 'backward_access' is the first access of the matrix in the backward
+  // pass of the computation, and
+  // 'forward_access' is the last access of the matrix in the forward pass
+  // of the computation.
+  const Access &backward_access = iter[0],
+      &forward_access = iter[-1];
+  KALDI_ASSERT(forward_access.command_index < middle_command_ &&
+               backward_access.command_index > middle_command_);
+
+  // 'backward_access_is_last_access' is going to be set to true if
+  // 'backward_access' is the last command to access the matrix (apart from
+  // deallocation or matrix-swap commands, which don't show up in the list of
+  // accesses).
+  bool backward_access_is_last_access = (accesses.end() == iter + 1);
+
+  int32 backward_command_index = backward_access.command_index,
+      forward_command_index = forward_access.command_index;
+  NnetComputation::Command
+      &backward_command = computation_->commands[backward_command_index];
+
+  if (memory_compression_level_ >= 1 &&
+      backward_access_is_last_access &&
+      backward_access.access_type == kReadAccess &&
+      backward_command.command_type == kBackprop) {
+    int32 component_index = backward_command.arg1;
+    const Component *component = nnet_.GetComponent(component_index);
+    // this is potentially a candidate for our optimization for ReLU units,
+    // where we only need to store the sign.
+    if (component->Type() == "RectifiedLinearComponent") {
+      compress_info_.push_back(
+          MatrixCompressInfo(m, forward_command_index,
+                             backward_command_index,
+                             kCompressedMatrixUint8, 0.0,
+                             true));
+      return;
+    }
+  }
+
+  // If memory_compression_level >= 2 (an "intermediate" level of compression),
+  // then we'll consider compressing quantities using 16 bits in the range
+  // [-10, 10].  Because of the way this compression works, exact zero will
+  // still be uncompressed as exact zero, so even if this is the output
+  // of a ReLU, it's OK.  (Having a few derivatives zero for ReLU outputs
+  // that were very close to zero is OK.)
+  if (memory_compression_level_ >= 2) {
+    compress_info_.push_back(
+        MatrixCompressInfo(m, forward_command_index,
+                           backward_command_index,
+                           kCompressedMatrixInt16, 10.0,
+                           true));
+    return;
+  }
+
+  // TODO: later maybe implement something for memory compression level = 3.
+}
+
+
+
+
+void OptimizeMemoryCompression(const Nnet &nnet,
+                               int32 memory_compression_level,
+                               NnetComputation *computation) {
+  if (memory_compression_level == 0 || computation->commands.empty())
+    return;
+  // don't apply this optimization to looped computations.
+  if (computation->commands.back().command_type == kGotoLabel)
+    return;
+
+  // 'middle_command' will be the index of the command of type
+  // 'kNoOperationMarker' that separates the forward and backward
+  // passes.  If it doesn't exist, it means this computation doesn't
+  // include
+  int32 middle_command = -1;
+  for (size_t i = 0; i < computation->commands.size(); i++) {
+    if (computation->commands[i].command_type == kNoOperationMarker) {
+      if (middle_command < 0) {
+        middle_command = static_cast<int32>(i);
+      } else {
+        KALDI_WARN << "Found more than one command of type kNoOperationMarker "
+            "in non-looped computation.";
+        // there are more than one command of this type... this wasn't expected.
+        // return (i.e. do nothing).
+        return;
+      }
+    }
+  }
+  if (middle_command == -1) {
+    return;  // This computation doesn't have a backprop pass.
+  }
+  if (memory_compression_level >= 1) {
+    int64 bytes_used_initial, bytes_used_final;
+    if (GetVerboseLevel() >= 2)
+      bytes_used_initial = GetMaxMemoryUse(*computation);
+
+    MemoryCompressionOptimizer opt(nnet, memory_compression_level,
+                                   middle_command, computation);
+    opt.Optimize();
+
+    if (GetVerboseLevel() >= 2) {
+      bytes_used_final = GetMaxMemoryUse(*computation);
+      if (bytes_used_final != bytes_used_initial) {
+        KALDI_VLOG(2) << "Memory compression reduced  memory use from "
+                      << bytes_used_initial << " to "
+                      << bytes_used_final << " bytes.";
+      }
     }
   }
 }
