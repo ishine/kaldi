@@ -235,6 +235,7 @@ public:
                                             num_input_fmaps_, 
                                             filt_y_len_, 
                                             filt_x_len_));
+        /*
        CU_SAFE_CALL(cudnnSetConvolution2dDescriptor(conv_desc_, 
                                                  pad_y_len_, 
                                                  pad_x_len_, 
@@ -243,6 +244,7 @@ public:
                                                  1,
                                                  1, 
                                                  CUDNN_CONVOLUTION));
+        */
 
        CU_SAFE_CALL(cudnnSetTensor4dDescriptorEx(in_desc_, 
                                               CUDNN_DATA_FLOAT, 
