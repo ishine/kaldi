@@ -1,7 +1,7 @@
 # This file was generated using the following command:
-# ./configure --shared --mkl-root=/data/tools/intel/mkl --threaded-math=yes
+# ./configure --shared --mkl-root=/aifs1/tools/INTEL/mkl2017/mkl --cudatk-dir=/aifs1/users/kxd/local/cuda-9.0
 
-CONFIGURE_VERSION := 6
+CONFIGURE_VERSION := 7
 
 # Toolchain configuration
 
@@ -13,14 +13,14 @@ RANLIB = ranlib
 # Base configuration
 
 KALDI_FLAVOR := dynamic
-KALDILIBDIR := /home/wd007/src/KALDI/kaldi-fastnn/src/lib
+KALDILIBDIR := /aifs1/users/wd007/decode/facepay/201802/kaldi-merge/src/lib
 DOUBLE_PRECISION = 0
-OPENFSTINC = /home/wd007/src/KALDI/kaldi-fastnn/tools/openfst/include
-OPENFSTLIBS = /home/wd007/src/KALDI/kaldi-fastnn/tools/openfst/lib/libfst.so
-OPENFSTLDFLAGS = -Wl,-rpath=/home/wd007/src/KALDI/kaldi-fastnn/tools/openfst/lib
+OPENFSTINC = /aifs1/users/wd007/decode/facepay/201802/kaldi-merge/tools/openfst/include
+OPENFSTLIBS = /aifs1/users/wd007/decode/facepay/201802/kaldi-merge/tools/openfst/lib/libfst.so
+OPENFSTLDFLAGS = -Wl,-rpath=/aifs1/users/wd007/decode/facepay/201802/kaldi-merge/tools/openfst/lib
 
-MKLROOT = /data/tools/intel/mkl
-MKLLIB = /data/tools/intel/mkl/lib/intel64
+MKLROOT = /aifs1/tools/INTEL/mkl2017/mkl
+MKLLIB = /aifs1/tools/INTEL/mkl2017/mkl/lib/intel64
 
 # MKL specific Linux configuration
 
@@ -89,13 +89,13 @@ MKL_DYN_MUL = -L$(MKLLIB) -lmkl_solver_lp64 -Wl,--start-group -lmkl_intel_lp64 \
 
 LDFLAGS = $(EXTRA_LDFLAGS) $(OPENFSTLDFLAGS) -rdynamic
 LDLIBS = $(EXTRA_LDLIBS) $(OPENFSTLIBS) $(MKLFLAGS) -lm -lpthread -ldl -lrt
-MKLFLAGS = -L/data/tools/intel/mkl/lib/intel64 -Wl,-rpath=/data/tools/intel/mkl/lib/intel64 -lmkl_intel_lp64  -lmkl_core  -lmkl_intel_thread  -L/data/tools/intel/compilers_and_libraries_2016.1.150/linux/compiler/lib/intel64_lin -Wl,-rpath=/data/tools/intel/compilers_and_libraries_2016.1.150/linux/compiler/lib/intel64_lin -liomp5  -ldl -lpthread -lm 
+MKLFLAGS = -L/aifs1/tools/INTEL/mkl2017/mkl/lib/intel64 -Wl,-rpath=/aifs1/tools/INTEL/mkl2017/mkl/lib/intel64 -lmkl_intel_lp64  -lmkl_core  -lmkl_sequential    -ldl -lpthread -lm 
 
 # CUDA configuration
 
 CUDA = true
-CUDATKDIR = /usr/local/cuda
-CUDA_ARCH = -gencode arch=compute_20,code=sm_20 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_53,code=sm_53 -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_62,code=sm_62
+CUDATKDIR = /aifs1/users/kxd/local/cuda-9.0
+CUDA_ARCH = -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_53,code=sm_53 -gencode arch=compute_60,code=sm_60 -gencode arch=compute_61,code=sm_61 -gencode arch=compute_62,code=sm_62 -gencode arch=compute_70,code=sm_70
 
 ifndef DOUBLE_PRECISION
 $(error DOUBLE_PRECISION not defined.)
@@ -106,14 +106,15 @@ endif
 
 CUDA_INCLUDE= -I$(CUDATKDIR)/include
 CUDA_FLAGS = -g -Xcompiler -fPIC --verbose --machine 64 -DHAVE_CUDA \
-             -DKALDI_DOUBLEPRECISION=$(DOUBLE_PRECISION)
+             -ccbin $(CXX) -DKALDI_DOUBLEPRECISION=$(DOUBLE_PRECISION)
 CXXFLAGS += -DHAVE_CUDA -I$(CUDATKDIR)/include
 CUDA_LDFLAGS += -L$(CUDATKDIR)/lib64 -Wl,-rpath,$(CUDATKDIR)/lib64
-CUDA_LDLIBS += -lcublas -lcudart -lcurand -lcudnn #LDLIBS : The libs are loaded later than static libs in implicit rule
+CUDA_LDLIBS += -lcublas -lcusparse -lcudart -lcurand -lcudnn #LDLIBS : The libs are loaded later than static libs in implicit rule
 
 # Environment configuration
-#Next section enables MPI
-MPICHDIR = /home/wd007/src/common/mpich-install
+# Next section enables MPI
+MPICHDIR = /aifs1/tools/MPI/mpich-3.2/mpich-install
 CXXFLAGS += -I$(MPICHDIR)/include
 MPICH_INCLUDE = -I$(MPICHDIR)/include
 MPICH_LDLIBS += -L$(MPICHDIR)/lib -Wl,-rpath,$(MPICHDIR)/lib -Wl,--enable-new-dtags -lmpi
+
