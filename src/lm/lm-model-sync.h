@@ -20,9 +20,9 @@
 #ifndef LM_LM_MODEL_SYNC_H_
 #define LM_LM_MODEL_SYNC_H_
 
-#include "thread/kaldi-semaphore.h"
-#include "thread/kaldi-mutex.h"
-#include "thread/kaldi-barrier.h"
+#include "util/kaldi-semaphore.h"
+#include "util/kaldi-mutex.h"
+#include "util/kaldi-barrier.h"
 #include "nnet0/nnet-nnet.h"
 
 #include "cudamatrix/cu-device.h"

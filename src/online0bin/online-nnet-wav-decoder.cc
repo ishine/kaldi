@@ -174,7 +174,8 @@ int main(int argc, char *argv[])
 						frame_ready = batch_size;
 
 					for (int i = 0; i < frame_ready; i += in_skip) {
-						feature_pipeline.GetFrame(frame_offset+i, &feat.Row(i/in_skip));
+                        SubVector<BaseFloat> row(feat, i/in_skip);
+						feature_pipeline.GetFrame(frame_offset+i, &row);
 					}
 					frame_offset += frame_ready;
 

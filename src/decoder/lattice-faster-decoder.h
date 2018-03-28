@@ -356,7 +356,7 @@ class LatticeFasterDecoder {
   /// ctc
   template <typename FstType> void ProcessEmittingCtc(DecodableInterface *decodable);
 
-  BaseFloat ProcessEmittingCtcWrapper(DecodableInterface *decodable);
+  void  ProcessEmittingCtcWrapper(DecodableInterface *decodable);
 
   /// Processes nonemitting (epsilon) arcs for one frame.  Called after
   /// ProcessEmitting() on each frame.  The cost cutoff is computed by the
@@ -369,7 +369,7 @@ class LatticeFasterDecoder {
   /// ctc
   template <typename FstType> void ProcessNonemittingCtc();
 
-  void ProcessNonemittingCtcWrapper(BaseFloat cost_cutoff);
+  void ProcessNonemittingCtcWrapper();
 
 
   // HashList defined in ../util/hash-list.h.  It actually allows us to maintain

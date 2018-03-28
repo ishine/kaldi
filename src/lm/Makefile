@@ -11,9 +11,8 @@ LDLIBS += $(MPICH_LDLIBS)
 TESTFILES = arpa-file-parser-test arpa-lm-compiler-test
 
 OBJFILES = arpa-file-parser.o arpa-lm-compiler.o const-arpa-lm.o \
-			kaldi-rnnlm.o mikolov-rnnlm-lib.o \
-		   	kaldi-lmtable.o kaldi-lm.o kaldi-nnlm.o \
-			lm-model-sync.o lm-compute-lstm-parallel.o \
+			kaldi-rnnlm.o mikolov-rnnlm-lib.o kaldi-nnlm.o \
+			kaldi-lm.o kaldi-lmtable.o lm-model-sync.o lm-compute-lstm-parallel.o \
 			seqlabel-compute-lstm-parallel.o slu-compute-lstm-parallel.o
 
 LIBNAME = kaldi-lm

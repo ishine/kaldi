@@ -24,6 +24,7 @@
 #include "nnet0/nnet-class-affine-transform.h"
 #include "nnet0/nnet-word-vector-transform.h"
 
+#include "matrix/cblas-wrappers.h"
 #include "lm/lm-model-sync.h"
 
 namespace kaldi {

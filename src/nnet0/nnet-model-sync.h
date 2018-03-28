@@ -20,8 +20,8 @@
 #ifndef NNET_NNET_MODEL_SYNC_H_
 #define NNET_NNET_MODEL_SYNC_H_
 
-#include "thread/kaldi-semaphore.h"
-#include "thread/kaldi-mutex.h"
+#include "util/kaldi-semaphore.h"
+#include "util/kaldi-mutex.h"
 #include "nnet0/nnet-nnet.h"
 
 #include "cudamatrix/cu-device.h"

@@ -21,7 +21,7 @@
 #define ONLINE0_ONLINE_NNET_FORWARD_H_
 
 #include "util/circular-queue.h"
-#include "thread/kaldi-mutex.h"
+#include "util/kaldi-mutex.h"
 #include "nnet0/nnet-nnet.h"
 #include "nnet0/nnet-trnopts.h"
 #include "nnet0/nnet-pdf-prior.h"

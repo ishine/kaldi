@@ -816,7 +816,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
   {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
-        Timer tim;
+        CuTimer tim;
 
         int32 dst_pitch, src_pitch, width,  size;
         int pos = 0;
@@ -896,7 +896,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
   	  CU_SAFE_CALL(cudaGetLastError());
 
-  	  CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+  	  CuDevice::Instantiate().AccuProfile(__func__, tim);
   	  return pos;
   }else
 #endif

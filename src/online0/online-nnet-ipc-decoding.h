@@ -22,8 +22,9 @@
 
 #include "fstext/fstext-lib.h"
 #include "decoder/decodable-matrix.h"
-#include "thread/kaldi-semaphore.h"
-#include "thread/kaldi-mutex.h"
+#include "util/kaldi-semaphore.h"
+#include "util/kaldi-mutex.h"
+#include "util/kaldi-thread.h"
 
 #include "online0/online-nnet-faster-decoder.h"
 #include "online0/kaldi-unix-domain-socket.h"

@@ -21,7 +21,7 @@
 #define ONLINE0_ONLINE_NNET_IPC_FORWARDING_H_
 
 #include "util/circular-queue.h"
-#include "thread/kaldi-mutex.h"
+#include "util/kaldi-mutex.h"
 #include "nnet0/nnet-trnopts.h"
 #include "nnet0/nnet-pdf-prior.h"
 

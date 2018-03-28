@@ -113,7 +113,7 @@ void AddVecStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des,
 
 #if HAVE_CUDA == 1
 	  if (CuDevice::Instantiate().Enabled()) {
-	    Timer tim;
+	    CuTimer tim;
 
 	    for (int32 i = 0; i < size; i++) {
 		    int32 dim = des[i]->Dim();
@@ -125,7 +125,7 @@ void AddVecStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des,
 	    }
 	    CU_SAFE_CALL(cudaGetLastError());
 
-	    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+	    CuDevice::Instantiate().AccuProfile(__func__, tim);
 	  } else
 #endif
 	  {
@@ -158,7 +158,7 @@ void MulElementsStreamed(std::vector<CuSubVector<Real>* > &des, const std::vecto
 
 #if HAVE_CUDA == 1
 	  if (CuDevice::Instantiate().Enabled()) {
-	    Timer tim;
+	    CuTimer tim;
 
 	    for (int32 i = 0; i < size; i++) {
 		    int32 dim = des[i]->Dim();
@@ -172,7 +172,7 @@ void MulElementsStreamed(std::vector<CuSubVector<Real>* > &des, const std::vecto
 	    }
 	    CU_SAFE_CALL(cudaGetLastError());
 
-	    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+	    CuDevice::Instantiate().AccuProfile(__func__, tim);
 	  } else
 #endif
 	  {
@@ -198,7 +198,7 @@ void AddStreamed(std::vector<CuSubVector<Real>* > &vec, std::vector<Real> &value
 
 #if HAVE_CUDA == 1
 	  if (CuDevice::Instantiate().Enabled()) {
-	    Timer tim;
+	    CuTimer tim;
 
 	    for (int32 i = 0; i < size; i++) {
 	    	int32 dim = vec[i]->Dim();
@@ -210,7 +210,7 @@ void AddStreamed(std::vector<CuSubVector<Real>* > &vec, std::vector<Real> &value
 	    }
 	    CU_SAFE_CALL(cudaGetLastError());
 
-	    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+	    CuDevice::Instantiate().AccuProfile(__func__, tim);
 	  } else
 #endif
 	  {
@@ -240,7 +240,7 @@ void AddRowSumMatStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des_vec,
 
 #if HAVE_CUDA == 1
 	  if (CuDevice::Instantiate().Enabled()) {
-	    Timer tim;
+	    CuTimer tim;
 	    for (int32 i = 0; i < size; i++) {
 	   			size_t dimBlock = src[i]->NumRows() > CU1DBLOCK ? CU1DBLOCK : src[i]->NumRows();
 	   			size_t dimGrid = src[i]->NumCols();
@@ -249,7 +249,7 @@ void AddRowSumMatStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des_vec,
 	    }
 	    CU_SAFE_CALL(cudaGetLastError());
 
-	    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+	    CuDevice::Instantiate().AccuProfile(__func__, tim);
 	  } else
 #endif
 	  {
@@ -283,7 +283,7 @@ void AddColSumMatStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des_vec,
 
 #if HAVE_CUDA == 1
 	  if (CuDevice::Instantiate().Enabled()) {
-	    Timer tim;
+	    CuTimer tim;
 	    for (int32 i = 0; i < size; i++) {
 			size_t dimBlock = src[i]->NumCols() > CU1DBLOCK ? CU1DBLOCK : src[i]->NumCols();
 			size_t dimGrid = src[i]->NumRows();
@@ -292,7 +292,7 @@ void AddColSumMatStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des_vec,
 	    }
 	    CU_SAFE_CALL(cudaGetLastError());
 
-	    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+	    CuDevice::Instantiate().AccuProfile(__func__, tim);
 	  } else
 #endif
 	  {
@@ -324,7 +324,7 @@ Real VecSumStreamed(const std::vector<CuSubVector<Real>* > &vec, std::vector<Rea
 
 #if HAVE_CUDA == 1
 	  if (CuDevice::Instantiate().Enabled()) {
-		Timer tim;
+		CuTimer tim;
 
 		for (int32 i = 0; i < size; i++) {
 			size_t dimBlock = vec[i]->Dim() > CU1DBLOCK ? CU1DBLOCK : vec[i]->Dim();
@@ -342,7 +342,7 @@ Real VecSumStreamed(const std::vector<CuSubVector<Real>* > &vec, std::vector<Rea
 			CU_SAFE_CALL(cudaMemcpy(&sum_vec->front(), value.Data(), sizeof(Real)*size, cudaMemcpyDeviceToHost));
 		}
 
-		CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+		CuDevice::Instantiate().AccuProfile(__func__, tim);
 		return sum;
 	  } else
 #endif
@@ -725,12 +725,12 @@ void CuVectorBase<Real>::ApplyFixed(Real resolution, int32 mode){
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
     if (dim_ == 0) return;
-    Timer tim; 
+    CuTimer tim; 
     int dimBlock(CU1DBLOCK);
     int dimGrid(n_blocks(dim_,CU1DBLOCK));
 
     cuda_vec_apply_fixed(dimGrid, dimBlock, data_, resolution, mode, dim_);
-    CuDevice::Instantiate().AccuProfile("CuVectorBase::ApplyFixed", tim.Elapsed());
+    CuDevice::Instantiate().AccuProfile("CuVectorBase::ApplyFixed", tim);
   } else
 #endif
    {    
@@ -1483,7 +1483,7 @@ void CuVectorBase<Real>::AddVec(Real alpha, const CuVectorBase<Real> &vec,
     const Real *vec_data = vec.data_;
     if (beta != 1.0) CU_SAFE_CALL(cuda_scal(GetLocalCublasHandle(), dim, beta, data, 1));
     if (alpha != 0.0) CU_SAFE_CALL(cuda_axpy(GetLocalCublasHandle(), dim, alpha, vec_data, 1, data, 1));
-    CuDevice::Instantiate().AccuProfile(__func__, tim.Elapsed());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
   } else
   #endif
   {

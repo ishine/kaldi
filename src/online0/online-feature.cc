@@ -226,7 +226,8 @@ void OnlineStreamCmvnFeature::ComputeCmvnInternal()
 						Vector<double> variance(sumsq_);
 						variance.Scale(1.0/num_frames);
 						variance.AddVec2(-1.0/(num_frames * num_frames), sum_);
-						int32 num_floored = variance.ApplyFloor(1.0e-10);
+						int32 num_floored;
+                        variance.ApplyFloor(1.0e-10, &num_floored);
 						if (num_floored > 0) {
 						  KALDI_WARN << "Flooring variance When normalizing variance, floored " << num_floored
 									 << " elements; num-frames was " << num_frames;
@@ -246,7 +247,8 @@ void OnlineStreamCmvnFeature::ComputeCmvnInternal()
 					Vector<double> variance(sumsq_);
 					variance.Scale(1.0/num_frames);
 					variance.AddVec2(-1.0/(num_frames * num_frames), sum_);
-					int32 num_floored = variance.ApplyFloor(1.0e-10);
+				    int32 num_floored;
+                    variance.ApplyFloor(1.0e-10, &num_floored);
 					if (num_floored > 0) {
 					  KALDI_WARN << "Flooring variance When normalizing variance, floored " << num_floored
 								 << " elements; num-frames was " << num_frames;

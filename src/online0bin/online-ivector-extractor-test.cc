@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
 
 	    std::ifstream wavlist_reader(wavlist_rspecifier);
 
-	    BaseFloat total_frames = 0, samp_freq = 16000;
+	    BaseFloat total_frames = 0; //samp_freq = 16000;
         size_t size;
         Matrix<BaseFloat> audio_data;
 	    Ivector *ivector;
@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
 
 			    const WaveData &wave_data = holder.Value();
                 audio_data = wave_data.Data();
-                samp_freq = wave_data.SampFreq();
+                //samp_freq = wave_data.SampFreq();
             }
             else if (audio_format == "pcm") {
                 std::ifstream pcm_reader(fn, std::ios::binary);

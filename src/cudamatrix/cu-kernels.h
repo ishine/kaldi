@@ -184,12 +184,13 @@ inline void cuda_add_mat_diag_vec(dim3 Gr, dim3 Bl, float alpha, float *mat,
 }
 inline void cuda_add_mat(dim3 Gr, dim3 Bl, double alpha, const double *src,
                          double *dst, MatrixDim d, int src_stride,
-                         int A_trans) {
-  cudaD_add_mat(Gr, Bl, alpha, src, dst, d, src_stride, A_trans);
+                         int A_trans, cudaStream_t s=NULL) {
+  cudaD_add_mat(Gr, Bl, alpha, src, dst, d, src_stride, A_trans, s);
 }
 inline void cuda_add_mat(dim3 Gr, dim3 Bl, float alpha, const float *src,
-                         float *dst, MatrixDim d, int src_stride, int A_trans) {
-  cudaF_add_mat(Gr, Bl, alpha, src, dst, d, src_stride, A_trans);
+                         float *dst, MatrixDim d, int src_stride, 
+                         int A_trans, cudaStream_t s=NULL) {
+  cudaF_add_mat(Gr, Bl, alpha, src, dst, d, src_stride, A_trans, s);
 }
 inline void cuda_add_mat_mat_elements(dim3 Gr, dim3 Bl, double *data,
                                       const double *srcA_data,
@@ -1288,11 +1289,11 @@ inline void cuda_soft_hinge(dim3 Gr, dim3 Bl, float *y, const float *x,
   cudaF_soft_hinge(Gr, Bl, y, x, d, src_stride);
 }
 inline void cuda_softmax_reduce(size_t Gr, size_t Bl, double *y,
-                                const double *x, MatrixDim d, int src_stride, float *logsum=NULL, cudaStream_t s=NULL) {
+                                const double *x, MatrixDim d, int src_stride, double *logsum=NULL, cudaStream_t s=NULL) {
   cudaD_softmax_reduce(Gr, Bl, y, x, d, src_stride, logsum, s);
 }
 inline void cuda_softmax_reduce(size_t Gr, size_t Bl, float *y, const float *x,
-                                MatrixDim d, int src_stride, double *logsum=NULL, cudaStream_t s=NULL) {
+                                MatrixDim d, int src_stride, float *logsum=NULL, cudaStream_t s=NULL) {
   cudaF_softmax_reduce(Gr, Bl, y, x, d, src_stride, logsum, s);
 }
 inline void cuda_splice(dim3 Gr, dim3 Bl, double *y, const double *x,

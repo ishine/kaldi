@@ -23,10 +23,10 @@
 //#include "tree/context-dep.h"
 //#include "hmm/transition-model.h"
 #include "fstext/fstext-lib.h"
-#include "thread/kaldi-task-sequence.h"
 #include "decoder/decoder-ctc-wrappers.h"
 #include "decoder/decodable-matrix.h"
 #include "base/timer.h"
+#include "util/kaldi-thread.h"
 
 int main(int argc, char *argv[]) {
   try {

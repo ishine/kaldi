@@ -91,7 +91,8 @@ int main(int argc, char *argv[])
 			feat.Resize(frame_ready, feature_pipeline.Dim(), kUndefined);
 
 			for (int i = 0; i < frame_ready; i++) {
-				feature_pipeline.GetFrame(i, &feat.Row(i));
+                SubVector<BaseFloat> row(feat, i);
+				feature_pipeline.GetFrame(i, &row);
 			}
 
 			feat_writer.Write(utt, feat);

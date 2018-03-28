@@ -404,8 +404,7 @@ void MatrixBase<Real>::AddMat(const Real alpha, const MatrixBase<Real>& A,
 
 template<typename Real>
 void MatrixBase<Real>::ConvolutionForwardExpandWorkspace(const MatrixBase<Real> &A, int num_input_fmaps_, int fmap_x_len_, int fmap_y_len_,
-		int filt_x_len_, int filt_y_len_, int filt_x_step_, int filt_y_step_, int connect_fmap_)
-{
+		int filt_x_len_, int filt_y_len_, int filt_x_step_, int filt_y_step_, int connect_fmap_) {
 			int st = 0;
 			int c = 0;
 			int num_output_cnt = 0;
@@ -438,7 +437,9 @@ void MatrixBase<Real>::ConvolutionForwardExpandWorkspace(const MatrixBase<Real> 
 					num_output_cnt ++ ;
 				}
 			}
+}
 
+template<typename Real>
 void MatrixBase<Real>::AddSmat(Real alpha, const SparseMatrix<Real> &A,
                                MatrixTransposeType trans) {
   if (trans == kNoTrans) {

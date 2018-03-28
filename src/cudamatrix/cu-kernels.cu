@@ -1461,7 +1461,7 @@ static void _equal_element_mask(const Real *mat1, const Real *mat2, Real *mask,
 }
 
 enum EnumTransformReduce {
-  SUMAB, SUM, MAX, MIN, LINFNORM, L2NORM, L1NORM, L0NORM, LPNORM
+  SUMAB, SUM, ABSMAX, MAX, MIN, LINFNORM, L2NORM, L1NORM, L0NORM, LPNORM
 };
 
 template<EnumTransformReduce TransReduceType, typename Real>
@@ -1570,6 +1570,26 @@ struct TransReduceOp<MIN, Real> {
   __forceinline__
   __device__ Real PostReduce(const Real& x, const Real& output) const {
     return x;
+  }
+};
+
+template<typename Real>
+struct TransReduceOp<ABSMAX, Real> {
+  __forceinline__
+  __device__ Real InitValue() const {
+    return sizeof(Real) == sizeof(float) ? -CUDART_INF_F : -CUDART_INF;
+  }
+  __forceinline__
+  __device__ Real Transform(const Real& x) const {
+    return fabs(x);
+  }
+  __forceinline__
+  __device__ Real Reduce(const Real& a, const Real& b) const {
+    return fmax(a, b);
+  }
+  __forceinline__
+  __device__ Real PostReduce(const Real& x, const Real& output) const {
+    return fabs(x);
   }
 };
 
@@ -2881,6 +2901,7 @@ static void _diff_normalize_per_row(Real *id, int id_stride, const Real *iv,
   }
 }
 
+/*
 // Per-row log-softmax operation on 'x', with writing to 'y'.
 // note, x and y may point to the same memory.  This is equivalent to setting
 // matrix y to matrix x and then, for each row of y, subtracting the offset that
@@ -2963,6 +2984,7 @@ static void _log_softmax_reduce(Real* y, const Real* x, MatrixDim y_dim,
     y[y_start + j] = x[x_start + j] - max - log_sum;
   }
 }
+*/
 
 template<typename Real>
 __global__

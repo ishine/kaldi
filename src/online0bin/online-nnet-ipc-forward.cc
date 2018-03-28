@@ -22,6 +22,7 @@
 
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
+#include "util/kaldi-thread.h"
 #include "base/timer.h"
 
 #include "nnet0/nnet-nnet.h"
