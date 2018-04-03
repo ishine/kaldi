@@ -20,9 +20,7 @@
 
 
 #include "base/timer.h"
-#include "online/onlinebin-util.h"
-
-#include "online0/online-nnet-decoding.h"
+#include "online0/online-fst-decoder.h"
 
 int main(int argc, char *argv[])
 {
@@ -44,8 +42,7 @@ int main(int argc, char *argv[])
 	        "	online-faster-decoder --config=conf/online_decoder.conf <loglikes-rspecifier> \n";
 
 	    ParseOptions po(usage);
-	    OnlineNnetFasterDecoderOptions decoder_opts;
-	    OnlineNnetDecodingOptions decoding_opts(decoder_opts);
+	    OnlineNnetDecodingOptions decoding_opts;
 	    decoding_opts.Register(&po);
 
 	    po.Read(argc, argv);
@@ -56,6 +53,8 @@ int main(int argc, char *argv[])
 	    }
 
 	    std::string loglikes_rspecifier = po.GetArg(1);
+
+	    OnlineNnetFasterDecoderOptions decoder_opts;
 	    ReadConfigFromFile(decoding_opts.decoder_cfg, &decoder_opts);
 
 	    Int32VectorWriter words_writer(decoding_opts.words_wspecifier);
@@ -70,13 +69,14 @@ int main(int argc, char *argv[])
 	        KALDI_ERR << "Could not read symbol table from file " << decoding_opts.word_syms_filename;
 
 	    DecoderSync decoder_sync;
+        Result result;
 
-	    OnlineNnetFasterDecoder decoder(*decode_fst, decoding_opts.decoder_opts);
+	    OnlineNnetFasterDecoder decoder(*decode_fst, decoder_opts);
 	    OnlineDecodableMatrixMapped decodable(trans_model, decoding_opts.acoustic_scale);
 
 	    OnlineNnetDecodingClass decoding(decoding_opts,
 	    								&decoder, &decodable, &decoder_sync,
-										*word_syms, words_writer, alignment_writer);
+										&result);
 		// The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
 	    MultiThreader<OnlineNnetDecodingClass> m(1, decoding);
@@ -91,7 +91,7 @@ int main(int argc, char *argv[])
             std::string utt_key = loglikes_reader.Key();
         	const Matrix<BaseFloat> &loglikes = loglikes_reader.Value();
 
-        	decodable.Reset();
+            decodable.Reset();
             decodable.AcceptLoglikes(&loglikes);
 			decodable.InputIsFinished();
             decoder_sync.DecoderSignal();
@@ -100,7 +100,11 @@ int main(int argc, char *argv[])
 			// waiting a utterance finished
             decoder_sync.DecoderSignal();
 			decoder_sync.UtteranceWait();
+            
+            //decoder.GetResult(FEAT_END);
+            PrintPartialResult(result.word_ids_, word_syms, true);
 			KALDI_LOG << "Finish decode utterance: " << utt_key;
+            result.clear();
         }
 
         decoder_sync.Abort();

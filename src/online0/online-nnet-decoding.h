@@ -237,14 +237,13 @@ public:
 					    //PrintPartialResult(word_ids, &word_syms_, true);
 					}
 
-
                     /*
 					// get best full path
 					//decoder_->ReachedFinal();
 					decoder_->GetBestPath(&out_fst);
 					fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
 					PrintPartialResult(word_ids, &word_syms_, true);
-					*/
+                    */
 
                     /*
 					if (!word_ids.empty())

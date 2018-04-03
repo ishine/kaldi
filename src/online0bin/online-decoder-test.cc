@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
 	    	"\n"
 	        "Usage: online-ivector-test [config option]\n"
 	    	"e.g.: \n"
-	        "	online-decoder-test --cfg=conf/ivector.conf wav.scp\n";
+	        "	online-decoder-test --cfg=conf/decode.conf wav.scp\n";
 
 	    ParseOptions po(usage);
 
@@ -117,6 +117,7 @@ int main(int argc, char *argv[])
 			while (samp_offset < data.Dim()) {
 				int32 samp_remaining = data.Dim() - samp_offset;
 				int32 num_samp = chunk_length < samp_remaining ? chunk_length : samp_remaining;
+                num_samp = data.Dim();
 
 				SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
 				samp_offset += num_samp;
