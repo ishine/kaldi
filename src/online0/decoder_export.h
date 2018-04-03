@@ -6,7 +6,7 @@
 extern "C" void * CreateDecoder(const char * cfgPath);
 extern "C" int DecoderFeedData(void * lpDecoder, void * data, int nbytes, int state);
 extern "C" int GetResult(void * lpDecoder, int * result, int state);
-extern "C" void DecoderReset(void * lpDecoder);
+extern "C" void ResetDecoder(void * lpDecoder);
 extern "C" void DisposeDecoder(void ** lpDecoder);
 
 #endif

@@ -28,6 +28,7 @@ extern "C" {
 
 void    *CreateIvectorExtractor(const char *cfg_path);
 int	    IvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int state);
+int     GetIvectorDim(void *lp_extractor);
 int     GetCurrentIvector(void *lp_extractor, float *result, int type = 1);
 float   GetScore(void *lp_extractor, float *ivec1, float *ivec2, int size, int type = 1);
 int     GetEnrollSpeakerIvector(void *lp_extractor, float *spk_ivector, float *ivectors,
