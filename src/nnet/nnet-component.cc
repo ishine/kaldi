@@ -53,6 +53,7 @@
 #include "nnet/nnet-simple-recurrent-unit.h"
 #include "nnet/nnet-batch-norm-component.h"
 #include "nnet/nnet-embedding.h"
+#include "nnet/nnet-tf-lstm.h"
 
 namespace kaldi {
 namespace nnet1 {
@@ -94,6 +95,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kSimpleRecurrentUnit, "<SimpleRecurrentUnit>" },
   { Component::kBatchNormComponent, "<BatchNormComponent>" },
   { Component::kEmbedding, "<Embedding>" },
+  { Component::kTfLstm, "<TfLstm>" },
 };
 
 
@@ -228,6 +230,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kEmbedding :
       ans = new Embedding(input_dim, output_dim);
+      break;
+    case Component::kTfLstm :
+      ans = new TfLstm(input_dim, output_dim);
       break;
     case Component::kUnknown :
     default :

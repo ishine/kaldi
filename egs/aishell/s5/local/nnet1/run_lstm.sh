@@ -37,7 +37,7 @@ fi
 
 # Step 2: Train LSTM with truncated BPTT
 if [ $stage -le 2 ]; then
-  dir=exp/lstm3x1024x512-lr0.0004
+  dir=exp/lstm4x1024x512-lr0.00004-mb128
   ali=${gmm}_ali
   dev_ali=${gmm}_dev_ali
 
@@ -49,7 +49,7 @@ if [ $stage -le 2 ]; then
     steps/nnet/train.sh \
       --cmvn-opts "--norm-means=true --norm-vars=true" --copy-feats false \
       --feature-transform-proto $dir/delay5.proto \
-      --network-type lstm --proto-opts "--cell-dim 1024 --proj-dim 512 --num-layer 3" \
+      --network-type lstm --proto-opts "--cell-dim 1024 --proj-dim 512 --num-layer 4" \
       --learn-rate 0.00004 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
       --train-tool "nnet-train-multistream" \
       --train-tool-opts "--num-streams=128 --batch-size=20" \
