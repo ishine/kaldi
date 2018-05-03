@@ -136,7 +136,9 @@ int main(int argc, char *argv[])
 				result = decoder.GetResult(state);
                 result->utt = std::string(fn);
                 if (state == FEAT_END)
-            	    		KALDI_LOG << "Finish decode utterance: " << result->utt;
+            	    		KALDI_LOG << "Finish decode utterance: " << result->utt
+							<< ", Log-like per frame is " << result->score_ << " over "
+			                  << result->num_frames << " frames.";
                 //usleep(chunk_length_secs/2*1e6);
 			}
 			total_frames += result->num_frames;

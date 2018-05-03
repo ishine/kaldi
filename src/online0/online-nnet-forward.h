@@ -98,10 +98,10 @@ public:
 		std::string feature_transform = opts_.feature_transform;
 		std::string model_filename = opts_.network_model;
 
-    	if (opts_.feature_transform != "")
-    		nnet_transf_.Read(opts_.feature_transform);
+    		if (opts_.feature_transform != "")
+    			nnet_transf_.Read(opts_.feature_transform);
 
-    	nnet_.Read(opts_.network_model);
+    		nnet_.Read(opts_.network_model);
 
 	    // optionally remove softmax,
 	    Component::ComponentType last_type = nnet_.GetComponent(nnet_.NumComponents()-1).GetType();
@@ -124,7 +124,7 @@ public:
         }
 
         // we will subtract log-priors later,
-    	if (opts_.prior_opts.class_frame_counts != "") 
+    		if (opts_.prior_opts.class_frame_counts != "")
 	        pdf_prior_ = new PdfPrior(opts.prior_opts);
 
 	    //int input_dim = feature_transform != "" ? nnet_transf_.InputDim() : nnet_.InputDim();
@@ -155,19 +155,19 @@ public:
             feat_out_.ColRange(0, 1).Scale(opts_.blank_posterior_scale);
         }
 
-    	// convert posteriors to log-posteriors,
-    	if (opts_.apply_log) {
-    		feat_out_.Add(1e-20); // avoid log(0),
-    		feat_out_.ApplyLog();
-    	}
+		// convert posteriors to log-posteriors,
+		if (opts_.apply_log) {
+			feat_out_.Add(1e-20); // avoid log(0),
+			feat_out_.ApplyLog();
+		}
 
-    	// subtract log-priors from log-posteriors or pre-softmax,
-    	if (pdf_prior_ != NULL) {
-    		pdf_prior_->SubtractOnLogpost(&feat_out_);
-    	}
+		// subtract log-priors from log-posteriors or pre-softmax,
+		if (pdf_prior_ != NULL) {
+			pdf_prior_->SubtractOnLogpost(&feat_out_);
+		}
 
-        out->Resize(feat_out_.NumRows(), feat_out_.NumCols(), kUndefined);
-    	out->CopyFromMat(feat_out_);
+		out->Resize(feat_out_.NumRows(), feat_out_.NumCols(), kUndefined);
+		out->CopyFromMat(feat_out_);
 		new_utt_flags_[0] = 0;
 	}
 
