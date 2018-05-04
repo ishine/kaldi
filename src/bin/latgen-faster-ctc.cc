@@ -33,6 +33,7 @@ int main(int argc, char *argv[]) {
     typedef kaldi::int32 int32;
     using fst::SymbolTable;
     using fst::VectorFst;
+    using fst::Fst;
     using fst::StdArc;
 
     const char *usage =
@@ -92,13 +93,13 @@ int main(int argc, char *argv[]) {
     kaldi::int64 frame_count = 0;
     int num_success = 0, num_fail = 0;
 
-    VectorFst<StdArc> *decode_fst = NULL; // only used if there is a single
+    Fst<StdArc> *decode_fst = NULL; // only used if there is a single
                                           // decoding graph.
     
     if (ClassifyRspecifier(fst_in_str, NULL, NULL) == kNoRspecifier) {
       SequentialBaseFloatMatrixReader loglike_reader(feature_rspecifier);
       // Input FST is just one FST, not a table of FSTs.
-      decode_fst = fst::ReadFstKaldi(fst_in_str);
+      decode_fst = fst::ReadFstKaldiGeneric(fst_in_str);
 
       {
           LatticeFasterDecoder *decoder = new LatticeFasterDecoder(*decode_fst, config);
