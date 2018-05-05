@@ -6,19 +6,23 @@
 using namespace kaldi;
 using namespace fst;
 
-void * CreateDecoder(const char * cfgPath)
-{
-
+void * InitDecoderCfg(const char *cfgPath) {
 //#ifdef __DEBUG
-    printf("create decoder, config path: %s.\n", cfgPath);
+	printf("create decoder, config path: %s.\n", cfgPath);
 //#endif
-    std::string cfg = cfgPath;
-    OnlineFstDecoder *decoder = new OnlineFstDecoder(cfg);
+	std::string cfg = cfgPath;
+	OnlineFstDecoderCfg *decoder_cfg = new OnlineFstDecoderCfg(cfg);
+	return (void *)decoder_cfg;
+}
+
+void * CreateDecoder(void *lpDecoderCfg)
+{
+    OnlineFstDecoder *decoder = new OnlineFstDecoder(lpDecoderCfg);
     decoder->InitDecoder();
     return (void *)decoder;
 }
 
-int DecoderFeedData(void * lpDecoder, void *data, int nbytes, int state)
+int DecoderFeedData(void *lpDecoder, void *data, int nbytes, int state)
 {
     OnlineFstDecoder *decoder = (OnlineFstDecoder *)lpDecoder;  
     if (state==FEAT_START){
@@ -33,7 +37,7 @@ int DecoderFeedData(void * lpDecoder, void *data, int nbytes, int state)
     return 0;
 }
 
-int GetResult(void * lpDecoder, int * words_id, int state)
+int GetResult(void *lpDecoder, int * words_id, int state)
 {
     OnlineFstDecoder * decoder = (OnlineFstDecoder *)lpDecoder;
     Result *result;
@@ -45,23 +49,30 @@ int GetResult(void * lpDecoder, int * words_id, int state)
     return idx;
 }
 
-void ResetDecoder(void * lpDecoder)
+void ResetDecoder(void *lpDecoder)
 {
     OnlineFstDecoder * decoder = (OnlineFstDecoder *)lpDecoder;
     decoder->Reset();
 }
 
-void DisposeDecoder(void ** lpDecoder)
+void DisposeDecoder(void **lpDecoder)
 {   
 #ifdef __DEBUG
 	printf("dispose Decoder instance.\n");
 #endif
     if (*lpDecoder!=nullptr){
         delete (OnlineFstDecoder *)*lpDecoder;
-	*lpDecoder = nullptr;
+        *lpDecoder = nullptr;
     }
 }
 
-// int main(){
-//     return 0;
-// }
+void DisposeDecoderCfg(void **lpDecoderCfg)
+{
+#ifdef __DEBUG
+	printf("dispose DecoderCfg instance.\n");
+#endif
+    if (*lpDecoderCfg!=nullptr){
+        delete (OnlineFstDecoderCfg *)*lpDecoderCfg;
+        *lpDecoderCfg = nullptr;
+    }
+}

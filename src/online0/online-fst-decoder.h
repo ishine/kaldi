@@ -25,6 +25,8 @@
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
 
+#include "online0/Online-fst-decoder-cfg.h"
+
 #include "online0/online-nnet-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
@@ -41,7 +43,7 @@ typedef enum {
 class OnlineFstDecoder {
 
 public:
-	OnlineFstDecoder(std::string cfg);
+	OnlineFstDecoder(OnlineFstDecoderCfg *cfg);
 	virtual ~OnlineFstDecoder() { Destory(); }
 
 	// initialize decoder
@@ -63,15 +65,19 @@ private:
 	void Destory();
 	const static int VECTOR_INC_STEP = 16000*10;
 
+	// read only decoder resources
+	OnlineFstDecoderCfg *decoder_cfg_;
+
 	OnlineNnetFasterDecoderOptions *decoder_opts_;
 	OnlineNnetForwardOptions *forward_opts_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
-
 	OnlineNnetDecodingOptions *decoding_opts_;
 
 	TransitionModel trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
 	fst::SymbolTable *word_syms_;
+
+	// likelihood
 	OnlineDecodableInterface *decodable_;
 
 	// decoder
