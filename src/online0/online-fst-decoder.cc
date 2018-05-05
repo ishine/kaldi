@@ -205,8 +205,8 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 				decodable_->AcceptLoglikes(&feat_out_);
 
 			// wake up decoder thread
-			decoder_sync_.DecoderSignal();
 			result_.num_frames += frame_ready_;
+			decoder_sync_.DecoderSignal();
 		}
 	}
 

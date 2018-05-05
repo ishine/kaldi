@@ -157,10 +157,12 @@ typedef struct Result_ {
 	std::vector<int> word_ids_;
 	std::vector<int> tids_;
 	std::string utt;
+	BaseFloat score_;
 	int num_frames;
 	void clear() {
 		word_ids_.clear();
 		tids_.clear();
+		score_ = 0.0;
 		num_frames = 0;
 		utt = "";
 	}
@@ -186,6 +188,7 @@ public:
 		fst::VectorFst<LatticeArc> out_fst;
 		std::vector<int> word_ids;
 		std::vector<int> tids;
+		LatticeWeight weight;
 		typedef OnlineNnetFasterDecoder::DecodeState DecodeState;
 		int batch_size = opts_.batch_size;
         int frame_ready;
@@ -230,14 +233,15 @@ public:
 					    decoder_->Decode(decodable_);
 
 					    decoder_->FinishTraceBack(&out_fst);
-					    fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
+					    //fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
+					    fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, &weight);
 					    for (int i = 0; i < word_ids.size(); i++)
 						    result_->word_ids_.push_back(word_ids[i]);
 					    for (int i = 0; i < tids.size(); i++)
 						    result_->tids_.push_back(tids[i]);
+					    result_->score_ = (-weight.Value1() - weight.Value2())/result_->num_frames;
 					    //PrintPartialResult(word_ids, &word_syms_, true);
 					}
-
 
                     /*
 					// get best full path
@@ -245,7 +249,7 @@ public:
 					decoder_->GetBestPath(&out_fst);
 					fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
 					PrintPartialResult(word_ids, &word_syms_, true);
-					*/
+                    */
 
                     /*
 					if (!word_ids.empty())
