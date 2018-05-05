@@ -24,8 +24,8 @@ namespace kaldi {
 OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
 		decoder_cfg_(cfg), decoder_opts_(cfg->decoder_opts_), forward_opts_(cfg->forward_opts_),
 		feature_opts_(cfg->feature_opts_), decoding_opts_(cfg->decoding_opts_),
-		decode_fst_(cfg->decode_fst_), word_syms_(cfg->word_syms_), decodable_(NULL),
-		decoder_(NULL), decoding_(NULL), decoder_thread_(NULL),
+		trans_model_(cfg->trans_model_), decode_fst_(cfg->decode_fst_), word_syms_(cfg->word_syms_), 
+        decodable_(NULL), decoder_(NULL), decoding_(NULL), decoder_thread_(NULL),
 		feature_pipeline_(NULL), forward_(NULL),
 		words_writer_(NULL), alignment_writer_(NULL), state_(FEAT_START),
 		len_(0), sample_offset_(0), frame_offset_(0), frame_ready_(0),
@@ -64,7 +64,7 @@ void OnlineFstDecoder::InitDecoder() {
 
 	// decodable feature pipe to decoder
 	if (decoding_opts_->model_rspecifier != "")
-		decodable_ = new OnlineDecodableMatrixMapped(trans_model_, decoding_opts_->acoustic_scale);
+		decodable_ = new OnlineDecodableMatrixMapped(*trans_model_, decoding_opts_->acoustic_scale);
 	else
 		decodable_ = new OnlineDecodableMatrixCtc(decoding_opts_->acoustic_scale);
 

@@ -23,7 +23,7 @@ namespace kaldi {
 
 OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 		decoder_opts_(NULL), forward_opts_(NULL), feature_opts_(NULL), decoding_opts_(NULL),
-		decode_fst_(NULL), word_syms_(NULL) {
+		trans_model_(NULL), decode_fst_(NULL), word_syms_(NULL) {
 
 	// main config
 	decoding_opts_ = new OnlineNnetDecodingOptions;
@@ -35,6 +35,9 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 	feature_opts_ = new OnlineNnetFeaturePipelineOptions(decoding_opts_->feature_cfg);
 	ReadConfigFromFile(decoding_opts_->decoder_cfg, decoder_opts_);
 	ReadConfigFromFile(decoding_opts_->forward_cfg, forward_opts_);
+    
+    // load decode resources
+    Initialize();
 }
 
 void OnlineFstDecoderCfg::Destory() {
@@ -46,6 +49,7 @@ void OnlineFstDecoderCfg::Destory() {
 	}
 
 	if (decode_fst_ != NULL) {
+        delete trans_model_; trans_model_ = NULL;
 		delete decode_fst_;	decode_fst_ = NULL;
 		delete word_syms_;	word_syms_ = NULL;
 	}
@@ -60,7 +64,8 @@ void OnlineFstDecoderCfg::Initialize() {
 	bool binary;
 	if (decoding_opts_->model_rspecifier != "") {
 		Input ki(decoding_opts_->model_rspecifier, &binary);
-		trans_model_.Read(ki.Stream(), binary);
+        trans_model_ = new TransitionModel;
+		trans_model_->Read(ki.Stream(), binary);
 	}
 
 	// HCLG fst graph

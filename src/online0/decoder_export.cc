@@ -17,7 +17,8 @@ void * InitDecoderCfg(const char *cfgPath) {
 
 void * CreateDecoder(void *lpDecoderCfg)
 {
-    OnlineFstDecoder *decoder = new OnlineFstDecoder(lpDecoderCfg);
+    OnlineFstDecoderCfg *decoder_cfg = (OnlineFstDecoderCfg *)lpDecoderCfg;  
+    OnlineFstDecoder *decoder = new OnlineFstDecoder(decoder_cfg);
     decoder->InitDecoder();
     return (void *)decoder;
 }

@@ -56,7 +56,8 @@ int main(int argc, char *argv[])
 
         std::string wavlist_rspecifier = po.GetArg(1);
 
-	    OnlineFstDecoder decoder(cfg);
+	    OnlineFstDecoderCfg decoder_cfg(cfg);
+	    OnlineFstDecoder decoder(&decoder_cfg);
 	    decoder.InitDecoder();
 
 	    std::ifstream wavlist_reader(wavlist_rspecifier);

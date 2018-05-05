@@ -40,7 +40,7 @@ public:
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;
 
-	TransitionModel trans_model_;
+	TransitionModel *trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
 	fst::SymbolTable *word_syms_;
 

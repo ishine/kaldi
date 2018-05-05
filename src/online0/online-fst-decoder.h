@@ -25,7 +25,7 @@
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
 
-#include "online0/Online-fst-decoder-cfg.h"
+#include "online0/online-fst-decoder-cfg.h"
 
 #include "online0/online-nnet-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
@@ -73,7 +73,7 @@ private:
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;
 
-	TransitionModel trans_model_;
+	TransitionModel *trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
 	fst::SymbolTable *word_syms_;
 
