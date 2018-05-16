@@ -978,7 +978,122 @@ void MultiTaskLoss::Merge(int myid, int root) {
 
 
 /**CTC**/
+void CtcItf::ErrorRate(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, float* err_rate, std::vector<int32> *hyp) {
 
+  // frame-level labels, by selecting the label with the largest probability at each frame
+  CuArray<int32> maxid(net_out.NumRows());
+  net_out.FindRowMaxId(&maxid);
+
+  int32 dim = maxid.Dim();
+
+  std::vector<int32> data(dim);
+  maxid.CopyToVec(&data);
+
+  // remove the repetitions
+  int32 i = 1, j = 1;
+  while(j < dim) {
+    if (data[j] != data[j-1]) {
+      data[i] = data[j];
+      i++;
+    }
+    j++;
+  }
+  // remove the blanks
+  std::vector<int32> hyp_seq(0);
+  for (int32 n = 0; n < i; n++) {
+    if (data[n] != 0) {
+      hyp_seq.push_back(data[n]);
+    }
+  }
+  hyp->resize(0);
+  *hyp = hyp_seq;
+
+  int32 err, ins, del, sub;
+  err =  LevenshteinEditDistance(label, hyp_seq, &ins, &del, &sub);
+  *err_rate = (100.0 * err) / label.size();
+  error_num_ += err;
+  ref_num_ += label.size();
+  error_num_progress_ += err;
+  ref_num_progress_ += label.size();
+}
+
+void CtcItf::ErrorRateMSeq(const std::vector<int> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out, std::vector< std::vector<int> > &label) {
+
+  // frame-level labels
+  CuArray<int32> maxid(net_out.NumRows());
+  net_out.FindRowMaxId(&maxid);
+
+  int32 dim = maxid.Dim();
+  std::vector<int32> data(dim);
+  maxid.CopyToVec(&data);
+
+  // compute errors sequence by sequence
+  int32 num_seq = frame_num_utt.size();
+  for (int32 s = 0; s < num_seq; s++) {
+    int32 num_frame = frame_num_utt[s];
+    std::vector<int32> raw_hyp_seq(num_frame);
+    for (int32 f = 0; f < num_frame; f++) {
+      raw_hyp_seq[f] = data[f*num_seq + s];
+    }
+    int32 i = 1, j = 1;
+    while(j < num_frame) {
+      if (raw_hyp_seq[j] != raw_hyp_seq[j-1]) {
+        raw_hyp_seq[i] = raw_hyp_seq[j];
+        i++;
+      }
+      j++;
+    }
+    std::vector<int32> hyp_seq(0);
+    for (int32 n = 0; n < i; n++) {
+      if (raw_hyp_seq[n] != 0) {
+        hyp_seq.push_back(raw_hyp_seq[n]);
+      }
+    }
+    int32 err, ins, del, sub;
+    err =  LevenshteinEditDistance(label[s], hyp_seq, &ins, &del, &sub);
+    error_num_ += err;
+    ref_num_ += label[s].size();
+    error_num_progress_ += err;
+    ref_num_progress_ += label[s].size();
+  }
+}
+
+/// Merge lost
+void CtcItf::Add(Ctc *ctc)
+{
+	  this->error_num_ += ctc->error_num_;
+	  this->ref_num_ += ctc->ref_num_;
+	  this->frames_ += ctc->frames_;
+
+	  // partial results during training
+	  this->error_num_progress_ += ctc->error_num_progress_;
+	  this->ref_num_progress_ += ctc->ref_num_progress_;
+	  this->obj_progress_ += ctc->obj_progress_;
+	  this->sequences_progress_ += ctc->sequences_progress_;
+	  this->frames_progress_ += ctc->frames_progress_;
+
+}
+
+void CtcItf::Merge(int myid, int root)
+{
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	void *addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->error_num_));
+	MPI_Reduce(addr, (void*)(&this->error_num_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->ref_num_));
+	MPI_Reduce(addr, (void*)(&this->ref_num_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+}
+
+std::string CtcItf::Report() {
+  std::ostringstream oss;
+  oss << "\nTOKEN_ACCURACY >> " << 100.0*(1.0 - error_num_/ref_num_) << "% <<";
+  return oss.str();
+}
+
+/// Essen CTC implementation
 void Ctc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
@@ -1055,10 +1170,10 @@ void Ctc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> 
 
   }else
 #endif
-        {
-                // not implemented for CPU yet
-                // return 0;
-        }
+	{
+		// not implemented for CPU yet
+		// return 0;
+	}
 
 }
 
@@ -1167,119 +1282,104 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
 }
 
-void Ctc::ErrorRate(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, float* err_rate, std::vector<int32> *hyp) {
+/// Baidu CTC implementation
+/// CTC training over a single sequence from the labels. The errors are returned to [diff]
+void WarpCtc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) {
+	// not implemented yet
+}
 
-  // frame-level labels, by selecting the label with the largest probability at each frame
-  CuArray<int32> maxid(net_out.NumRows());
-  net_out.FindRowMaxId(&maxid);
+void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
+	diff->Resize(net_out.NumRows(), net_out.NumCols(), kStrideEqualNumCols);
 
-  int32 dim = maxid.Dim();
+	int32 num_sequence = frame_num_utt.size();  // number of sequences
+	int32 num_frames = net_out.NumRows();
+	KALDI_ASSERT(num_frames % num_sequence == 0);  // after padding, number of frames is a multiple of number of sequences
 
-  std::vector<int32> data(dim);
-  maxid.CopyToVec(&data);
+	int32 num_frames_per_sequence = num_frames / num_sequence;
+	int32 num_classes = net_out.NumCols();
+	int	  alphabet_size = num_classes;
 
-  // remove the repetitions
-  int32 i = 1, j = 1;
-  while(j < dim) {
-    if (data[j] != data[j-1]) {
-      data[i] = data[j];
-      i++;
-    }
-    j++;
+	std::vector<int> label_lengths(num_sequence);
+	int num_labels = 0;
+	for (int i = 0; i < num_sequence; i++) {
+		label_lengths[i] = label[i].size();
+		num_labels += label[i].size();
+	}
+
+	std::vector<int32> flat_labels(num_labels);
+	// utterances label concatenation
+	int k = 0;
+	for (int i = 0; i < num_sequence; i++) {
+		for (int j = 0; j < label[i].size(); j++) {
+			flat_labels[k++] = label[i][j];
+		}
+	}
+
+	CuVector<BaseFloat> score(num_sequence, kSetZero);
+
+	ctcOptions options{};
+	options.loc = CTC_CPU;
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+	options.loc = CTC_GPU;
   }
-  // remove the blanks
-  std::vector<int32> hyp_seq(0);
-  for (int32 n = 0; n < i; n++) {
-    if (data[n] != 0) {
-      hyp_seq.push_back(data[n]);
-    }
-  }
-  hyp->resize(0);
-  *hyp = hyp_seq;
+#endif
+	options.blank_label = 0;
 
-  int32 err, ins, del, sub;
-  err =  LevenshteinEditDistance(label, hyp_seq, &ins, &del, &sub);
-  *err_rate = (100.0 * err) / label.size();
-  error_num_ += err;
-  ref_num_ += label.size();
-  error_num_progress_ += err;
-  ref_num_progress_ += label.size();
-}
+	// get ctc workspace size
+	size_t gpu_alloc_bytes;
+    throw_on_error(get_workspace_size(label_lengths.data(),
+    									 frame_num_utt.data(),
+                                      alphabet_size,
+									 num_sequence,
+									 options,
+                                      &gpu_alloc_bytes),
+                   "Error: get_workspace_size in EvalParallel");
 
-void Ctc::ErrorRateMSeq(const std::vector<int> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out, std::vector< std::vector<int> > &label) {
+    // Allocate ctc workspace
+	ctc_workspace_.Resize((gpu_alloc_bytes+sizeof(BaseFloat)-1)/sizeof(BaseFloat), kSetZero);
 
-  // frame-level labels
-  CuArray<int32> maxid(net_out.NumRows());
-  net_out.FindRowMaxId(&maxid);
+	// Compute ctc error
+	throw_on_error(compute_ctc_loss(net_out.Data(), diff->Data(),
+									flat_labels.data(),
+									label_lengths.data(),
+									frame_num_utt.data(),
+									alphabet_size,
+									num_sequence,
+									score.Data(),
+									ctc_workspace_.Data(),
+									options),
+				   "Error: compute_ctc_loss int EvalParallel");
 
-  int32 dim = maxid.Dim();
-  std::vector<int32> data(dim);
-  maxid.CopyToVec(&data);
+	// Clip gradient
+	// diff->ApplyFloor(-1.0);
+	// diff->ApplyCeiling(1.0);
 
-  // compute errors sequence by sequence
-  int32 num_seq = frame_num_utt.size();
-  for (int32 s = 0; s < num_seq; s++) {
-    int32 num_frame = frame_num_utt[s];
-    std::vector<int32> raw_hyp_seq(num_frame);
-    for (int32 f = 0; f < num_frame; f++) {
-      raw_hyp_seq[f] = data[f*num_seq + s];
-    }
-    int32 i = 1, j = 1;
-    while(j < num_frame) {
-      if (raw_hyp_seq[j] != raw_hyp_seq[j-1]) {
-        raw_hyp_seq[i] = raw_hyp_seq[j];
-        i++;
-      }
-      j++;
-    }
-    std::vector<int32> hyp_seq(0);
-    for (int32 n = 0; n < i; n++) {
-      if (raw_hyp_seq[n] != 0) {
-        hyp_seq.push_back(raw_hyp_seq[n]);
-      }
-    }
-    int32 err, ins, del, sub;
-    err =  LevenshteinEditDistance(label[s], hyp_seq, &ins, &del, &sub);
-    error_num_ += err;
-    ref_num_ += label[s].size();
-    error_num_progress_ += err;
-    ref_num_progress_ += label[s].size();
-  }
-}
+	// update registries
+	obj_progress_ += score.Sum();
+	sequences_progress_ += num_sequence;
+	sequences_num_ += num_sequence;
+	for (int s = 0; s < num_sequence; s++) {
+		frames_progress_ += frame_num_utt[s];
+		frames_ += frame_num_utt[s];
+	}
 
-/// Merge lost
-void Ctc::Add(Ctc *ctc)
-{
-	  this->error_num_ += ctc->error_num_;
-	  this->ref_num_ += ctc->ref_num_;
-	  this->frames_ += ctc->frames_;
+	// progressive reporting
+	{
+		if (sequences_progress_ > report_step_) {
+		  KALDI_VLOG(1) << "After " << sequences_num_ << " sequences (" << frames_/(100.0 * 3600) << "Hr): "
+						<< "Obj(log[Pzx]) = " << obj_progress_/sequences_progress_
+						<< "  TokenAcc = " << 100.0*(1.0 - error_num_progress_/ref_num_progress_) << "%";
+		  // reset
+		  sequences_progress_ = 0;
+		  frames_progress_ = 0;
+		  obj_progress_ = 0.0;
+		  error_num_progress_ = 0;
+		  ref_num_progress_ = 0;
+		}
+	}
 
-	  // partial results during training
-	  this->error_num_progress_ += ctc->error_num_progress_;
-	  this->ref_num_progress_ += ctc->ref_num_progress_;
-	  this->obj_progress_ += ctc->obj_progress_;
-	  this->sequences_progress_ += ctc->sequences_progress_;
-	  this->frames_progress_ += ctc->frames_progress_;
-
-}
-
-void Ctc::Merge(int myid, int root)
-{
-
-	MPI_Barrier(MPI_COMM_WORLD);
-
-	void *addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->error_num_));
-	MPI_Reduce(addr, (void*)(&this->error_num_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
-
-	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->ref_num_));
-	MPI_Reduce(addr, (void*)(&this->ref_num_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
-
-}
-
-std::string Ctc::Report() {
-  std::ostringstream oss;
-  oss << "\nTOKEN_ACCURACY >> " << 100.0*(1.0 - error_num_/ref_num_) << "% <<";
-  return oss.str();
 }
 
 } // namespace nnet0

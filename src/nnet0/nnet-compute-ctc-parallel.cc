@@ -180,9 +180,7 @@ private:
 
 	    Nnet si_nnet;
 	    if (this->kld_scale > 0)
-	    {
-	    	si_nnet.Read(si_model_filename);
-	    }
+	    		si_nnet.Read(si_model_filename);
 
 	    model_sync->Initialize(&nnet);
 
@@ -193,8 +191,12 @@ private:
 
 	    Xent xent;
 	    Mse mse;
+	    CtcItf *ctc;
 	    // Initialize CTC optimizer
-	    Ctc ctc;
+	    if (opts->ctc_imp == "eesen")
+	    		ctc = new Ctc;
+	    else if (opts->ctc_imp == "warp")
+			ctc = new WarpCtc;
 
 		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
 		//CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
@@ -337,17 +339,17 @@ private:
 	        // Propagation and CTC training
 	        nnet.Propagate(CuMatrix<BaseFloat>(feat_mat_host), &nnet_out);
 
-	        if (objective_function == "xent"){
-	        	xent.Eval(frame_mask_host, nnet_out, target, &nnet_diff);
+	        if (objective_function == "xent") {
+	        		xent.Eval(frame_mask_host, nnet_out, target, &nnet_diff);
 	        }
-	        else if (objective_function == "ctc"){
-	        	//ctc error
-	        	ctc.EvalParallel(num_utt_frame_out, nnet_out, labels_utt, &nnet_diff);
-	        	// Error rates
-	        	ctc.ErrorRateMSeq(num_utt_frame_out, nnet_out, labels_utt);
+	        else if (objective_function == "ctc") {
+	        		//ctc error
+	        		ctc->EvalParallel(num_utt_frame_out, nnet_out, labels_utt, &nnet_diff);
+	        		// Error rates
+	        		ctc->ErrorRateMSeq(num_utt_frame_out, nnet_out, labels_utt);
 	        }
 	        else
-	        	KALDI_ERR<< "Unknown objective function code : " << objective_function;
+	        		KALDI_ERR<< "Unknown objective function code : " << objective_function;
 
 
 		        // backward pass
