@@ -1059,7 +1059,7 @@ void CtcItf::ErrorRateMSeq(const std::vector<int> &frame_num_utt, const CuMatrix
 }
 
 /// Merge lost
-void CtcItf::Add(Ctc *ctc)
+void CtcItf::Add(CtcItf *ctc)
 {
 	  this->error_num_ += ctc->error_num_;
 	  this->ref_num_ += ctc->ref_num_;
@@ -1282,6 +1282,18 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
 }
 
+WarpCtc::WarpCtc() {
+	options_.loc = CTC_CPU;
+	options_.blank_label = 0;
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    options_.loc = CTC_GPU;
+    cudaStreamCreate(&stream_);
+    options_.stream = stream_;
+  }
+#endif
+}
+
 /// Baidu CTC implementation
 /// CTC training over a single sequence from the labels. The errors are returned to [diff]
 void WarpCtc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) {
@@ -1290,13 +1302,12 @@ void WarpCtc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int
 
 void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
-	diff->Resize(net_out.NumRows(), net_out.NumCols(), kStrideEqualNumCols);
+	diff->Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
 
 	int32 num_sequence = frame_num_utt.size();  // number of sequences
 	int32 num_frames = net_out.NumRows();
 	KALDI_ASSERT(num_frames % num_sequence == 0);  // after padding, number of frames is a multiple of number of sequences
 
-	int32 num_frames_per_sequence = num_frames / num_sequence;
 	int32 num_classes = net_out.NumCols();
 	int	  alphabet_size = num_classes;
 
@@ -1316,29 +1327,21 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 		}
 	}
 
-	CuVector<BaseFloat> score(num_sequence, kSetZero);
-
-	ctcOptions options{};
-	options.loc = CTC_CPU;
-#if HAVE_CUDA == 1
-  if (CuDevice::Instantiate().Enabled()) {
-	options.loc = CTC_GPU;
-  }
-#endif
-	options.blank_label = 0;
+	Vector<BaseFloat> score(num_sequence, kSetZero);
 
 	// get ctc workspace size
-	size_t gpu_alloc_bytes;
+	size_t workspace_alloc_bytes;
     throw_on_error(get_workspace_size(label_lengths.data(),
-    									 frame_num_utt.data(),
+    								  frame_num_utt.data(),
                                       alphabet_size,
-									 num_sequence,
-									 options,
-                                      &gpu_alloc_bytes),
+									  num_sequence,
+									  options_,
+                                      &workspace_alloc_bytes),
                    "Error: get_workspace_size in EvalParallel");
 
     // Allocate ctc workspace
-	ctc_workspace_.Resize((gpu_alloc_bytes+sizeof(BaseFloat)-1)/sizeof(BaseFloat), kSetZero);
+    workspace_alloc_bytes = 2693600;
+	ctc_workspace_.Resize((workspace_alloc_bytes+sizeof(BaseFloat)-1)/sizeof(BaseFloat), kUndefined);
 
 	// Compute ctc error
 	throw_on_error(compute_ctc_loss(net_out.Data(), diff->Data(),
@@ -1349,7 +1352,7 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 									num_sequence,
 									score.Data(),
 									ctc_workspace_.Data(),
-									options),
+									options_),
 				   "Error: compute_ctc_loss int EvalParallel");
 
 	// Clip gradient

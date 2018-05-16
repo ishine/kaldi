@@ -456,7 +456,7 @@ private:
 		if (objective_function == "xent")
 			stats_->xent.Add(&xent);
 		else if (objective_function == "ctc")
-			dynamic_cast<NnetCtcStats*>(stats_)->ctc.Add(&ctc);
+			dynamic_cast<NnetCtcStats*>(stats_)->ctc.Add(ctc);
 		else
 			KALDI_ERR<< "Unknown objective function code : " << objective_function;
 

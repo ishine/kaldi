@@ -101,7 +101,7 @@ void Nnet::Propagate(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> 
   // (*out) = propagate_buf_[components_.size()];
   CuMatrix<BaseFloat> &mat = propagate_buf_[components_.size()];
   if (out->NumRows() != mat.NumRows() || out->NumCols() != mat.NumCols())
-  		(static_cast<CuMatrix<BaseFloat>*>(out))->Resize(mat.NumRows(), mat.NumCols(), kUndefined);
+  		(static_cast<CuMatrix<BaseFloat>*>(out))->Resize(mat.NumRows(), mat.NumCols(), kUndefined, kStrideEqualNumCols);
   out->CopyFromMat(mat);
 }
 

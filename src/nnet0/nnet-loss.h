@@ -358,34 +358,34 @@ public:
 	virtual ~CtcItf() {};
 
 	/// CTC training over a single sequence from the labels. The errors are returned to [diff]
-	void Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) = 0;
+	virtual void Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) {};
 
 	/// CTC training over multiple sequences. The errors are returned to [diff]
-	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) = 0;
+	virtual void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {};
 
 	/// Compute token error rate from the softmax-layer activations and the given labels. From the softmax activations,
 	/// we get the frame-level labels, by selecting the label with the largest probability at each frame. Then, the frame
 	/// -level labels are shrunk by removing the blanks and collasping the repetitions. This gives us the utterance-level
 	/// labels, from which we can compute the error rate. The error rate is the Levenshtein distance between the hyp labels
 	/// and the given reference label sequence.
-	void ErrorRate(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, float* err, std::vector<int32> *hyp);
+	virtual void ErrorRate(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, float* err, std::vector<int32> *hyp);
 
 	/// Compute token error rate over multiple sequences.
-	void ErrorRateMSeq(const std::vector<int> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out, std::vector< std::vector<int> > &label);
+	virtual void ErrorRateMSeq(const std::vector<int> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out, std::vector< std::vector<int> > &label);
 
 	/// Set the step of reporting
 	void SetReportStep(int32 report_step) { report_step_ = report_step;  }
 
 	/// Generate string with report
-	std::string Report();
+	virtual std::string Report();
 
 	float NumErrorTokens() const { return error_num_;}
 	int32 NumRefTokens() const { return ref_num_;}
 
 	/// Merge statistic data
-	void Add(CtcItf *loss);
-	void Merge(int myid, int root);
+	virtual void Add(CtcItf *loss);
+	virtual void Merge(int myid, int root);
 
 protected:
 	double frames_;                    // total frame number
@@ -424,6 +424,7 @@ class Ctc : public CtcItf {
 
 class WarpCtc : public CtcItf {
 public:
+    WarpCtc();
 
 	/// CTC training over a single sequence from the labels. The errors are returned to [diff]
 	void Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff);
@@ -432,7 +433,7 @@ public:
 	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
 
-	inline void throw_on_error(ctcStatus_t status, const char* message) {
+	void throw_on_error(ctcStatus_t status, const char* message) {
 	    if (status != CTC_STATUS_SUCCESS) {
 	        throw std::runtime_error(message + (", stat = " + std::string(ctcGetStatusString(status))));
 	    }
@@ -440,6 +441,10 @@ public:
 
 private:
 	CuVector<BaseFloat> ctc_workspace_;
+	ctcOptions options_;
+#if HAVE_CUDA == 1
+    cudaStream_t stream_;
+#endif
 };
 
 } // namespace nnet0

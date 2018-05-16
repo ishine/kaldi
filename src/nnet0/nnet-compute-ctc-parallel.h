@@ -51,7 +51,7 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
 
 
     NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), targets_delay(0), obj_imp("eesen") { }
+    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), targets_delay(0), ctc_imp("eesen") { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -68,7 +68,7 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
 
 struct NnetCtcStats: NnetStats {
 
-    Ctc ctc;
+    CtcItf ctc;
 
     NnetCtcStats() { }
 

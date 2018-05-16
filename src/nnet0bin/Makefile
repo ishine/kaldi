@@ -2,6 +2,7 @@
 all:
 EXTRA_CXXFLAGS = -Wno-sign-compare
 include ../kaldi.mk
+include ../speechlab.mk
 
 LDFLAGS += $(CUDA_LDFLAGS)
 LDLIBS += $(CUDA_LDLIBS)
@@ -38,5 +39,9 @@ ADDLIBS = ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a ../nnet3/kaldi-nnet3.a .
 		  ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a ../fstext/kaldi-fstext.a \
           ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../util/kaldi-util.a \
           ../matrix/kaldi-matrix.a ../base/kaldi-base.a 
+
+ifeq ($(USE_WARP_CTC), true)
+    ADDLIBS += ../warp-ctc/build/warpctc.a
+endif
 
 include ../makefiles/default_rules.mk

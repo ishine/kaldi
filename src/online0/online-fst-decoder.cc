@@ -119,7 +119,8 @@ void OnlineFstDecoder::Reset() {
 void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 	// extend buffer
 	if (wav_buffer_.Dim() < len_+nbytes/sizeof(float)) {
-		Vector<BaseFloat> tmp(wav_buffer_.Dim()+VECTOR_INC_STEP, kUndefined);
+        int size = std::max((int)(wav_buffer_.Dim()+VECTOR_INC_STEP), int(len_+nbytes/sizeof(float)));
+		Vector<BaseFloat> tmp(size, kUndefined);
 		memcpy((char*)tmp.Data(), (char*)wav_buffer_.Data(), len_*sizeof(float));
 		wav_buffer_.Swap(&tmp);
 	}
