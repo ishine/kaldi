@@ -440,11 +440,12 @@ public:
 	}
 
 private:
-	CuVector<BaseFloat> ctc_workspace_;
 	ctcOptions options_;
 #if HAVE_CUDA == 1
     cudaStream_t stream_;
 #endif
+	CuVector<BaseFloat> ctc_workspace_;
+    CuMatrix<BaseFloat> net_out_act_;
 };
 
 } // namespace nnet0

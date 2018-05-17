@@ -435,6 +435,8 @@ void CuDevice::PrintProfile() {
     }
     // display from shortest to longest time, so tail will show the longest
     // times at the end.
+    if (profile_map_.find("compute_ctc_loss") != profile_map_.end())
+        os << "compute_ctc_loss" << "\t" << profile_map_["compute_ctc_loss"] << "s\n";
     std::sort(pairs.begin(), pairs.end());
     size_t max_print = 15, start_pos = (pairs.size() <= max_print ?
                                         0 : pairs.size() - max_print);

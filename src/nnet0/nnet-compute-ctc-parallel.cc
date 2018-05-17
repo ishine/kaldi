@@ -132,6 +132,7 @@ private:
 
 	    // Select the GPU
 	#if HAVE_CUDA == 1
+        if (opts->use_gpu == "yes") {
 	    if (parallel_opts->num_procs > 1)
 	    {
 	    	//thread_idx = model_sync->GetThreadIdx();
@@ -145,6 +146,7 @@ private:
 	    }
 	    else
 	    	CuDevice::Instantiate().SelectGpu();
+        }
 
 	    //CuDevice::Instantiate().DisableCaching();
 	#endif
@@ -179,8 +181,8 @@ private:
 	    }
 
 	    Nnet si_nnet;
-	    if (this->kld_scale > 0)
-	    		si_nnet.Read(si_model_filename);
+	    if (this->kld_scale > 0 && si_model_filename != "")
+	        si_nnet.Read(si_model_filename);
 
 	    model_sync->Initialize(&nnet);
 
@@ -191,12 +193,24 @@ private:
 
 	    Xent xent;
 	    Mse mse;
+
 	    CtcItf *ctc;
 	    // Initialize CTC optimizer
 	    if (opts->ctc_imp == "eesen")
 	    		ctc = new Ctc;
-	    else if (opts->ctc_imp == "warp")
+	    else if (opts->ctc_imp == "warp") {
 			ctc = new WarpCtc;
+            // using activations directly: remove softmax, if present
+            if (nnet.GetComponent(nnet.NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
+                KALDI_LOG << "Removing softmax from the nnet " << model_filename;
+                nnet.RemoveComponent(nnet.NumComponents()-1);
+            } else {
+                KALDI_LOG << "The nnet was without softmax " << model_filename;
+            }    
+        } else {
+                KALDI_ERR << opts->ctc_imp << " ctc loss not implement.";
+        }
+
 
 		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
 		//CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
