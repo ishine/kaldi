@@ -433,7 +433,7 @@ public:
 	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
 
-	void throw_on_error(ctcStatus_t status, const char* message) {
+	inline void throw_on_error(ctcStatus_t status, const char* message) {
 	    if (status != CTC_STATUS_SUCCESS) {
 	        throw std::runtime_error(message + (", stat = " + std::string(ctcGetStatusString(status))));
 	    }

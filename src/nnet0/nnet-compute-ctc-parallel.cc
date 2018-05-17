@@ -208,7 +208,7 @@ private:
                 KALDI_LOG << "The nnet was without softmax " << model_filename;
             }    
         } else {
-                KALDI_ERR << opts->ctc_imp << " ctc loss not implement.";
+                KALDI_ERR << opts->ctc_imp << " ctc loss not implemented yet.";
         }
 
 
