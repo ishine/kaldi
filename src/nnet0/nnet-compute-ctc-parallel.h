@@ -47,11 +47,13 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     int32 max_frames;
     int32 batch_size;
     int32 targets_delay;
+    int32 blank_label;
     std::string ctc_imp;
 
 
     NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), targets_delay(0), ctc_imp("eesen") { }
+    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), targets_delay(0), blank_label(0),
+		  ctc_imp("eesen") { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -61,6 +63,7 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
 	      	po->Register("max-frames", &max_frames, "Max number of frames to be processed");
 	        po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
 	        po->Register("targets-delay", &targets_delay, "---LSTM--- BPTT targets delay");
+	        po->Register("blank-label", &blank_label, "CTC output bank label id");
 	        po->Register("ctc-imp", &ctc_imp, "CTC objective function implementation, (eesen|warp)");
   	  }
 };

@@ -53,7 +53,7 @@ class Component {
 	kTimeDelayTransform,
 	kWordVectorTransform,
 	kClassAffineTransform,
-	kBatchNormTransform,
+	kBatchNormalization,
 	kAffinePreconditionedOnlineTransform,
     kLinearTransform,
     kConvolutionalComponent,

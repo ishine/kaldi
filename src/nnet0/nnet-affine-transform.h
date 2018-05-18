@@ -1,6 +1,7 @@
 // nnet0/nnet-affine-transform.h
 
 // Copyright 2011-2014  Brno University of Technology (author: Karel Vesely)
+// Copyright 2015-2016  Shanghai Jiao Tong University (author: Wei Deng)
 // Copyright 2016-2017  AISpeech (author: Tao Xu)
 
 // See ../../COPYING for clarification regarding multiple authors

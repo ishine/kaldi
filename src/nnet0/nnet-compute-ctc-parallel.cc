@@ -199,7 +199,7 @@ private:
 	    if (opts->ctc_imp == "eesen")
 	    		ctc = new Ctc;
 	    else if (opts->ctc_imp == "warp") {
-			ctc = new WarpCtc;
+			ctc = new WarpCtc(opts->blank_label);
             // using activations directly: remove softmax, if present
             if (nnet.GetComponent(nnet.NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
                 KALDI_LOG << "Removing softmax from the nnet " << model_filename;

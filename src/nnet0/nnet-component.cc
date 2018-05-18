@@ -24,7 +24,7 @@
 #include "nnet0/nnet-kl-hmm.h"
 #include "nnet0/nnet-affine-transform.h"
 #include "nnet0/nnet-time-delay-transform.h"
-#include "nnet0/nnet-batchnorm-transform.h"
+#include "nnet0/nnet-batch-normalization-transform.h"
 #include "nnet0/nnet-linear-transform.h"
 #include "nnet0/nnet-rbm.h"
 #include "nnet0/nnet-various.h"
@@ -73,7 +73,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kWordVectorTransform,"<WordVectorTransform>" },
   { Component::kClassAffineTransform,"<ClassAffineTransform>" },
   { Component::kCBSoftmax,"<CBSoftmax>" },
-  { Component::kBatchNormTransform,"<BatchNormTransform>" },
+  { Component::kBatchNormalization,"<BatchNormalization>" },
   { Component::kAffinePreconditionedOnlineTransform,"<kAffinePreconditionedOnlineTransform>" },
   { Component::kLinearTransform,"<LinearTransform>" },
   { Component::kConvolutionalComponent,"<ConvolutionalComponent>"},
@@ -165,8 +165,8 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
     case Component::kCBSoftmax :
       ans = new CBSoftmax(input_dim, output_dim);
       break;
-    case Component::kBatchNormTransform :
-      ans = new BatchNormTransform(input_dim, output_dim);
+    case Component::kBatchNormalization :
+      ans = new BatchNormalization(input_dim, output_dim);
       break;
     case Component::kLinearTransform :
       ans = new LinearTransform(input_dim, output_dim); 
