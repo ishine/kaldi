@@ -1283,10 +1283,10 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
 }
 
-WarpCtc::WarpCtc() {
+WarpCtc::WarpCtc(int blank_label) : blank_label_(blank_label) {
 	options_.loc = CTC_CPU;
 	options_.num_threads = 1;
-	options_.blank_label = 0;
+	options_.blank_label = blank_label_;
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
     options_.loc = CTC_GPU;

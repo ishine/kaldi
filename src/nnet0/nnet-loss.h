@@ -424,7 +424,7 @@ class Ctc : public CtcItf {
 
 class WarpCtc : public CtcItf {
 public:
-    WarpCtc();
+    WarpCtc(int blank_label = 0);
 
 	/// CTC training over a single sequence from the labels. The errors are returned to [diff]
 	void Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff);
@@ -440,6 +440,7 @@ public:
 	}
 
 private:
+	int blank_label_;
 	ctcOptions options_;
 #if HAVE_CUDA == 1
     cudaStream_t stream_;
