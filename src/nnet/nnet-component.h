@@ -90,7 +90,8 @@ class Component {
     kSimpleRecurrentUnit,
     kBatchNormComponent,
     kEmbedding,
-    kTfLstm
+    kTfLstm,
+    kCompactVfsmn
   } ComponentType;
 
   /// A pair of type and marker,

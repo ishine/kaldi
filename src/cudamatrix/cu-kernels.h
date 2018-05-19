@@ -38,6 +38,72 @@
 
 namespace kaldi {
 
+inline void cuda_update_vfsmn_filter(
+    dim3 Gr, dim3 Bl,
+    const double *memory_diff, MatrixDim md_shape,
+    const double *hidden, MatrixDim h_shape,
+    const double *position, int p_stride,
+    double *filter, MatrixDim f_shape,
+    double alpha) {
+  cudaD_update_vfsmn_filter(Gr, Bl,
+                            memory_diff, md_shape,
+                            hidden, h_shape,
+                            position, p_stride,
+                            filter, f_shape, alpha);
+}
+inline void cuda_update_vfsmn_filter(
+    dim3 Gr, dim3 Bl,
+    const float *memory_diff, MatrixDim md_shape,
+    const float *hidden, MatrixDim h_shape,
+    const float *position, int p_stride,
+    float *filter, MatrixDim f_shape,
+    float alpha) {
+  cudaF_update_vfsmn_filter(Gr, Bl,
+                            memory_diff, md_shape,
+                            hidden, h_shape,
+                            position, p_stride,
+                            filter, f_shape, alpha);
+}
+inline void cuda_compute_vfsmn_hidden_diff(
+    dim3 Gr, dim3 Bl,
+    const double *memory_diff, MatrixDim md_shape,
+    const double *filter, MatrixDim f_shape,
+    const double *position, int p_stride,
+    double *hidden_diff, MatrixDim hd_shape) {
+  cudaD_compute_vfsmn_hidden_diff(Gr, Bl,
+                                  memory_diff, md_shape,
+                                  filter, f_shape,
+                                  position, p_stride,
+                                  hidden_diff, hd_shape);
+}
+inline void cuda_compute_vfsmn_hidden_diff(
+    dim3 Gr, dim3 Bl,
+    const float *memory_diff, MatrixDim md_shape,
+    const float *filter, MatrixDim f_shape,
+    const float *position, int p_stride,
+    float *hidden_diff, MatrixDim hd_shape) {
+  cudaF_compute_vfsmn_hidden_diff(Gr, Bl,
+                                  memory_diff, md_shape,
+                                  filter, f_shape,
+                                  position, p_stride,
+                                  hidden_diff, hd_shape);
+}
+inline void cuda_vfsmn_memory(dim3 Gr, dim3 Bl,
+                              const double *hidden, MatrixDim h_shape,
+                              const double *filter, MatrixDim f_shape,
+                              const double *position, int p_stride,
+                              double *memory, MatrixDim m_shape) {
+  cudaD_vfsmn_memory(Gr, Bl, hidden, h_shape, filter, f_shape, position, p_stride,
+                     memory, m_shape);
+}
+inline void cuda_vfsmn_memory(dim3 Gr, dim3 Bl,
+                              const float *hidden, MatrixDim h_shape,
+                              const float *filter, MatrixDim f_shape,
+                              const float *position, int p_stride,
+                              float *memory, MatrixDim m_shape) {
+  cudaF_vfsmn_memory(Gr, Bl, hidden, h_shape, filter, f_shape, position, p_stride,
+                     memory, m_shape);
+}
 inline void cuda_add_col_sum_mat(int Gr, int Bl, double* result,
                                  const double* mat, const MatrixDim d,
                                  const double alpha, const double beta) {

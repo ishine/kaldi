@@ -93,6 +93,18 @@ class CuMatrixBase {
   friend class CuSparseMatrix<double>;
   friend class CuSparseMatrix<Real>;
 
+
+  void VfsmnMemory(const CuMatrixBase<Real> &hidden,
+                   const CuMatrixBase<Real> &filter,
+                   const CuMatrixBase<Real> &position);
+  void ComputeVfsmnHiddenDiff(const CuMatrixBase<Real> &memory_diff,
+                              const CuMatrixBase<Real> &filter,
+                              const CuMatrixBase<Real> &position);
+  void UpdateVfsmnFilter(const CuMatrixBase<Real> &memory_diff,
+                         const CuMatrixBase<Real> &hidden,
+                         const CuMatrixBase<Real> &position,
+                         Real alpha);
+
   /// Copies column r from column indexes[r] of src.
   /// As a special case, if indexes[i] == -1, sets column i to zero
   /// indexes.size() must equal this->NumCols(),

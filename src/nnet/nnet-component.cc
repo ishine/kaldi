@@ -54,6 +54,7 @@
 #include "nnet/nnet-batch-norm-component.h"
 #include "nnet/nnet-embedding.h"
 #include "nnet/nnet-tf-lstm.h"
+#include "nnet/nnet-compact-vfsmn.h"
 
 namespace kaldi {
 namespace nnet1 {
@@ -96,6 +97,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kBatchNormComponent, "<BatchNormComponent>" },
   { Component::kEmbedding, "<Embedding>" },
   { Component::kTfLstm, "<TfLstm>" },
+  { Component::kCompactVfsmn, "<CompactVfsmn>" },
 };
 
 
@@ -233,6 +235,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kTfLstm :
       ans = new TfLstm(input_dim, output_dim);
+      break;
+    case Component::kCompactVfsmn :
+      ans = new CompactVfsmn(input_dim, output_dim);
       break;
     case Component::kUnknown :
     default :

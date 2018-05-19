@@ -2429,6 +2429,89 @@ void VectorBase<float>::CopyRowsFromMat(const CuMatrixBase<float> &mat);
 template
 void VectorBase<double>::CopyRowsFromMat(const CuMatrixBase<double> &mat);
 
+inline int GridDim(int size, int block_size) {
+  return size / block_size + (size % block_size ? 1 : 0);
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::VfsmnMemory(const CuMatrixBase<Real> &hidden,
+                                     const CuMatrixBase<Real> &filter,
+                                     const CuMatrixBase<Real> &position) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(NumRows() == hidden.NumRows() && NumCols() == hidden.NumCols());
+    KALDI_ASSERT(position.NumCols() == 1 && position.NumRows() == NumRows());
+    KALDI_ASSERT(NumCols() == filter.NumCols());
+
+    CuTimer tim;
+
+    dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+    dim3 dimGrid(n_blocks(num_rows_, CU2DBLOCK), n_blocks(num_cols_, CU2DBLOCK));
+    cuda_vfsmn_memory(dimGrid, dimBlock, hidden.Data(), hidden.Dim(), filter.Data(), filter.Dim(), position.Data(), position.Stride(), this->data_, this->Dim());
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    // TODO
+    // Mat().VfsmnMemory(hidden.Mat(), filter.Mat(), position.Mat());
+  }
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::ComputeVfsmnHiddenDiff(const CuMatrixBase<Real> &memory_diff,
+                                                const CuMatrixBase<Real> &filter,
+                                                const CuMatrixBase<Real> &position) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(NumRows() == memory_diff.NumRows() && NumCols() == memory_diff.NumCols());
+    KALDI_ASSERT(position.NumCols() == 1 && position.NumRows() == NumRows());
+    KALDI_ASSERT(NumCols() == filter.NumCols());
+
+    CuTimer tim;
+
+    dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+    dim3 dimGrid(n_blocks(num_rows_, CU2DBLOCK), n_blocks(num_cols_, CU2DBLOCK));
+    cuda_compute_vfsmn_hidden_diff(dimGrid, dimBlock, memory_diff.Data(), memory_diff.Dim(), filter.Data(), filter.Dim(), position.Data(), position.Stride(), this->data_, this->Dim());
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    // TODO
+    // Mat().ComputeVfsmnHiddenDiff(memory_diff.Mat(), filter.Mat(), position.Mat());
+  }
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::UpdateVfsmnFilter(const CuMatrixBase<Real> &memory_diff,
+                                           const CuMatrixBase<Real> &hidden,
+                                           const CuMatrixBase<Real> &position,
+                                           Real alpha) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(hidden.NumRows() == memory_diff.NumRows() &&
+                 hidden.NumCols() == memory_diff.NumCols());
+    KALDI_ASSERT(position.NumCols() == 1 && position.NumRows() == hidden.NumRows());
+    KALDI_ASSERT(NumCols() == hidden.NumCols());
+
+    CuTimer tim;
+
+    dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+    dim3 dimGrid(n_blocks(hidden.NumRows(), CU2DBLOCK), n_blocks(hidden.NumCols(), CU2DBLOCK));
+    cuda_update_vfsmn_filter(dimGrid, dimBlock, memory_diff.Data(), memory_diff.Dim(), hidden.Data(), hidden.Dim(), position.Data(), position.Stride(), this->data_, this->Dim(), alpha);
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    // TODO
+    // Mat().UpdateVfsmnFilter(memory_diff.Mat(), hidden.Mat(), position.Mat(), alpha);
+  }
+}
 
 template<typename Real>
 void CuMatrixBase<Real>::CopyCols(const CuMatrixBase<Real> &src,

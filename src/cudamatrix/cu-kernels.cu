@@ -58,6 +58,33 @@ static Real _sum_reduce(Real buffer[]) {
   return buffer[0];
 }
 
+#ifdef __CUDACC__
+#if ( __CUDACC_VER_MAJOR__ >= 8 ) && ( !defined(__CUDA_ARCH__) || __CUDA_ARCH__ >= 600 )
+// native implementation available
+#else
+#if __CUDA_ARCH__ >= 600
+#error using CAS implementation of double atomicAdd
+#endif
+__device__ double atomicAdd(double* address, double val)
+{
+    unsigned long long int* address_as_ull =
+        (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed,
+                __double_as_longlong(val +
+                    __longlong_as_double(assumed)));
+
+        // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
+}
+#endif
+#endif
+
 /***********************************************************************
  * CUDA kernels
  * the functions are templated to have the float/double operations
@@ -66,6 +93,63 @@ static Real _sum_reduce(Real buffer[]) {
 /*
  * CuMatrix
  */
+
+template<typename Real>
+__global__
+static void _update_vfsmn_filter(
+    const Real *memory_diff, MatrixDim md_shape,
+    const Real *hidden, MatrixDim h_shape,
+    const Real *position, int p_stride,
+    Real *filter, MatrixDim f_shape,
+    Real alpha) {
+  int r = threadIdx.x + blockDim.x * blockIdx.x;
+  int c = threadIdx.y + blockDim.y * blockIdx.y;
+  if ( r < md_shape.rows && c < md_shape.cols ) {
+    const int step = fminf(position[r * p_stride], f_shape.rows);
+    for ( int i = 0; i < step; i++ ) {
+      atomicAdd(filter + i * f_shape.stride + c,
+                hidden[(r - i -1) * h_shape.stride + c] *
+                   memory_diff[r * md_shape.stride + c] * alpha);
+    }
+  }
+}
+
+template<typename Real>
+__global__ 
+static void _compute_vfsmn_hidden_diff(
+    const Real *memory_diff, MatrixDim md_shape,
+    const Real *filter, MatrixDim f_shape,
+    const Real *position, int p_stride,
+    Real *hidden_diff, MatrixDim hd_shape) {
+  int r = threadIdx.x + blockDim.x * blockIdx.x;
+  int c = threadIdx.y + blockDim.y * blockIdx.y;
+  if ( r < md_shape.rows && c < md_shape.cols ) {
+    const int step = fminf(position[r * p_stride], f_shape.rows);
+    for ( int i = 0; i < step; i++ ) {
+      atomicAdd(hidden_diff + (r - i - 1) * hd_shape.stride + c,
+                filter[i * f_shape.stride + c] * memory_diff[r * md_shape.stride + c] );
+    }
+  }
+}
+
+template<typename Real>
+__global__ 
+static void _vfsmn_memory(const Real *hidden, MatrixDim h_shape,
+                          const Real *filter, MatrixDim f_shape,
+                          const Real *position, int p_stride,
+                          Real *memory, MatrixDim m_shape) {
+  int r = threadIdx.x + blockDim.x * blockIdx.x;
+  int c = threadIdx.y + blockDim.y * blockIdx.y;
+  if ( r < m_shape.rows && c < m_shape.cols ) {
+    const int step = fminf(position[r * p_stride], f_shape.rows);
+    float result = hidden[r * h_shape.stride + c];
+    for ( int i = 0; i < step; i++ ) {
+      result += filter[i * f_shape.stride + c] * 
+          hidden[(r - i - 1) * h_shape.stride + c];
+    }
+    memory[r * m_shape.stride + c] = result;
+  }
+}
 
 template<typename Real>
 __global__
@@ -3359,6 +3443,41 @@ void cuda_int32_add(dim3 Gr, dim3 Bl, int32_cuda* mat, int32_cuda value,
 /*
  * CuMatrix
  */
+
+void cudaF_update_vfsmn_filter(
+    dim3 Gr, dim3 Bl,
+    const float *memory_diff, MatrixDim md_shape,
+    const float *hidden, MatrixDim h_shape,
+    const float *position, int p_stride,
+    float *filter, MatrixDim f_shape,
+    float alpha) {
+  _update_vfsmn_filter<<<Gr, Bl>>>(memory_diff, md_shape,
+                                   hidden, h_shape,
+                                   position, p_stride,
+                                   filter, f_shape,
+                                   alpha);
+}
+void cudaF_compute_vfsmn_hidden_diff(
+    dim3 Gr, dim3 Bl,
+    const float *memory_diff, MatrixDim md_shape,
+    const float *filter, MatrixDim f_shape,
+    const float *position, int p_stride,
+    float *hidden_diff, MatrixDim hd_shape) {
+  _compute_vfsmn_hidden_diff<<<Gr, Bl>>>(memory_diff, md_shape,
+                                         filter, f_shape,
+                                         position, p_stride,
+                                         hidden_diff, hd_shape);
+}
+void cudaF_vfsmn_memory(dim3 Gr, dim3 Bl,
+                        const float *hidden, MatrixDim h_shape,
+                        const float *filter, MatrixDim f_shape,
+                        const float *position, int p_stride,
+                        float *memory, MatrixDim m_shape) {
+  _vfsmn_memory<<<Gr, Bl>>>(hidden, h_shape,
+                            filter, f_shape,
+                            position, p_stride,
+                            memory, m_shape);
+}
 void cudaF_copy_upp_low(dim3 Gr, dim3 Bl, float* A, MatrixDim dimA) {
   _copy_upp_low<<<Gr,Bl>>>(A,dimA);}
 void cudaF_copy_low_upp(dim3 Gr, dim3 Bl, float* A, MatrixDim dimA) {
@@ -4023,6 +4142,42 @@ void cudaF_equal_element_mask(dim3 Gr, dim3 Bl, const float *mat1,
 /*
  * CuMatrix
  */
+
+void cudaD_update_vfsmn_filter(
+    dim3 Gr, dim3 Bl,
+    const double *memory_diff, MatrixDim md_shape,
+    const double *hidden, MatrixDim h_shape,
+    const double *position, int p_stride,
+    double *filter, MatrixDim f_shape,
+    double alpha) {
+  _update_vfsmn_filter<<<Gr, Bl>>>(memory_diff, md_shape,
+                                   hidden, h_shape,
+                                   position, p_stride,
+                                   filter, f_shape,
+                                   alpha);
+}
+
+void cudaD_compute_vfsmn_hidden_diff(
+    dim3 Gr, dim3 Bl,
+    const double *memory_diff, MatrixDim md_shape,
+    const double *filter, MatrixDim f_shape,
+    const double *position, int p_stride,
+    double *hidden_diff, MatrixDim hd_shape) {
+  _compute_vfsmn_hidden_diff<<<Gr, Bl>>>(memory_diff, md_shape,
+                                         filter, f_shape,
+                                         position, p_stride,
+                                         hidden_diff, hd_shape);
+}
+void cudaD_vfsmn_memory(dim3 Gr, dim3 Bl,
+                        const double *hidden, MatrixDim h_shape,
+                        const double *filter, MatrixDim f_shape,
+                        const double *position, int p_stride,
+                        double *memory, MatrixDim m_shape) {
+  _vfsmn_memory<<<Gr, Bl>>>(hidden, h_shape,
+                            filter, f_shape,
+                            position, p_stride,
+                            memory, m_shape);
+}
 void cudaD_copy_upp_low(dim3 Gr, dim3 Bl, double* A, MatrixDim dimA) {
   _copy_upp_low<<<Gr,Bl>>>(A,dimA);}
 void cudaD_copy_low_upp(dim3 Gr, dim3 Bl, double* A, MatrixDim dimA) {
