@@ -20,7 +20,8 @@ conf_dir=local/nnet1/
 fbank_conf=$conf_dir/fbank.conf
 decode_dnn_conf=$conf_dir/decode_dnn.config
 
-dir=exp/tflstm1-C24F8S1-lstm4x1024x512-lr0.00001-mb128-notanh
+lr=0.00004
+dir=exp/tflstm1-C24F8S1-lstm4x1024x512-lr$lr-mb128-tanh
 
 stage=0
 . utils/parse_options.sh || exit 1;
@@ -52,6 +53,7 @@ if [ $stage -le 2 ]; then
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
+<Tanh> <InputDim> 512 <OutputDim> 512
 <AffineTransform> <InputDim> 512 <OutputDim> 2952 <BiasMean> 0.0 <BiasRange> 0.0
 <Softmax> <InputDim> 2952 <OutputDim> 2952
 EOF
@@ -62,7 +64,7 @@ EOF
       --cmvn-opts "--norm-means=true --norm-vars=true" --copy-feats false \
       --feature-transform-proto $dir/delay5.proto \
       --nnet-proto $nnet_proto \
-      --learn-rate 0.00001 --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
+      --learn-rate $lr --scheduler-opts "--momentum 0.9 --halving-factor 0.5" \
       --train-tool "nnet-train-multistream" \
       --train-tool-opts "--num-streams=128 --batch-size=20" \
     $train $dev data/lang $ali $dev_ali $dir || exit 1;

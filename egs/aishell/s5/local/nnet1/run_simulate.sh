@@ -40,6 +40,7 @@ if [ $choice == "both" ]; then
 # Only add noise
 elif [ $choice == "noise" ]; then
   python local/nnet1/data/reverberate_data_dir.py \
+    --rir-set-parameters "0.3, RIRS_NOISES/simulated_rirs/smallroom/rir_list" \
     --noise-set-parameters RIRS_NOISES/pointsource_noises/noise_list \
     --prefix "noise" \
     --foreground-snrs $foreground_snrs \
@@ -52,6 +53,7 @@ elif [ $choice == "noise" ]; then
     --source-sampling-rate 16000 \
     --random-seed 6666 \
     data/${data_dir} data/${data_dir}_noise
+  sed -i "s/ wav-reverberate --impulse.*start/\' --start/g" data/${data_dir}_noise/wav.scp
 # Only add reverb
 elif [ $choice == "reverb" ]; then
   python local/nnet1/data/reverberate_data_dir.py \

@@ -445,10 +445,10 @@ class TfLstm : public MultistreamComponent {
         y_c.AddMatMatElements(1.0, y_g, y_i, 0.0);
         y_c.AddMatMatElements(1.0, block_pc, y_f, 1.0);
 
-        // if (cell_clip_ > 0.0) {
-        //   y_c.ApplyFloor(-cell_clip_);   // optional clipping of cell activation,
-        //   y_c.ApplyCeiling(cell_clip_);  // google paper Interspeech2014: LSTM for LVCSR
-        // }
+        if (cell_clip_ > 0.0) {
+          y_c.ApplyFloor(-cell_clip_);   // optional clipping of cell activation,
+          y_c.ApplyCeiling(cell_clip_);  // google paper Interspeech2014: LSTM for LVCSR
+        }
 
         y_o.AddMatDiagVec(1.0, y_c, kNoTrans, peephole_o_c_, 1.0);
         y_o.Sigmoid(y_o);
@@ -559,10 +559,10 @@ class TfLstm : public MultistreamComponent {
         d_c.AddMatDiagVec(1.0, d_f_ntb, kNoTrans, peephole_f_c_, 1.0);
         d_c.AddMatDiagVec(1.0, d_o,     kNoTrans, peephole_o_c_, 1.0);
 
-        // if (cell_diff_clip_ > 0.0) {
-        //   d_c.ApplyFloor(-cell_diff_clip_);
-        //   d_c.ApplyCeiling(cell_diff_clip_);
-        // }
+        if (cell_diff_clip_ > 0.0) {
+          d_c.ApplyFloor(-cell_diff_clip_);
+          d_c.ApplyCeiling(cell_diff_clip_);
+        }
 
         d_f.AddMatMatElements(1.0, d_c, block_pc, 0.0);
         d_f.DiffSigmoid(y_f, d_f);
@@ -573,10 +573,10 @@ class TfLstm : public MultistreamComponent {
         d_g.AddMatMatElements(1.0, d_c, y_i, 0.0);
         d_g.DiffTanh(y_g, d_g);
 
-        // if (diff_clip_ > 0.0) {
-        //   d_gifo.ApplyFloor(-diff_clip_);
-        //   d_gifo.ApplyCeiling(diff_clip_);
-        // }
+        if (diff_clip_ > 0.0) {
+          d_gifo.ApplyFloor(-diff_clip_);
+          d_gifo.ApplyCeiling(diff_clip_);
+        }
 
         // lazy initialization of udpate buffers,
         if (w_gifo_x_corr_.NumRows() == 0) {

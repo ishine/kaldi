@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Created on 2018-04-08
+# Created on 2018-04-02
 # Author: Kaituo Xu
-# Function: Train LSTM using fbank features and truncated BPTT.
+# Function: Train TF-LSTM using fbank features and truncated BPTT.
 
 [ -f cmd.sh ] && . ./cmd.sh
 [ -f path.sh ] && . ./path.sh
@@ -20,8 +20,8 @@ conf_dir=local/nnet1/
 fbank_conf=$conf_dir/fbank.conf
 decode_dnn_conf=$conf_dir/decode_dnn.config
 
-lr=0.00004
-dir=exp/lstm4x1024x512-lr$lr-mb128-tanh-0413
+lr=0.00001
+dir=exp/tflstm1-C24F8S1-maxpool1-F4S4-lstm4x1024x512-lr$lr-mb128-tanh
 
 stage=0
 . utils/parse_options.sh || exit 1;
@@ -46,9 +46,13 @@ if [ $stage -le 2 ]; then
   mkdir -p $dir
   echo "<Splice> <InputDim> 40 <OutputDim> 40 <BuildVector> 5 </BuildVector>" > $dir/delay5.proto
 
+# <MaxPoolingComponent> <InputDim> 792 <OutputDim> 264 <PoolSize> 3 <PoolStep> 3 <PoolStride> 1
+# <LstmProjected> <InputDim> 264 <OutputDim> 512 <CellDim> 1024
   nnet_proto=$dir/nnet.proto
   cat > $nnet_proto << EOF
-<LstmProjected> <InputDim> 40 <OutputDim> 512 <CellDim> 1024
+<TfLstm> <InputDim> 40 <OutputDim> 792 <CellDim> 24 <F> 8 <S> 1
+<MaxPoolingComponent> <InputDim> 792 <OutputDim> 198 <PoolSize> 4 <PoolStep> 4 <PoolStride> 1
+<LstmProjected> <InputDim> 198 <OutputDim> 512 <CellDim> 1024
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
