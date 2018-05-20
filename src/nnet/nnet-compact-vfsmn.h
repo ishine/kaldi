@@ -142,6 +142,10 @@ class CompactVfsmn : public UpdatableComponent {
     // filter_  : N x D; N is order_
     // position_: T x 1; auxiliary information
     out->VfsmnMemory(in, filter_, position_);
+    // KALDI_LOG << in;
+    // KALDI_LOG << filter_;
+    // KALDI_LOG << position_;
+    // KALDI_LOG << *out;
   }
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in,

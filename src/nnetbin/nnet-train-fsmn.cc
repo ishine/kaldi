@@ -330,7 +330,7 @@ int main(int argc, char *argv[]) {
         if (position(0, 0) != 0.0) {
           int32 i = 0;
           BaseFloat start_idx = position(0, 0);
-          while (position(i, 0) != 0.0) {
+          while (position(i, 0) != 0.0 && i < position.NumRows()) {
             position.RowRange(i, 1).Set(position(i, 0) - start_idx);
             ++i;
           }

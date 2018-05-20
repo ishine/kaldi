@@ -146,6 +146,10 @@ class Component {
     return output_dim_;
   }
 
+  /// Set position matrix in fsmn component
+  virtual void Prepare(const CuMatrixBase<BaseFloat> &position) { }
+
+
   /// Perform forward-pass propagation 'in' -> 'out',
   void Propagate(const CuMatrixBase<BaseFloat> &in, CuMatrix<BaseFloat> *out);
 
@@ -155,9 +159,6 @@ class Component {
                      const CuMatrixBase<BaseFloat> &out,
                      const CuMatrixBase<BaseFloat> &out_diff,
                      CuMatrix<BaseFloat> *in_diff);
-
-  /// Set position matrix in fsmn component
-  void Prepare(const CuMatrixBase<BaseFloat> &position) { }
 
   /// Initialize component from a line in config file,
   static Component* Init(const std::string &conf_line);
