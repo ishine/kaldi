@@ -58,7 +58,7 @@ class CompactVfsmn : public UpdatableComponent {
     // Glorot Uniform
     filter_.Resize(order_, InputDim());
     float mean = 0.0;
-    float range = sqrt(6.0 / (float)(1 + order_));
+    float range = sqrt(6.0 / (float)(1 + order_))*2;
     RandUniform(mean, range, &filter_);
   }
 
@@ -131,37 +131,34 @@ class CompactVfsmn : public UpdatableComponent {
       ", lr-coef " + ToString(learn_rate_coef_);
   }
 
+  void Prepare(const CuMatrixBase<BaseFloat> &position) {
+    position_.Resize(position.NumRows(), position.NumCols());
+    position_.CopyFromMat(position);
+  }
+
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in,
                     CuMatrixBase<BaseFloat> *out) {
-    // <placeholder> for position
-    CuMatrix<BaseFloat> position(in.NumRows(), 1);
-    // in      : T x D; T = sum(T1, T2, .., Tk), k sentence
-    // filter_ : N x D; N is order_
-    // position: T x 1; auxiliary information
-    out->VfsmnMemory(in, filter_, position);
+    // in       : T x D; T = sum(T1, T2, .., Tk), k sentence
+    // filter_  : N x D; N is order_
+    // position_: T x 1; auxiliary information
+    out->VfsmnMemory(in, filter_, position_);
   }
 
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in,
                         const CuMatrixBase<BaseFloat> &out,
                         const CuMatrixBase<BaseFloat> &out_diff,
                         CuMatrixBase<BaseFloat> *in_diff) {
-    // multiply error derivative by weights
-    // in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity_, kNoTrans, 0.0);
-    // TODO
-    // <placeholder> for position
-    CuMatrix<BaseFloat> position(in.NumRows(), 1);
     // out_diff : T x D
     // filter_  : N x D
-    // position : T x 1
-    in_diff->ComputeVfsmnHiddenDiff(out_diff, filter_, position);
+    // position_: T x 1
+    in_diff->ComputeVfsmnHiddenDiff(out_diff, filter_, position_);
   }
 
 
   void Update(const CuMatrixBase<BaseFloat> &input,
               const CuMatrixBase<BaseFloat> &diff) {
     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
-    CuMatrix<BaseFloat> position(input.NumRows(), 1);
-    filter_.UpdateVfsmnFilter(diff, input, position, -lr);
+    filter_.UpdateVfsmnFilter(diff, input, position_, -lr);
   }
 
   const CuMatrixBase<BaseFloat>& GetFilter() const { return filter_; }
@@ -177,6 +174,7 @@ class CompactVfsmn : public UpdatableComponent {
   CuMatrix<BaseFloat> filter_;  // [a0, a1, ..., aN].T
 
   CuMatrix<BaseFloat> filter_corr_;
+  CuMatrix<BaseFloat> position_;
 };
 
 }  // namespace nnet1

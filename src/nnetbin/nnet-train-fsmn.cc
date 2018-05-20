@@ -337,6 +337,8 @@ int main(int argc, char *argv[]) {
         }
         KALDI_ASSERT(position(0, 0) == 0.0);
 
+        // send position matrix to fsmn component
+        nnet.Prepare(position);
         // forward pass,
         nnet.Propagate(nnet_in, &nnet_out);
 

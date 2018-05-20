@@ -156,6 +156,9 @@ class Component {
                      const CuMatrixBase<BaseFloat> &out_diff,
                      CuMatrix<BaseFloat> *in_diff);
 
+  /// Set position matrix in fsmn component
+  void Prepare(const CuMatrixBase<BaseFloat> &position) { }
+
   /// Initialize component from a line in config file,
   static Component* Init(const std::string &conf_line);
 

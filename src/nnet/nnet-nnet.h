@@ -52,6 +52,8 @@ class Nnet {
   /// Perform forward pass through the network (with 2 swapping buffers),
   void Feedforward(const CuMatrixBase<BaseFloat> &in,
                    CuMatrix<BaseFloat> *out);
+  /// Send position matrix to fsmn component
+  void Prepare(const CuMatrixBase<BaseFloat> &position);
 
   /// Dimensionality on network input (input feature dim.),
   int32 InputDim() const;

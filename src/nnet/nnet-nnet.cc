@@ -140,6 +140,14 @@ void Nnet::Feedforward(const CuMatrixBase<BaseFloat> &in,
   }
 }
 
+void Nnet::Prepare(const CuMatrixBase<BaseFloat> &position) {
+  for (int32 c = 0; c < NumComponents(); c++) {
+    if (GetComponent(c).GetType() == Component::kCompactVfsmn) {
+      components_[c]->Prepare(position);
+    }
+  }
+}
+
 
 int32 Nnet::OutputDim() const {
   KALDI_ASSERT(!components_.empty());
