@@ -19,7 +19,8 @@ BINFILES = nnet-train-frmshuff \
 	cuda-gpu-available nnet-set-learnrate \
 	nnet-init-sparse-dnn \
 	nnet-train-multistream-skip \
-	punc-forward
+	punc-forward \
+    nnet-train-fsmn
 
 OBJFILES =
 
