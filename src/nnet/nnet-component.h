@@ -34,6 +34,23 @@
 namespace kaldi {
 namespace nnet1 {
 
+struct ExtraInfo {
+  // look backward position info
+  const CuMatrixBase<BaseFloat> &bposition;
+  // look forward position info
+  const CuMatrixBase<BaseFloat> &fposition;
+
+  ExtraInfo(const CuMatrixBase<BaseFloat> &bpos,
+            const CuMatrixBase<BaseFloat> &fpos):
+            bposition(bpos), fposition(fpos) { }
+
+  ExtraInfo(const CuMatrixBase<BaseFloat> &bpos):
+            bposition(bpos), fposition(CuMatrix<BaseFloat>()) { }
+
+  ExtraInfo() : bposition(CuMatrix<BaseFloat>()), 
+                fposition(CuMatrix<BaseFloat>()) { }
+};
+
 /**
  * Abstract class, building block of the network.
  * It is able to propagate (PropagateFnc: compute the output based on its input)
@@ -91,7 +108,8 @@ class Component {
     kBatchNormComponent,
     kEmbedding,
     kTfLstm,
-    kCompactVfsmn
+    kCompactVfsmn,
+    kBiCompactVfsmn
   } ComponentType;
 
   /// A pair of type and marker,
@@ -147,8 +165,7 @@ class Component {
   }
 
   /// Set position matrix in fsmn component
-  virtual void Prepare(const CuMatrixBase<BaseFloat> &position) { }
-
+  virtual void Prepare(const ExtraInfo &info) { }
 
   /// Perform forward-pass propagation 'in' -> 'out',
   void Propagate(const CuMatrixBase<BaseFloat> &in, CuMatrix<BaseFloat> *out);

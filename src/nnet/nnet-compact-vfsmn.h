@@ -131,9 +131,9 @@ class CompactVfsmn : public UpdatableComponent {
       ", lr-coef " + ToString(learn_rate_coef_);
   }
 
-  void Prepare(const CuMatrixBase<BaseFloat> &position) {
-    position_.Resize(position.NumRows(), position.NumCols());
-    position_.CopyFromMat(position);
+  void Prepare(const ExtraInfo &info) {
+    position_.Resize(info.bposition.NumRows(), info.bposition.NumCols());
+    position_.CopyFromMat(info.bposition);
   }
 
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in,

@@ -96,6 +96,107 @@ __device__ double atomicAdd(double* address, double val)
 
 template<typename Real>
 __global__
+static void _bi_update_vfsmn_aheadfilter(
+    const Real *memory_diff, MatrixDim md_shape,
+    const Real *hidden, MatrixDim h_shape,
+    const Real *fposition, int fp_stride,
+    Real *ffilter, MatrixDim ff_shape,
+    Real alpha) {
+  int r = threadIdx.x + blockDim.x * blockIdx.x;
+  int c = threadIdx.y + blockDim.y * blockIdx.y;
+  if (r < md_shape.rows && c < md_shape.cols) {
+    const int step = fminf(fposition[r * fp_stride], ff_shape.rows);
+    for (int i = 0; i < step; i++) {
+      atomicAdd(ffilter + i * ff_shape.stride + c,
+                hidden[(r + i + 1) * h_shape.stride + c] *
+                memory_diff[r * md_shape.stride + c] * alpha);
+    }
+  }
+}
+
+template<typename Real>
+__global__
+static void _bi_update_vfsmn_backfilter(
+    const Real *memory_diff, MatrixDim md_shape,
+    const Real *hidden, MatrixDim h_shape,
+    const Real *bposition, int bp_stride,
+    Real *bfilter, MatrixDim bf_shape,
+    Real alpha) {
+  int r = threadIdx.x + blockDim.x * blockIdx.x;
+  int c = threadIdx.y + blockDim.y * blockIdx.y;
+  if (r < md_shape.rows && c < md_shape.cols) {
+    const int step = fminf(bposition[r * bp_stride], bf_shape.rows - 1);
+    atomicAdd(bfilter + 0 * bf_shape.stride + c,
+              hidden[r * h_shape.stride + c] *
+              memory_diff[r * md_shape.stride + c] * alpha);
+    for (int i = 0; i < step; i++) {
+      atomicAdd(bfilter + (i + 1) * bf_shape.stride + c,
+                hidden[(r - i - 1) * h_shape.stride + c] *
+                memory_diff[r * md_shape.stride + c] * alpha);
+    }
+  }
+}
+
+template<typename Real>
+__global__
+static void _bi_compute_vfsmn_hidden_diff(
+    const Real *memory_diff, MatrixDim md_shape,
+    const Real *bfilter, MatrixDim bf_shape,
+    const Real *ffilter, MatrixDim ff_shape,
+    const Real *bposition, int bp_stride,
+    const Real *fposition, int fp_stride,
+    Real *hidden_diff, MatrixDim hd_shape) {
+  int r = threadIdx.x + blockDim.x * blockIdx.x;
+  int c = threadIdx.y + blockDim.y * blockIdx.y;
+  if ( r < md_shape.rows && c < md_shape.cols ) {
+    // lookback
+    const int stepb = fminf(bposition[r * bp_stride], bf_shape.rows - 1);
+    atomicAdd(hidden_diff + r * hd_shape.stride + c,
+              (1.0 + bfilter[0 + c]) * memory_diff[r * md_shape.stride + c]);
+    for ( int i = 0; i < stepb; i++ ) {
+      atomicAdd(hidden_diff + (r - i - 1) * hd_shape.stride + c,
+                bfilter[(i + 1) * bf_shape.stride + c] * memory_diff[r * md_shape.stride + c] );
+    }
+    // lookahead
+    const int stepf = fminf(fposition[r * fp_stride], ff_shape.rows);
+    for ( int i = 0; i < stepf; i++ ) {
+      atomicAdd(hidden_diff + (r + i + 1) * hd_shape.stride + c,
+                ffilter[i * ff_shape.stride + c] * memory_diff[r * md_shape.stride + c] );
+    }
+  }
+}
+
+template<typename Real>
+__global__
+static void _bi_vfsmn_memory(
+    const Real *hidden, MatrixDim h_shape,
+    const Real *bfilter, MatrixDim bf_shape,
+    const Real *ffilter, MatrixDim ff_shape,
+    const Real *bposition, int bp_stride,
+    const Real *fposition, int fp_stride,
+    Real *memory, MatrixDim m_shape) {
+  int r = threadIdx.x + blockDim.x * blockIdx.x;
+  int c = threadIdx.y + blockDim.y * blockIdx.y;
+  if ( r < m_shape.rows && c < m_shape.cols ) {
+    // lookback
+    const int stepb = fminf(bposition[r * bp_stride], bf_shape.rows - 1);
+    float result = (1.0 + bfilter[0 + c]) * hidden[r * h_shape.stride + c];
+    for ( int i = 0; i < stepb; i++ ) {
+      result += bfilter[(i + 1) * bf_shape.stride + c] * 
+                hidden[(r - i - 1) * h_shape.stride + c];
+    }
+    // lookahead
+    const int stepf = fminf(fposition[r * fp_stride], ff_shape.rows);
+    for ( int i = 0; i < stepf; i++ ) {
+      result += ffilter[i * ff_shape.stride + c] * 
+                hidden[(r + i + 1) * h_shape.stride + c];
+    }
+    memory[r * m_shape.stride + c] = result;
+  }
+}
+
+template<typename Real>
+__global__
 static void _update_vfsmn_filter(
     const Real *memory_diff, MatrixDim md_shape,
     const Real *hidden, MatrixDim h_shape,
@@ -125,6 +226,8 @@ static void _compute_vfsmn_hidden_diff(
   int c = threadIdx.y + blockDim.y * blockIdx.y;
   if ( r < md_shape.rows && c < md_shape.cols ) {
     const int step = fminf(position[r * p_stride], f_shape.rows);
+    atomicAdd(hidden_diff + r * hd_shape.stride + c,
+              memory_diff[r * md_shape.stride + c]);
     for ( int i = 0; i < step; i++ ) {
       atomicAdd(hidden_diff + (r - i - 1) * hd_shape.stride + c,
                 filter[i * f_shape.stride + c] * memory_diff[r * md_shape.stride + c] );
@@ -3444,6 +3547,65 @@ void cuda_int32_add(dim3 Gr, dim3 Bl, int32_cuda* mat, int32_cuda value,
  * CuMatrix
  */
 
+void cudaF_bi_update_vfsmn_aheadfilter(
+    dim3 Gr, dim3 Bl,
+    const float *memory_diff, MatrixDim md_shape,
+    const float *hidden, MatrixDim h_shape,
+    const float *fposition, int fp_stride,
+    float *ffilter, MatrixDim ff_shape,
+    float alpha) {
+  _bi_update_vfsmn_aheadfilter<<<Gr, Bl>>>(
+      memory_diff, md_shape,
+      hidden, h_shape,
+      fposition, fp_stride,
+      ffilter, ff_shape,
+      alpha);
+}
+void cudaF_bi_update_vfsmn_backfilter(
+    dim3 Gr, dim3 Bl,
+    const float *memory_diff, MatrixDim md_shape,
+    const float *hidden, MatrixDim h_shape,
+    const float *bposition, int bp_stride,
+    float *bfilter, MatrixDim bf_shape,
+    float alpha) {
+  _bi_update_vfsmn_backfilter<<<Gr, Bl>>>(
+      memory_diff, md_shape,
+      hidden, h_shape,
+      bposition, bp_stride,
+      bfilter, bf_shape,
+      alpha);
+}
+void cudaF_bi_compute_vfsmn_hidden_diff(
+    dim3 Gr, dim3 Bl,
+    const float *memory_diff, MatrixDim md_shape,
+    const float *bfilter, MatrixDim bf_shape,
+    const float *ffilter, MatrixDim ff_shape,
+    const float *bposition, int bp_stride,
+    const float *fposition, int fp_stride,
+    float *hidden_diff, MatrixDim hd_shape) {
+  _bi_compute_vfsmn_hidden_diff<<<Gr, Bl>>>(
+      memory_diff, md_shape,
+      bfilter, bf_shape,
+      ffilter, ff_shape,
+      bposition, bp_stride,
+      fposition, fp_stride,
+      hidden_diff, hd_shape);
+}
+void cudaF_bi_vfsmn_memory(dim3 Gr, dim3 Bl,
+                           const float *hidden, MatrixDim h_shape,
+                           const float *bfilter, MatrixDim bf_shape,
+                           const float *ffilter, MatrixDim ff_shape,
+                           const float *bposition, int bp_stride,
+                           const float *fposition, int fp_stride,
+                           float *memory, MatrixDim m_shape) {
+  _bi_vfsmn_memory<<<Gr, Bl>>>(
+      hidden, h_shape,
+      bfilter, bf_shape,
+      ffilter, ff_shape,
+      bposition, bp_stride,
+      fposition, fp_stride,
+      memory, m_shape);
+}
 void cudaF_update_vfsmn_filter(
     dim3 Gr, dim3 Bl,
     const float *memory_diff, MatrixDim md_shape,
@@ -4143,6 +4305,65 @@ void cudaF_equal_element_mask(dim3 Gr, dim3 Bl, const float *mat1,
  * CuMatrix
  */
 
+void cudaD_bi_update_vfsmn_aheadfilter(
+    dim3 Gr, dim3 Bl,
+    const double *memory_diff, MatrixDim md_shape,
+    const double *hidden, MatrixDim h_shape,
+    const double *fposition, int fp_stride,
+    double *ffilter, MatrixDim ff_shape,
+    double alpha) {
+  _bi_update_vfsmn_aheadfilter<<<Gr, Bl>>>(
+      memory_diff, md_shape,
+      hidden, h_shape,
+      fposition, fp_stride,
+      ffilter, ff_shape,
+      alpha);
+}
+void cudaD_bi_update_vfsmn_backfilter(
+    dim3 Gr, dim3 Bl,
+    const double *memory_diff, MatrixDim md_shape,
+    const double *hidden, MatrixDim h_shape,
+    const double *bposition, int bp_stride,
+    double *bfilter, MatrixDim bf_shape,
+    double alpha) {
+  _bi_update_vfsmn_backfilter<<<Gr, Bl>>>(
+      memory_diff, md_shape,
+      hidden, h_shape,
+      bposition, bp_stride,
+      bfilter, bf_shape,
+      alpha);
+}
+void cudaD_bi_compute_vfsmn_hidden_diff(
+    dim3 Gr, dim3 Bl,
+    const double *memory_diff, MatrixDim md_shape,
+    const double *bfilter, MatrixDim bf_shape,
+    const double *ffilter, MatrixDim ff_shape,
+    const double *bposition, int bp_stride,
+    const double *fposition, int fp_stride,
+    double *hidden_diff, MatrixDim hd_shape) {
+  _bi_compute_vfsmn_hidden_diff<<<Gr, Bl>>>(
+      memory_diff, md_shape,
+      bfilter, bf_shape,
+      ffilter, ff_shape,
+      bposition, bp_stride,
+      fposition, fp_stride,
+      hidden_diff, hd_shape);
+}
+void cudaD_bi_vfsmn_memory(dim3 Gr, dim3 Bl,
+                           const double *hidden, MatrixDim h_shape,
+                           const double *bfilter, MatrixDim bf_shape,
+                           const double *ffilter, MatrixDim ff_shape,
+                           const double *bposition, int bp_stride,
+                           const double *fposition, int fp_stride,
+                           double *memory, MatrixDim m_shape) {
+  _bi_vfsmn_memory<<<Gr, Bl>>>(
+      hidden, h_shape,
+      bfilter, bf_shape,
+      ffilter, ff_shape,
+      bposition, bp_stride,
+      fposition, fp_stride,
+      memory, m_shape);
+}
 void cudaD_update_vfsmn_filter(
     dim3 Gr, dim3 Bl,
     const double *memory_diff, MatrixDim md_shape,

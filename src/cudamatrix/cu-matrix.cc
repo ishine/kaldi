@@ -2429,8 +2429,146 @@ void VectorBase<float>::CopyRowsFromMat(const CuMatrixBase<float> &mat);
 template
 void VectorBase<double>::CopyRowsFromMat(const CuMatrixBase<double> &mat);
 
-inline int GridDim(int size, int block_size) {
-  return size / block_size + (size % block_size ? 1 : 0);
+template<typename Real>
+void CuMatrixBase<Real>::BiVfsmnMemory(const CuMatrixBase<Real> &hidden,
+                                       const CuMatrixBase<Real> &bfilter,
+                                       const CuMatrixBase<Real> &ffilter,
+                                       const CuMatrixBase<Real> &bposition,
+                                       const CuMatrixBase<Real> &fposition) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(NumRows() == hidden.NumRows() && NumCols() == hidden.NumCols());
+    KALDI_ASSERT(bposition.NumCols() == 1 && bposition.NumRows() == NumRows());
+    KALDI_ASSERT(fposition.NumCols() == 1 && fposition.NumRows() == NumRows());
+    KALDI_ASSERT(NumCols() == bfilter.NumCols());
+    KALDI_ASSERT(NumCols() == ffilter.NumCols());
+
+    CuTimer tim;
+
+    dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+    dim3 dimGrid(n_blocks(num_rows_, CU2DBLOCK), n_blocks(num_cols_, CU2DBLOCK));
+    cuda_bi_vfsmn_memory(dimGrid, dimBlock,
+                         hidden.Data(), hidden.Dim(),
+                         bfilter.Data(), bfilter.Dim(),
+                         ffilter.Data(), ffilter.Dim(),
+                         bposition.Data(), bposition.Stride(),
+                         fposition.Data(), fposition.Stride(),
+                         this->data_, this->Dim());
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    // TODO
+    // Mat().BiVfsmnMemory(hidden.Mat(), bfilter.Mat(), ffilter.Mat(),
+    //                     bposition.Mat(), fposition.Mat());
+  }
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::BiComputeVfsmnHiddenDiff(const CuMatrixBase<Real> &memory_diff,
+                                                  const CuMatrixBase<Real> &bfilter,
+                                                  const CuMatrixBase<Real> &ffilter,
+                                                  const CuMatrixBase<Real> &bposition,
+                                                  const CuMatrixBase<Real> &fposition) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(NumRows() == memory_diff.NumRows() && NumCols() == memory_diff.NumCols());
+    KALDI_ASSERT(bposition.NumCols() == 1 && bposition.NumRows() == NumRows());
+    KALDI_ASSERT(fposition.NumCols() == 1 && fposition.NumRows() == NumRows());
+    KALDI_ASSERT(NumCols() == bfilter.NumCols());
+    KALDI_ASSERT(NumCols() == ffilter.NumCols());
+
+    CuTimer tim;
+
+    dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+    dim3 dimGrid(n_blocks(num_rows_, CU2DBLOCK), n_blocks(num_cols_, CU2DBLOCK));
+    cuda_bi_compute_vfsmn_hidden_diff(dimGrid, dimBlock,
+                                      memory_diff.Data(), memory_diff.Dim(),
+                                      bfilter.Data(), bfilter.Dim(),
+                                      ffilter.Data(), ffilter.Dim(),
+                                      bposition.Data(), bposition.Stride(),
+                                      fposition.Data(), fposition.Stride(),
+                                      this->data_, this->Dim());
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    // TODO
+    // Mat().BiComputeVfsmnHiddenDiff(memory_diff.Mat(), bfilter.Mat(), ffilter.Mat(),
+    //                                bposition.Mat(), fposition.Mat());
+  }
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::BiUpdateVfsmnBackfilter(
+    const CuMatrixBase<Real> &memory_diff,
+    const CuMatrixBase<Real> &hidden,
+    const CuMatrixBase<Real> &bposition,
+    Real alpha) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(hidden.NumRows() == memory_diff.NumRows() &&
+                 hidden.NumCols() == memory_diff.NumCols());
+    KALDI_ASSERT(bposition.NumCols() == 1 && bposition.NumRows() == hidden.NumRows());
+    KALDI_ASSERT(NumCols() == hidden.NumCols());
+
+    CuTimer tim;
+
+    dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+    dim3 dimGrid(n_blocks(hidden.NumRows(), CU2DBLOCK), n_blocks(hidden.NumCols(), CU2DBLOCK));
+    cuda_bi_update_vfsmn_backfilter(dimGrid, dimBlock,
+                                    memory_diff.Data(), memory_diff.Dim(),
+                                    hidden.Data(), hidden.Dim(),
+                                    bposition.Data(), bposition.Stride(),
+                                    this->data_, this->Dim(), alpha);
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    // TODO
+    // Mat().UpdateVfsmnBackfilter(memory_diff.Mat(), hidden.Mat(),
+    //                             bposition.Mat(), alpha);
+  }
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::BiUpdateVfsmnAheadfilter(
+    const CuMatrixBase<Real> &memory_diff,
+    const CuMatrixBase<Real> &hidden,
+    const CuMatrixBase<Real> &fposition,
+    Real alpha) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    KALDI_ASSERT(hidden.NumRows() == memory_diff.NumRows() &&
+                 hidden.NumCols() == memory_diff.NumCols());
+    KALDI_ASSERT(fposition.NumCols() == 1 && fposition.NumRows() == hidden.NumRows());
+    KALDI_ASSERT(NumCols() == hidden.NumCols());
+
+    CuTimer tim;
+
+    dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+    dim3 dimGrid(n_blocks(hidden.NumRows(), CU2DBLOCK), n_blocks(hidden.NumCols(), CU2DBLOCK));
+    cuda_bi_update_vfsmn_aheadfilter(dimGrid, dimBlock,
+                                    memory_diff.Data(), memory_diff.Dim(),
+                                    hidden.Data(), hidden.Dim(),
+                                    fposition.Data(), fposition.Stride(),
+                                    this->data_, this->Dim(), alpha);
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    // TODO
+    // Mat().UpdateVfsmnAheadfilter(memory_diff.Mat(), hidden.Mat(),
+    //                              fposition.Mat(), alpha);
+  }
 }
 
 template<typename Real>

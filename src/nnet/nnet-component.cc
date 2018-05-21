@@ -55,6 +55,7 @@
 #include "nnet/nnet-embedding.h"
 #include "nnet/nnet-tf-lstm.h"
 #include "nnet/nnet-compact-vfsmn.h"
+#include "nnet/nnet-bi-compact-vfsmn.h"
 
 namespace kaldi {
 namespace nnet1 {
@@ -98,6 +99,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kEmbedding, "<Embedding>" },
   { Component::kTfLstm, "<TfLstm>" },
   { Component::kCompactVfsmn, "<CompactVfsmn>" },
+  { Component::kBiCompactVfsmn, "<BiCompactVfsmn>" },
 };
 
 
@@ -238,6 +240,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kCompactVfsmn :
       ans = new CompactVfsmn(input_dim, output_dim);
+      break;
+    case Component::kBiCompactVfsmn :
+      ans = new BiCompactVfsmn(input_dim, output_dim);
       break;
     case Component::kUnknown :
     default :

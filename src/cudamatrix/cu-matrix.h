@@ -93,6 +93,24 @@ class CuMatrixBase {
   friend class CuSparseMatrix<double>;
   friend class CuSparseMatrix<Real>;
 
+  void BiVfsmnMemory(const CuMatrixBase<Real> &hidden,
+                     const CuMatrixBase<Real> &bfilter,
+                     const CuMatrixBase<Real> &ffilter,
+                     const CuMatrixBase<Real> &bposition,
+                     const CuMatrixBase<Real> &fposition);
+  void BiComputeVfsmnHiddenDiff(const CuMatrixBase<Real> &memory_diff,
+                                const CuMatrixBase<Real> &bfilter,
+                                const CuMatrixBase<Real> &ffilter,
+                                const CuMatrixBase<Real> &bposition,
+                                const CuMatrixBase<Real> &fposition);
+  void BiUpdateVfsmnBackfilter(const CuMatrixBase<Real> &memory_diff,
+                               const CuMatrixBase<Real> &hidden,
+                               const CuMatrixBase<Real> &bposition,
+                               Real alpha);
+  void BiUpdateVfsmnAheadfilter(const CuMatrixBase<Real> &memory_diff,
+                                const CuMatrixBase<Real> &hidden,
+                                const CuMatrixBase<Real> &fposition,
+                                Real alpha);
 
   void VfsmnMemory(const CuMatrixBase<Real> &hidden,
                    const CuMatrixBase<Real> &filter,

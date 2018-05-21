@@ -64,6 +64,17 @@ Nnet& Nnet::operator= (const Nnet& other) {
   return *this;
 }
 
+
+void Nnet::Prepare(const ExtraInfo &info) {
+  for (int32 c = 0; c < NumComponents(); c++) {
+    if (GetComponent(c).GetType() == Component::kCompactVfsmn ||
+        GetComponent(c).GetType() == Component::kBiCompactVfsmn) {
+      components_[c]->Prepare(info);
+    }
+  }
+}
+
+
 /**
  * Forward propagation through the network,
  * (from first component to last).
@@ -139,15 +150,6 @@ void Nnet::Feedforward(const CuMatrixBase<BaseFloat> &in,
     components_[i]->Propagate(tmp_in, out);
   }
 }
-
-void Nnet::Prepare(const CuMatrixBase<BaseFloat> &position) {
-  for (int32 c = 0; c < NumComponents(); c++) {
-    if (GetComponent(c).GetType() == Component::kCompactVfsmn) {
-      components_[c]->Prepare(position);
-    }
-  }
-}
-
 
 int32 Nnet::OutputDim() const {
   KALDI_ASSERT(!components_.empty());
