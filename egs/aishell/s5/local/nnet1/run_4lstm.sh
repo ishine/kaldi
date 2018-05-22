@@ -44,6 +44,7 @@ if [ $stage -le 2 ]; then
   dev_ali=${gmm}_dev_ali
 
   mkdir -p $dir
+  num_tgt=$(hmm-info --print-args=false $ali/final.mdl | grep pdfs | awk '{ print $NF }')
   echo "<Splice> <InputDim> 40 <OutputDim> 40 <BuildVector> 5 </BuildVector>" > $dir/delay5.proto
 
   nnet_proto=$dir/nnet.proto
@@ -53,8 +54,8 @@ if [ $stage -le 2 ]; then
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
 <LstmProjected> <InputDim> 512 <OutputDim> 512 <CellDim> 1024
 <Tanh> <InputDim> 512 <OutputDim> 512
-<AffineTransform> <InputDim> 512 <OutputDim> 2952 <BiasMean> 0.0 <BiasRange> 0.0
-<Softmax> <InputDim> 2952 <OutputDim> 2952
+<AffineTransform> <InputDim> 512 <OutputDim> $num_tgt <BiasMean> 0.0 <BiasRange> 0.0
+<Softmax> <InputDim> $num_tgt <OutputDim> $num_tgt
 EOF
 
   # Train

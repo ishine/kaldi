@@ -170,10 +170,12 @@ class BiCompactVfsmn : public UpdatableComponent {
     // ffilter_  : N2 x D; N2 is lookahead order
     // bposition_: T x 1; auxiliary information
     // fposition_: T x 1; auxiliary information
-    out->BiVfsmnMemory(in, bfilter_, ffilter_, bposition_, fposition_);
     // KALDI_LOG << in;
-    // KALDI_LOG << filter_;
-    // KALDI_LOG << position_;
+    // KALDI_LOG << bfilter_;
+    // KALDI_LOG << ffilter_;
+    // KALDI_LOG << bposition_;
+    // KALDI_LOG << fposition_;
+    out->BiVfsmnMemory(in, bfilter_, ffilter_, bposition_, fposition_);
     // KALDI_LOG << *out;
   }
 

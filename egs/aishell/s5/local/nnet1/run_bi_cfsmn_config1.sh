@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Created on 2018-05-20
+# Created on 2018-05-22
 # Author: Kaituo Xu
-# Funciton: Train cFSMN with frame cross-entropy.
+# Funciton: Train Bidirectional cFSMN with frame cross-entropy.
 
 [ -f cmd.sh ] && . ./cmd.sh
 [ -f path.sh ] && . ./path.sh
@@ -21,12 +21,13 @@ fbank_conf=$conf_dir/fbank.conf
 decode_dnn_conf=$conf_dir/decode_dnn.config
 
 lr=0.00001
-order=30  # cFSMN look-back order, use --order N
+backorder=30  # cFSMN lookback order, use --backorder N
+aheadorder=30  # cFSMN lookahead order, use --aheadorder N
 
 stage=0
 . utils/parse_options.sh || exit 1;
 
-dir=exp/cFSMN-3x40-4x_2048-512-${order}_2x2048-512-lr$lr
+dir=exp/BcFSMN-3x40-4x_2048-512-${backorder}-${aheadorder}_2x2048-512-lr$lr
 
 # Step 1: Make the FBANK features
 [ ! -e $dev ] && if [ $stage -le 0 ]; then
@@ -49,24 +50,24 @@ if [ $stage -le 2 ]; then
 
   num_tgt=$(hmm-info --print-args=false $ali/final.mdl | grep pdfs | awk '{ print $NF }')
 
-  # cFSMN config: 3x40-4x_2048-512-30_2x2048-512
-  # one CompactVfsmn layer = [AffineTransform-CompactVfsmn-AffineTransform-Sigmoid]
+  # BcFSMN config: 3x40-4x_2048-512-30-30_2x2048-512
+  # one BiCompactVfsmn layer = [AffineTransform-BiCompactVfsmn-AffineTransform-Sigmoid]
   nnet_proto=$dir/nnet.proto
   cat > $nnet_proto << EOF
 <AffineTransform> <InputDim> 120 <OutputDim> 512 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.196890 <MaxNorm> 0.000000
-<CompactVfsmn> <InputDim> 512 <OutputDim> 512 <Order> $order
+<BiCompactVfsmn> <InputDim> 512 <OutputDim> 512 <BackOrder> $backorder <AheadOrder> $aheadorder
 <AffineTransform> <InputDim> 512 <OutputDim> 2048 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.097828 <MaxNorm> 0.000000
 <Sigmoid> <InputDim> 2048 <OutputDim> 2048 
 <AffineTransform> <InputDim> 2048 <OutputDim> 512 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.097828 <MaxNorm> 0.000000
-<CompactVfsmn> <InputDim> 512 <OutputDim> 512 <Order> $order
+<BiCompactVfsmn> <InputDim> 512 <OutputDim> 512 <BackOrder> $backorder <AheadOrder> $aheadorder
 <AffineTransform> <InputDim> 512 <OutputDim> 2048 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.097828 <MaxNorm> 0.000000
 <Sigmoid> <InputDim> 2048 <OutputDim> 2048 
 <AffineTransform> <InputDim> 2048 <OutputDim> 512 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.097828 <MaxNorm> 0.000000
-<CompactVfsmn> <InputDim> 512 <OutputDim> 512 <Order> $order
+<BiCompactVfsmn> <InputDim> 512 <OutputDim> 512 <BackOrder> $backorder <AheadOrder> $aheadorder
 <AffineTransform> <InputDim> 512 <OutputDim> 2048 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.097828 <MaxNorm> 0.000000
 <Sigmoid> <InputDim> 2048 <OutputDim> 2048 
 <AffineTransform> <InputDim> 2048 <OutputDim> 512 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.097828 <MaxNorm> 0.000000
-<CompactVfsmn> <InputDim> 512 <OutputDim> 512 <Order> $order
+<BiCompactVfsmn> <InputDim> 512 <OutputDim> 512 <BackOrder> $backorder <AheadOrder> $aheadorder
 <AffineTransform> <InputDim> 512 <OutputDim> 2048 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.097828 <MaxNorm> 0.000000
 <Sigmoid> <InputDim> 2048 <OutputDim> 2048 
 <AffineTransform> <InputDim> 2048 <OutputDim> 2048 <BiasMean> -2.000000 <BiasRange> 4.000000 <ParamStddev> 0.077340 <MaxNorm> 0.000000

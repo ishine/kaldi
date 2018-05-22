@@ -139,7 +139,8 @@ int main(int argc, char *argv[]) {
     // actually, randomize is not allowed when we train FSMN
     RandomizerMask randomizer_mask(rnd_opts);
     MatrixRandomizer feature_randomizer(rnd_opts);
-    MatrixRandomizer position_randomizer(rnd_opts);
+    MatrixRandomizer bposition_randomizer(rnd_opts);
+    MatrixRandomizer fposition_randomizer(rnd_opts);
     PosteriorRandomizer targets_randomizer(rnd_opts);
     VectorRandomizer weights_randomizer(rnd_opts);
 
@@ -202,10 +203,16 @@ int main(int argc, char *argv[]) {
         // get feature / target pair,
         Matrix<BaseFloat> mat = feature_reader.Value();
         Posterior targets = targets_reader.Value(utt);
-        // generate position matrix for this utt
-        Matrix<BaseFloat> posi(mat.NumRows(), 1.0);
-        for (int32 i = 0; i < mat.NumRows(); ++i) {
-          posi(i, 0) = (BaseFloat)i;
+        // generate bposition matrix for this utt
+        int32 row = mat.NumRows();
+        Matrix<BaseFloat> bposi(row, 1.0);
+        for (int32 i = 0; i < row; ++i) {
+          bposi(i, 0) = (BaseFloat)i;
+        }
+        // generate fposition matrix for this utt
+        Matrix<BaseFloat> fposi(row, 1.0);
+        for (int32 i = 0; i < row; ++i) {
+          fposi(i, 0) = (BaseFloat)(row - i - 1);
         }
         // get per-frame weights,
         Vector<BaseFloat> weights;
@@ -237,7 +244,8 @@ int main(int argc, char *argv[]) {
           if (max - min < length_tolerance) {
             // we truncate to shortest,
             if (mat.NumRows() != min) mat.Resize(min, mat.NumCols(), kCopyData);
-            if (posi.NumRows() != min) posi.Resize(min, posi.NumCols(), kCopyData);
+            if (bposi.NumRows() != min) bposi.Resize(min, bposi.NumCols(), kCopyData);
+            if (fposi.NumRows() != min) fposi.Resize(min, fposi.NumCols(), kCopyData);
             if (targets.size() != min) targets.resize(min);
             if (weights.Dim() != min) weights.Resize(min, kCopyData);
           } else {
@@ -291,7 +299,8 @@ int main(int argc, char *argv[]) {
         // pass data to randomizers,
         KALDI_ASSERT(feats_transf.NumRows() == targets.size());
         feature_randomizer.AddData(feats_transf);
-        position_randomizer.AddData(CuMatrix<BaseFloat>(posi));
+        bposition_randomizer.AddData(CuMatrix<BaseFloat>(bposi));
+        fposition_randomizer.AddData(CuMatrix<BaseFloat>(fposi));
         targets_randomizer.AddData(targets);
         weights_randomizer.AddData(weights);
         num_done++;
@@ -316,29 +325,42 @@ int main(int argc, char *argv[]) {
 
       // train with data from randomizers (using mini-batches),
       for ( ; !feature_randomizer.Done(); feature_randomizer.Next(),
-                                          position_randomizer.Next(),
+                                          bposition_randomizer.Next(),
+                                          fposition_randomizer.Next(),
                                           targets_randomizer.Next(),
                                           weights_randomizer.Next()) {
         // get block of feature/target pairs,
         const CuMatrixBase<BaseFloat>& nnet_in = feature_randomizer.Value();
-        const CuMatrixBase<BaseFloat>& position = position_randomizer.Value();
+        const CuMatrixBase<BaseFloat>& bposition = bposition_randomizer.Value();
+        const CuMatrixBase<BaseFloat>& fposition = fposition_randomizer.Value();
         const Posterior& nnet_tgt = targets_randomizer.Value();
         const Vector<BaseFloat>& frm_weights = weights_randomizer.Value();
         
-        // process the begin of position matrix, if it is not a new utt but
+        // process the begin of bposition matrix, if it is not a new utt but
         // is a part of utt of the end utt in last minibatch
-        if (position(0, 0) != 0.0) {
+        if (bposition(0, 0) != 0.0) {
           int32 i = 0;
-          BaseFloat start_idx = position(0, 0);
-          while (position(i, 0) != 0.0 && i < position.NumRows()) {
-            position.RowRange(i, 1).Set(position(i, 0) - start_idx);
+          BaseFloat start_idx = bposition(0, 0);
+          while (bposition(i, 0) != 0.0 && i < bposition.NumRows()) {
+            bposition.RowRange(i, 1).Set(bposition(i, 0) - start_idx);
             ++i;
           }
         }
-        KALDI_ASSERT(position(0, 0) == 0.0);
+        KALDI_ASSERT(bposition(0, 0) == 0.0);
+        // process the end of fposition matrix, if it is a part of new utt
+        int32 row = fposition.NumRows();
+        if (fposition(row - 1, 0) != 0.0) {
+          int32 i = row - 1;
+          BaseFloat end_idx = fposition(row - 1, 0);
+          while (fposition(i, 0) != 0.0 && i >= 0) {
+            fposition.RowRange(i, 1).Set(fposition(i, 0) - end_idx);
+            --i;
+          }
+        }
+        KALDI_ASSERT(fposition(row - 1, 0) == 0.0);
 
-        ExtraInfo info(position);
-        // send position matrix to fsmn component
+        ExtraInfo info(bposition, fposition);
+        // send bposition matrix to fsmn component
         nnet.Prepare(info);
         // forward pass,
         nnet.Propagate(nnet_in, &nnet_out);
