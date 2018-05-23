@@ -62,6 +62,9 @@ int main(int argc, char *argv[]) {
     po.Register("num-skip-frames", &num_skip_frames,
       "Number of frames to skip in the Multi-stream training");
 
+    bool have_fsmn = true;  // TODO: change it false later
+    po.Register("have-fsmn", &have_fsmn, "Whether have fsmn component");
+
     using namespace kaldi;
     using namespace kaldi::nnet1;
     typedef kaldi::int32 int32;
@@ -109,6 +112,12 @@ int main(int argc, char *argv[]) {
                 << "use only one of the two!";
     }
 
+    if (have_fsmn && num_skip_frames > 0) {
+      KALDI_ERR << "Cannot use both --have-fsmn=true --num-skip-frames > 0"
+                << "use only one of the two right now! (Support both later)";
+    }
+
+
     // we will subtract log-priors later,
     PdfPrior pdf_prior(prior_opts);
 
@@ -126,6 +135,9 @@ int main(int argc, char *argv[]) {
     CuMatrix<BaseFloat> feats, feats_transf, nnet_out;
     Matrix<BaseFloat> nnet_out_host;
 
+    // FSMN
+    CuMatrix<BaseFloat> bposition, fposition;
+
     Timer time;
     double time_now = 0;
     int32 num_done = 0;
@@ -139,6 +151,24 @@ int main(int argc, char *argv[]) {
                     << ", " << utt
                     << ", " << mat.NumRows() << "frm";
 
+      // FSMN related info BEGIN
+      if (have_fsmn) {
+        int32 row = mat.NumRows();
+        // generate bposition matrix for this utt
+        Matrix<BaseFloat> bposi(row, 1.0);
+        for (int32 i = 0; i < row; ++i) {
+          bposi(i, 0) = (BaseFloat)i;
+        }
+        // generate fposition matrix for this utt
+        Matrix<BaseFloat> fposi(row, 1.0);
+        for (int32 i = 0; i < row; ++i) {
+          fposi(i, 0) = (BaseFloat)(row - i - 1);
+        }
+        // push them to gpu
+        bposition = bposi;
+        fposition = fposi;
+      }
+      // FSMN realted info END
 
       if (!KALDI_ISFINITE(mat.Sum())) {  // check there's no nan/inf,
         KALDI_ERR << "NaN or inf found in features for " << utt;
@@ -166,6 +196,10 @@ int main(int argc, char *argv[]) {
 
       // fwd-pass, nnet,
       if (num_skip_frames == 0) {
+        if (have_fsmn) {
+          ExtraInfo info(bposition, fposition);
+          nnet.Prepare(info);
+        }
         nnet.Feedforward(feats_transf, &nnet_out);
       } else if (num_skip_frames > 0) {
         nnet.Feedforward(feats_skip, &nnet_out);
