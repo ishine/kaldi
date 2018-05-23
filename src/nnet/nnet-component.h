@@ -110,7 +110,8 @@ class Component {
     kEmbedding,
     kTfLstm,
     kCompactVfsmn,
-    kBiCompactVfsmn
+    kBiCompactVfsmn,
+    kDeepFsmn
   } ComponentType;
 
   /// A pair of type and marker,

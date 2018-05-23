@@ -59,11 +59,11 @@ class BiCompactVfsmn : public UpdatableComponent {
     // Glorot Uniform
     bfilter_.Resize(lookback_order_ + 1, InputDim());  // NOTE +1
     float mean = 0.0;
-    float range = sqrt(6.0 / (float)(InputDim() + lookback_order_ + 1))*2;
+    float range = sqrt(6.0 / (float)(InputDim() + lookback_order_ + 1));
     RandUniform(mean, range, &bfilter_);
 
     ffilter_.Resize(lookahead_order_, InputDim());
-    range = sqrt(6.0 / (float)(InputDim() + lookahead_order_))*2;
+    range = sqrt(6.0 / (float)(InputDim() + lookahead_order_));
     RandUniform(mean, range, &ffilter_);
   }
 

@@ -47,6 +47,7 @@ class AffineTransform : public UpdatableComponent {
   void InitData(std::istream &is) {
     // define options
     float bias_mean = -2.0, bias_range = 2.0, param_stddev = 0.1;
+    int xavier_flag = 0;
     // parse config
     std::string token;
     while (is >> std::ws, !is.eof()) {
@@ -57,6 +58,7 @@ class AffineTransform : public UpdatableComponent {
       else if (token == "<LearnRateCoef>") ReadBasicType(is, false, &learn_rate_coef_);
       else if (token == "<BiasLearnRateCoef>") ReadBasicType(is, false, &bias_learn_rate_coef_);
       else if (token == "<MaxNorm>") ReadBasicType(is, false, &max_norm_);
+      else if (token == "<Xavier>") ReadBasicType(is, false, &xavier_flag);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                      << " (ParamStddev|BiasMean|BiasRange|LearnRateCoef|BiasLearnRateCoef)";
     }
@@ -65,11 +67,19 @@ class AffineTransform : public UpdatableComponent {
     // Initialize trainable parameters,
     //
     // Gaussian with given std_dev (mean = 0),
-    linearity_.Resize(OutputDim(), InputDim());
-    RandGauss(0.0, param_stddev, &linearity_);
-    // Uniform,
-    bias_.Resize(OutputDim());
-    RandUniform(bias_mean, bias_range, &bias_);
+    if (xavier_flag) {
+      float range = sqrt(6.0/(OutputDim() + InputDim()));
+      linearity_.Resize(OutputDim(), InputDim(), kSetZero);
+      RandUniform(0.0, range, &linearity_);
+
+      bias_.Resize(OutputDim(), kSetZero);
+    } else {
+      linearity_.Resize(OutputDim(), InputDim());
+      RandGauss(0.0, param_stddev, &linearity_);
+      // Uniform,
+      bias_.Resize(OutputDim());
+      RandUniform(bias_mean, bias_range, &bias_);
+    }
   }
 
   void ReadData(std::istream &is, bool binary) {

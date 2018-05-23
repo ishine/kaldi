@@ -67,10 +67,7 @@ Nnet& Nnet::operator= (const Nnet& other) {
 
 void Nnet::Prepare(const ExtraInfo &info) {
   for (int32 c = 0; c < NumComponents(); c++) {
-    if (GetComponent(c).GetType() == Component::kCompactVfsmn ||
-        GetComponent(c).GetType() == Component::kBiCompactVfsmn) {
-      components_[c]->Prepare(info);
-    }
+    components_[c]->Prepare(info);
   }
 }
 
