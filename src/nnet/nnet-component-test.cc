@@ -32,6 +32,7 @@
 #include "nnet/nnet-batch-norm-component.h"
 #include "nnet/nnet-embedding.h"
 #include "nnet/nnet-tf-lstm.h"
+#include "nnet/nnet-compact-vfsmn.h"
 #include "nnet/nnet-bi-compact-vfsmn.h"
 #include "util/common-utils.h"
 
@@ -752,6 +753,131 @@ namespace nnet1 {
     delete c;
   }
 
+  void UnitTestCompactVfsmn() { /* Implemented by Kaituo XU */
+    Component* cp = Component::Init(
+      "<CompactVfsmn> <InputDim> 5 <OutputDim> 5 <Order> 4"
+    );
+    CompactVfsmn* c = dynamic_cast<CompactVfsmn*>(cp);
+    auto t = c->GetType();
+    KALDI_LOG << c->TypeToMarker(t);
+    KALDI_LOG << c->Info();
+
+    CuMatrix<BaseFloat> mat_in;
+    ReadCuMatrixFromString("[ 1.   2.   3.   4.   5. \n\
+          6.   7.   8.   9.  10. \n\
+         11.  12.  13.  14.  15. \n\
+         16.  17.  18.  19.  20. \n\
+         21.  22.  23.  24.  25. \n\
+         26.  27.  28.  29.  30. \n\
+         31.  32.  33.  34.  35. \n\
+         36.  37.  38.  39.  40. \n\
+         41.  42.  43.  44.  45. \n\
+         46.  47.  48.  49.  50. \n\
+         51.  52.  53.  54.  55. \n\
+         56.  57.  58.  59.  60. \n\
+         61.  62.  63.  64.  65. \n\
+         66.  67.  68.  69.  70. \n\
+         71.  72.  73.  74.  75. ]", &mat_in);
+    KALDI_LOG << mat_in.NumRows() << " " << mat_in.NumCols();
+    KALDI_LOG << mat_in;
+
+    CuMatrix<BaseFloat> position;
+    ReadCuMatrixFromString("[ 0 \n 1 \n 2 \n 3 \n 4 \n 5 \n 6 \n 7 \n 0 \n 1 \n 2 \n 3 \n 4 \n 0 \n 1 ]", &position);
+    KALDI_LOG << position.NumRows() << " " << position.NumCols();
+    KALDI_LOG << position;
+
+    // Prepare extra info
+    ExtraInfo info(position);
+    c->Prepare(info);
+
+    CuMatrix<BaseFloat> filter;
+    ReadCuMatrixFromString("[    0.1  0.2  0.3  0.4  0.5 \n\
+         0.6  0.7  0.8  0.9  1.  \n\
+         1.1  1.2  1.3  1.4  1.5 \n\
+         1.6  1.7  1.8  1.9  2.  ]", &filter);
+    KALDI_LOG << filter;
+
+    Vector<BaseFloat> para;
+    int32 N1 = 4, D = 5;
+    para.Resize(N1*D, kSetZero);
+    para.CopyRowsFromMat(filter);
+    c->SetParams(para);
+
+    // propagate,
+    CuMatrix<BaseFloat> mat_out;
+    c->Propagate(mat_in, &mat_out);
+    KALDI_LOG << "mat_out" << mat_out;
+    /* mat_out should be
+       [[   1.     2.     3.     4.     5. ]
+       [   6.1    7.4    8.9   10.6   12.5]
+       [  12.2   14.8   17.8   21.2   25. ]
+       [  21.8   26.7   32.2   38.3   45. ]
+       [  37.4   45.6   54.6   64.4   75. ]
+       [  59.4   69.6   80.6   92.4  105. ]
+       [  81.4   93.6  106.6  120.4  135. ]
+       [ 103.4  117.6  132.6  148.4  165. ]
+       [  41.    42.    43.    44.    45. ]
+       [  50.1   55.4   60.9   66.6   72.5]
+       [  80.2   90.8  101.8  113.2  125. ]
+       [ 133.8  150.7  168.2  186.3  205. ]
+       [ 213.4  237.6  262.6  288.4  315. ]
+       [  66.    67.    68.    69.    70. ]
+       [  77.6   85.4   93.4  101.6  110. ]]
+     */
+
+    CuMatrix<BaseFloat> mat_out_diff(mat_out);
+    ReadCuMatrixFromString("[ 75.  74.  73.  72.  71. \n\
+         70.  69.  68.  67.  66. \n\
+         65.  64.  63.  62.  61. \n\
+         60.  59.  58.  57.  56. \n\
+         55.  54.  53.  52.  51. \n\
+         50.  49.  48.  47.  46. \n\
+         45.  44.  43.  42.  41. \n\
+         40.  39.  38.  37.  36. \n\
+         35.  34.  33.  32.  31. \n\
+         30.  29.  28.  27.  26. \n\
+         25.  24.  23.  22.  21. \n\
+         20.  19.  18.  17.  16. \n\
+         15.  14.  13.  12.  11. \n\
+         10.   9.   8.   7.   6. \n\
+          5.   4.   3.   2.   1. ]", &mat_out_diff);
+    // backpropagate,
+    CuMatrix<BaseFloat> mat_in_diff;
+    c->Backpropagate(mat_in, mat_out, mat_out_diff, &mat_in_diff);
+    KALDI_LOG << "mat_in_diff " << mat_in_diff;
+    /* mat_in_diff should be
+       [[ 275.   295.2  314.6  333.2  351. ]
+       [ 253.   271.2  288.6  305.2  321. ]
+       [ 231.   247.2  262.6  277.2  291. ]
+       [ 209.   223.2  236.6  249.2  261. ]
+       [ 131.   141.4  151.2  160.4  169. ]
+       [  78.5   85.1   91.3   97.1  102.5]
+       [  49.    51.8   54.4   56.8   59. ]
+       [  40.    39.    38.    37.    36. ]
+       [  99.   103.2  106.6  109.2  111. ]
+       [  61.    63.9   66.2   67.9   69. ]
+       [  36.    37.6   38.8   39.6   40. ]
+       [  21.5   21.8   21.9   21.8   21.5]
+       [  15.    14.    13.    12.    11. ]
+       [  10.5    9.8    8.9    7.8    6.5]
+       [   5.     4.     3.     2.     1. ]]
+    */
+    
+    // update
+    NnetTrainOptions opts;
+    opts.learn_rate = -1.0;
+    c->SetTrainOptions(opts);
+    c->Update(mat_in, mat_out_diff);
+    KALDI_LOG << c->GetFilter();
+    /* output should be
+       10030.1 10126.2 10198.3 10246.4 10270.5 
+       6525.6 6672.7 6801.8 6912.9 7006 
+       4011.1 4147.2 4269.3 4377.4 4471.5 
+       2106.6 2231.7 2346.8 2451.9 2547
+    */
+    delete c;
+  }
+
   void UnitTestBiCompactVfsmn() { /* Implemented by Kaituo XU */
     Component* cp = Component::Init(
       "<BiCompactVfsmn> <InputDim> 5 <OutputDim> 5 <BackOrder> 4 <AheadOrder> 3"
@@ -930,6 +1056,7 @@ int main() {
     // UnitTestBatchNormComponent();
     // UnitTestEmbedding();
     // UnitTestTfLstm();
+    UnitTestCompactVfsmn();
     UnitTestBiCompactVfsmn();
     // end of unit-tests,
     if (loop == 0)

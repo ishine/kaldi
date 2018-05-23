@@ -2463,6 +2463,35 @@ void CuMatrixBase<Real>::BiVfsmnMemory(const CuMatrixBase<Real> &hidden,
     // TODO
     // Mat().BiVfsmnMemory(hidden.Mat(), bfilter.Mat(), ffilter.Mat(),
     //                     bposition.Mat(), fposition.Mat());
+    Real *memory = this->Data();
+    const Real *h_data = hidden.Data();
+    int32 h_stride = hidden.Stride();
+    const Real *bf_data = bfilter.Data();
+    const Real *ff_data = ffilter.Data();
+    const Real *bp_data = bposition.Data();
+    const Real *fp_data = fposition.Data();
+    int32 rows = NumRows();
+    int32 cols = NumCols();
+    int32 N1 = bfilter.NumRows() - 1;
+    int32 N2 = ffilter.NumRows();
+    for (int32 r = 0; r < rows; r++) {
+      for (int32 c = 0; c < cols; c++) {
+        // lookback
+        const int stepb = fminf(bp_data[r * bposition.Stride()], N1);
+        Real result = (1.0 + bf_data[0 + c]) * h_data[r * h_stride + c];
+        for (int i = 0; i < stepb; ++i) {
+          result += bf_data[(i + 1) * bfilter.Stride() + c] *
+                    h_data[(r - i - 1) * h_stride + c];
+        }
+        // lookahead
+        const int stepf = fminf(fp_data[r * fposition.Stride()], N2);
+        for (int i = 0; i < stepf; ++i) {
+          result += ff_data[i * ffilter.Stride() + c] *
+                    h_data[(r + i + 1 ) * h_stride + c];
+        }
+        memory[r * this->Stride() + c] = result;
+      }
+    }
   }
 }
 
@@ -2594,6 +2623,25 @@ void CuMatrixBase<Real>::VfsmnMemory(const CuMatrixBase<Real> &hidden,
   {
     // TODO
     // Mat().VfsmnMemory(hidden.Mat(), filter.Mat(), position.Mat());
+    Real *memory = this->Data();
+    const Real *h_data = hidden.Data();
+    int32 h_stride = hidden.Stride();
+    const Real *f_data = filter.Data();
+    const Real *p_data = position.Data();
+    int32 rows = NumRows();
+    int32 cols = NumCols();
+    for (int32 r = 0; r < rows; r++) {
+      for (int32 c = 0; c < cols; c++) {
+        // lookback
+        const int step = fminf(p_data[r * position.Stride()], filter.NumRows());
+        Real result = h_data[r * h_stride + c];
+        for (int i = 0; i < step; ++i) {
+          result += f_data[i * filter.Stride() + c] *
+                    h_data[(r - i - 1) * h_stride + c];
+        }
+        memory[r * this->Stride() + c] = result;
+      }
+    }
   }
 }
 
