@@ -79,6 +79,7 @@ class Component {
     kBlockSoftmax,
     kSigmoid,
     kTanh,
+    kReLU,
     kParametricRelu,
     kDropout,
     kLengthNormComponent,

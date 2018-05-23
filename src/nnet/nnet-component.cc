@@ -75,6 +75,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kBlockSoftmax, "<BlockSoftmax>" },
   { Component::kSigmoid, "<Sigmoid>" },
   { Component::kTanh, "<Tanh>" },
+  { Component::kReLU, "<ReLU>" },
   { Component::kParametricRelu,"<ParametricRelu>" },
   { Component::kDropout, "<Dropout>" },
   { Component::kLengthNormComponent, "<LengthNormComponent>" },
@@ -168,6 +169,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kTanh :
       ans = new Tanh(input_dim, output_dim);
+      break;
+    case Component::kReLU :
+      ans = new ReLU(input_dim, output_dim);
       break;
     case Component::kParametricRelu :
       ans = new ParametricRelu(input_dim, output_dim);
