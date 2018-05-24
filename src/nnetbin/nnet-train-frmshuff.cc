@@ -121,6 +121,7 @@ int main(int argc, char *argv[]) {
       nnet_transf.SetBatchNormMode("test");
       nnet.SetBatchNormMode("test");
     }
+    KALDI_LOG << nnet.Info();
 
     kaldi::int64 total_frames = 0;
 

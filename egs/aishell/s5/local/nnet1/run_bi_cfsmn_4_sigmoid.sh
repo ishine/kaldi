@@ -92,6 +92,6 @@ fi
 
 # Step 3: Decode
 if [ $stage -le 3 ]; then
-  steps/nnet/decode.sh --nj 1 --use-gpu "yes" --cmd "$decode_cmd" --config $decode_dnn_conf --acwt 0.1 \
+  steps/nnet/decode.sh --nj 20 --cmd "$decode_cmd" --config $decode_dnn_conf --acwt 0.1 \
     $gmm/graph $test $dir/decode_test || exit 1;
 fi
