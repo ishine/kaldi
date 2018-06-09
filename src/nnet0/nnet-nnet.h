@@ -177,6 +177,9 @@ class Nnet {
     return opts_;
   }
 
+  /// For FSMN component
+  void SetFlags(const Vector<BaseFloat> &flags);
+
  private:
   /// Vector which contains all the components composing the neural network,
   /// the components are for example: AffineTransform, Sigmoid, Softmax

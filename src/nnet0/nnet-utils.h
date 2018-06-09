@@ -38,7 +38,7 @@ namespace nnet0 {
 /**
  * Define stream insertion opeartor for 'std::vector', useful for log-prints,
  */
-template <typename T> 
+template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
   std::copy(v.begin(), v.end(), std::ostream_iterator<T>(os," "));
   return os;
@@ -149,6 +149,138 @@ Real ComputeStdDev(const CuMatrixBase<Real> &mat) {
   }
   return sqrt(var);
 }
+
+/**
+ * Fill CuMatrix with random numbers (Gaussian distribution):
+ * mu = the mean value,
+ * sigma = standard deviation,
+ *
+ * Using the CPU random generator.
+ */
+template <typename Real>
+void RandGauss(BaseFloat mu, BaseFloat sigma, CuMatrixBase<Real>* mat,
+               struct RandomState* state = NULL) {
+  // fill temporary matrix with 'Normal' samples,
+  Matrix<Real> m(mat->NumRows(), mat->NumCols(), kUndefined);
+  for (int32 r = 0; r < m.NumRows(); r++) {
+    for (int32 c = 0; c < m.NumCols(); c++) {
+      m(r, c) = RandGauss(state);
+    }
+  }
+  // re-shape the distrbution,
+  m.Scale(sigma);
+  m.Add(mu);
+  // export,
+  mat->CopyFromMat(m);
+}
+
+/**
+ * Fill CuMatrix with random numbers (Uniform distribution):
+ * mu = the mean value,
+ * range = the 'width' of the uniform PDF (spanning mu-range/2 .. mu+range/2)
+ *
+ * Using the CPU random generator.
+ */
+template <typename Real>
+void RandUniform(BaseFloat mu, BaseFloat range, CuMatrixBase<Real>* mat,
+                 struct RandomState* state = NULL) {
+  // fill temporary matrix with '0..1' samples,
+  Matrix<Real> m(mat->NumRows(), mat->NumCols(), kUndefined);
+  for (int32 r = 0; r < m.NumRows(); r++) {
+    for (int32 c = 0; c < m.NumCols(); c++) {
+      m(r, c) = Rand(state) / static_cast<Real>(RAND_MAX);
+    }
+  }
+  // re-shape the distrbution,
+  m.Scale(range);  // 0..range,
+  m.Add(mu - (range / 2.0));  // mu-range/2 .. mu+range/2,
+  // export,
+  mat->CopyFromMat(m);
+}
+
+/**
+ * Fill CuVector with random numbers (Uniform distribution):
+ * mu = the mean value,
+ * range = the 'width' of the uniform PDF (spanning mu-range/2 .. mu+range/2)
+ *
+ * Using the CPU random generator.
+ */
+template <typename Real>
+void RandUniform(BaseFloat mu, BaseFloat range, CuVectorBase<Real>* vec,
+                 struct RandomState* state = NULL) {
+  // fill temporary vector with '0..1' samples,
+  Vector<Real> v(vec->Dim(), kUndefined);
+  for (int32 i = 0; i < v.Dim(); i++) {
+    v(i) = Rand(state) / static_cast<Real>(RAND_MAX);
+  }
+  // re-shape the distrbution,
+  v.Scale(range);  // 0..range,
+  v.Add(mu - (range / 2.0));  // mu-range/2 .. mu+range/2,
+  // export,
+  vec->CopyFromVec(v);
+}
+
+
+/**
+ * Build 'integer vector' out of vector of 'matlab-like' representation:
+ * 'b, b:e, b:s:e'
+ *
+ * b,e,s are integers, where:
+ * b = beginning
+ * e = end
+ * s = step
+ *
+ * The sequence includes 'end', 1:3 => [ 1 2 3 ].
+ * The 'step' has to be positive.
+ */
+inline void BuildIntegerVector(const std::vector<std::vector<int32> >& in,
+                               std::vector<int32>* out) {
+  // start with empty vector,
+  out->clear();
+  // loop over records,
+  for (int32 i = 0; i < in.size(); i++) {
+    // process i'th record,
+    int32 beg = 0, end = 0, step = 1;
+    switch (in[i].size()) {
+      case 1:
+        beg  = in[i][0];
+        end  = in[i][0];
+        step = 1;
+        break;
+      case 2:
+        beg  = in[i][0];
+        end  = in[i][1];
+        step = 1;
+        break;
+      case 3:
+        beg  = in[i][0];
+        end  = in[i][2];
+        step = in[i][1];
+        break;
+      default:
+        KALDI_ERR << "Something is wrong! (should be 1-3) : "
+                  << in[i].size();
+    }
+    // check the inputs,
+    KALDI_ASSERT(beg <= end);
+    KALDI_ASSERT(step > 0);  // positive,
+    // append values to vector,
+    for (int32 j = beg; j <= end; j += step) {
+      out->push_back(j);
+    }
+  }
+}
+
+/**
+ * Wrapper with 'CuArray<int32>' output.
+ */
+inline void BuildIntegerVector(const std::vector<std::vector<int32> >& in,
+                               CuArray<int32>* out) {
+  std::vector<int32> v;
+  BuildIntegerVector(in, &v);
+  (*out) = v;
+}
+
 
 /**
  * Convert Posterior to CuMatrix, 

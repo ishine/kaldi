@@ -1,6 +1,7 @@
 // nnet0/nnet-component.cc
 
 // Copyright 2011-2013  Brno University of Technology (Author: Karel Vesely)
+//           2018 Alibaba.Inc (Author: ShaoFei Xue, ShiLiang Zhang)
 
 // See ../../COPYING for clarification regarding multiple authors
 //
@@ -64,6 +65,11 @@
 #include <sstream>
 #include "nnet-time-delay-transform.h"
 
+#include "nnet0/nnet-fsmn.h"
+#include "nnet0/nnet-deep-fsmn.h"
+#include "nnet0/nnet-uni-fsmn.h"
+#include "nnet0/nnet-uni-deep-fsmn.h"
+
 namespace kaldi {
 namespace nnet0 {
 
@@ -119,6 +125,10 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kFramePoolingComponent, "<FramePoolingComponent>"},
   { Component::kParallelComponent, "<ParallelComponent>"},
   { Component::kParallelComponentMultiTask, "<ParallelComponentMultiTask>"},
+  { Component::kFsmn, "<Fsmn>" },
+  { Component::kDeepFsmn, "<DeepFsmn>" },
+  { Component::kUniFsmn, "<UniFsmn>" },
+  { Component::kUniDeepFsmn, "<UniDeepFsmn>" },
 };
 
 
@@ -295,6 +305,18 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kParallelComponentMultiTask :
       ans = new ParallelComponentMultiTask(input_dim, output_dim);
+      break;
+    case Component::kFsmn:
+      ans = new Fsmn(input_dim, output_dim);
+      break;
+    case Component::kDeepFsmn:
+      ans = new DeepFsmn(input_dim, output_dim);
+      break;
+    case Component::kUniFsmn:
+      ans = new UniFsmn(input_dim, output_dim);
+      break;
+    case Component::kUniDeepFsmn:
+      ans = new UniDeepFsmn(input_dim, output_dim);
       break;
     case Component::kUnknown :
     default :

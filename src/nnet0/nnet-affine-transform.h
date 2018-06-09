@@ -61,6 +61,7 @@ class AffineTransform : public UpdatableComponent {
     float learn_rate_coef = 1.0, bias_learn_rate_coef = 1.0;
     float max_norm = 0.0;
     int32 fix_ = 0;
+    int xavier_flag = 0;
     // parse config
     std::string token; 
     while (!is.eof()) {
@@ -74,37 +75,31 @@ class AffineTransform : public UpdatableComponent {
       else if (token == "<MaxNorm>") ReadBasicType(is, false, &max_norm);
       else if (token == "<FixPoint>") ReadBasicType(is, false, &fix_);
       else if (token == "<Bit>") ReadBasicType(is, false, &bit_);
+      else if (token == "<Xavier>") ReadBasicType(is, false, &xavier_flag);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                      << " (ParamStddev|BiasMean|BiasRange|LearnRateCoef|BiasLearnRateCoef)";
       is >> std::ws; // eat-up whitespace
     }
 
     //
-    // initialize
-    //
-    Matrix<BaseFloat> mat(output_dim_, input_dim_);
-    for (int32 r=0; r<output_dim_; r++) {
-      for (int32 c=0; c<input_dim_; c++) {
-        if (param_range == 0.0)
-        	mat(r,c) = param_stddev * RandGauss(); // 0-mean Gauss with given std_dev
-	else
-		mat(r,c) = param_range * (RandUniform() - 0.5) * 2;
-      }
+    // Initialize trainable parameters,
+    // if Xavier_flag=1, use the “Xavier” initialization
+    if(xavier_flag){
+      float range = sqrt(6)/sqrt(OutputDim() + InputDim());
+      linearity_.Resize(OutputDim(), InputDim(), kSetZero);
+      RandUniform(0.0, range, &linearity_);
+
+      bias_.Resize(OutputDim(),kSetZero);
     }
-    linearity_ = mat;
-    // fixed point
-    if(fix_){
-        linearity_fix_= linearity_;
+    else{
+      // Gaussian with given std_dev (mean = 0),
+      linearity_.Resize(OutputDim(), InputDim());
+      RandGauss(0.0, param_stddev, &linearity_);
+      // Uniform,
+      bias_.Resize(OutputDim());
+      RandUniform(bias_mean, bias_range, &bias_);
     }
 
-    //
-    Vector<BaseFloat> vec(output_dim_);
-    for (int32 i=0; i<output_dim_; i++) {
-      // +/- 1/2*bias_range from bias_mean:
-      vec(i) = bias_mean + (RandUniform() - 0.5) * bias_range; 
-    }
-    bias_ = vec;
-    //
     learn_rate_coef_ = learn_rate_coef;
     bias_learn_rate_coef_ = bias_learn_rate_coef;
     max_norm_ = max_norm;
@@ -131,8 +126,11 @@ class AffineTransform : public UpdatableComponent {
       ExpectToken(is, binary, "<Bit>");
       ReadBasicType(is, binary, &bit_);
     }
-    // weights
+    // Read the data (data follow the tokens),
+
+    // weight matrix,
     linearity_.Read(is, binary);
+    // bias vector,
     bias_.Read(is, binary);
 
     if(fix_){

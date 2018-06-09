@@ -104,7 +104,13 @@ class Component {
     kCudnnPooling2DComponent,
     kFramePoolingComponent, 
     kParallelComponent,
-	kParallelComponentMultiTask
+	kParallelComponentMultiTask,
+
+    //FSMN
+    kFsmn,
+    kDeepFsmn,
+    kUniFsmn,
+    kUniDeepFsmn,
   } ComponentType;
   /// A pair of type and marker 
   struct key_value {
