@@ -1,4 +1,4 @@
-// nnet/nnet-fsmn.h
+// nnet0/nnet-fsmn.h
 
 // Copyright 2018 Alibaba.Inc (Author: ShiLiang Zhang) 
 
@@ -21,8 +21,8 @@
 #ifndef KALDI_NNET_NNET_FSMN_H_
 #define KALDI_NNET_NNET_FSMN_H_
 
-#include "nnet/nnet-component.h"
-#include "nnet/nnet-utils.h"
+#include "nnet0/nnet-component.h"
+#include "nnet0/nnet-utils.h"
 #include "cudamatrix/cu-math.h"
 #include "cudamatrix/cu-kernels.h"
 
@@ -46,7 +46,7 @@ namespace nnet0 {
      flags_.Resize(flags.Dim(), kSetZero);
      flags_.CopyFromVec(flags);
    }
-   void InitData(std::istream                                                     &is) {
+   void InitData(std::istream &is) {
      // define options
      float learn_rate_coef = 1.0;
      int l_order = 1, r_order = 1;
@@ -130,15 +130,14 @@ namespace nnet0 {
      r_filter_.Write(os, binary);
    }
 
-   void ResetMomentum(void)
-   {
+   void ResetMomentum(void) {
    }
 
    int32 NumParams() const { 
      return l_filter_.NumRows()*l_filter_.NumCols() + r_filter_.NumRows()*r_filter_.NumCols(); 
    }
 
-   void GetParams(VectorBase<BaseFloat>* wei_copy) const {
+   void GetParams(Vector<BaseFloat>* wei_copy) const {
      KALDI_ASSERT(wei_copy->Dim() == NumParams());
      int32 l_filter_num_elem = l_filter_.NumRows() * l_filter_.NumCols();
      int32 r_filter_num_elem = r_filter_.NumRows() * r_filter_.NumCols();

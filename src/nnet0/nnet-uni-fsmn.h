@@ -1,4 +1,4 @@
-// nnet/nnet-uni-fsmn.h
+// nnet0/nnet-uni-fsmn.h
 
 // Copyright 2018 Alibaba.Inc (Author: Shiliang Zhang) 
 
@@ -22,8 +22,8 @@
 #define KALDI_NNET0_NNET_UNI_FSMN_H_
 
 
-#include "nnet/nnet-component.h"
-#include "nnet/nnet-utils.h"
+#include "nnet0/nnet-component.h"
+#include "nnet0/nnet-utils.h"
 #include "cudamatrix/cu-math.h"
 #include "cudamatrix/cu-kernels.h"
 
@@ -115,7 +115,7 @@ namespace nnet0 {
      return l_filter_.NumRows()*l_filter_.NumCols(); 
    }
 
-   void GetParams(VectorBase<BaseFloat>* wei_copy) const {
+   void GetParams(Vector<BaseFloat>* wei_copy) const {
      KALDI_ASSERT(wei_copy->Dim() == NumParams());
      int32 l_filter_num_elem = l_filter_.NumRows() * l_filter_.NumCols();
      wei_copy->Range(0, l_filter_num_elem).CopyRowsFromMat(Matrix<BaseFloat>(l_filter_));

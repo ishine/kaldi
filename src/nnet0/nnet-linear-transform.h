@@ -1,4 +1,4 @@
-// nnet/nnet-linear-transform.h
+// nnet0/nnet-linear-transform.h
 
 // Copyright 2011-2014  Brno University of Technology (author: Karel Vesely)
 //           2018 Alibaba.Inc (Author: ShiLiang Zhang) 
@@ -24,19 +24,20 @@
 
 #include <string>
 
-#include "nnet/nnet-component.h"
-#include "nnet/nnet-utils.h"
+#include "nnet0/nnet-component.h"
+#include "nnet0/nnet-utils.h"
 #include "cudamatrix/cu-math.h"
 
 namespace kaldi {
-namespace nnet1 {
+namespace nnet0 {
 
 class LinearTransform : public UpdatableComponent {
  public:
   LinearTransform(int32 dim_in, int32 dim_out):
     UpdatableComponent(dim_in, dim_out),
     linearity_(dim_out, dim_in),
-    linearity_corr_(dim_out, dim_in)
+    linearity_corr_(dim_out, dim_in),
+    learn_rate_coef_(1.0)
   { }
 
   ~LinearTransform()
@@ -135,7 +136,7 @@ class LinearTransform : public UpdatableComponent {
     gradient->CopyRowsFromMat(linearity_corr_);
   }
 
-  void GetParams(VectorBase<BaseFloat>* params) const {
+  void GetParams(Vector<BaseFloat>* params) const {
     KALDI_ASSERT(params->Dim() == NumParams());
     params->CopyRowsFromMat(linearity_);
   }
@@ -214,6 +215,7 @@ class LinearTransform : public UpdatableComponent {
  private:
   CuMatrix<BaseFloat> linearity_;
   CuMatrix<BaseFloat> linearity_corr_;
+  BaseFloat learn_rate_coef_;
 };
 
 }  // namespace nnet1

@@ -93,22 +93,20 @@ public:
         KALDI_LOG << "num_filters " << num_filters;
         Matrix<BaseFloat> mat(num_filters, num_input_fmaps_ * filt_x_len_*filt_y_len_);
         //KALDI_LOG <<__FILE__<<__LINE__<<" "<<mat.NumRows()<<" "<<mat.NumCols(); 
-        for (int32 r = 0; r < num_filters; r++) {
-            for (int32 c = 0; c < num_input_fmaps_*filt_x_len_*filt_y_len_; c++) {
-                // 0-mean Gauss with given std_dev
-                if (param_range == 0.0)
-                    mat(r, c) = param_stddev * RandGauss();
-                else
-                    mat(r,c) = param_range * (RandUniform() - 0.5) * 2;
-            }
-        }
-        //KALDI_LOG <<__FILE__<<__LINE__<<mat.NumRows()<<" "<<mat.NumCols();
-        filters_ = mat;
-        Vector<BaseFloat> vec(num_filters);
-        for (int32 i = 0; i < num_filters; i++) {
-            vec(i) = bias_mean + (RandUniform() - 0.5) * bias_range;
-        }
-        bias_ = vec;
+        //
+        //  
+        // Initialize trainable parameters,
+        //  
+        // Gaussian with given std_dev (mean = 0),
+        filters_.Resize(num_filters, num_input_fmaps_*filt_x_len_*filt_y_len_);
+        if (param_range == 0.0)
+            RandGauss(0.0, param_stddev, &filters_);
+        else
+            RandUniform(0.0, param_range, &filters_);
+        // Uniform,
+        bias_.Resize(num_filters);
+        RandUniform(bias_mean, bias_range, &bias_);
+
         learn_rate_coef_ = learn_rate_coef;
         bias_learn_rate_coef_ = bias_learn_rate_coef;
         

@@ -132,28 +132,15 @@ class Rbm : public RbmBase {
     else if (hid_type == "gauss" || hid_type == "Gaussian") hid_type_ = RbmBase::Gaussian;
     else KALDI_ERR << "Wrong <HiddenType>" << hid_type;
     // visible-hidden connections
-    Matrix<BaseFloat> mat(output_dim_, input_dim_);
-    for (int32 r=0; r<output_dim_; r++) {
-      for (int32 c=0; c<input_dim_; c++) {
-        mat(r,c) = param_stddev * RandGauss(); // 0-mean Gauss with given std_dev
-      }
-    }
-    vis_hid_ = mat;
+    vis_hid_.Resize(output_dim_, input_dim_);
+    RandGauss(0.0, param_stddev, &vis_hid_);
     // hidden-bias
-    Vector<BaseFloat> vec(output_dim_);
-    for (int32 i=0; i<output_dim_; i++) {
-      // +/- 1/2*bias_range from bias_mean:
-      vec(i) = hid_bias_mean + (RandUniform() - 0.5) * hid_bias_range; 
-    }
-    hid_bias_ = vec;
+    hid_bias_.Resize(output_dim_);
+    RandUniform(hid_bias_mean, hid_bias_range, &hid_bias_);
     // visible-bias
     if (vis_bias_cmvn_file == "") {
-      Vector<BaseFloat> vec2(input_dim_);
-      for (int32 i=0; i<input_dim_; i++) {
-        // +/- 1/2*bias_range from bias_mean:
-        vec2(i) = vis_bias_mean + (RandUniform() - 0.5) * vis_bias_range; 
-      }
-      vis_bias_ = vec2;
+      vis_bias_.Resize(input_dim_);
+      RandUniform(vis_bias_mean, vis_bias_range, &vis_bias_);
     } else {
       KALDI_LOG << "Initializing from <VisibleBiasCmvnFilename> " << vis_bias_cmvn_file;
       Nnet cmvn;

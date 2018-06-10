@@ -76,19 +76,15 @@ class WordVectorTransform : public UpdatableComponent {
     vocab_size_ = vocab_size; // wordvector length: output_dim_
     //
 
-    //
-    // initialize
-    //
-    Matrix<BaseFloat> mat(vocab_size_, output_dim_);
-    for (int32 r=0; r<vocab_size_; r++) {
-      for (int32 c=0; c<output_dim_; c++) {
-        if (param_range == 0.0)
-        	mat(r,c) = param_stddev * RandGauss(); // 0-mean Gauss with given std_dev
-        else
-        	mat(r,c) = param_range * (RandUniform() - 0.5) * 2;
-      }
-    }
-    wordvector_ = mat;
+    //  
+    // Initialize trainable parameters,
+    //  
+    // Gaussian with given std_dev (mean = 0),
+    wordvector_.Resize(vocab_size_, output_dim_);
+    if (param_range == 0.0)
+        RandGauss(0.0, param_stddev, &wordvector_);
+    else
+        RandUniform(0.0, param_range, &wordvector_);
 
   }
 

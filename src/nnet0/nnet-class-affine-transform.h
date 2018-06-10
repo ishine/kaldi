@@ -79,26 +79,18 @@ class ClassAffineTransform : public UpdatableComponent {
 
     KALDI_ASSERT(num_class > 0);
 
-    //
-    // initialize
-    //
-    Matrix<BaseFloat> mat(output_dim_, input_dim_);
-    for (int32 r=0; r<output_dim_; r++) {
-      for (int32 c=0; c<input_dim_; c++) {
-        if (param_range == 0.0)
-        	mat(r,c) = param_stddev * RandGauss(); // 0-mean Gauss with given std_dev
-	else
-		mat(r,c) = param_range * (RandUniform() - 0.5) * 2;
-      }
-    }
-    linearity_ = mat;
-    //
-    Vector<BaseFloat> vec(output_dim_);
-    for (int32 i=0; i<output_dim_; i++) {
-      // +/- 1/2*bias_range from bias_mean:
-      vec(i) = bias_mean + (RandUniform() - 0.5) * bias_range; 
-    }
-    bias_ = vec;
+    //  
+    // Initialize trainable parameters,
+    //  
+    // Gaussian with given std_dev (mean = 0),
+    linearity_.Resize(OutputDim(), InputDim());
+    if (param_range == 0.0)
+        RandGauss(0.0, param_stddev, &linearity_);
+    else
+        RandUniform(0.0, param_range, &linearity_);
+    // Uniform,
+    bias_.Resize(OutputDim());
+    RandUniform(bias_mean, bias_range, &bias_);
 
     //
     learn_rate_coef_ = learn_rate_coef;

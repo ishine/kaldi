@@ -180,7 +180,7 @@ void RandGauss(BaseFloat mu, BaseFloat sigma, CuMatrixBase<Real>* mat,
  * range = the 'width' of the uniform PDF (spanning mu-range/2 .. mu+range/2)
  *
  * Using the CPU random generator.
- */
+*/
 template <typename Real>
 void RandUniform(BaseFloat mu, BaseFloat range, CuMatrixBase<Real>* mat,
                  struct RandomState* state = NULL) {
@@ -204,7 +204,7 @@ void RandUniform(BaseFloat mu, BaseFloat range, CuMatrixBase<Real>* mat,
  * range = the 'width' of the uniform PDF (spanning mu-range/2 .. mu+range/2)
  *
  * Using the CPU random generator.
- */
+*/
 template <typename Real>
 void RandUniform(BaseFloat mu, BaseFloat range, CuVectorBase<Real>* vec,
                  struct RandomState* state = NULL) {
@@ -219,7 +219,6 @@ void RandUniform(BaseFloat mu, BaseFloat range, CuVectorBase<Real>* vec,
   // export,
   vec->CopyFromVec(v);
 }
-
 
 /**
  * Build 'integer vector' out of vector of 'matlab-like' representation:

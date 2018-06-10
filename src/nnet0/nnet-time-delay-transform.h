@@ -99,24 +99,19 @@ class TimeDelayTransform : public UpdatableComponent {
     	int dim_in_ = input_dim_ / num_input_context_;
     	int dim_out_ = output_dim_ / num_output_context_;
 
-    Matrix<BaseFloat> mat(dim_out_, dim_in_*num_indexes_);
-    for (int32 r=0; r<dim_out_; r++) {
-      for (int32 c=0; c<dim_in_*num_indexes_; c++) {
-        if (param_range == 0.0)
-        	mat(r,c) = param_stddev * RandGauss(); // 0-mean Gauss with given std_dev
-	else
-		mat(r,c) = param_range * (RandUniform() - 0.5) * 2;
-      }
-    }
-    linearity_ = mat;
+    //  
+    // Initialize trainable parameters,
+    //  
+    // Gaussian with given std_dev (mean = 0),
+    linearity_.Resize(dim_out_, dim_in_*num_indexes_);
+    if (param_range == 0.0)
+        RandGauss(0.0, param_stddev, &linearity_);
+    else
+        RandUniform(0.0, param_range, &linearity_);
+    // Uniform,
+    bias_.Resize(dim_out_);
+    RandUniform(bias_mean, bias_range, &bias_);
 
-    //
-    Vector<BaseFloat> vec(dim_out_);
-    for (int32 i=0; i<dim_out_; i++) {
-      // +/- 1/2*bias_range from bias_mean:
-      vec(i) = bias_mean + (RandUniform() - 0.5) * bias_range; 
-    }
-    bias_ = vec;
     //
     learn_rate_coef_ = learn_rate_coef;
     bias_learn_rate_coef_ = bias_learn_rate_coef;

@@ -1,4 +1,4 @@
-// nnet/nnet-deep-fsmn.h
+// nnet0/nnet-deep-fsmn.h
 
 // Copyright 2018 Alibaba.Inc (Author: Shiliang Zhang) 
 //
@@ -22,8 +22,8 @@
 #define KALDI_NNET_NNET_DEEP_FSMN_H_
 
 
-#include "nnet/nnet-component.h"
-#include "nnet/nnet-utils.h"
+#include "nnet0/nnet-component.h"
+#include "nnet0/nnet-utils.h"
 #include "cudamatrix/cu-math.h"
 #include "cudamatrix/cu-kernels.h"
 
@@ -183,7 +183,7 @@ namespace nnet0 {
        + linearity_.NumRows()*linearity_.NumCols() + bias_.Dim();
    }
 
-   void GetParams(VectorBase<BaseFloat>* wei_copy) const {
+   void GetParams(Vector<BaseFloat>* wei_copy) const {
      KALDI_ASSERT(wei_copy->Dim() == NumParams());
      int32 l_filter_num_elem = l_filter_.NumRows() * l_filter_.NumCols();
      int32 r_filter_num_elem = r_filter_.NumRows() * r_filter_.NumCols();

@@ -39,10 +39,10 @@
 #include "nnet0/nnet-gru-projected-streams-fast.h"
 #include "nnet0/nnet-class-affine-transform.h"
 #include "nnet0/nnet-parallel-component-multitask.h"
-#include "nnet/nnet-fsmn.h"
-#include "nnet/nnet-deep-fsmn.h"
-#include "nnet/nnet-uni-fsmn.h"
-#include "nnet/nnet-uni-deep-fsmn.h"
+#include "nnet0/nnet-fsmn.h"
+#include "nnet0/nnet-deep-fsmn.h"
+#include "nnet0/nnet-uni-fsmn.h"
+#include "nnet0/nnet-uni-deep-fsmn.h"
 
 namespace kaldi {
 namespace nnet0 {

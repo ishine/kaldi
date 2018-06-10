@@ -299,10 +299,9 @@ public:
     if (CuDevice::Instantiate().Enabled()) {
           CuTimer tim;
 
-          int32 dst_pitch, src_pitch, width,  size;
+          int32 size;
           int pos = 0;
           void *src, *dst;
-          MatrixDim dim;
           cudaMemcpyKind kind;
           switch(copykind)
           {

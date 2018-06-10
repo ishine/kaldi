@@ -76,11 +76,14 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
   }
 
   static void InitVecParam(CuVector<BaseFloat> &v, float scale) {
+    /*
     Vector<BaseFloat> tmp(v.Dim());
     for (int i=0; i < tmp.Dim(); i++) {
       tmp(i) = (RandUniform() - 0.5) * 2 * scale;
     }
     v = tmp;
+    */
+    RandUniform(0.0, scale, &v);
   }
 
   void InitData(std::istream &is) {

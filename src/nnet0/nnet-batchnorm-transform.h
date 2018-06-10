@@ -56,13 +56,9 @@ public:
       ReadToken(is, false, &token);
 
       /**/ if (token == "<ParamStddev>") ReadBasicType(is, false, &param_stddev);
-
       else if (token == "<BiasMean>")    ReadBasicType(is, false, &bias_mean);
-
       else if (token == "<BiasRange>")    ReadBasicType(is, false, &bias_range);
-
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
-
                      << " (ParamStddev|BiasMean|BiasRange)";
 
       is >> std::ws; // eat-up whitespace
@@ -70,27 +66,11 @@ public:
     }
 
     // initialize
+    scale_.Resize(output_dim_);
+    RandUniform(bias_mean, bias_range, &scale_);
 
-    Vector<BaseFloat> vec_scale(output_dim_);
-
-    for (int32 i=0; i<output_dim_; i++) {
-
-      // +/- 1/2*bias_range from bias_mean:
-      vec_scale(i) = bias_mean + (RandUniform() - 0.5) * bias_range;
-
-    }
-    scale_ = vec_scale;
-
-    Vector<BaseFloat> vec_shift(output_dim_);
-
-    for (int32 r=0; r<output_dim_; r++) {
-
-        vec_shift(r) = param_stddev * RandGauss(); // 0-mean Gauss with given std_dev
-
-    }
-
-    shift_ = vec_shift;
-
+    shift_.Resize(output_dim_);
+    RandGauss(0.0, param_stddev, &shift_);
   }
 
 
