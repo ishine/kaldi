@@ -48,7 +48,7 @@ namespace nnet0 {
      flags_.CopyFromVec(flags);
    }
 
-   void InitData(std::istream                                                     &is) {
+   void InitData(std::istream  &is) {
      // define options
      float learn_rate_coef = 1.0;
      int hid_size;
@@ -274,6 +274,36 @@ namespace nnet0 {
      in_diff->AddMat(1.0, out_diff, kNoTrans);
    }
 
+   void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
+
+	   int nframes = in.NumRows();
+	   const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+	   const BaseFloat mmt = opts_.momentum;
+	   //Step 1. fsmn layer
+
+	   //Step 2. linear affine transform
+	   // multiply error derivative by weights
+	   p_weight_corr_.AddMatMat(1.0, p_out_err_, kTrans, hid_out_, kNoTrans, mmt);
+
+	   //Step3. nonlinear affine transform
+	   linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, input, kNoTrans, mmt);
+	   bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
+   }
+
+   void UpdateGradient() {
+
+     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     const BaseFloat l2 = opts_.l2_penalty;
+
+     if (l2 != 0.0) {
+       linearity_.AddMat(-lr*l2, linearity_);
+       p_weight_.AddMat(-lr*l2,  p_weight_);
+     }
+     p_weight_.AddMat(-lr, p_weight_corr_);
+     linearity_.AddMat(-lr, linearity_corr_);
+     bias_.AddVec(-lr, bias_corr_);
+   }
+
    void Update(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
      
      const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
@@ -287,6 +317,74 @@ namespace nnet0 {
      linearity_.AddMat(-lr, linearity_corr_);
      bias_.AddVec(-lr, bias_corr_);
    }
+
+   int WeightCopy(void *host, int direction, int copykind)
+   {
+ #if HAVE_CUDA == 1
+   if (CuDevice::Instantiate().Enabled()) {
+         CuTimer tim;
+
+         int32 dst_pitch, src_pitch, width,  size;
+         int pos = 0;
+         void *src, *dst;
+         MatrixDim dim;
+         cudaMemcpyKind kind;
+         switch(copykind)
+         {
+             case 0:
+                 kind = cudaMemcpyHostToHost;
+                 break;
+             case 1:
+                 kind = cudaMemcpyHostToDevice;
+                 break;
+             case 2:
+                 kind = cudaMemcpyDeviceToHost;
+                 break;
+             case 3:
+                 kind = cudaMemcpyDeviceToDevice;
+                 break;
+             default:
+                 KALDI_ERR << "Default based unified virtual address space";
+                 break;
+         }
+
+  		dim = p_weight_.Dim();
+  		src_pitch = dim.stride*sizeof(BaseFloat);
+  		dst_pitch = src_pitch;
+  		width = dim.cols*sizeof(BaseFloat);
+          dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)p_weight_.Data());
+  		src = (void*) (direction==0 ? (char *)p_weight_.Data() : ((char *)host+pos));
+  		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+  		pos += p_weight_.SizeInBytes();
+
+ 		dim = linearity_.Dim();
+ 		src_pitch = dim.stride*sizeof(BaseFloat);
+ 		dst_pitch = src_pitch;
+ 		width = dim.cols*sizeof(BaseFloat);
+         dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_.Data());
+ 		src = (void*) (direction==0 ? (char *)linearity_.Data() : ((char *)host+pos));
+ 		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+ 		pos += linearity_.SizeInBytes();
+
+ 		size = bias_.Dim()*sizeof(BaseFloat);
+ 		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)bias_.Data());
+ 		src = (void*) (direction==0 ? (char *)bias_.Data() : ((char *)host+pos));
+ 		cudaMemcpy(dst, src, size, kind);
+ 		pos += size;
+
+   	  CU_SAFE_CALL(cudaGetLastError());
+
+   	  CuDevice::Instantiate().AccuProfile(__func__, tim);
+
+   	  return pos;
+   }else
+ #endif
+   	{
+   		// not implemented for CPU yet
+   		return 0;
+   	}
+   }
+
 
  private:
    ///fsmn layer

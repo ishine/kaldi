@@ -192,6 +192,7 @@ private:
 	    MatrixRandomizer feature_randomizer(*rnd_opts);
 	    PosteriorRandomizer targets_randomizer(*rnd_opts);
 	    VectorRandomizer weights_randomizer(*rnd_opts);
+	    VectorRandomizer flags_randomizer(*rnd_opts);
 
 	    Xent xent;
 	    Mse mse;
@@ -211,6 +212,7 @@ private:
 		CuMatrix<BaseFloat> feats, feats_transf, nnet_out, nnet_diff;
 		CuMatrix<BaseFloat> si_nnet_out; // *p_si_nnet_out = NULL;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
+		Vector<BaseFloat> utt_flags;
 
 		DNNNnetExample *example;
 
@@ -240,6 +242,9 @@ private:
 		        feature_randomizer.AddData(feats_transf);
 		        targets_randomizer.AddData(targets);
 		        weights_randomizer.AddData(weights);
+		        utt_flags.Resize(feats_transf.NumRows(), kSetZero);
+		        utt_flags.Set(BaseFloat(num_done));
+		        flags_randomizer.AddData(utt_flags);
 		        num_done++;
 
 		        // report the speed
@@ -259,22 +264,27 @@ private:
 
 		      // randomize
       		if (!crossvalidate && opts->randomize) {
-        		const std::vector<int32>& mask = randomizer_mask.Generate(feature_randomizer.NumFrames());
-        		feature_randomizer.Randomize(mask);
-        		targets_randomizer.Randomize(mask);
+        			const std::vector<int32>& mask = randomizer_mask.Generate(feature_randomizer.NumFrames());
+        			feature_randomizer.Randomize(mask);
+        			targets_randomizer.Randomize(mask);
        			weights_randomizer.Randomize(mask);
       		}
 
 	        // train with data from randomizers (using mini-batches)
-			for (; !feature_randomizer.Done();
-					feature_randomizer.Next(), targets_randomizer.Next(), weights_randomizer.Next())
+			for (; !feature_randomizer.Done(); feature_randomizer.Next(),
+											  targets_randomizer.Next(),
+											  weights_randomizer.Next(),
+											  flags_randomizer.Next())
 			{
 				// get block of feature/target pairs
 				const CuMatrixBase<BaseFloat>& nnet_in = feature_randomizer.Value();
 				const Posterior& nnet_tgt = targets_randomizer.Value();
 				const Vector<BaseFloat>& frm_weights = weights_randomizer.Value();
+				const Vector<BaseFloat>& flags = flags_randomizer.Value();
 				num_frames = nnet_in.NumRows();
 
+				// fsmn
+				nnet.SetFlags(flags);
 				// forward pass
 				nnet.Propagate(nnet_in, &nnet_out);
 
@@ -318,8 +328,7 @@ private:
 					// backpropagate
 
                     /*
-                    if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient")
-                    {
+                    if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient") {
                         nnet.ResetGradient();
                         model_sync->reset_gradient_[thread_idx] = false;
                         //KALDI_VLOG(1) << "Reset Gradient";

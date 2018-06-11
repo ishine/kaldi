@@ -316,6 +316,73 @@ namespace nnet0 {
 
    }
 
+   int WeightCopy(void *host, int direction, int copykind)
+   {
+ #if HAVE_CUDA == 1
+   if (CuDevice::Instantiate().Enabled()) {
+         CuTimer tim;
+
+         int32 dst_pitch, src_pitch, width,  size;
+         int pos = 0;
+         void *src, *dst;
+         MatrixDim dim;
+         cudaMemcpyKind kind;
+         switch(copykind)
+         {
+             case 0:
+                 kind = cudaMemcpyHostToHost;
+                 break;
+             case 1:
+                 kind = cudaMemcpyHostToDevice;
+                 break;
+             case 2:
+                 kind = cudaMemcpyDeviceToHost;
+                 break;
+             case 3:
+                 kind = cudaMemcpyDeviceToDevice;
+                 break;
+             default:
+                 KALDI_ERR << "Default based unified virtual address space";
+                 break;
+         }
+
+  		dim = p_weight_.Dim();
+  		src_pitch = dim.stride*sizeof(BaseFloat);
+  		dst_pitch = src_pitch;
+  		width = dim.cols*sizeof(BaseFloat);
+          dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)p_weight_.Data());
+  		src = (void*) (direction==0 ? (char *)p_weight_.Data() : ((char *)host+pos));
+  		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+  		pos += p_weight_.SizeInBytes();
+
+ 		dim = linearity_.Dim();
+ 		src_pitch = dim.stride*sizeof(BaseFloat);
+ 		dst_pitch = src_pitch;
+ 		width = dim.cols*sizeof(BaseFloat);
+         dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_.Data());
+ 		src = (void*) (direction==0 ? (char *)linearity_.Data() : ((char *)host+pos));
+ 		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+ 		pos += linearity_.SizeInBytes();
+
+ 		size = bias_.Dim()*sizeof(BaseFloat);
+ 		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)bias_.Data());
+ 		src = (void*) (direction==0 ? (char *)bias_.Data() : ((char *)host+pos));
+ 		cudaMemcpy(dst, src, size, kind);
+ 		pos += size;
+
+   	  CU_SAFE_CALL(cudaGetLastError());
+
+   	  CuDevice::Instantiate().AccuProfile(__func__, tim);
+
+   	  return pos;
+   }else
+ #endif
+   	{
+   		// not implemented for CPU yet
+   		return 0;
+   	}
+   }
+
  private:
    ///fsmn layer
    CuMatrix<BaseFloat> l_filter_;
