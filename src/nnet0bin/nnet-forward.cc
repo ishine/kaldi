@@ -145,6 +145,12 @@ int main(int argc, char *argv[]) {
       // push it to gpu,
       feats = mat;
 
+      ///only for nnet with fsmn component
+      Vector<BaseFloat> flags;
+      flags.Resize(feats_transf.NumRows(), kSetZero);
+      flags.Set(1.0);
+      nnet.SetFlags(flags);
+
       // fwd-pass, feature transform,
       nnet_transf.Feedforward(feats, &feats_transf);
       if (!KALDI_ISFINITE(feats_transf.Sum())) { // check there's no nan/inf,
@@ -156,7 +162,7 @@ int main(int argc, char *argv[]) {
       if (!KALDI_ISFINITE(nnet_out.Sum())) { // check there's no nan/inf,
         KALDI_ERR << "NaN or inf found in nn-output for " << utt;
       }
-      
+
       // convert posteriors to log-posteriors,
       if (apply_log) {
         if (!(nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0)) {
@@ -167,7 +173,7 @@ int main(int argc, char *argv[]) {
         nnet_out.Add(1e-20); // avoid log(0),
         nnet_out.ApplyLog();
       }
-     
+
       // subtract log-priors from log-posteriors or pre-softmax,
       if (prior_opts.class_frame_counts != "") {
         if (nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0) {
