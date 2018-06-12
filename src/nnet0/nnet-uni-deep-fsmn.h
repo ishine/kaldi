@@ -18,8 +18,8 @@
 // limitations under the License.
 
 
-#ifndef KALDI_NNET0_NNET_UNI_DEEP_FSMN_H_
-#define KALDI_NNET0_NNET_UNI_DEEP_FSMN_H_
+#ifndef KALDI_NNET_NNET_UNI_DEEP_FSMN_H_
+#define KALDI_NNET_NNET_UNI_DEEP_FSMN_H_
 
 
 #include "nnet0/nnet-component.h"
@@ -89,6 +89,7 @@ namespace nnet0 {
      bias_.Resize(hid_size_,kSetZero);
 
      //gradient related
+     l_filter_corr_.Resize(l_order_, output_dim_, kSetZero);
      p_weight_corr_.Resize(output_dim_, hid_size_, kSetZero);
      linearity_corr_.Resize(hid_size_, input_dim_, kSetZero);
      bias_corr_.Resize(hid_size_, kSetZero);
@@ -130,6 +131,7 @@ namespace nnet0 {
      KALDI_ASSERT(bias_.Dim() == hid_size_);
 
      //gradient related
+     l_filter_corr_.Resize(l_order_, output_dim_, kSetZero);
      p_weight_corr_.Resize(output_dim_, hid_size_, kSetZero);
      linearity_corr_.Resize(hid_size_, input_dim_, kSetZero);
      bias_corr_.Resize(hid_size_, kSetZero);
@@ -154,6 +156,7 @@ namespace nnet0 {
 
    void ResetMomentum(void)
    {
+     l_filter_corr_.Set(0.0);
      p_weight_corr_.Set(0.0);
      linearity_corr_.Set(0.0);
      bias_corr_.Set(0.0);
@@ -164,8 +167,17 @@ namespace nnet0 {
        + linearity_.NumRows()*linearity_.NumCols() + bias_.Dim();
    }
 
+   int32 GetDim() const {
+    return ( l_filter_.SizeInBytes()/sizeof(BaseFloat) +
+         p_weight_.SizeInBytes()/sizeof(BaseFloat) +
+         linearity_.SizeInBytes()/sizeof(BaseFloat) +
+         bias_.Dim() );
+  }
+
+
    void GetParams(Vector<BaseFloat>* wei_copy) const {
-     KALDI_ASSERT(wei_copy->Dim() == NumParams());
+     //KALDI_ASSERT(wei_copy->Dim() == NumParams());
+     wei_copy->Resize(NumParams());
      int32 l_filter_num_elem = l_filter_.NumRows() * l_filter_.NumCols();
      int32 p_weight_num_elem = p_weight_.NumRows()*p_weight_.NumCols();
      int32 linearity_num_elem = linearity_.NumRows()*linearity_.NumCols();
@@ -248,13 +260,14 @@ namespace nnet0 {
      const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
      
      int nframes = in.NumRows();
-     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     //const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
      const BaseFloat mmt = opts_.momentum;
      //Step 1. fsmn layer
      p_out_err_.Resize(nframes, output_dim_, kSetZero);
      p_out_err_.UniMemoryErrBack(out_diff, l_filter_, flags_, l_order_,  l_stride_);
      //l_filter_corr_.Set(0.0);
-     l_filter_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, lr);
+     l_filter_corr_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, 1.0);
+     //l_filter_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, lr);
      
      //Step 2. linear affine transform
      // multiply error derivative by weights
@@ -267,8 +280,8 @@ namespace nnet0 {
      hid_out_err_.MulElements(hid_out_);
 
      in_diff->AddMatMat(1.0, hid_out_err_, kNoTrans, linearity_, kNoTrans, 0.0);
-     linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, in, kNoTrans, mmt);
-     bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
+     //linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, in, kNoTrans, mmt);
+     //bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
 
      //Step4. skip connection
      in_diff->AddMat(1.0, out_diff, kNoTrans);
@@ -276,14 +289,12 @@ namespace nnet0 {
 
    void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
 
-	   int nframes = in.NumRows();
-	   const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
 	   const BaseFloat mmt = opts_.momentum;
 	   //Step 1. fsmn layer
 
 	   //Step 2. linear affine transform
 	   // multiply error derivative by weights
-	   p_weight_corr_.AddMatMat(1.0, p_out_err_, kTrans, hid_out_, kNoTrans, mmt);
+	   //p_weight_corr_.AddMatMat(1.0, p_out_err_, kTrans, hid_out_, kNoTrans, mmt);
 
 	   //Step3. nonlinear affine transform
 	   linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, input, kNoTrans, mmt);
@@ -299,6 +310,7 @@ namespace nnet0 {
        linearity_.AddMat(-lr*l2, linearity_);
        p_weight_.AddMat(-lr*l2,  p_weight_);
      }
+     l_filter_.AddMat(-lr, l_filter_corr_);
      p_weight_.AddMat(-lr, p_weight_corr_);
      linearity_.AddMat(-lr, linearity_corr_);
      bias_.AddVec(-lr, bias_corr_);
@@ -313,6 +325,7 @@ namespace nnet0 {
        linearity_.AddMat(-lr*l2, linearity_);
        p_weight_.AddMat(-lr*l2,  p_weight_);
      }
+     l_filter_.AddMat(-lr, l_filter_corr_);
      p_weight_.AddMat(-lr, p_weight_corr_);
      linearity_.AddMat(-lr, linearity_corr_);
      bias_.AddVec(-lr, bias_corr_);
@@ -348,11 +361,20 @@ namespace nnet0 {
                  break;
          }
 
+  		dim = l_filter_.Dim();
+  		src_pitch = dim.stride*sizeof(BaseFloat);
+  		dst_pitch = src_pitch;
+  		width = dim.cols*sizeof(BaseFloat);
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)l_filter_.Data());
+  		src = (void*) (direction==0 ? (char *)l_filter_.Data() : ((char *)host+pos));
+  		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+  		pos += l_filter_.SizeInBytes();
+
   		dim = p_weight_.Dim();
   		src_pitch = dim.stride*sizeof(BaseFloat);
   		dst_pitch = src_pitch;
   		width = dim.cols*sizeof(BaseFloat);
-          dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)p_weight_.Data());
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)p_weight_.Data());
   		src = (void*) (direction==0 ? (char *)p_weight_.Data() : ((char *)host+pos));
   		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
   		pos += p_weight_.SizeInBytes();
@@ -361,7 +383,7 @@ namespace nnet0 {
  		src_pitch = dim.stride*sizeof(BaseFloat);
  		dst_pitch = src_pitch;
  		width = dim.cols*sizeof(BaseFloat);
-         dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_.Data());
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_.Data());
  		src = (void*) (direction==0 ? (char *)linearity_.Data() : ((char *)host+pos));
  		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
  		pos += linearity_.SizeInBytes();
@@ -389,6 +411,7 @@ namespace nnet0 {
  private:
    ///fsmn layer
    CuMatrix<BaseFloat> l_filter_;
+   CuMatrix<BaseFloat> l_filter_corr_;
    CuVector<BaseFloat> flags_;
 
    //linear affine transform

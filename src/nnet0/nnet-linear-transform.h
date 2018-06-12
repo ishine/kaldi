@@ -131,13 +131,18 @@ class LinearTransform : public UpdatableComponent {
     return linearity_.NumRows()*linearity_.NumCols();
   }
 
+  int32 GetDim() const {
+    return linearity_.SizeInBytes()/sizeof(BaseFloat);
+  }
+
   void GetGradient(VectorBase<BaseFloat>* gradient) const {
     KALDI_ASSERT(gradient->Dim() == NumParams());
     gradient->CopyRowsFromMat(linearity_corr_);
   }
 
   void GetParams(Vector<BaseFloat>* params) const {
-    KALDI_ASSERT(params->Dim() == NumParams());
+    //KALDI_ASSERT(params->Dim() == NumParams());
+    params->Resize(NumParams());
     params->CopyRowsFromMat(linearity_);
   }
 
@@ -177,6 +182,33 @@ class LinearTransform : public UpdatableComponent {
     in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity_, kNoTrans, 0.0);
   }
 
+  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
+  {
+	    // we use following hyperparameters from the option class
+	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+	    const BaseFloat mmt = opts_.momentum;
+	    const BaseFloat l2 = opts_.l2_penalty;
+	    const BaseFloat l1 = opts_.l1_penalty;
+	    // we will also need the number of frames in the mini-batch
+	    const int32 num_frames = input.NumRows();
+
+	    // compute gradient (incl. momentum)
+        linearity_corr_.AddMatMat(1.0, diff, kTrans, input, kNoTrans, mmt);
+	    // l2 regularization
+	    if (l2 != 0.0) {
+	      linearity_.AddMat(-lr*l2*num_frames, linearity_);
+	    }
+	    // l1 regularization
+	    if (l1 != 0.0) {
+	      cu::RegularizeL1(&linearity_, &linearity_corr_, lr*l1*num_frames, lr);
+	    }
+  }
+
+  void UpdateGradient() {
+	    // update
+	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+        linearity_.AddMat(-lr*learn_rate_coef_, linearity_corr_);
+    }
 
   void Update(const CuMatrixBase<BaseFloat> &input,
               const CuMatrixBase<BaseFloat> &diff) {
@@ -211,6 +243,59 @@ class LinearTransform : public UpdatableComponent {
   }
 
   const CuMatrixBase<BaseFloat>& GetLinearityCorr() { return linearity_corr_; }
+
+  int WeightCopy(void *host, int direction, int copykind)
+  {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+        CuTimer tim;
+
+        int32 dst_pitch, src_pitch, width;
+        int pos = 0;
+        void *src, *dst;
+        MatrixDim dim;
+        cudaMemcpyKind kind;
+        switch(copykind)
+        {
+            case 0:
+                kind = cudaMemcpyHostToHost;
+                break;
+            case 1:
+                kind = cudaMemcpyHostToDevice;
+                break;
+            case 2:
+                kind = cudaMemcpyDeviceToHost;
+                break;
+            case 3:
+                kind = cudaMemcpyDeviceToDevice;
+                break;
+            default:
+                KALDI_ERR << "Default based unified virtual address space";
+                break;
+        }
+
+		dim = linearity_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)linearity_.Data());
+		src = (void*) (direction==0 ? (char *)linearity_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += linearity_.SizeInBytes();
+
+  	  CU_SAFE_CALL(cudaGetLastError());
+
+  	  CuDevice::Instantiate().AccuProfile(__func__, tim);
+
+  	  return pos;
+  }else
+#endif
+  	{
+  		// not implemented for CPU yet
+  		return 0;
+  	}
+  }
+
 
  private:
   CuMatrix<BaseFloat> linearity_;

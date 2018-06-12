@@ -16,10 +16,10 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#include "nnet/nnet-trnopts.h"
-#include "nnet/nnet-nnet.h"
-#include "nnet/nnet-loss.h"
-#include "nnet/nnet-randomizer.h"
+#include "nnet0/nnet-trnopts.h"
+#include "nnet0/nnet-nnet.h"
+#include "nnet0/nnet-loss.h"
+#include "nnet0/nnet-randomizer.h"
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
 #include "base/timer.h"
@@ -27,7 +27,7 @@
 
 int main(int argc, char *argv[]) {
   using namespace kaldi;
-  using namespace kaldi::nnet1;
+  using namespace kaldi::nnet0;
   typedef kaldi::int32 int32;
 
   try {
@@ -44,8 +44,8 @@ int main(int argc, char *argv[]) {
     trn_opts.Register(&po);
     NnetDataRandomizerOptions rnd_opts;
     rnd_opts.Register(&po);
-    LossOptions loss_opts;
-    loss_opts.Register(&po);
+    //LossOptions loss_opts;
+    //loss_opts.Register(&po);
 
     bool binary = true;
     po.Register("binary", &binary, "Write output in binary mode");
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
     }
 
     using namespace kaldi;
-    using namespace kaldi::nnet1;
+    using namespace kaldi::nnet0;
     typedef kaldi::int32 int32;
 
 #if HAVE_CUDA == 1
@@ -121,8 +121,8 @@ int main(int argc, char *argv[]) {
     nnet.SetTrainOptions(trn_opts);
 
     if (crossvalidate) {
-      nnet_transf.SetDropoutRate(0.0);
-      nnet.SetDropoutRate(0.0);
+      //nnet_transf.SetDropoutRate(0.0);
+      //nnet.SetDropoutRate(0.0);
     }
 
     kaldi::int64 total_frames = 0;
@@ -144,10 +144,13 @@ int main(int argc, char *argv[]) {
     VectorRandomizer weights_randomizer(rnd_opts);
     VectorRandomizer flags_randomizer(rnd_opts);
 
-    Xent xent(loss_opts);
-    Mse mse(loss_opts);
+    //Xent xent(loss_opts);
+    //Mse mse(loss_opts);
 
-    MultiTaskLoss multitask(loss_opts);
+    //MultiTaskLoss multitask(loss_opts);
+    Xent xent;
+    Mse mse;
+    MultiTaskLoss multitask;
     if (0 == objective_function.compare(0, 9, "multitask")) {
       // objective_function contains something like :
       // 'multitask,xent,2456,1.0,mse,440,0.001'
@@ -398,7 +401,7 @@ int main(int argc, char *argv[]) {
       << total_frames / time.Elapsed() << " frames per sec.]";
 
     if (objective_function == "xent") {
-      KALDI_LOG << xent.ReportPerClass();
+      //KALDI_LOG << xent.ReportPerClass();
       KALDI_LOG << xent.Report();
     } else if (objective_function == "mse") {
       KALDI_LOG << mse.Report();

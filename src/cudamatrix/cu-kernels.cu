@@ -2534,7 +2534,7 @@ static void _heaviside(Real*y, const Real*x, MatrixDim d, int src_stride) {
 /*
 template<typename Real>
 __global__
-static void _softmax_reduce(Real*y, const Real*x, MatrixDim d, int src_stride) {
+static void _softmax_reduce(Real*y, const Real*x, MatrixDim d, int src_stride, Real *logsum) {
   __shared__ Real smem[CU1DBLOCK];
   const int i = blockIdx.x;
   const int x_start = i * src_stride;
@@ -6927,7 +6927,8 @@ static void _get_l_filter_err(Real* out, const Real* diff, const Real* in, float
   }
     Real sum = aux[0];
   __syncthreads();
-    out[index] = out[index]-lr*sum;
+    //out[index] = out[index]-lr*sum;
+    out[index] = lr*sum;
 }
 
 template<typename Real>
@@ -6994,7 +6995,8 @@ static void _get_r_filter_err(Real* out, const Real* diff, const Real* in, float
   
     Real sum = aux[0];
      __syncthreads();
-  out[index] = out[index]-lr*sum;
+  //out[index] = out[index]-lr*sum;
+  out[index] = lr*sum;
 }
 
 

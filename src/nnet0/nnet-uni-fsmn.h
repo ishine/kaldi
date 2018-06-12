@@ -94,6 +94,8 @@ namespace nnet0 {
      KALDI_ASSERT(l_filter_.NumRows() == l_order_);
      KALDI_ASSERT(l_filter_.NumCols() == input_dim_);
 
+     //gradient related
+     l_filter_corr_.Resize(l_order_, input_dim_, kSetZero);
    }
 
    void WriteData(std::ostream &os, bool binary) const {
@@ -115,8 +117,13 @@ namespace nnet0 {
      return l_filter_.NumRows()*l_filter_.NumCols(); 
    }
 
+   int32 GetDim() const {
+     return l_filter_.SizeInBytes()/sizeof(BaseFloat);
+   }
+
    void GetParams(Vector<BaseFloat>* wei_copy) const {
-     KALDI_ASSERT(wei_copy->Dim() == NumParams());
+     //KALDI_ASSERT(wei_copy->Dim() == NumParams());
+     wei_copy->Resize(NumParams());
      int32 l_filter_num_elem = l_filter_.NumRows() * l_filter_.NumCols();
      wei_copy->Range(0, l_filter_num_elem).CopyRowsFromMat(Matrix<BaseFloat>(l_filter_));
    }
@@ -148,20 +155,83 @@ namespace nnet0 {
    void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
      const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
    
-     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     //const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
 
      in_diff->UniMemoryErrBack(out_diff, l_filter_,  flags_, l_order_, l_stride_);
 
-     l_filter_.GetLfilterErr(out_diff, in, flags_, l_order_, l_stride_, lr);
+     //l_filter_.GetLfilterErr(out_diff, in, flags_, l_order_, l_stride_, lr);
    }
+
+   void Gradient(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out_diff) {
+
+     l_filter_corr_.GetLfilterErr(out_diff, in, flags_, l_order_, l_stride_, 1.0);
+   }   
+
+   void UpdateGradient() {
+     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     l_filter_.AddMat(-lr, l_filter_corr_);
+   }   
 
    void Update(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
-     ///const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
-   }
+     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     l_filter_.AddMat(-lr, l_filter_corr_);
+   }   
 
+   int WeightCopy(void *host, int direction, int copykind)
+   {   
+ #if HAVE_CUDA == 1
+   if (CuDevice::Instantiate().Enabled()) {
+         CuTimer tim;
+
+         int32 dst_pitch, src_pitch, width;
+         int pos = 0;
+         void *src, *dst;
+         MatrixDim dim;
+         cudaMemcpyKind kind;
+         switch(copykind)
+         {   
+             case 0:
+                 kind = cudaMemcpyHostToHost;
+                 break;
+             case 1:
+                 kind = cudaMemcpyHostToDevice;
+                 break;
+             case 2:
+                 kind = cudaMemcpyDeviceToHost;
+                 break;
+             case 3:
+                 kind = cudaMemcpyDeviceToDevice;
+                 break;
+             default:
+                 KALDI_ERR << "Default based unified virtual address space";
+                 break;
+         }   
+
+        dim = l_filter_.Dim();
+        src_pitch = dim.stride*sizeof(BaseFloat);
+        dst_pitch = src_pitch;
+        width = dim.cols*sizeof(BaseFloat);
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)l_filter_.Data());
+        src = (void*) (direction==0 ? (char *)l_filter_.Data() : ((char *)host+pos));
+        cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+        pos += l_filter_.SizeInBytes();
+
+        CU_SAFE_CALL(cudaGetLastError());
+
+        CuDevice::Instantiate().AccuProfile(__func__, tim);
+
+        return pos;
+   }else
+ #endif
+    {   
+        // not implemented for CPU yet
+        return 0;
+    }   
+   }   
 
  private:
    CuMatrix<BaseFloat> l_filter_;
+   CuMatrix<BaseFloat> l_filter_corr_;
    CuVector<BaseFloat> flags_;
 
    BaseFloat learn_rate_coef_;

@@ -80,6 +80,7 @@ class Component {
     kBlockSoftmax, 
     kSigmoid,
     kTanh,
+    kParametricRelu,
     kDropout,
     kLengthNormComponent,
 
@@ -279,6 +280,7 @@ inline void Component::Propagate(const CuMatrixBase<BaseFloat> &in,
   int T = (in.NumRows()/S + nsubsample-1)/nsubsample;
   // Allocate target buffer
   out->Resize(T*S, output_dim_, kSetZero, kStrideEqualNumCols); // reset
+  //out->Resize(T*S, output_dim_, kSetZero);  // reset
   // Call the propagation implementation of the component
   PropagateFnc(in, out);
 }
@@ -305,6 +307,7 @@ inline void Component::Backpropagate(const CuMatrixBase<BaseFloat> &in,
     }
   } else {
     // Allocate target buffer
+    //in_diff->Resize(in.NumRows(), InputDim(), kSetZero);  // reset
     in_diff->Resize(in.NumRows(), input_dim_, kUndefined, kStrideEqualNumCols); // reset
     // Asserts on the dims
     int nsubsample = this->GetSubSampleRate();

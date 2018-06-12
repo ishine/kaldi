@@ -144,6 +144,8 @@ namespace nnet0 {
      KALDI_ASSERT(bias_.Dim() == hid_size_);
 
      //gradient related
+     l_filter_corr_.Resize(l_order_, output_dim_, kSetZero);
+     r_filter_corr_.Resize(r_order_, output_dim_, kSetZero);
      p_weight_corr_.Resize(output_dim_, hid_size_, kSetZero);
      linearity_corr_.Resize(hid_size_, input_dim_, kSetZero);
      bias_corr_.Resize(hid_size_, kSetZero);
@@ -173,9 +175,19 @@ namespace nnet0 {
 
    void ResetMomentum(void)
    {
+     l_filter_corr_.Set(0.0);
+     r_filter_corr_.Set(0.0);
      p_weight_corr_.Set(0.0);
      linearity_corr_.Set(0.0);
      bias_corr_.Set(0.0);
+   }
+
+   int32 GetDim() const {
+    return ( l_filter_.SizeInBytes()/sizeof(BaseFloat) +
+         r_filter_.SizeInBytes()/sizeof(BaseFloat) +
+         p_weight_.SizeInBytes()/sizeof(BaseFloat) +
+         linearity_.SizeInBytes()/sizeof(BaseFloat) +
+         bias_.Dim() );
    }
 
    int32 NumParams() const { 
@@ -184,7 +196,8 @@ namespace nnet0 {
    }
 
    void GetParams(Vector<BaseFloat>* wei_copy) const {
-     KALDI_ASSERT(wei_copy->Dim() == NumParams());
+     //KALDI_ASSERT(wei_copy->Dim() == NumParams());
+     wei_copy->Resize(NumParams());
      int32 l_filter_num_elem = l_filter_.NumRows() * l_filter_.NumCols();
      int32 r_filter_num_elem = r_filter_.NumRows() * r_filter_.NumCols();
      int32 p_weight_num_elem = p_weight_.NumRows()*p_weight_.NumCols();
@@ -275,13 +288,15 @@ namespace nnet0 {
      const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
      
      int nframes = in.NumRows();
-     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     //const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
      const BaseFloat mmt = opts_.momentum;
      //Step 1. fsmn layer
      p_out_err_.Resize(nframes, output_dim_, kSetZero);
      p_out_err_.MemoryErrBack(out_diff, l_filter_, r_filter_, flags_, l_order_, r_order_, l_stride_, r_stride_);
-     l_filter_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, lr);
-     r_filter_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, lr);
+     //l_filter_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, lr);
+     //r_filter_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, lr);
+     l_filter_corr_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, 1.0);
+     r_filter_corr_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, 1.0);
      
      //Step 2. linear affine transform
      // multiply error derivative by weights
@@ -301,6 +316,36 @@ namespace nnet0 {
      in_diff->AddMat(1.0, out_diff, kNoTrans);
    }
 
+   void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
+
+	   const BaseFloat mmt = opts_.momentum;
+	   //Step 1. fsmn layer
+
+	   //Step 2. linear affine transform
+	   // multiply error derivative by weights
+	   //p_weight_corr_.AddMatMat(1.0, p_out_err_, kTrans, hid_out_, kNoTrans, mmt);
+
+	   //Step3. nonlinear affine transform
+	   linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, input, kNoTrans, mmt);
+	   bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
+   }
+
+   void UpdateGradient() {
+
+     const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     const BaseFloat l2 = opts_.l2_penalty;
+
+     if (l2 != 0.0) {
+       linearity_.AddMat(-lr*l2, linearity_);
+       p_weight_.AddMat(-lr*l2,  p_weight_);
+     }
+     l_filter_.AddMat(-lr, l_filter_corr_);
+     r_filter_.AddMat(-lr, r_filter_corr_);
+     p_weight_.AddMat(-lr, p_weight_corr_);
+     linearity_.AddMat(-lr, linearity_corr_);
+     bias_.AddVec(-lr, bias_corr_);
+   }
+
    void Update(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
      
      const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
@@ -310,10 +355,11 @@ namespace nnet0 {
        linearity_.AddMat(-lr*l2, linearity_);
        p_weight_.AddMat(-lr*l2,  p_weight_);
      }
+     l_filter_.AddMat(-lr, l_filter_corr_);
+     r_filter_.AddMat(-lr, r_filter_corr_);
      p_weight_.AddMat(-lr, p_weight_corr_);
      linearity_.AddMat(-lr, linearity_corr_);
      bias_.AddVec(-lr, bias_corr_);
-
    }
 
    int WeightCopy(void *host, int direction, int copykind)
@@ -345,6 +391,24 @@ namespace nnet0 {
                  KALDI_ERR << "Default based unified virtual address space";
                  break;
          }
+
+  		dim = l_filter_.Dim();
+  		src_pitch = dim.stride*sizeof(BaseFloat);
+  		dst_pitch = src_pitch;
+  		width = dim.cols*sizeof(BaseFloat);
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)l_filter_.Data());
+  		src = (void*) (direction==0 ? (char *)l_filter_.Data() : ((char *)host+pos));
+  		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+  		pos += l_filter_.SizeInBytes();
+
+  		dim = r_filter_.Dim();
+  		src_pitch = dim.stride*sizeof(BaseFloat);
+  		dst_pitch = src_pitch;
+  		width = dim.cols*sizeof(BaseFloat);
+        dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)r_filter_.Data());
+  		src = (void*) (direction==0 ? (char *)r_filter_.Data() : ((char *)host+pos));
+  		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+  		pos += r_filter_.SizeInBytes();
 
   		dim = p_weight_.Dim();
   		src_pitch = dim.stride*sizeof(BaseFloat);
@@ -386,7 +450,9 @@ namespace nnet0 {
  private:
    ///fsmn layer
    CuMatrix<BaseFloat> l_filter_;
+   CuMatrix<BaseFloat> l_filter_corr_;
    CuMatrix<BaseFloat> r_filter_;
+   CuMatrix<BaseFloat> r_filter_corr_;
    CuVector<BaseFloat> flags_;
 
    //linear affine transform

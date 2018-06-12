@@ -61,6 +61,7 @@
 #include "nnet0/nnet-word-vector-transform.h"
 #include "nnet0/nnet-class-affine-transform.h"
 #include "nnet0/nnet-parallel-component-multitask.h"
+#include "nnet0/nnet-parametric-relu.h"
 
 #include <sstream>
 #include "nnet-time-delay-transform.h"
@@ -106,6 +107,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kSigmoid,"<Sigmoid>" },
   { Component::kRelu,"<Relu>" },
   { Component::kTanh,"<Tanh>" },
+  { Component::kParametricRelu,"<ParametricRelu>" },
   { Component::kDropout,"<Dropout>" },
   { Component::kLengthNormComponent,"<LengthNormComponent>" },
   { Component::kRbm,"<Rbm>" },
@@ -248,6 +250,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kTanh :
       ans = new Tanh(input_dim, output_dim);
+      break;
+    case Component::kParametricRelu :
+      ans = new ParametricRelu(input_dim, output_dim);
       break;
     case Component::kDropout :
       ans = new Dropout(input_dim, output_dim); 
