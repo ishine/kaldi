@@ -201,6 +201,8 @@ namespace nnet0 {
 
    void Gradient(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out_diff) {
 
+     //l_filter_corr_.Set(0.0);
+     //r_filter_corr_.Set(0.0);
      l_filter_corr_.GetLfilterErr(out_diff, in, flags_, l_order_, l_stride_, 1.0);
      r_filter_corr_.GetRfilterErr(out_diff, in, flags_, r_order_, r_stride_, 1.0);
    }

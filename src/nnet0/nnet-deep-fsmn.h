@@ -265,7 +265,7 @@ namespace nnet0 {
      int nframes = in.NumRows();
      //////////////////////////////////////
      //step1. nonlinear affine transform
-     hid_out_.Resize(nframes, hid_size_, kSetZero);
+     hid_out_.Resize(nframes, hid_size_, kUndefined);
      // pre copy bias
      hid_out_.AddVecToRows(1.0, bias_, 0.0);
      // multiply by weights^t
@@ -274,7 +274,7 @@ namespace nnet0 {
      hid_out_.ApplyFloor(0.0);
 
      ////Step2. linear affine transform
-     p_out_.Resize(nframes, output_dim_, kSetZero);
+     p_out_.Resize(nframes, output_dim_, kUndefined);
      p_out_.AddMatMat(1.0, hid_out_, kNoTrans, p_weight_, kTrans, 0.0);
 
      ////Step3. fsmn layer
@@ -295,8 +295,6 @@ namespace nnet0 {
      p_out_err_.MemoryErrBack(out_diff, l_filter_, r_filter_, flags_, l_order_, r_order_, l_stride_, r_stride_);
      //l_filter_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, lr);
      //r_filter_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, lr);
-     l_filter_corr_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, 1.0);
-     r_filter_corr_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, 1.0);
      
      //Step 2. linear affine transform
      // multiply error derivative by weights
@@ -316,10 +314,14 @@ namespace nnet0 {
      in_diff->AddMat(1.0, out_diff, kNoTrans);
    }
 
-   void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
+   void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &out_diff) {
 
 	   const BaseFloat mmt = opts_.momentum;
 	   //Step 1. fsmn layer
+	   //l_filter_corr_.Set(0.0);
+	   //r_filter_corr_.Set(0.0);
+       l_filter_corr_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, 1.0);
+       r_filter_corr_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, 1.0);
 
 	   //Step 2. linear affine transform
 	   // multiply error derivative by weights
