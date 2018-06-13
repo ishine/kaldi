@@ -316,20 +316,24 @@ namespace nnet0 {
 
    void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &out_diff) {
 
-	   const BaseFloat mmt = opts_.momentum;
-	   //Step 1. fsmn layer
-	   //l_filter_corr_.Set(0.0);
-	   //r_filter_corr_.Set(0.0);
-       l_filter_corr_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, 1.0);
-       r_filter_corr_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, 1.0);
+     //const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+     //const BaseFloat l2 = opts_.l2_penalty;
+	 const BaseFloat mmt = opts_.momentum;
+     // we will also need the number of frames in the mini-batch
+     num_frames_ = input.NumRows();
+	 //Step 1. fsmn layer
+	 //l_filter_corr_.Set(0.0);
+	 //r_filter_corr_.Set(0.0);
+     l_filter_corr_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, 1.0);
+     r_filter_corr_.GetRfilterErr(out_diff, p_out_, flags_, r_order_, r_stride_, 1.0);
 
-	   //Step 2. linear affine transform
-	   // multiply error derivative by weights
-	   //p_weight_corr_.AddMatMat(1.0, p_out_err_, kTrans, hid_out_, kNoTrans, mmt);
+	 //Step 2. linear affine transform
+	 // multiply error derivative by weights
+	 //p_weight_corr_.AddMatMat(1.0, p_out_err_, kTrans, hid_out_, kNoTrans, mmt);
 
-	   //Step3. nonlinear affine transform
-	   linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, input, kNoTrans, mmt);
-	   bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
+	 //Step3. nonlinear affine transform
+	 linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, input, kNoTrans, mmt);
+	 bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
    }
 
    void UpdateGradient() {
@@ -338,8 +342,8 @@ namespace nnet0 {
      const BaseFloat l2 = opts_.l2_penalty;
 
      if (l2 != 0.0) {
-       linearity_.AddMat(-lr*l2, linearity_);
-       p_weight_.AddMat(-lr*l2,  p_weight_);
+        linearity_.AddMat(-lr*l2*num_frames_, linearity_);
+        p_weight_.AddMat(-lr*l2*num_frames_,  p_weight_);
      }
      l_filter_.AddMat(-lr, l_filter_corr_);
      r_filter_.AddMat(-lr, r_filter_corr_);
@@ -477,6 +481,7 @@ namespace nnet0 {
    int l_stride_;
    int r_stride_;  
    int hid_size_;
+   int32 num_frames_;
  };
 
 } // namespace nnet0

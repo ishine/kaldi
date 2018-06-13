@@ -182,33 +182,32 @@ class LinearTransform : public UpdatableComponent {
     in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity_, kNoTrans, 0.0);
   }
 
-  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
-  {
+  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
 	    // we use following hyperparameters from the option class
-	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
 	    const BaseFloat mmt = opts_.momentum;
-	    const BaseFloat l2 = opts_.l2_penalty;
-	    const BaseFloat l1 = opts_.l1_penalty;
 	    // we will also need the number of frames in the mini-batch
-	    const int32 num_frames = input.NumRows();
+	    num_frames_ = input.NumRows();
 
 	    // compute gradient (incl. momentum)
         linearity_corr_.AddMatMat(1.0, diff, kTrans, input, kNoTrans, mmt);
-	    // l2 regularization
-	    if (l2 != 0.0) {
-	      linearity_.AddMat(-lr*l2*num_frames, linearity_);
-	    }
-	    // l1 regularization
-	    if (l1 != 0.0) {
-	      cu::RegularizeL1(&linearity_, &linearity_corr_, lr*l1*num_frames, lr);
-	    }
   }
 
   void UpdateGradient() {
-	    // update
+	    // we use following hyperparameters from the option class
 	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+	    const BaseFloat l2 = opts_.l2_penalty;
+	    const BaseFloat l1 = opts_.l1_penalty;
+	    // l2 regularization
+	    if (l2 != 0.0) {
+	      linearity_.AddMat(-lr*l2*num_frames_, linearity_);
+	    }
+	    // l1 regularization
+	    if (l1 != 0.0) {
+	      cu::RegularizeL1(&linearity_, &linearity_corr_, lr*l1*num_frames_, lr);
+	    }
+	    // update
         linearity_.AddMat(-lr*learn_rate_coef_, linearity_corr_);
-    }
+  }
 
   void Update(const CuMatrixBase<BaseFloat> &input,
               const CuMatrixBase<BaseFloat> &diff) {
@@ -301,6 +300,7 @@ class LinearTransform : public UpdatableComponent {
   CuMatrix<BaseFloat> linearity_;
   CuMatrix<BaseFloat> linearity_corr_;
   BaseFloat learn_rate_coef_;
+  int32 num_frames_;
 };
 
 }  // namespace nnet1

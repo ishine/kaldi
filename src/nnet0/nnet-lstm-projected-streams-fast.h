@@ -681,14 +681,8 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
   void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
   {
 
-	    // we use following hyperparameters from the option class
-	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
-	    //const BaseFloat lr_bias = opts_.learn_rate * bias_learn_rate_coef_;
-	    //const BaseFloat mmt = opts_.momentum;
-	    const BaseFloat l2 = opts_.l2_penalty;
-	    //const BaseFloat l1 = opts_.l1_penalty;
 	    // we will also need the number of frames in the mini-batch
-	    const int32 num_frames = input.NumRows();
+	    num_frames_ = input.NumRows();
 
 	    int DEBUG = 0;
 
@@ -753,18 +747,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 	      std::cerr << "peephole_o_c_corr_ " << peephole_o_c_corr_;
 	    }
 
-	    // l2 regularization
-	    if (l2 != 0.0) {
-	    	w_gifo_x_.AddMat(-lr*l2*num_frames, w_gifo_x_);
-	    	w_gifo_r_.AddMat(-lr*l2*num_frames, w_gifo_r_);
-	    	bias_.AddVec(-lr*l2*num_frames, bias_);
-
-	    	peephole_i_c_.AddVec(-lr*l2*num_frames, peephole_i_c_);
-	    	peephole_f_c_.AddVec(-lr*l2*num_frames, peephole_f_c_);
-	    	peephole_o_c_.AddVec(-lr*l2*num_frames, peephole_o_c_);
-
-	    	w_r_m_.AddMat(-lr*l2*num_frames, w_r_m_);
-	    }
 
 	    if (y_g.size() != T+2)
 	    	Destroy();
@@ -774,6 +756,20 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
   {
 	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
         const BaseFloat lr_bias = opts_.learn_rate * bias_learn_rate_coef_;
+        const BaseFloat l2 = opts_.l2_penalty;
+
+	    // l2 regularization
+	    if (l2 != 0.0) {
+	    	w_gifo_x_.AddMat(-lr*l2*num_frames_, w_gifo_x_);
+	    	w_gifo_r_.AddMat(-lr*l2*num_frames_, w_gifo_r_);
+	    	bias_.AddVec(-lr*l2*num_frames_, bias_);
+
+	    	peephole_i_c_.AddVec(-lr*l2*num_frames_, peephole_i_c_);
+	    	peephole_f_c_.AddVec(-lr*l2*num_frames_, peephole_f_c_);
+	    	peephole_o_c_.AddVec(-lr*l2*num_frames_, peephole_o_c_);
+
+	    	w_r_m_.AddMat(-lr*l2*num_frames_, w_r_m_);
+	    }
 
 	    w_gifo_x_.AddMat(-lr, w_gifo_x_corr_);
 	    w_gifo_r_.AddMat(-lr, w_gifo_r_corr_);
@@ -1148,6 +1144,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
   BaseFloat learn_rate_coef_;
   BaseFloat bias_learn_rate_coef_;
   BaseFloat max_norm_;
+  int32 num_frames_;
 
 };
 } // namespace nnet0

@@ -221,66 +221,65 @@ class AffineTransform : public UpdatableComponent {
 	in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity_, kNoTrans, 0.0);
   }
 
-  void ResetGradient()
-  {
-      linearity_corr_.SetZero();
-      bias_corr_.SetZero();
+  void ResetGradient() {
+        linearity_corr_.SetZero();
+        bias_corr_.SetZero();
   }
 
-  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
-  {
+  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
 	    // we use following hyperparameters from the option class
-	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
-	    const BaseFloat lr_bias = opts_.learn_rate * bias_learn_rate_coef_;
 	    const BaseFloat mmt = opts_.momentum;
-	    const BaseFloat l2 = opts_.l2_penalty;
-	    const BaseFloat l1 = opts_.l1_penalty;
 	    // we will also need the number of frames in the mini-batch
-	    const int32 num_frames = input.NumRows();
-		local_lrate = -lr;
-		local_lrate_bias = -lr_bias;
+	    num_frames_ = input.NumRows();
 
 	    // compute gradient (incl. momentum)
 	    linearity_corr_.AddMatMat(1.0, diff, kTrans, *p_input_, kNoTrans, mmt);
 	    bias_corr_.AddRowSumMat(1.0, diff, mmt);
-	    // l2 regularization
-	    if (l2 != 0.0) {
-	      linearity_.AddMat(-lr*l2*num_frames, linearity_);
-	    }
-	    // l1 regularization
-	    if (l1 != 0.0) {
-	      cu::RegularizeL1(&linearity_, &linearity_corr_, lr*l1*num_frames, lr);
-	    }
   }
 
-  void UpdateGradient()
-  {
-	    	// update
-	      linearity_.AddMat(local_lrate, linearity_corr_);
-	      bias_.AddVec(local_lrate_bias, bias_corr_);
-	      // max-norm
-	      if (max_norm_ > 0.0) {
-	        CuMatrix<BaseFloat> lin_sqr(linearity_);
-	        lin_sqr.MulElements(linearity_);
-	        CuVector<BaseFloat> l2(OutputDim());
-	        l2.AddColSumMat(1.0, lin_sqr, 0.0);
-	        l2.ApplyPow(0.5); // we have per-neuron L2 norms
-	        CuVector<BaseFloat> scl(l2);
-	        scl.Scale(1.0/max_norm_);
-	        scl.ApplyFloor(1.0);
-	        scl.InvertElements();
-	        linearity_.MulRowsVec(scl); // shink to sphere!
-	      }
-          if(fix_){
-              bias_.ApplyFloor(-8.0);
-              bias_.ApplyCeiling(8.0);
-              //linearity_.ApplyFloor(-8.0);
-              //linearity_.ApplyCeiling(8.0);
-              linearity_fix_.CopyFromMat(linearity_);
-              linearity_fix_.FindRowAbsMax(linearity_row_max_);
-              linearity_fix_.DivRowsVec(linearity_row_max_); 
-              linearity_fix_.ApplyFixed(pow(2, -bit_), fix_);
-          }
+  void UpdateGradient() {
+	   // we use following hyperparameters from the option class
+	   const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+	   const BaseFloat lr_bias = opts_.learn_rate * bias_learn_rate_coef_;
+	   const BaseFloat l2 = opts_.l2_penalty;
+	   const BaseFloat l1 = opts_.l1_penalty;
+
+	   // l2 regularization
+	   if (l2 != 0.0) {
+	     linearity_.AddMat(-lr*l2*num_frames_, linearity_);
+	   }
+	   // l1 regularization
+	   if (l1 != 0.0) {
+	     cu::RegularizeL1(&linearity_, &linearity_corr_, lr*l1*num_frames_, lr);
+	   }
+
+	   // update
+	   linearity_.AddMat(-lr, linearity_corr_);
+	   bias_.AddVec(-lr_bias, bias_corr_);
+	   // max-norm
+	   if (max_norm_ > 0.0) {
+	       CuMatrix<BaseFloat> lin_sqr(linearity_);
+	       lin_sqr.MulElements(linearity_);
+	       CuVector<BaseFloat> l2(OutputDim());
+	       l2.AddColSumMat(1.0, lin_sqr, 0.0);
+	       l2.ApplyPow(0.5); // we have per-neuron L2 norms
+	       CuVector<BaseFloat> scl(l2);
+	       scl.Scale(1.0/max_norm_);
+	       scl.ApplyFloor(1.0);
+	       scl.InvertElements();
+	       linearity_.MulRowsVec(scl); // shink to sphere!
+	   }
+
+       if(fix_){
+           bias_.ApplyFloor(-8.0);
+           bias_.ApplyCeiling(8.0);
+           //linearity_.ApplyFloor(-8.0);
+           //linearity_.ApplyCeiling(8.0);
+           linearity_fix_.CopyFromMat(linearity_);
+           linearity_fix_.FindRowAbsMax(linearity_row_max_);
+           linearity_fix_.DivRowsVec(linearity_row_max_); 
+           linearity_fix_.ApplyFixed(pow(2, -bit_), fix_);
+       }
 
   }
 
@@ -505,6 +504,7 @@ protected:
   BaseFloat local_lrate_bias;
   int32 fix_ ;
   int32 bit_;
+  int32 num_frames_;
 };
 
 } // namespace nnet0

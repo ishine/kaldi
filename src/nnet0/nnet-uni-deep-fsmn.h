@@ -288,6 +288,8 @@ namespace nnet0 {
    void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &out_diff) {
 
 	   const BaseFloat mmt = opts_.momentum;
+       // we will also need the number of frames in the mini-batch
+       num_frames_ = input.NumRows();
 	   //Step 1. fsmn layer
        //l_filter_corr_.Set(0.0);
        l_filter_corr_.GetLfilterErr(out_diff, p_out_, flags_, l_order_, l_stride_, 1.0);
@@ -307,8 +309,8 @@ namespace nnet0 {
      const BaseFloat l2 = opts_.l2_penalty;
 
      if (l2 != 0.0) {
-       linearity_.AddMat(-lr*l2, linearity_);
-       p_weight_.AddMat(-lr*l2,  p_weight_);
+       linearity_.AddMat(-lr*l2*num_frames_, linearity_);
+       p_weight_.AddMat(-lr*l2*num_frames_,  p_weight_);
      }
      l_filter_.AddMat(-lr, l_filter_corr_);
      p_weight_.AddMat(-lr, p_weight_corr_);
@@ -432,6 +434,7 @@ namespace nnet0 {
    int l_order_;
    int l_stride_;
    int hid_size_;
+   int32 num_frames_;
  };
 
 } // namespace nnet0
