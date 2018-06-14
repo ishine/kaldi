@@ -188,8 +188,10 @@ private:
 
 	    // skip frames
 	    int32 skip_frames = opts->skip_frames;
+        int in_skip = opts->skip_inner ? 1 : skip_frames,
+        out_skip = opts->skip_inner ? skip_frames : 1;
 	    NnetDataRandomizerOptions skip_rand_opts = *rnd_opts;
-	    if (opts->skip_inner) skip_rand_opts.minibatch_size = rnd_opts->minibatch_size*skip_frames;
+	    skip_rand_opts.minibatch_size = rnd_opts->minibatch_size*out_skip;
 
 	    RandomizerMask randomizer_mask(*rnd_opts);
 	    MatrixRandomizer feature_randomizer(skip_rand_opts);
@@ -241,7 +243,7 @@ private:
 		        nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
 
 		        // pass data to randomizers
-		        KALDI_ASSERT(feats_transf.NumRows() == targets.size());
+		        KALDI_ASSERT(feats_transf.NumRows() == targets.size()*out_skip);
 		        feature_randomizer.AddData(feats_transf);
 		        targets_randomizer.AddData(targets);
 		        weights_randomizer.AddData(weights);
