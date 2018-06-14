@@ -182,14 +182,17 @@ private:
 
 	    Nnet si_nnet;
 	    if (this->kld_scale > 0)
-	    {
-	    	si_nnet.Read(si_model_filename);
-	    }
+	    		si_nnet.Read(si_model_filename);
 
 	    model_sync->Initialize(&nnet);
 
+	    // skip frames
+	    int32 skip_frames = opts->skip_frames;
+	    NnetDataRandomizerOptions skip_rand_opts = *rnd_opts;
+	    if (opts->skip_inner) skip_rand_opts.minibatch_size = rnd_opts->minibatch_size*skip_frames;
+
 	    RandomizerMask randomizer_mask(*rnd_opts);
-	    MatrixRandomizer feature_randomizer(*rnd_opts);
+	    MatrixRandomizer feature_randomizer(skip_rand_opts);
 	    PosteriorRandomizer targets_randomizer(*rnd_opts);
 	    VectorRandomizer weights_randomizer(*rnd_opts);
 	    VectorRandomizer flags_randomizer(*rnd_opts);
@@ -242,7 +245,7 @@ private:
 		        feature_randomizer.AddData(feats_transf);
 		        targets_randomizer.AddData(targets);
 		        weights_randomizer.AddData(weights);
-		        utt_flags.Resize(feats_transf.NumRows(), kSetZero);
+		        utt_flags.Resize(targets.size(), kSetZero);
 		        utt_flags.Set(BaseFloat(num_done));
 		        flags_randomizer.AddData(utt_flags);
 		        num_done++;
@@ -518,21 +521,42 @@ void NnetUpdateParallel(const NnetUpdateOptions *opts,
 	    // process the examples.  They get re-joined in its destructor.
 	    MultiThreader<TrainParallelClass> m(opts->parallel_opts->num_threads, c);
 
-	    NnetExample *example;
-	    std::vector<NnetExample*> examples;
-	    for (; !feature_reader.Done(); feature_reader.Next()) {
-	    	example = new DNNNnetExample(&feature_reader, &targets_reader, &weights_reader, &model_sync, stats, opts);
-	    	if (example->PrepareData(examples))
-	    	{
-	    		for (int i = 0; i < examples.size(); i++)
-	    			repository.AcceptExample(examples[i]);
-	    		if (examples[0] != example)
-	    			delete example;
-	    	}
-	    	else
-	    		delete example;
-	    }
-	    repository.ExamplesDone();
+	    // prepare sample
+		NnetExample *example;
+		std::vector<NnetExample*> examples;
+		std::vector<int> sweep_frames, loop_frames;
+		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+		for (int i = 0; i < sweep_frames.size(); i++) {
+			if (sweep_frames[i] >= opts->skip_frames)
+				KALDI_ERR << "invalid sweep frames indexes";
+		}
+
+		int nframes = sweep_frames.size();
+		int idx = 0;
+		loop_frames = sweep_frames;
+		// loop sweep skip frames
+		for (; !feature_reader.Done(); feature_reader.Next()) {
+			if (!opts->sweep_loop) {
+				loop_frames.resize(1);
+				loop_frames[0] = sweep_frames[idx];
+				idx = (idx+1)%nframes;
+			}
+
+			example = new DNNNnetExample(&feature_reader, &targets_reader,
+					&weights_reader, &model_sync, stats, opts);
+			example->SetSweepFrames(loop_frames, opts->skip_inner);
+			if (example->PrepareData(examples)) {
+				for (int i = 0; i < examples.size(); i++) {
+					repository.AcceptExample(examples[i]);
+				}
+				if (examples[0] != example)
+					delete example;
+			}
+			else
+				delete example;
+		}
+		repository.ExamplesDone();
 	  }
 
 }

@@ -182,7 +182,7 @@ private:
 
 	    Nnet si_nnet;
 	    if (this->kld_scale > 0)
-	    	si_nnet.Read(si_model_filename);
+	    		si_nnet.Read(si_model_filename);
 
 	    model_sync->Initialize(&nnet);
 
@@ -283,10 +283,10 @@ private:
 	        if (done) break;
 
 	        if (feat.NumCols() != feats[0].NumCols()) {
-	        	minibatch = batch_size * num_stream;
-	        	if (opts->skip_inner) minibatch *= skip_frames;
-	        	feat.Resize(minibatch, feats[0].NumCols(), kSetZero);
-	        	nnet_in.Resize(minibatch, feats[0].NumCols(), kSetZero);
+				minibatch = batch_size * num_stream;
+				if (opts->skip_inner) minibatch *= skip_frames;
+				feat.Resize(minibatch, feats[0].NumCols(), kSetZero);
+				nnet_in.Resize(minibatch, feats[0].NumCols(), kSetZero);
 	        }
 
 	        // fill a multi-stream bptt batch

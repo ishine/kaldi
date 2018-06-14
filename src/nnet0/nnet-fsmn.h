@@ -141,6 +141,11 @@ namespace nnet0 {
    void ResetMomentum(void) {
    }
 
+   void ResetGradient() {
+	   l_filter_corr_.SetZero();
+	   l_filter_corr_.SetZero();
+   }
+
    int32 NumParams() const { 
      return l_filter_.NumRows()*l_filter_.NumCols() + r_filter_.NumRows()*r_filter_.NumCols(); 
    }

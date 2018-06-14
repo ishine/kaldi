@@ -154,12 +154,18 @@ namespace nnet0 {
 
    }
 
-   void ResetMomentum(void)
-   {
+   void ResetMomentum(void) {
      l_filter_corr_.Set(0.0);
      p_weight_corr_.Set(0.0);
      linearity_corr_.Set(0.0);
      bias_corr_.Set(0.0);
+   }
+
+   void ResetGradient() {
+	   l_filter_corr_.SetZero();
+	   p_weight_corr_.SetZero();
+	   linearity_corr_.SetZero();
+       bias_corr_.SetZero();
    }
 
    int32 NumParams() const { 

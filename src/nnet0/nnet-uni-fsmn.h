@@ -109,8 +109,11 @@ namespace nnet0 {
      l_filter_.Write(os, binary);
    }
 
-   void ResetMomentum(void)
-   {
+   void ResetMomentum(void) {
+   }
+
+   void ResetGradient() {
+	   l_filter_corr_.SetZero();
    }
 
    int32 NumParams() const { 

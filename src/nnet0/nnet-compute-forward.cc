@@ -134,8 +134,8 @@ public:
 	    int32 out_dim = nnet.OutputDim();
 	    Matrix<BaseFloat> feat, nnet_out_host;
 	    if (batch_size * num_stream > 0) {
-	    	feat.Resize(out_skip * batch_size * num_stream, feat_dim, kSetZero);
-	    	nnet_out_host.Resize(batch_size * num_stream, out_dim, kSetZero);
+	    		feat.Resize(out_skip * batch_size * num_stream, feat_dim, kSetZero);
+	    		nnet_out_host.Resize(batch_size * num_stream, out_dim, kSetZero);
 	    }
 
 
@@ -149,253 +149,244 @@ public:
 
 	    //num_stream=1 for lstm debug
 	    if (num_stream >= 1)
-	    while (1)
-	    {
-	    	 // loop over all streams, check if any stream reaches the end of its utterance,
-	    	 // if any, feed the exhausted stream with a new utterance, update book-keeping infos
-	    	for (int s = 0; s < num_stream; s++)
-	    	{
-	    		// this stream still has valid frames
-	    		if (curt[s] < lent[s]) {
-	    			new_utt_flags[s] = 0;
-	    		    continue;
-	    		}
+	    while (1) {
+			// loop over all streams, check if any stream reaches the end of its utterance,
+			// if any, feed the exhausted stream with a new utterance, update book-keeping infos
+			for (int s = 0; s < num_stream; s++) {
+				// this stream still has valid frames
+				if (curt[s] < lent[s]) {
+					new_utt_flags[s] = 0;
+					continue;
+				}
 
-	    		if (utt_curt[s] > 0 && !utt_copied[s])
-	    		{
-	    			examples_mutex->Lock();
-	    			feature_writer->Write(keys[s], utt_feats[s]);
-	    			examples_mutex->Unlock();
-	    			utt_copied[s] = true;
-	    		}
+				if (utt_curt[s] > 0 && !utt_copied[s]) {
+					examples_mutex->Lock();
+					feature_writer->Write(keys[s], utt_feats[s]);
+					examples_mutex->Unlock();
+					utt_copied[s] = true;
+				}
 
-	    		while ((example = dynamic_cast<FeatureExample*>(repository->ProvideExample())) != NULL)
-	    		{
-	    	    	std::string key = example->utt;
-	    	    	Matrix<BaseFloat> &mat = example->input_frames;
-	    	    	// forward the features through a feature-transform,
-                    nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
+				while ((example = dynamic_cast<FeatureExample*>(repository->ProvideExample())) != NULL) {
+					std::string key = example->utt;
+					Matrix<BaseFloat> &mat = example->input_frames;
+					// forward the features through a feature-transform,
+					nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
 
-	    	    	num_done++;
+							num_done++;
 
-	                // checks ok, put the data in the buffers,
-	                keys[s] = key;
-	                feats[s].Resize(feats_transf.NumRows(), feats_transf.NumCols());
-	                feats_transf.CopyToMat(&feats[s]);
-	                //feats[s] = mat;
-	                curt[s] = 0;
-	                lent[s] = feats[s].NumRows();
-	                new_utt_flags[s] = 1;  // a new utterance feeded to this stream
+					// checks ok, put the data in the buffers,
+					keys[s] = key;
+					feats[s].Resize(feats_transf.NumRows(), feats_transf.NumCols());
+					feats_transf.CopyToMat(&feats[s]);
+					//feats[s] = mat;
+					curt[s] = 0;
+					lent[s] = feats[s].NumRows();
+					new_utt_flags[s] = 1;  // a new utterance feeded to this stream
 
-	                //frame_num_utt[s] = (lent[s]+skip_frames-1)/skip_frames;
-	                frame_num_utt[s] = lent[s]/skip_frames;
-	                frame_num_utt[s] += lent[s]%skip_frames > 0 ? 1 : 0;
-	                lent[s] = lent[s] > frame_num_utt[s]*skip_frames ? frame_num_utt[s]*skip_frames : lent[s];
-	                int32 utt_frames = opts->copy_posterior ? lent[s]:frame_num_utt[s];
-	                utt_feats[s].Resize(utt_frames, out_dim, kUndefined);
-	                utt_copied[s] = false;
-	                utt_curt[s] = 0;
+					//frame_num_utt[s] = (lent[s]+skip_frames-1)/skip_frames;
+					frame_num_utt[s] = lent[s]/skip_frames;
+					frame_num_utt[s] += lent[s]%skip_frames > 0 ? 1 : 0;
+					lent[s] = lent[s] > frame_num_utt[s]*skip_frames ? frame_num_utt[s]*skip_frames : lent[s];
+					int32 utt_frames = opts->copy_posterior ? lent[s]:frame_num_utt[s];
+					utt_feats[s].Resize(utt_frames, out_dim, kUndefined);
+					utt_copied[s] = false;
+					utt_curt[s] = 0;
 
-	                delete example;
-	                break;
-	    		}
-	    	}
+					delete example;
+					break;
+				}
+			}
 
-		        // we are done if all streams are exhausted
-		        int done = 1;
-		        for (int s = 0; s < num_stream; s++) {
-		            if (curt[s] < lent[s]) done = 0;  // this stream still contains valid data, not exhausted
-		        }
+			// we are done if all streams are exhausted
+			int done = 1;
+			for (int s = 0; s < num_stream; s++) {
+				if (curt[s] < lent[s]) done = 0;  // this stream still contains valid data, not exhausted
+			}
 
-		        if (done) break;
+			if (done) break;
 
-		        // fill a multi-stream bptt batch
-		        // * target: padded to batch_size
-		        // * feat: first shifted to achieve targets delay; then padded to batch_size
-		        for (int t = 0; t < batch_size * out_skip; t++) {
-		           for (int s = 0; s < num_stream; s++) {
-		               // feat shifting & padding
-		               if (curt[s] + time_shift*skip_frames < lent[s]) {
-		                   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]+time_shift*skip_frames));
-		               } else {
-		            	   int last = (frame_num_utt[s]-1)*skip_frames; // lent[s]-1
-		            	   if (last >= 0)
-		                   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(last));
-		               }
+			// fill a multi-stream bptt batch
+			// * target: padded to batch_size
+			// * feat: first shifted to achieve targets delay; then padded to batch_size
+			for (int t = 0; t < batch_size * out_skip; t++) {
+			   for (int s = 0; s < num_stream; s++) {
+				   // feat shifting & padding
+				   if (curt[s] + time_shift*skip_frames < lent[s]) {
+					   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]+time_shift*skip_frames));
+				   } else {
+					   int last = (frame_num_utt[s]-1)*skip_frames; // lent[s]-1
+					   if (last >= 0)
+					   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(last));
+				   }
 
-		               curt[s] += in_skip;
-		           }
-		       }
-
-		        num_frames = feat.NumRows();
-			    // report the speed
-			    if (num_done % 5000 == 0) {
-			      time_now = time.Elapsed();
-			      KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
-			                    << time_now/60 << " min; processed " << total_frames/time_now
-								<< " frames per second.";
-			    }
-
-			    // apply optional feature transform
-			   //nnet_transf.Feedforward(CuMatrix<BaseFloat>(feat), &feats_transf);
-
-			   // for streams with new utterance, history states need to be reset
-			   nnet.ResetLstmStreams(new_utt_flags);
-			   nnet.SetSeqLengths(new_utt_flags);
-
-			   // forward pass
-			   //nnet.Propagate(feats_transf, &nnet_out);
-			   nnet.Propagate(CuMatrix<BaseFloat>(feat), &nnet_out);
-
-			   // ctc prior, only scale blank label posterior
-			   if (blank_posterior_scale >= 0) {
-				   nnet_out.ColRange(0, 1).Scale(blank_posterior_scale);
+				   curt[s] += in_skip;
 			   }
+		   }
 
-		    	// convert posteriors to log-posteriors,
-		    	if (apply_log) {
-		    	  nnet_out.Add(1e-20); // avoid log(0),
-		    	  nnet_out.ApplyLog();
-		    	}
-        
-		    	// subtract log-priors from log-posteriors or pre-softmax,
-		    	if (prior_opts->class_frame_counts != "") {
-		    	  pdf_prior.SubtractOnLogpost(&nnet_out);
-		    	}
+			num_frames = feat.NumRows();
+			// report the speed
+			if (num_done % 5000 == 0) {
+			  time_now = time.Elapsed();
+			  KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
+							<< time_now/60 << " min; processed " << total_frames/time_now
+							<< " frames per second.";
+			}
 
-			   nnet_out.CopyToMat(&nnet_out_host);
+			// apply optional feature transform
+			//nnet_transf.Feedforward(CuMatrix<BaseFloat>(feat), &feats_transf);
 
-		       for (int t = 0; t < batch_size; t++) {
-		           for (int s = 0; s < num_stream; s++) {
-		               // feat shifting & padding
-		        	   if (opts->copy_posterior) {
-		        		   for (int k = 0; k < skip_frames; k++){
-		        		   		if (utt_curt[s] < lent[s]) {
-		        		   			utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
-		        		   			utt_curt[s]++;
-		        		   		}
-		        		   }
-		        	   }
-		        	   else {
-		        		   if (utt_curt[s] < frame_num_utt[s]) {
-		        			   utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
-		        			   utt_curt[s]++;
-		        		   }
-		        	   }
-		           }
-		       }
+			// for streams with new utterance, history states need to be reset
+			nnet.ResetLstmStreams(new_utt_flags);
+			nnet.SetSeqLengths(new_utt_flags);
 
-		       total_frames += num_frames;
+			// forward pass
+			//nnet.Propagate(feats_transf, &nnet_out);
+			nnet.Propagate(CuMatrix<BaseFloat>(feat), &nnet_out);
+
+			// ctc prior, only scale blank label posterior
+			if (blank_posterior_scale >= 0) {
+			   nnet_out.ColRange(0, 1).Scale(blank_posterior_scale);
+			}
+
+			// convert posteriors to log-posteriors,
+			if (apply_log) {
+			  nnet_out.Add(1e-20); // avoid log(0),
+			  nnet_out.ApplyLog();
+			}
+
+			// subtract log-priors from log-posteriors or pre-softmax,
+			if (prior_opts->class_frame_counts != "") {
+			  pdf_prior.SubtractOnLogpost(&nnet_out);
+			}
+
+			nnet_out.CopyToMat(&nnet_out_host);
+
+			for (int t = 0; t < batch_size; t++) {
+			   for (int s = 0; s < num_stream; s++) {
+				   // feat shifting & padding
+				   if (opts->copy_posterior) {
+					   for (int k = 0; k < skip_frames; k++){
+							if (utt_curt[s] < lent[s]) {
+								utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
+								utt_curt[s]++;
+							}
+					   }
+				   }
+				   else {
+					   if (utt_curt[s] < frame_num_utt[s]) {
+						   utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
+						   utt_curt[s]++;
+					   }
+				   }
+			   }
+			}
+			total_frames += num_frames;
 	    }
 
-	    // for dnn cnn
+	    // for feed forward network, e.g. cnn,dnn,fsmn
 	    if (num_stream < 1)
 	    while ((example = dynamic_cast<FeatureExample*>(repository->ProvideExample())) != NULL)
 	    {
-	    	std::string utt = example->utt;
-	    	Matrix<BaseFloat> &mat = example->input_frames;
+			std::string utt = example->utt;
+			Matrix<BaseFloat> &mat = example->input_frames;
 
-	    	/*
-	        if (!KALDI_ISFINITE(mat.Sum())) { // check there's no nan/inf,
-	          KALDI_ERR << "NaN or inf found in features for " << utt;
-	        }
-			*/
-
-	    	if (time_shift > 0 || skip_frames > 1)
-	    	{
+			if (time_shift > 0 || skip_frames > 1) {
 				int32 len = mat.NumRows()/skip_frames, cur = 0;
 				len += mat.NumRows()%skip_frames > 0 ? 1 : 0;
-                len *= out_skip;
+				len *= out_skip;
 				feat.Resize(len, mat.NumCols(), kUndefined);
 
-				for (int32 i = 0; i < len; i++)
-				{
+				for (int32 i = 0; i < len; i++) {
 					feat.Row(i).CopyFromVec(mat.Row(cur+time_shift*skip_frames));
 					cur += in_skip;
 				}
 
 				cufeat = feat; // push it to gpu,
-	    	}
-	    	else
-	    		cufeat = mat; // push it to gpu,
+			}
+			else
+				cufeat = mat; // push it to gpu,
 
-	        // fwd-pass, feature transform,
-	        nnet_transf.Feedforward(cufeat, &feats_transf);
+			///only for nnet with fsmn component
+			Vector<BaseFloat> flags;
+			flags.Resize(feat.NumRows(), kSetZero);
+			flags.Set(1.0);
+			nnet.SetFlags(flags);
 
-	        // fwd-pass, nnet,
-	        nnet.Feedforward(feats_transf, &nnet_out);
+			// fwd-pass, feature transform,
+			nnet_transf.Feedforward(cufeat, &feats_transf);
+
+			// fwd-pass, nnet,
+			nnet.Feedforward(feats_transf, &nnet_out);
 
 
-	    	// convert posteriors to log-posteriors,
-	    	if (apply_log) {
-	    	  if (!(nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0)) {
-	    	    KALDI_WARN << utt << " "
-	    	               << "Applying 'log' to data which don't seem to be probabilities "
-	    	               << "(is there a softmax somwhere?)";
-	    	  }
-	    	  nnet_out.Add(1e-20); // avoid log(0),
-	    	  nnet_out.ApplyLog();
-	    	}
+			// convert posteriors to log-posteriors,
+			if (apply_log) {
+			  if (!(nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0)) {
+				KALDI_WARN << utt << " "
+						   << "Applying 'log' to data which don't seem to be probabilities "
+						   << "(is there a softmax somwhere?)";
+			  }
+			  nnet_out.Add(1e-20); // avoid log(0),
+			  nnet_out.ApplyLog();
+			}
 
-	    	// subtract log-priors from log-posteriors or pre-softmax,
-	    	if (prior_opts->class_frame_counts != "") {
-	    	  if (nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0) {
-	    	    KALDI_WARN << utt << " "
-	    	               << "Subtracting log-prior on 'probability-like' data in range [0..1] "
-	    	               << "(Did you forget --no-softmax=true or --apply-log=true ?)";
-	    	  }
-	    	  pdf_prior.SubtractOnLogpost(&nnet_out);
-	    	}
+			// subtract log-priors from log-posteriors or pre-softmax,
+			if (prior_opts->class_frame_counts != "") {
+			  if (nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0) {
+				KALDI_WARN << utt << " "
+						   << "Subtracting log-prior on 'probability-like' data in range [0..1] "
+						   << "(Did you forget --no-softmax=true or --apply-log=true ?)";
+			  }
+			  pdf_prior.SubtractOnLogpost(&nnet_out);
+			}
 
-	    	// download from GPU,
-	    	nnet_out_host.Resize(nnet_out.NumRows(), nnet_out.NumCols());
-	    	nnet_out.CopyToMat(&nnet_out_host);
+			// download from GPU,
+			nnet_out_host.Resize(nnet_out.NumRows(), nnet_out.NumCols());
+			nnet_out.CopyToMat(&nnet_out_host);
 
-	    	// check there's no nan/inf,
+			// check there's no nan/inf,
 			if (!KALDI_ISFINITE(nnet_out_host.Sum())) {
 			  KALDI_ERR << "NaN or inf found in final output nn-output for " << utt;
 			}
 
-	    	if (opts->copy_posterior)
-	    	{
-	    		Matrix<BaseFloat> tmp(nnet_out_host);
-	    		nnet_out_host.Resize(mat.NumRows(), nnet_out.NumCols());
+			if (opts->copy_posterior) {
+				Matrix<BaseFloat> tmp(nnet_out_host);
+				nnet_out_host.Resize(mat.NumRows(), nnet_out.NumCols());
 
-	    		int32 cur = 0;
-	    		for (int32 i = 0; i < tmp.NumRows(); i++)
-	    		{
-						for (int k = 0; k < skip_frames; k++) {
-							if (cur < mat.NumRows()) {
-								nnet_out_host.Row(cur).CopyFromVec(tmp.Row(i));
-								cur++;
-							}
+				int32 cur = 0;
+				for (int32 i = 0; i < tmp.NumRows(); i++) {
+					for (int k = 0; k < skip_frames; k++) {
+						if (cur < mat.NumRows()) {
+							nnet_out_host.Row(cur).CopyFromVec(tmp.Row(i));
+							cur++;
 						}
-	    		}
-	    	}
+					}
+				}
+			}
 
-	    	// write,
-	    	examples_mutex->Lock();
-	    	feature_writer->Write(utt, nnet_out_host);
-	    	examples_mutex->Unlock();
+			// write,
+			examples_mutex->Lock();
+			feature_writer->Write(utt, nnet_out_host);
+			examples_mutex->Unlock();
 
-	    	// progress log
-	    	if (num_done % 100 == 0) {
-	    	  time_now = time.Elapsed();
-	    	  KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
-	    	                << time_now/60 << " min; processed " << total_frames/time_now
-	    	                << " frames per second.";
-	    	}
-	    	num_done++;
-	    	total_frames += example->input_frames.NumRows();
+			// progress log
+			if (num_done % 100 == 0) {
+			  time_now = time.Elapsed();
+			  KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
+							<< time_now/60 << " min; processed " << total_frames/time_now
+							<< " frames per second.";
+			}
+			num_done++;
+			total_frames += example->input_frames.NumRows();
 
-	        // release the buffers we don't need anymore
-	       	delete example;
+			// release the buffers we don't need anymore
+			delete example;
 	    }
 
-	    examples_mutex->Lock();
-	    stats->num_done += num_done;
-	    stats->total_frames += total_frames;
-	    examples_mutex->Unlock();
+		examples_mutex->Lock();
+		stats->num_done += num_done;
+		stats->total_frames += total_frames;
+		examples_mutex->Unlock();
 
 	}
 
@@ -422,42 +413,42 @@ void NnetForwardParallel(const NnetForwardOptions *opts,
     	    // process the examples.  They get re-joined in its destructor.
     	    MultiThreader<NnetForwardParallelClass> m(opts->num_threads, c);
 
-    	    // iterate over all feature files
-			// prepare sample
-			NnetExample *example;
-			std::vector<NnetExample*> examples;
-			std::vector<int> sweep_frames, loop_frames;
-			if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
-				KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
-			for (int i = 0; i < sweep_frames.size(); i++) {
-				if (sweep_frames[i] >= opts->skip_frames)
-					KALDI_ERR << "invalid sweep frames indexes";
+		// iterate over all feature files
+		// prepare sample
+		NnetExample *example;
+		std::vector<NnetExample*> examples;
+		std::vector<int> sweep_frames, loop_frames;
+		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
+			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
+		for (int i = 0; i < sweep_frames.size(); i++) {
+			if (sweep_frames[i] >= opts->skip_frames)
+				KALDI_ERR << "invalid sweep frames indexes";
+		}
+
+		int nframes = sweep_frames.size();
+		int idx = 0;
+		loop_frames = sweep_frames;
+		// loop sweep skip frames
+		for (; !feature_reader.Done(); feature_reader.Next()) {
+			if (!opts->sweep_loop) {
+				loop_frames.resize(1);
+				loop_frames[0] = sweep_frames[idx];
+				idx = (idx+1)%nframes;
 			}
 
-			int nframes = sweep_frames.size();
-			int idx = 0;
-			loop_frames = sweep_frames;
-			// loop sweep skip frames
-			for (; !feature_reader.Done(); feature_reader.Next()) {
-				if (!opts->sweep_loop) {
-					loop_frames.resize(1);
-					loop_frames[0] = sweep_frames[idx];
-					idx = (idx+1)%nframes;
+			example = new FeatureExample(&feature_reader, &sweep_frames_reader, opts);
+			example->SetSweepFrames(loop_frames, opts->skip_inner);
+			if (example->PrepareData(examples)) {
+				for (int i = 0; i < examples.size(); i++) {
+					repository.AcceptExample(examples[i]);
 				}
-
-				example = new FeatureExample(&feature_reader, &sweep_frames_reader, opts);
-				example->SetSweepFrames(loop_frames, opts->skip_inner);
-				if (example->PrepareData(examples)) {
-					for (int i = 0; i < examples.size(); i++) {
-						repository.AcceptExample(examples[i]);
-					}
-					if (examples[0] != example)
-						delete example;
-				}
-				else
+				if (examples[0] != example)
 					delete example;
 			}
-			repository.ExamplesDone();
+			else
+				delete example;
+		}
+		repository.ExamplesDone();
 
 }
 
