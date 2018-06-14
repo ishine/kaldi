@@ -307,8 +307,8 @@ namespace nnet0 {
      hid_out_err_.MulElements(hid_out_);
 
      in_diff->AddMatMat(1.0, hid_out_err_, kNoTrans, linearity_, kNoTrans, 0.0);
-     linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, in, kNoTrans, mmt);
-     bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
+     //linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, in, kNoTrans, mmt);
+     //bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
 
      //Step4. skip connection
      in_diff->AddMat(1.0, out_diff, kNoTrans);
