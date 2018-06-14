@@ -308,7 +308,7 @@ public:
 
 			///only for nnet with fsmn component
 			Vector<BaseFloat> flags;
-			flags.Resize(feat.NumRows(), kSetZero);
+			flags.Resize(cufeat.NumRows(), kSetZero);
 			flags.Set(1.0);
 			nnet.SetFlags(flags);
 
