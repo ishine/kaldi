@@ -290,8 +290,9 @@ public:
 			std::string utt = example->utt;
 			Matrix<BaseFloat> &mat = example->input_frames;
 
+            int len, cur;
 			if (time_shift > 0 || skip_frames > 1) {
-				int32 len = mat.NumRows()/skip_frames, cur = 0;
+				len = mat.NumRows()/skip_frames, cur = 0;
 				len += mat.NumRows()%skip_frames > 0 ? 1 : 0;
 				len *= out_skip;
 				feat.Resize(len, mat.NumCols(), kUndefined);
@@ -299,6 +300,7 @@ public:
 				for (int32 i = 0; i < len; i++) {
 					feat.Row(i).CopyFromVec(mat.Row(cur+time_shift*skip_frames));
 					cur += in_skip;
+                    if (cur >= mat.NumRows()) cur = mat.NumRows()-1;
 				}
 
 				cufeat = feat; // push it to gpu,
@@ -308,7 +310,7 @@ public:
 
 			///only for nnet with fsmn component
 			Vector<BaseFloat> flags;
-			flags.Resize(cufeat.NumRows(), kSetZero);
+			flags.Resize(len/out_skip, kSetZero);
 			flags.Set(1.0);
 			nnet.SetFlags(flags);
 
