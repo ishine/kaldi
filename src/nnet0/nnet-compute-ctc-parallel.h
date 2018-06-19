@@ -49,11 +49,12 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     int32 targets_delay;
     int32 blank_label;
     std::string ctc_imp;
+    std::string nnet_type;
 
 
     NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
     	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), targets_delay(0), blank_label(0),
-		  ctc_imp("eesen") { }
+		  ctc_imp("eesen"), nnet_type("lstm") { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -65,6 +66,7 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
 	        po->Register("targets-delay", &targets_delay, "---LSTM--- BPTT targets delay");
 	        po->Register("blank-label", &blank_label, "CTC output bank label id");
 	        po->Register("ctc-imp", &ctc_imp, "CTC objective function implementation, (eesen|warp)");
+	        po->Register("nnet-type", &nnet_type, "CTC neural network type, (lstm|fsmn)");
   	  }
 };
 
