@@ -248,7 +248,8 @@ private:
 	    Timer time;
 	    double time_now = 0;
 
-		int32 cur_stream_num = 0, num_skip, in_rows, out_rows;
+		int32 cur_stream_num = 0, num_skip, in_rows, out_rows, 
+              in_frames, out_frames, in_frames_pad, out_frames_pad;
 		int32 feat_dim = nnet.InputDim();
 	    num_skip = opts->skip_inner ? skip_frames : 1;
         frame_limit *= num_skip;
@@ -310,17 +311,18 @@ private:
 
 			targets_delay *=  num_skip;
 			cur_stream_num = s;
+            in_frames_pad = cur_stream_num * max_frame_num;
+            out_frames_pad = cur_stream_num * ((max_frame_num+num_skip-1)/num_skip);
 			new_utt_flags.resize(cur_stream_num, 1);
 
-			if (this->objective_function == "xent")
-			{
-				target.resize(cur_stream_num * (max_frame_num+num_skip-1)/num_skip);
-				frame_mask_host.Resize(cur_stream_num * (max_frame_num+num_skip-1)/num_skip, kSetZero);
+			if (this->objective_function == "xent") {
+				target.resize(out_frames_pad);
+				frame_mask_host.Resize(out_frames_pad, kSetZero);
 			}
 
-			if (opts->nnet_type == "lstm") {
+			if (opts->network_type == "lstm") {
 				// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
-				feat_mat_host.Resize(cur_stream_num * max_frame_num, feat_dim, kSetZero);
+				feat_mat_host.Resize(in_frames_pad, feat_dim, kSetZero);
 
 				for (int s = 0; s < cur_stream_num; s++) {
 				  //Matrix<BaseFloat> mat_tmp = feats_utt[s];
@@ -341,8 +343,8 @@ private:
 					  }
 				  }
 				}
-			} else if (opts->nnet_type == "fsmn") {
-				int in_frames = 0, out_frames = 0;
+			} else if (opts->network_type == "fsmn") {
+				in_frames = 0, out_frames = 0;
 				for (int s = 0; s < cur_stream_num; s++) {
 					in_frames += num_utt_frame_in[s];
 					out_frames += num_utt_frame_out[s];
@@ -352,11 +354,11 @@ private:
 				utt_flags.Resize(out_frames);
 
 				int k = 0, offset = 0;
-				idx.resize(cur_stream_num * (max_frame_num+num_skip-1)/num_skip, -1);
+				idx.resize(out_frames_pad, -1);
 				reidx.resize(out_frames);
 				for (int s = 0; s < cur_stream_num; s++) {
 					for (int r = 0; r < num_utt_frame_out[s]; r++) {
-						utt_flags[k] = num_done-(cur_stream_num-s);
+						utt_flags(k) = num_done-(cur_stream_num-s);
 						idx[r*cur_stream_num + s] = k;
 						reidx[k] = r*cur_stream_num + s;
 						k++;
@@ -368,12 +370,15 @@ private:
 			}
 
 			// Set the original lengths of utterances before padding
-			// lstm
-			nnet.ResetLstmStreams(new_utt_flags, batch_size);
-			// bilstm
-			nnet.SetSeqLengths(num_utt_frame_in);
-			// fsmn
-			nnet.SetFlags(utt_flags);
+	        if (opts->network_type == "lstm") {
+			    // lstm
+			    nnet.ResetLstmStreams(new_utt_flags, batch_size);
+			    // bilstm
+			    nnet.SetSeqLengths(num_utt_frame_in);
+            } else if (opts->network_type == "fsmn") {
+			    // fsmn
+			    nnet.SetFlags(utt_flags);
+            }
 
 	        // report the speed
 	        if (num_done % 5000 == 0) {
@@ -386,9 +391,9 @@ private:
 	        // Propagation and CTC training
 	        nnet.Propagate(CuMatrix<BaseFloat>(feat_mat_host), &nnet_out);
 	        p_nnet_out = &nnet_out;
-	        if (opts->nnet_type == "fsmn") {
+	        if (opts->network_type == "fsmn") {
 	        		indexes = idx;
-	        		nnet_out_rearrange.Resize(cur_stream_num * (max_frame_num+num_skip-1)/num_skip, kSetZero);
+	        		nnet_out_rearrange.Resize(out_frames_pad, nnet.OutputDim(), kSetZero);
 	        		nnet_out_rearrange.CopyRows(nnet_out, indexes);
 	        		p_nnet_out = &nnet_out_rearrange;
 	        }
@@ -407,9 +412,9 @@ private:
 	        		KALDI_ERR<< "Unknown objective function code : " << objective_function;
 
 
-	        if (opts->nnet_type == "fsmn") {
+	        if (opts->network_type == "fsmn") {
 	        		indexes = reidx;
-	        		nnet_diff_rearrange.Resize(utt_flags.Dim(), kUndefined);
+	        		nnet_diff_rearrange.Resize(utt_flags.Dim(), nnet.OutputDim(), kUndefined);
 	        		nnet_diff_rearrange.CopyRows(nnet_diff, indexes);
 	        		p_nnet_diff = &nnet_diff_rearrange;
 	        }

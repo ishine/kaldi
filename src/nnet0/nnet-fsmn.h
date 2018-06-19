@@ -190,6 +190,7 @@ namespace nnet0 {
 
    void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
      // skip frames
+     /*
      KALDI_ASSERT(in.NumRows()%flags_.Dim() == 0);
      int skip_frames = in.NumRows()/flags_.Dim(); 
      if (skip_frames > 1) {
@@ -199,6 +200,7 @@ namespace nnet0 {
                 flags(skip_frames*i+j) = flags_(i);
         flags_ = flags;
      }
+     */
 
      out->GenMemory(in, l_filter_, r_filter_, flags_, l_order_, r_order_, l_stride_, r_stride_);
    }
