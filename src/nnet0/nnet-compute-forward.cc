@@ -290,7 +290,7 @@ public:
 			std::string utt = example->utt;
 			Matrix<BaseFloat> &mat = example->input_frames;
 
-            int len, cur;
+            int len = mat.NumRows(), cur = 0;
 			if (time_shift > 0 || skip_frames > 1) {
 				len = mat.NumRows()/skip_frames, cur = 0;
 				len += mat.NumRows()%skip_frames > 0 ? 1 : 0;
