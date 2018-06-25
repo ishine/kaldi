@@ -297,10 +297,11 @@ public:
 				len *= out_skip;
 				feat.Resize(len, mat.NumCols(), kUndefined);
 
+                cur += time_shift*in_skip;
 				for (int32 i = 0; i < len; i++) {
-					feat.Row(i).CopyFromVec(mat.Row(cur+time_shift*skip_frames));
-					cur += in_skip;
                     if (cur >= mat.NumRows()) cur = mat.NumRows()-1;
+					feat.Row(i).CopyFromVec(mat.Row(cur));
+					cur += in_skip;
 				}
 
 				cufeat = feat; // push it to gpu,
@@ -318,7 +319,8 @@ public:
 			nnet_transf.Feedforward(cufeat, &feats_transf);
 
 			// fwd-pass, nnet,
-			nnet.Feedforward(feats_transf, &nnet_out);
+			//nnet.Feedforward(feats_transf, &nnet_out);
+			nnet.Propagate(feats_transf, &nnet_out);
 
 
 			// convert posteriors to log-posteriors,

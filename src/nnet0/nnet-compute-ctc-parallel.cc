@@ -354,6 +354,7 @@ private:
 				utt_flags.Resize(out_frames);
 
 				int k = 0, offset = 0;
+                idx.resize(0);
 				idx.resize(out_frames_pad, -1);
 				reidx.resize(out_frames);
 				for (int s = 0; s < cur_stream_num; s++) {
@@ -398,13 +399,12 @@ private:
 	        		p_nnet_out = &nnet_out_rearrange;
 	        }
 
-	        p_nnet_diff = &nnet_diff;
 	        if (objective_function == "xent") {
 	        		xent.Eval(frame_mask_host, *p_nnet_out, target, p_nnet_diff);
 	        }
 	        else if (objective_function == "ctc") {
 	        		//ctc error
-	        		ctc->EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, p_nnet_diff);
+	        		ctc->EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, &nnet_diff);
 	        		// Error rates
 	        		ctc->ErrorRateMSeq(num_utt_frame_out, *p_nnet_out, labels_utt);
 	        }
@@ -412,6 +412,7 @@ private:
 	        		KALDI_ERR<< "Unknown objective function code : " << objective_function;
 
 
+	        p_nnet_diff = &nnet_diff;
 	        if (opts->network_type == "fsmn") {
 	        		indexes = reidx;
 	        		nnet_diff_rearrange.Resize(utt_flags.Dim(), nnet.OutputDim(), kUndefined);

@@ -269,8 +269,8 @@ namespace nnet0 {
 
    void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
      // skip frames
-     /*
      KALDI_ASSERT(in.NumRows()%flags_.Dim() == 0); 
+     /*
      int skip_frames = in.NumRows()/flags_.Dim(); 
      if (skip_frames > 1) {
         Vector<BaseFloat> flags(in.NumRows(), kUndefined);

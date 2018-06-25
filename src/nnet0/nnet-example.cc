@@ -199,7 +199,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
     	lent = utt_len/skip_frames;
     	lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
-    	feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
+    	feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
     	example->input_frames.Resize(feat_lent, input_frames.NumCols());
 
     	cur = sweep_frames[i];
@@ -330,7 +330,8 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 		lent = utt_len/skip_frames;
 		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
-		feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
+		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
+		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
 		example->input_frames.Resize(feat_lent, input_frames.NumCols());
 
 		cur = sweep_frames[i];
@@ -374,7 +375,7 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 
 		lent = utt_len/skip_frames;
 		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
-		feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
+		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
 		example->input_frames.Resize(feat_lent, input_frames.NumCols());
 
 		cur = sweep_frames[i];
