@@ -522,10 +522,9 @@ private:
 
 	    // Read transition model
 	    TransitionModel *trans_model = NULL;
-	    if (transition_model_filename != "")
-	    {
-	    	trans_model = new TransitionModel();
-	    	ReadKaldiObject(transition_model_filename, trans_model);
+	    if (transition_model_filename != "") {
+	    		trans_model = new TransitionModel();
+	    		ReadKaldiObject(transition_model_filename, trans_model);
 	    }
         else skip_frames = 1; // for CTC
 
@@ -552,19 +551,15 @@ private:
 
 	    Nnet si_nnet, softmax;
 	    if (this->kld_scale > 0)
-	    {
-	    	si_nnet.Read(si_model_filename);
-	    }
+	    		si_nnet.Read(si_model_filename);
 
-	    if (this->kld_scale > 0 || frame_smooth > 0)
-	    {
-	    	KALDI_LOG << "KLD model Appending the softmax ...";
-	    	softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+	    if (this->kld_scale > 0 || frame_smooth > 0) {
+	    		KALDI_LOG << "KLD model Appending the softmax ...";
+	    		softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
         }
 
 	    std::vector<int32> silence_phones;
-	    if (this->criterion != "mmi")
-	    {
+	    if (this->criterion != "mmi") {
 		    if (!kaldi::SplitStringToIntegers(silence_phones_str, ":", false, &silence_phones))
 		      KALDI_ERR << "Invalid silence-phones string " << silence_phones_str;
 		    kaldi::SortAndUniq(&silence_phones);
@@ -578,7 +573,7 @@ private:
 	    double time_now = 0;
 
 		CuMatrix<BaseFloat> cu_feats, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out;
-		Matrix<BaseFloat> nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, *p_nnet_diff_h = NULL;
+		Matrix<BaseFloat> feats, nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, *p_nnet_diff_h = NULL;
 
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
@@ -589,6 +584,7 @@ private:
 	    std::vector<int> lent(num_stream, 0);
 	    std::vector<int> frame_num_utt(num_stream, 0);
 	    std::vector<int> new_utt_flags;
+	    Vector<BaseFloat> flags;
 
 	    std::vector<Matrix<BaseFloat> > utt_nnet_out_h(num_stream),
 	    		utt_si_nnet_out_h(num_stream), utt_soft_nnet_out_h(num_stream);
@@ -613,8 +609,13 @@ private:
 		int32 num_frames = 0;
 		int32 cur_stream_num = 0;
 		int32 num_dump = 0, num_skip;
+
 		num_skip = opts->skip_inner ? skip_frames : 1;
         num_skip = opts->skip_frames == skip_frames ? num_skip : opts->skip_frames; // for CTC
+
+        int in_skip = opts->skip_inner ? 1 : opts->skip_frames,
+        out_skip = opts->skip_inner ? opts->skip_frames : 1;
+
         frame_limit *= num_skip;
 
 		SequentialNnetExample *example = NULL;
@@ -702,8 +703,8 @@ private:
 
 					if (this->kld_scale > 0)
 					{
-                        // for streams with new utterance, history states need to be reset
-                        si_nnet.ResetLstmStreams(new_utt_flags, batch_size);
+						// for streams with new utterance, history states need to be reset
+						si_nnet.ResetLstmStreams(new_utt_flags, batch_size);
 						si_nnet.Propagate(feats_transf, &si_nnet_out);
 						si_nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
 						si_nnet_out.CopyToMat(&si_nnet_out_host);
@@ -716,43 +717,41 @@ private:
 						soft_nnet_out.CopyToMat(&soft_nnet_out_host);
 					}
 					/*
-						      if (!KALDI_ISFINITE(nnet_out.Sum())) { // check there's no nan/inf,
-        						KALDI_ERR << "NaN or inf found in final output nnet-output for " << utt_examples[0]->utt ;
-      							}   
+					if (!KALDI_ISFINITE(nnet_out.Sum())) { // check there's no nan/inf,
+						KALDI_ERR << "NaN or inf found in final output nnet-output for " << utt_examples[0]->utt ;
+					}
 					*/
 
 					// subtract the log_prior
                     if(prior_opts->class_frame_counts != "")
-                    {
-                    	log_prior.SubtractOnLogpost(&nnet_out);
-                    }
+                    		log_prior.SubtractOnLogpost(&nnet_out);
 
 
 					nnet_out.CopyToMat(&nnet_out_host);
 
 					for (int s = 0; s < cur_stream_num; s++) {
 						for (int t = 0; t < lent[s]; t++) {
-							   // feat shifting & padding
-							   for (int k = 0; k < skip_frames; k++) {
-								   if (utt_curt[s] < frame_num_utt[s]) {
-									   utt_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * cur_stream_num + s));
-									   if (this->kld_scale > 0)
-										   utt_si_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(si_nnet_out_host.Row(t * cur_stream_num + s));
-									   if (this->kld_scale > 0 || frame_smooth > 0)
-										   utt_soft_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(soft_nnet_out_host.Row(t * cur_stream_num + s));
-									   utt_curt[s]++;
-								   }
-								}
-						   }
+						   // feat shifting & padding
+						   for (int k = 0; k < skip_frames; k++) {
+							   if (utt_curt[s] < frame_num_utt[s]) {
+								   utt_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * cur_stream_num + s));
+								   if (this->kld_scale > 0)
+									   utt_si_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(si_nnet_out_host.Row(t * cur_stream_num + s));
+								   if (this->kld_scale > 0 || frame_smooth > 0)
+									   utt_soft_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(soft_nnet_out_host.Row(t * cur_stream_num + s));
+								   utt_curt[s]++;
+							   }
+							}
+						}
 					}
 
 					for (int s = 0; s < cur_stream_num; s++)
 					{
 						//SubMatrix<BaseFloat> obj_feats(diff_feat.RowRange(s*max_frame_num, lent[s]));
 						/*
-						      if (!KALDI_ISFINITE(utt_feats[s].Sum())) { // check there's no nan/inf,
-        						KALDI_ERR << "NaN or inf found in final output nnet-host-output for " << utt_examples[s]->utt << " s: " << s;
-      							}*/   
+						if (!KALDI_ISFINITE(utt_feats[s].Sum())) { // check there's no nan/inf,
+							KALDI_ERR << "NaN or inf found in final output nnet-host-output for " << utt_examples[s]->utt << " s: " << s;
+						}*/
 
 						if (this->criterion == "mmi")
 							MMIObj(utt_nnet_out_h[s], diff_utt_feats[s],
@@ -785,199 +784,187 @@ private:
 						}
 					}
 
-
-
 				}
 
 
 				if (num_stream < 1 && ((example = dynamic_cast<SequentialNnetExample*>(repository_->ProvideExample())) != NULL))
 				{
-						//time.Reset();
-						std::string utt = example->utt;
-						Matrix<BaseFloat> &mat = example->input_frames;
-						//t1 = time.Elapsed();
-						//time.Reset();
 
-						  // get actual dims for this utt and nnet
-						  num_frames = mat.NumRows();
+					//time.Reset();
+					std::string utt = example->utt;
+					Matrix<BaseFloat> &mat = example->input_frames;
+					//t1 = time.Elapsed();
+					//time.Reset();
 
-						  // 3) propagate the feature to get the log-posteriors (nnet w/o sofrmax)
-						  //lstm  time-shift, copy the last frame of LSTM input N-times,
-						  if (time_shift > 0) {
-							int32 last_row = mat.NumRows() - 1; // last row,
-							mat.Resize(mat.NumRows() + time_shift, mat.NumCols(), kCopyData);
-							for (int32 r = last_row+1; r<mat.NumRows(); r++) {
-							  mat.CopyRowFromVec(mat.Row(last_row), r); // copy last row,
-							}
-						  }
-						  // push features to GPU
-						  cu_feats = mat;
-						  // possibly apply transform
-						  nnet_transf.Feedforward(cu_feats, &feats_transf);
-						  // propagate through the nnet (assuming w/o softmax)
-						  nnet.Propagate(feats_transf, &nnet_out);
+					// get actual dims for this utt and nnet
+					num_frames = mat.NumRows();
 
-						  // time-shift, remove N first frames of LSTM output,
-						  if (time_shift > 0) {
-							  CuMatrix<BaseFloat> tmp(nnet_out);
-							  nnet_out = tmp.RowRange(time_shift, tmp.NumRows() - time_shift);
-						  }
+					// 3) propagate the feature to get the log-posteriors (nnet w/o sofrmax)
+					//lstm  time-shift, copy the last frame of LSTM input N-times,
+					int len = mat.NumRows(), cur = 0;
+					if (time_shift > 0 || opts->skip_frames > 1) {
+						len = mat.NumRows()/opts->skip_frames, cur = 0;
+						len += mat.NumRows()%opts->skip_frames > 0 ? 1 : 0;
+						len *= out_skip;
+						feat.Resize(len, mat.NumCols(), kUndefined);
 
-						  if (this->kld_scale > 0)
-						  {
-							  si_nnet.Propagate(feats_transf, &si_nnet_out);
+						cur += time_shift*in_skip;
+						for (int32 i = 0; i < len; i++) {
+							if (cur >= mat.NumRows()) cur = mat.NumRows()-1;
+							feat.Row(i).CopyFromVec(mat.Row(cur));
+							cur += in_skip;
+						}
 
-							  // time-shift, remove N first frames of LSTM output,
-							  if (time_shift > 0) {
-								  CuMatrix<BaseFloat> tmp(si_nnet_out);
-								  si_nnet_out = tmp.RowRange(time_shift, tmp.NumRows() - time_shift);
-							  }
-							  si_nnet_out_h.Resize(si_nnet_out.NumRows(), si_nnet_out.NumCols(), kUndefined);
-							  si_nnet_out.CopyToMat(&si_nnet_out_h);
-						  }
+						cu_feats = feat; // push it to gpu,
+					}
+					else
+						cu_feats = mat; // push it to gpu,
 
-						  if (this->kld_scale > 0 || frame_smooth > 0)
-						  {
-							  softmax.Propagate(nnet_out, &soft_nnet_out);
-							  soft_nnet_out_h.Resize(soft_nnet_out.NumRows(), soft_nnet_out.NumCols(), kUndefined);
-							  soft_nnet_out.CopyToMat(&soft_nnet_out_h);
-						  }
+					///only for nnet0 with fsmn component
+					flags.Resize(len/out_skip, kSetZero);
+					flags.Set(1.0);
+					nnet.SetFlags(flags);
 
-						  // subtract the log_prior
-						  if(prior_opts->class_frame_counts != "")
-						  {
-							  log_prior.SubtractOnLogpost(&nnet_out);
-						  }
+					// possibly apply transform
+					nnet_transf.Feedforward(cu_feats, &feats_transf);
+					// propagate through the nnet (assuming w/o softmax)
+					nnet.Propagate(feats_transf, &nnet_out);
 
-						  nnet_out_h.Resize(nnet_out.NumRows(), nnet_out.NumCols(), kUndefined);
-						  nnet_out.CopyToMat(&nnet_out_h);
+					if (this->kld_scale > 0) {
+						si_nnet.Propagate(feats_transf, &si_nnet_out);
+						si_nnet_out_h.Resize(si_nnet_out.NumRows(), si_nnet_out.NumCols(), kUndefined);
+						si_nnet_out.CopyToMat(&si_nnet_out_h);
+					}
 
-						  nnet_diff_h.Resize(nnet_out_h.NumRows(), nnet.OutputDim(), kSetZero);
+					if (this->kld_scale > 0 || frame_smooth > 0) {
+						softmax.Propagate(nnet_out, &soft_nnet_out);
+						soft_nnet_out_h.Resize(soft_nnet_out.NumRows(), soft_nnet_out.NumCols(), kUndefined);
+						soft_nnet_out.CopyToMat(&soft_nnet_out_h);
+					}
 
-						  if (this->criterion == "mmi")
-							  MMIObj(nnet_out_h, nnet_diff_h,
-					      				trans_model, example,
-					      				total_mmi_obj, total_post_on_ali, num_frm_drop, num_done,
-										soft_nnet_out_h, si_nnet_out_h);
-						  else
-							  MPEObj(nnet_out_h, nnet_diff_h,
-					      				trans_model, example,
-										silence_phones, total_frame_acc, num_done,
-										soft_nnet_out_h, si_nnet_out_h);
+					// subtract the log_prior
+					if(prior_opts->class_frame_counts != "")
+						log_prior.SubtractOnLogpost(&nnet_out);
 
-					      num_done++;
-					      p_nnet_diff_h = &nnet_diff_h;
-					      delete example;
-			}
+					nnet_out_h.Resize(nnet_out.NumRows(), nnet_out.NumCols(), kUndefined);
+					nnet_out.CopyToMat(&nnet_out_h);
+
+					nnet_diff_h.Resize(nnet_out_h.NumRows(), nnet.OutputDim(), kSetZero);
+
+					if (this->criterion == "mmi")
+					  MMIObj(nnet_out_h, nnet_diff_h,
+								trans_model, example,
+								total_mmi_obj, total_post_on_ali, num_frm_drop, num_done,
+								soft_nnet_out_h, si_nnet_out_h);
+					else
+					  MPEObj(nnet_out_h, nnet_diff_h,
+								trans_model, example,
+								silence_phones, total_frame_acc, num_done,
+								soft_nnet_out_h, si_nnet_out_h);
+
+					num_done++;
+					p_nnet_diff_h = &nnet_diff_h;
+					delete example;
+				}
+
 
 				if (example == NULL && cur_stream_num == 0) break;
 
 				// push to gpu
 				nnet_diff = *p_nnet_diff_h;
 
-                if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient")
-                {
-                    nnet.ResetGradient();
-                    model_sync->reset_gradient_[thread_idx] = false;
-                }
+				if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient") {
+					nnet.ResetGradient();
+					model_sync->reset_gradient_[thread_idx] = false;
+				}
 
 
-		       if (parallel_opts->num_threads > 1 && update_frames >= opts->update_frames)
-		       {
-		    	   nnet.Backpropagate(nnet_diff, NULL, false);
-		    	   nnet.Gradient();
+				if (parallel_opts->num_threads > 1 && update_frames >= opts->update_frames) {
+					nnet.Backpropagate(nnet_diff, NULL, false);
+					nnet.Gradient();
 
-		    	   //t2 = time.Elapsed();
-		    	   //time.Reset();
+					//t2 = time.Elapsed();
+					//time.Reset();
 
-		    	   if (parallel_opts->asgd_lock)
-		    		   model_sync->LockModel();
+					if (parallel_opts->asgd_lock)
+					   model_sync->LockModel();
 
-		    	   model_sync->SetWeight(&nnet);
-		    	   nnet.UpdateGradient();
-		    	   model_sync->GetWeight(&nnet);
+					model_sync->SetWeight(&nnet);
+					nnet.UpdateGradient();
+					model_sync->GetWeight(&nnet);
 
-		    	   if (parallel_opts->asgd_lock)
-		    		   model_sync->UnlockModel();
+					if (parallel_opts->asgd_lock)
+					   model_sync->UnlockModel();
 
-		    	   update_frames = 0;
-			
-		    	   //t3 = time.Elapsed();
-		       }
-		       else
-		       {
-		    	   nnet.Backpropagate(nnet_diff, NULL, true);
+					update_frames = 0;
 
-		    	   //t2 = time.Elapsed();
-		    	   //time.Reset();
-		       }
+					//t3 = time.Elapsed();
+				} else {
+					nnet.Backpropagate(nnet_diff, NULL, true);
+				}
 
-		       //KALDI_WARN << "prepare data: "<< t1 <<" forward & backward: "<< t2 <<" update: "<< t3;
-		       // relase the buffer, we don't need anymore
+				//KALDI_WARN << "prepare data: "<< t1 <<" forward & backward: "<< t2 <<" update: "<< t3;
+				// relase the buffer, we don't need anymore
 
-		       //multi-machine
-		       if (parallel_opts->num_procs > 1)
-		    	{
-		    		model_sync->LockModel();
-
-		    		if (p_merge_func->CurrentMergeCache() + num_frames > parallel_opts->merge_size)
-		    		{
-		    			if (p_merge_func->leftMerge() <= 1 && !p_merge_func->isLastMerge())
-		    			{
-		    				p_merge_func->MergeStatus(1);
-		    			}
-
-		    			if (p_merge_func->leftMerge() > 1 || !p_merge_func->isLastMerge())
-		    			{
-		    				model_sync->GetWeight(&nnet);
-
-		    			    p_merge_func->Merge(0);
-		    			    KALDI_VLOG(1) << "Model merge NO." << parallel_opts->num_merge - p_merge_func->leftMerge()
-		    			    				<< " Current mergesize = " << p_merge_func->CurrentMergeCache() << " frames.";
-		    			    p_merge_func->MergeCacheReset();
-
-		    			    model_sync->SetWeight(&nnet);
-                            model_sync->ResetGradient();
-		    			}
-		    		}
-
-		    		p_merge_func->AddMergeCache((int) num_frames);
-
-		    		model_sync->UnlockModel();
-
-		    	}
-
-		       // increase time counter
-		       total_frames += num_frames;
-		       update_frames += num_frames;
-
-		       if (num_done % 100 == 0)
-		       {
-		         time_now = time.Elapsed();
-		         KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
-		                       << time_now/60 << " min; processed " << total_frames/time_now
-		                       << " frames per second.";
-
-		       }
-			
-		        // track training process
-			    if (this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0)
+				//multi-machine
+				if (parallel_opts->num_procs > 1)
 				{
-                    int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
-					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump)
+					model_sync->LockModel();
+
+					if (p_merge_func->CurrentMergeCache() + num_frames > parallel_opts->merge_size)
 					{
+						if (p_merge_func->leftMerge() <= 1 && !p_merge_func->isLastMerge())
+						{
+							p_merge_func->MergeStatus(1);
+						}
+
+						if (p_merge_func->leftMerge() > 1 || !p_merge_func->isLastMerge())
+						{
+							model_sync->GetWeight(&nnet);
+
+							p_merge_func->Merge(0);
+							KALDI_VLOG(1) << "Model merge NO." << parallel_opts->num_merge - p_merge_func->leftMerge()
+											<< " Current mergesize = " << p_merge_func->CurrentMergeCache() << " frames.";
+							p_merge_func->MergeCacheReset();
+
+							model_sync->SetWeight(&nnet);
+							model_sync->ResetGradient();
+						}
+					}
+
+					p_merge_func->AddMergeCache((int) num_frames);
+
+					model_sync->UnlockModel();
+
+				}
+
+				// increase time counter
+				total_frames += num_frames;
+				update_frames += num_frames;
+
+				if (num_done % 100 == 0) {
+					time_now = time.Elapsed();
+					KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
+							   << time_now/60 << " min; processed " << total_frames/time_now
+							   << " frames per second.";
+				}
+
+				// track training process
+				if (this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0) {
+					int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
+					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump) {
 						char name[512];
 						num_dump++;
 						sprintf(name, "%s_%d_%ld", model_filename.c_str(), num_dump, total_frames);
-                        nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+						nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
 						nnet.Write(string(name), true);
-                        nnet.RemoveComponent(nnet.NumComponents()-1);
+						nnet.RemoveComponent(nnet.NumComponents()-1);
 					}
 				}
 
 		       fflush(stderr); 
                fsync(fileno(stderr));
-	  }
+		}
 
 		model_sync->LockStates();
 		stats_->total_mmi_obj += total_mmi_obj;
@@ -991,41 +978,41 @@ private:
 
 
 		//last merge
-			model_sync->LockModel();
+		model_sync->LockModel();
 
-			bool last_thread = true;
-			for (int i = 0; i < parallel_opts->num_threads; i++)
-			{
-				if (i != thread_idx && !model_sync->isfinished_[i]){
-						last_thread = false;
-						break;
-				}
+		bool last_thread = true;
+		for (int i = 0; i < parallel_opts->num_threads; i++)
+		{
+			if (i != thread_idx && !model_sync->isfinished_[i]) {
+					last_thread = false;
+					break;
 			}
+		}
 
-			if (parallel_opts->num_procs > 1)
-			{
-				if (last_thread)
-				{
-					if (!p_merge_func->isLastMerge())
-						p_merge_func->MergeStatus(0);
-
-					model_sync->GetWeight(&nnet);
-
-					p_merge_func->Merge(0);
-						KALDI_VLOG(1) << "Model merge NO." << parallel_opts->num_merge-p_merge_func->leftMerge()
-									   << " Current mergesize = " << p_merge_func->CurrentMergeCache() << " frames.";
-						model_sync->SetWeight(&nnet);
-				}
-			}
-
+		if (parallel_opts->num_procs > 1)
+		{
 			if (last_thread)
 			{
-				KALDI_VLOG(1) << "Last thread upload model to host.";
-					model_sync->CopyToHost(&nnet);
-			}
+				if (!p_merge_func->isLastMerge())
+					p_merge_func->MergeStatus(0);
 
-			model_sync->isfinished_[thread_idx] = true;
-			model_sync->UnlockModel();
+				model_sync->GetWeight(&nnet);
+
+				p_merge_func->Merge(0);
+					KALDI_VLOG(1) << "Model merge NO." << parallel_opts->num_merge-p_merge_func->leftMerge()
+								   << " Current mergesize = " << p_merge_func->CurrentMergeCache() << " frames.";
+					model_sync->SetWeight(&nnet);
+			}
+		}
+
+		if (last_thread)
+		{
+			KALDI_VLOG(1) << "Last thread upload model to host.";
+				model_sync->CopyToHost(&nnet);
+		}
+
+		model_sync->isfinished_[thread_idx] = true;
+		model_sync->UnlockModel();
 	}
 
 };
