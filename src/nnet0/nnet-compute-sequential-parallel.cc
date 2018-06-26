@@ -573,7 +573,7 @@ private:
 	    double time_now = 0;
 
 		CuMatrix<BaseFloat> cufeat, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out;
-		Matrix<BaseFloat> nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, *p_nnet_diff_h = NULL;
+		Matrix<BaseFloat> nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, tmp_mat, *p_nnet_diff_h = NULL;
 
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
@@ -608,7 +608,7 @@ private:
 		int32 update_frames = 0;
 		int32 num_frames = 0;
 		int32 cur_stream_num = 0;
-		int32 num_dump = 0, num_skip;
+		int32 num_dump = 0, num_skip, num_ali;
 
 		num_skip = opts->skip_inner ? skip_frames : 1;
         num_skip = opts->skip_frames == skip_frames ? num_skip : opts->skip_frames; // for CTC
@@ -798,6 +798,7 @@ private:
 
 					// get actual dims for this utt and nnet
 					num_frames = mat.NumRows();
+					num_ali = example->num_ali.size();
 
 					// 3) propagate the feature to get the log-posteriors (nnet w/o sofrmax)
 					//lstm  time-shift, copy the last frame of LSTM input N-times,
@@ -849,6 +850,21 @@ private:
 					nnet_out_h.Resize(nnet_out.NumRows(), nnet_out.NumCols(), kUndefined);
 					nnet_out.CopyToMat(&nnet_out_h);
 
+					// fsmn skip frames
+					if (skip_frames > 1) {
+						tmp_mat = nnet_out_h;
+						nnet_out_h.Resize(mat.NumRows(), nnet_out.NumCols());
+						cur = 0;
+						for (int32 i = 0; i < tmp.NumRows(); i++) {
+							for (int k = 0; k < skip_frames; k++) {
+								if (cur < mat.NumRows()) {
+									nnet_out_host.Row(cur).CopyFromVec(tmp.Row(i));
+									cur++;
+								}
+							}
+						}
+					}
+
 					nnet_diff_h.Resize(nnet_out_h.NumRows(), nnet.OutputDim(), kSetZero);
 
 					if (this->criterion == "mmi")
@@ -861,6 +877,22 @@ private:
 								trans_model, example,
 								silence_phones, total_frame_acc, num_done,
 								soft_nnet_out_h, si_nnet_out_h);
+
+					// fsmn skip frames
+					if (skip_frames > 1) {
+						tmp_mat = nnet_diff_h;
+						nnet_diff_h.Resize(nnet_out.NumRows(), nnet_out.NumCols(), kSetZero);
+						cur = 0;
+						for (int32 i = 0; i < nnet_out.NumRows(); i++) {
+							for (int k = 0; k < skip_frames; k++) {
+								if (cur < tmp_mat.NumRows()) {
+									nnet_diff_h.Row(i).AddVec(tmp_mat.Row(cur));
+									cur++;
+								}
+							}
+						}
+					}
+
 
 					num_done++;
 					p_nnet_diff_h = &nnet_diff_h;
