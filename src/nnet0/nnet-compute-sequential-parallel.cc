@@ -579,18 +579,16 @@ private:
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
 
 	    std::vector<std::string> keys(num_stream);
-	    std::vector<Matrix<BaseFloat> > feats(num_stream);
-	    std::vector<int> curt(num_stream, 0);
-	    std::vector<int> lent(num_stream, 0);
+	    std::vector<Matrix<BaseFloat> > feats_utt(num_stream);
+	    std::vector<int> num_utt_frame_in, num_utt_frame_out;
 	    std::vector<int> frame_num_utt(num_stream, 0);
 	    std::vector<int> new_utt_flags;
-	    Vector<BaseFloat> flags;
+	    Vector<BaseFloat> flags, utt_flags;
 
 	    std::vector<Matrix<BaseFloat> > utt_nnet_out_h(num_stream),
 	    		utt_si_nnet_out_h(num_stream), utt_soft_nnet_out_h(num_stream);
 	    std::vector<int> utt_curt(num_stream, 0);
 	    std::vector<SequentialNnetExample *> utt_examples(num_stream);
-	    std::vector<bool> utt_copied(num_stream, 0);
 
 	    std::vector<Matrix<BaseFloat> > diff_utt_feats(num_stream);
 	    std::vector<int> diff_curt(num_stream, 0);
@@ -600,14 +598,15 @@ private:
 	    int32 out_dim = nnet.OutputDim();
 
 	    Matrix<BaseFloat> feat;
-	    Matrix<BaseFloat> diff_feat;
+	    Matrix<BaseFloat> nnet_diff_host;
 	    Matrix<BaseFloat> nnet_out_host, si_nnet_out_host, soft_nnet_out_host;
 
 
 		//double t1, t2, t3, t4;
 		int32 update_frames = 0;
 		int32 num_frames = 0;
-		int32 cur_stream_num = 0;
+		int32 cur_stream_num = 0, in_rows, out_rows,
+				in_frames, out_frames, in_frames_pad, out_frames_pad;
 		int32 num_dump = 0, num_skip;
 
 		num_skip = opts->skip_inner ? skip_frames : 1;
@@ -626,9 +625,10 @@ private:
 				{
 					int32 s = 0, max_frame_num = 0, cur_frames = 0;
 					cur_stream_num = 0; num_frames = 0;
-					p_nnet_diff_h = &diff_feat;
+					p_nnet_diff_h = &nnet_diff_host;
+					num_utt_frame_in.clear();
+					num_utt_frame_out.clear();
 					
-
 					if (NULL == example)
 						example = dynamic_cast<SequentialNnetExample*>(repository_->ProvideExample());
 
@@ -639,14 +639,22 @@ private:
 						Matrix<BaseFloat> &mat = example->input_frames;
 
 						if ((s+1)*mat.NumRows() > frame_limit || (s+1)*max_frame_num > frame_limit) break;
-
 						if (max_frame_num < mat.NumRows()) max_frame_num = mat.NumRows();
 
-						keys[s] = key;
-						feats[s] = mat;
-						curt[s] = 0;
-						lent[s] = feats[s].NumRows();
-						num_frames += lent[s];
+						// forward the features through a feature-transform,
+						nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
+
+						feats_utt[s].Resize(feats_transf.NumRows(), feats_transf.NumCols(), kUndefined);
+						feats_transf.CopyToMat(&feats_utt[s]);
+
+						in_rows = mat.NumRows();
+						num_utt_frame_in.push_back(in_rows);
+						num_frames += in_rows;
+
+				        // inner skip frames
+				        out_rows = in_rows/num_skip;
+				        out_rows += in_rows%num_skip > 0 ? 1:0;
+				        num_utt_frame_out.push_back(out_rows);
 
 						// skip frames
 						frame_num_utt[s] = example->num_ali.size();
@@ -654,7 +662,7 @@ private:
 					    if (this->kld_scale > 0) utt_si_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kSetZero);
 					    if (this->kld_scale > 0 || frame_smooth > 0) utt_soft_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kSetZero);
 						diff_utt_feats[s].Resize(frame_num_utt[s], out_dim, kSetZero);
-						utt_copied[s] = false;
+
 						utt_curt[s] = 0;
 						diff_curt[s] = 0;
 						utt_examples[s] = example;
@@ -665,57 +673,81 @@ private:
 						example = dynamic_cast<SequentialNnetExample*>(repository_->ProvideExample());
 					}
 
+					time_shift *=  num_skip;
 					cur_stream_num = s;
+		            in_frames_pad = cur_stream_num * max_frame_num;
+		            out_frames_pad = cur_stream_num * ((max_frame_num+num_skip-1)/num_skip);
 					new_utt_flags.resize(cur_stream_num, 1);
 
 					// we are done if all streams are exhausted
 					if (cur_stream_num == 0) break;
 
-					feat.Resize(max_frame_num * cur_stream_num, feat_dim, kSetZero);
-					nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
+					if (opts->network_type == "lstm") {
+						 feat.Resize(in_frames_pad, feat_dim, kSetZero);
+						 nnet_out_host.Resize(out_frames_pad, out_dim, kUndefined);
+						 nnet_diff_host.Resize(out_frames_pad, out_dim, kSetZero);
 
-					//int truc_frame_num = batch_size>0 ? (max_frame_num+batch_size-1)/batch_size * batch_size : max_frame_num;
-					diff_feat.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kSetZero);
-
-					// fill a multi-stream bptt batch
-					 // * feat: first shifted to achieve targets delay; then padded to batch_size
-					 for (int s = 0; s < cur_stream_num; s++) {
-						 for (int t = 0; t < lent[s]; t++) {
-							// feat shifting & padding
-							if (curt[s] + time_shift < lent[s]) {
-								feat.Row(t * cur_stream_num + s).CopyFromVec(feats[s].Row(curt[s]+time_shift));
-							} else {
-								//int last = (frame_num_utt[s]-1)*skip_frames; //lent[s]-1
-								feat.Row(t * cur_stream_num + s).CopyFromVec(feats[s].Row(lent[s]-1));
+						 for (int s = 0; s < cur_stream_num; s++) {
+							 for (int t = 0; t < num_utt_frame_in[s]; t++) {
+								// feat shifting & padding
+								if (t + time_shift < num_utt_frame_in[s]) {
+									feat.Row(t * cur_stream_num + s).CopyFromVec(feats_utt[s].Row(t+time_shift));
+								} else {
+									int last = (num_utt_frame_in[s]-1); // frame_num_utt[s]-1
+									feat.Row(t*cur_stream_num + s).CopyFromVec(feats_utt[s].Row(last));
+								}
 							}
-							curt[s]++;
+						}
+					} else if (opts->network_type == "fsmn") {
+						in_frames = 0, out_frames = 0;
+						for (int s = 0; s < cur_stream_num; s++) {
+							in_frames += num_utt_frame_in[s];
+							out_frames += num_utt_frame_out[s];
+						}
+
+						feat.Resize(in_frames, feat_dim, kUndefined);
+						nnet_out_host.Resize(out_frames, out_dim, kUndefined);
+						nnet_diff_host.Resize(out_frames, out_dim, kSetZero);
+						utt_flags.Resize(out_frames);
+
+						int k = 0, offset = 0;
+						for (int s = 0; s < cur_stream_num; s++) {
+							for (int r = 0; r < num_utt_frame_out[s]; r++) {
+								utt_flags(k) = num_done+s;
+								k++;
+							}
+
+							feat.RowRange(offset, num_utt_frame_in[s]).CopyFromMat(feats_utt[s]);
+							offset += num_utt_frame_in[s];
 						}
 					}
 
-					 // apply optional feature transform
-					nnet_transf.Feedforward(CuMatrix<BaseFloat>(feat), &feats_transf);
-
 					// for streams with new utterance, history states need to be reset
-					nnet.ResetLstmStreams(new_utt_flags, batch_size);
+					if (opts->network_type == "lstm") {
+						nnet.ResetLstmStreams(new_utt_flags, batch_size);
+					} else if (opts->network_type == "fsmn") {
+					    nnet.SetFlags(utt_flags);
+		            }
 
 					// forward pass
-					nnet.Propagate(feats_transf, &nnet_out);
+					cufeat = feat;
+					nnet.Propagate(cufeat, &nnet_out);
 
-					if (this->kld_scale > 0)
-					{
+					if (this->kld_scale > 0) {
 						// for streams with new utterance, history states need to be reset
 						si_nnet.ResetLstmStreams(new_utt_flags, batch_size);
-						si_nnet.Propagate(feats_transf, &si_nnet_out);
-						si_nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
+						si_nnet.SetFlags(utt_flags);
+						si_nnet.Propagate(cufeat, &si_nnet_out);
+						si_nnet_out_host.Resize(si_nnet_out.NumRows(), out_dim, kUndefined);
 						si_nnet_out.CopyToMat(&si_nnet_out_host);
 					}
 
-					if (this->kld_scale > 0 || frame_smooth > 0)
-					{
+					if (this->kld_scale > 0 || frame_smooth > 0) {
 						softmax.Propagate(nnet_out, &soft_nnet_out);
-						soft_nnet_out_host.Resize((max_frame_num+num_skip-1)/num_skip * cur_stream_num, out_dim, kUndefined);
+						soft_nnet_out_host.Resize(soft_nnet_out.NumRows(), out_dim, kUndefined);
 						soft_nnet_out.CopyToMat(&soft_nnet_out_host);
 					}
+
 					/*
 					if (!KALDI_ISFINITE(nnet_out.Sum())) { // check there's no nan/inf,
 						KALDI_ERR << "NaN or inf found in final output nnet-output for " << utt_examples[0]->utt ;
@@ -729,24 +761,43 @@ private:
 
 					nnet_out.CopyToMat(&nnet_out_host);
 
-					for (int s = 0; s < cur_stream_num; s++) {
-						for (int t = 0; t < lent[s]; t++) {
-						   // feat shifting & padding
-						   for (int k = 0; k < skip_frames; k++) {
-							   if (utt_curt[s] < frame_num_utt[s]) {
-								   utt_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * cur_stream_num + s));
-								   if (this->kld_scale > 0)
-									   utt_si_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(si_nnet_out_host.Row(t * cur_stream_num + s));
-								   if (this->kld_scale > 0 || frame_smooth > 0)
-									   utt_soft_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(soft_nnet_out_host.Row(t * cur_stream_num + s));
-								   utt_curt[s]++;
-							   }
+					if (opts->network_type == "lstm") {
+						for (int s = 0; s < cur_stream_num; s++) {
+							for (int t = 0; t < num_utt_frame_out[s]; t++) {
+							   // feat shifting & padding
+							   for (int k = 0; k < skip_frames; k++) {
+								   if (utt_curt[s] < frame_num_utt[s]) {
+									   utt_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t*cur_stream_num + s));
+									   if (this->kld_scale > 0)
+										   utt_si_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(si_nnet_out_host.Row(t*cur_stream_num + s));
+									   if (this->kld_scale > 0 || frame_smooth > 0)
+										   utt_soft_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(soft_nnet_out_host.Row(t*cur_stream_num + s));
+									   utt_curt[s]++;
+								   }
+								}
+							}
+						}
+					} else if (opts->network_type == "fsmn") {
+						int n = 0;
+						for (int s = 0; s < cur_stream_num; s++) {
+							for (int t = 0; t < num_utt_frame_out[s]; t++) {
+								for (int k = 0; k < skip_frames; k++) {
+									if (utt_curt[s] < frame_num_utt[s]) {
+										utt_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(n));
+										if (this->kld_scale > 0)
+										   utt_si_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(si_nnet_out_host.Row(n));
+										if (this->kld_scale > 0 || frame_smooth > 0)
+										   utt_soft_nnet_out_h[s].Row(utt_curt[s]).CopyFromVec(soft_nnet_out_host.Row(n));
+										utt_curt[s]++;
+									}
+								}
+								n++;
 							}
 						}
 					}
 
-					for (int s = 0; s < cur_stream_num; s++)
-					{
+
+					for (int s = 0; s < cur_stream_num; s++) {
 						//SubMatrix<BaseFloat> obj_feats(diff_feat.RowRange(s*max_frame_num, lent[s]));
 						/*
 						if (!KALDI_ISFINITE(utt_feats[s].Sum())) { // check there's no nan/inf,
@@ -769,22 +820,37 @@ private:
 						delete utt_examples[s];
 					}
 
-					for (int s = 0; s < cur_stream_num; s++) {
-						for (int t = 0; t < lent[s]; t++) {
-							// feat shifting & padding
-							for (int k = 0; k < skip_frames; k++) {
-								if (diff_curt[s] + time_shift < frame_num_utt[s]) {
-									diff_feat.Row(t * cur_stream_num + s).AddVec(1.0, diff_utt_feats[s].Row(diff_curt[s]+time_shift));
-								    diff_curt[s]++;
-									//diff_feat.Row(t * cur_stream_num + s).CopyFromVec(diff_utt_feats[s].Row(diff_curt[s]+time_shift));
-								} else {
-									//diff_feat.Row(t * cur_stream_num + s).SetZero();
+					if (opts->network_type == "lstm") {
+						for (int s = 0; s < cur_stream_num; s++) {
+							for (int t = 0; t < num_utt_frame_out[s]; t++) {
+								// feat shifting & padding
+								for (int k = 0; k < skip_frames; k++) {
+									if (diff_curt[s] < frame_num_utt[s]) {
+										nnet_diff_host.Row(t*cur_stream_num + s).AddVec(1.0, diff_utt_feats[s].Row(diff_curt[s]));
+										diff_curt[s]++;
+										//diff_feat.Row(t * cur_stream_num + s).CopyFromVec(diff_utt_feats[s].Row(diff_curt[s]));
+									} else {
+										//diff_feat.Row(t * cur_stream_num + s).SetZero();
+									}
 								}
+							}
+						}
+					} else if (opts->network_type == "fsmn") {
+						int n = 0;
+						for (int s = 0; s < cur_stream_num; s++) {
+							for (int t = 0; t < num_utt_frame_out[s]; t++) {
+								for (int k = 0; k < skip_frames; k++) {
+									if (diff_curt[s] < frame_num_utt[s]) {
+										nnet_diff_host.Row(n).AddVec(1.0, diff_utt_feats[s].Row(diff_curt[s]));
+										diff_curt[s]++;
+									}
+								}
+								n++;
 							}
 						}
 					}
 
-				}
+				} // num_stream >= 1
 
 
 				if (num_stream < 1 && ((example = dynamic_cast<SequentialNnetExample*>(repository_->ProvideExample())) != NULL))
@@ -877,6 +943,8 @@ private:
 								silence_phones, total_frame_acc, num_done,
 								soft_nnet_out_h, si_nnet_out_h);
 
+					num_done++;
+
 					// fsmn skip frames
 					if (skip_frames > 1) {
 						tmp_mat = nnet_diff_h;
@@ -892,8 +960,6 @@ private:
 						}
 					}
 
-
-					num_done++;
 					p_nnet_diff_h = &nnet_diff_h;
 					delete example;
 				}

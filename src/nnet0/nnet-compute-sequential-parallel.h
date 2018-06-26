@@ -74,6 +74,7 @@ struct NnetSequentialUpdateOptions {
 
   bool  sweep_loop;
   bool  skip_inner;
+  std::string network_type;
 
   const NnetTrainOptions *trn_opts;
   const PdfPriorOptions *prior_opts;
@@ -89,7 +90,7 @@ struct NnetSequentialUpdateOptions {
 								 si_model_filename(""),
 								 use_psgd(false),
 								 targets_delay(0), batch_size(0), num_stream(0), dump_interval(0),frame_limit(10000),skip_frames(1),dump_time(0),
-								 sweep_loop(false), skip_inner(false),
+								 sweep_loop(false), skip_inner(false), network_type("lstm"),
 								 trn_opts(trn_opts),
 								 prior_opts(prior_opts),
 								 parallel_opts(parallel_opts){ }
@@ -152,6 +153,7 @@ struct NnetSequentialUpdateOptions {
       po->Register("sweep-loop", &sweep_loop, "Sweep all frames indexes for each utterance in skip frames training if true, "
       	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
       po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
+      po->Register("network-type", &network_type, "the neural network type, (lstm|fsmn)");
   }
 };
 
