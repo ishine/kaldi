@@ -572,8 +572,8 @@ private:
 	    Timer time;
 	    double time_now = 0;
 
-		CuMatrix<BaseFloat> cu_feats, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out;
-		Matrix<BaseFloat> feats, nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, *p_nnet_diff_h = NULL;
+		CuMatrix<BaseFloat> cufeat, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out;
+		Matrix<BaseFloat> nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, *p_nnet_diff_h = NULL;
 
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
@@ -815,10 +815,10 @@ private:
 							cur += in_skip;
 						}
 
-						cu_feats = feat; // push it to gpu,
+						cufeat = feat; // push it to gpu,
 					}
 					else
-						cu_feats = mat; // push it to gpu,
+						cufeat = mat; // push it to gpu,
 
 					///only for nnet0 with fsmn component
 					flags.Resize(len/out_skip, kSetZero);
@@ -826,7 +826,7 @@ private:
 					nnet.SetFlags(flags);
 
 					// possibly apply transform
-					nnet_transf.Feedforward(cu_feats, &feats_transf);
+					nnet_transf.Feedforward(cufeat, &feats_transf);
 					// propagate through the nnet (assuming w/o softmax)
 					nnet.Propagate(feats_transf, &nnet_out);
 
