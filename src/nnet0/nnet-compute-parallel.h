@@ -49,6 +49,7 @@ struct NnetUpdateOptions {
     int32 skip_frames;
     int32 sweep_time;
     int32 dump_time;
+    int32 targets_delay;
 
     std::string feature_transform;
     std::string objective_function;
@@ -69,7 +70,7 @@ struct NnetUpdateOptions {
     const NnetParallelOptions *parallel_opts;
 
     NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: binary(true),crossvalidate(false),randomize(true),use_psgd(false),kld_scale(-1.0),skip_frames(1),sweep_time(1), dump_time(0),
+    	: binary(true),crossvalidate(false),randomize(true),use_psgd(false),kld_scale(-1.0),skip_frames(1),sweep_time(1), dump_time(0), targets_delay(0),
 		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),sweep_loop(false), skip_inner(false),
 		  length_tolerance(5),update_frames(-1),dropout_retention(0.0),
 		  trn_opts(trn_opts),rnd_opts(rnd_opts),parallel_opts(parallel_opts){ }
@@ -111,6 +112,7 @@ struct NnetUpdateOptions {
 	      po->Register("use-psgd",&use_psgd, "use preconditional sgd instead of sgd, it always true while training with multi-machine");
 
 	      po->Register("dump-time", &dump_time, "num hours frames between model dumping [ 0 == disabled ]");
+	      po->Register("targets-delay", &targets_delay, "targets label delay input feature");
   	  }
 };
 

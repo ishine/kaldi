@@ -190,6 +190,8 @@ private:
 	    int32 skip_frames = opts->skip_frames;
         int in_skip = opts->skip_inner ? 1 : skip_frames,
         out_skip = opts->skip_inner ? skip_frames : 1;
+        int num_skip = opts->skip_inner ? skip_frames : 1;
+
 	    NnetDataRandomizerOptions skip_rand_opts = *rnd_opts;
 	    skip_rand_opts.minibatch_size = rnd_opts->minibatch_size*out_skip;
 
@@ -241,6 +243,16 @@ private:
 
 		        // apply optional feature transform
 		        nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
+
+		        // fsmn target delay
+		        if (opts->targets_delay > 0) {
+		        		CuMatrix<BaseFloat> tmp(feats_transf);
+		        		int offset = opts->targets_delay*num_skip;
+		        		int rows = feats_transf.NumRows()-offset;
+		        		feats_transf.RowRange(0, rows).CopyFromMat(tmp.RowRange(offset, rows));
+		        		for (int i = 0; i < offset; i++)
+		        			feats_transf.Row(rows+i).CopyFromVec(tmp.RowRange(rows+offset-1));
+		        }
 
 		        // pass data to randomizers
 		        KALDI_ASSERT(feats_transf.NumRows() == targets.size()*out_skip);

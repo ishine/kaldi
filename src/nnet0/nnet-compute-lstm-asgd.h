@@ -43,21 +43,19 @@ namespace nnet0 {
 struct NnetLstmUpdateOptions : public NnetUpdateOptions {
 
     //lstm
-    int32 targets_delay;
     int32 batch_size;
     int32 num_stream;
     int32 dump_interval;
     //lstm
 
     NnetLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), targets_delay(0), batch_size(20), num_stream(4), dump_interval(0) { }
+    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), batch_size(20), num_stream(4), dump_interval(0) { }
 
   	  void Register(OptionsItf *po)
   	  {
   		  NnetUpdateOptions::Register(po);
 
 	      //<jiayu>
-	      po->Register("targets-delay", &targets_delay, "---LSTM--- BPTT targets delay");
 
 	      po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
 
