@@ -255,10 +255,14 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	int32 skip_frames = opts->skip_frames;
 	//int32 utt_frames = (input_frames.NumRows()+skip_frames-1)/skip_frames; //
 	int32 utt_frames = input_frames.NumRows(), ali_frames = num_ali.size();
+
+	int len = utt_frames/skip_frames;
+    len += utt_frames%skip_frames > sweep_frames[0] ? 1 : 0;
+    utt_frames = len*skip_frames;
+
 	//for CTC
-	if (ali_frames == utt_frames - sweep_frames[0] ||
-		  ali_frames == utt_frames/skip_frames || ali_frames == utt_frames/skip_frames+1)
-		utt_frames = ali_frames;
+    if (utt_frames == ali_frames*skip_frames)
+        utt_frames = ali_frames;
 
 	// check for temporal length of numerator alignments
 	if ((int32)num_ali.size() != utt_frames){

@@ -923,7 +923,7 @@ private:
 						for (int32 i = 0; i < tmp_mat.NumRows(); i++) {
 							for (int k = 0; k < skip_frames; k++) {
 								if (cur < mat.NumRows()) {
-									nnet_out_host.Row(cur).CopyFromVec(tmp_mat.Row(i));
+									nnet_out_h.Row(cur).CopyFromVec(tmp_mat.Row(i));
 									cur++;
 								}
 							}
