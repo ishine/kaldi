@@ -251,7 +251,7 @@ private:
 		        		int rows = feats_transf.NumRows()-offset;
 		        		feats_transf.RowRange(0, rows).CopyFromMat(tmp.RowRange(offset, rows));
 		        		for (int i = 0; i < offset; i++)
-		        			feats_transf.Row(rows+i).CopyFromVec(tmp.RowRange(rows+offset-1));
+		        			feats_transf.Row(rows+i).CopyFromVec(tmp.Row(rows+offset-1));
 		        }
 
 		        // pass data to randomizers
