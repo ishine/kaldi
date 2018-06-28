@@ -658,9 +658,9 @@ private:
 
 						// skip frames
 						frame_num_utt[s] = example->num_ali.size();
-						utt_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kSetZero);
-					    if (this->kld_scale > 0) utt_si_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kSetZero);
-					    if (this->kld_scale > 0 || frame_smooth > 0) utt_soft_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kSetZero);
+						utt_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
+					    if (this->kld_scale > 0) utt_si_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
+					    if (this->kld_scale > 0 || frame_smooth > 0) utt_soft_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
 						diff_utt_feats[s].Resize(frame_num_utt[s], out_dim, kSetZero);
 
 						utt_curt[s] = 0;
@@ -713,10 +713,9 @@ private:
 						int k = 0, offset = 0;
 						for (int s = 0; s < cur_stream_num; s++) {
 							for (int r = 0; r < num_utt_frame_out[s]; r++) {
-								utt_flags(k) = num_done+s;
+								utt_flags(k) = num_done + s;
 								k++;
 							}
-
 							feat.RowRange(offset, num_utt_frame_in[s]).CopyFromMat(feats_utt[s]);
 							offset += num_utt_frame_in[s];
 						}
@@ -756,7 +755,7 @@ private:
 
 					// subtract the log_prior
                     if(prior_opts->class_frame_counts != "")
-                    		log_prior.SubtractOnLogpost(&nnet_out);
+                        log_prior.SubtractOnLogpost(&nnet_out);
 
 
 					nnet_out.CopyToMat(&nnet_out_host);

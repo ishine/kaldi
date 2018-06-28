@@ -4829,7 +4829,7 @@ void CuMatrixBase<Real>::GenMemory(const CuMatrixBase<Real>& in, const CuMatrixB
         for (int order = 0; order < l_order; order++)
         {
           shift_index = r - order*l_stride;
-          if (shift_index >= 0)
+          if (shift_index >= 0 && flags(shift_index) == flags(r))
           {
             data[index] += src_data[shift_index*stride + c] * LF[order*stride + c];
           }
@@ -4837,7 +4837,7 @@ void CuMatrixBase<Real>::GenMemory(const CuMatrixBase<Real>& in, const CuMatrixB
         for (int order = 1; order < r_order + 1; order++)
         {
           shift_index = r + order*r_stride;
-          if (shift_index < rows)
+          if (shift_index < rows && flags(shift_index) == flags(r))
           {
             data[index] += src_data[shift_index*stride + c] * RF[(order - 1)*stride + c];
           }
