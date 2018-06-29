@@ -246,12 +246,30 @@ private:
 
 		        // fsmn target delay
 		        if (opts->targets_delay > 0) {
+		        		int targets_delay = opts->targets_delay;
 		        		CuMatrix<BaseFloat> tmp(feats_transf);
 		        		int offset = opts->targets_delay*num_skip;
-		        		int rows = feats_transf.NumRows()-offset;
-		        		feats_transf.RowRange(0, rows).CopyFromMat(tmp.RowRange(offset, rows));
+		        		int rows = feats_transf.NumRows();
+		        		feats_transf.Resize(rows+offset, tmp.NumCols(), kUndefined);
+		        		feats_transf.RowRange(0, rows).CopyFromMat(tmp);
+
 		        		for (int i = 0; i < offset; i++)
 		        			feats_transf.Row(rows+i).CopyFromVec(tmp.Row(rows+offset-1));
+
+
+		        		int tg_size = targets.size();
+		        		Posterior tgt = targets;
+		        		targets.resize(tg_size+targets_delay);
+		        		Vector<BaseFloat> wt = weights;
+		        		weights.Resize(tg_size+targets_delay, kUndefined);
+		        		for (int i = 0; i < targets_delay; i++) {
+		        			targets[i] = tgt[0];
+		        			weights(i) = 0.0;
+		        		}
+		        		for (int i = targets_delay; i < rows+targets; i++) {
+		        			targets[i] = tgt[i-targets];
+		        			weights(i) = wt(i-targets);
+		        		}
 		        }
 
 		        // pass data to randomizers
@@ -291,8 +309,8 @@ private:
 			for (; !feature_randomizer.Done(); feature_randomizer.Next(),
 											  targets_randomizer.Next(),
 											  weights_randomizer.Next(),
-											  flags_randomizer.Next())
-			{
+											  flags_randomizer.Next()) {
+
 				// get block of feature/target pairs
 				const CuMatrixBase<BaseFloat>& nnet_in = feature_randomizer.Value();
 				const Posterior& nnet_tgt = targets_randomizer.Value();
