@@ -188,8 +188,8 @@ private:
 
 	    // skip frames
 	    int32 skip_frames = opts->skip_frames;
-        int in_skip = opts->skip_inner ? 1 : skip_frames,
-        out_skip = opts->skip_inner ? skip_frames : 1;
+        //int in_skip = opts->skip_inner ? 1 : skip_frames;
+        int out_skip = opts->skip_inner ? skip_frames : 1;
         int num_skip = opts->skip_inner ? skip_frames : 1;
 
 	    NnetDataRandomizerOptions skip_rand_opts = *rnd_opts;
@@ -254,7 +254,7 @@ private:
 		        		feats_transf.RowRange(0, rows).CopyFromMat(tmp);
 
 		        		for (int i = 0; i < offset; i++)
-		        			feats_transf.Row(rows+i).CopyFromVec(tmp.Row(rows+offset-1));
+		        			feats_transf.Row(rows+i).CopyFromVec(tmp.Row(rows-1));
 
 
 		        		int tg_size = targets.size();
@@ -266,9 +266,9 @@ private:
 		        			targets[i] = tgt[0];
 		        			weights(i) = 0.0;
 		        		}
-		        		for (int i = targets_delay; i < rows+targets; i++) {
-		        			targets[i] = tgt[i-targets];
-		        			weights(i) = wt(i-targets);
+		        		for (int i = targets_delay; i < tg_size+targets_delay; i++) {
+		        			targets[i] = tgt[i-targets_delay];
+		        			weights(i) = wt(i-targets_delay);
 		        		}
 		        }
 
