@@ -295,18 +295,16 @@ public:
 				len = mat.NumRows()/skip_frames, cur = 0;
 				len += mat.NumRows()%skip_frames > 0 ? 1 : 0;
 				len *= out_skip;
+				len += time_shift*out_skip;
 				feat.Resize(len, mat.NumCols(), kUndefined);
 
-                cur += time_shift*in_skip;
 				for (int32 i = 0; i < len; i++) {
                     if (cur >= mat.NumRows()) cur = mat.NumRows()-1;
 					feat.Row(i).CopyFromVec(mat.Row(cur));
 					cur += in_skip;
 				}
-
 				cufeat = feat; // push it to gpu,
-			}
-			else
+			} else
 				cufeat = mat; // push it to gpu,
 
 			///only for nnet with fsmn component
@@ -322,16 +320,22 @@ public:
 			//nnet.Feedforward(feats_transf, &nnet_out);
 			nnet.Propagate(feats_transf, &nnet_out);
 
+			if (time_shift > 0) {
+				CuMatrix<BaseFloat> tmp = nnet_out;
+				int rows = tmp.NumRows() - time_shift;
+				nnet_out.Resize(rows, tmp.NumCols(), kUndefined);
+				nnet_out.CopyFromMat(tmp.RowRange(time_shift, rows));
+			}
 
 			// convert posteriors to log-posteriors,
 			if (apply_log) {
-			  if (!(nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0)) {
+				if (!(nnet_out.Min() >= 0.0 && nnet_out.Max() <= 1.0)) {
 				KALDI_WARN << utt << " "
 						   << "Applying 'log' to data which don't seem to be probabilities "
 						   << "(is there a softmax somwhere?)";
-			  }
-			  nnet_out.Add(1e-20); // avoid log(0),
-			  nnet_out.ApplyLog();
+				}
+				nnet_out.Add(1e-20); // avoid log(0),
+				nnet_out.ApplyLog();
 			}
 
 			// subtract log-priors from log-posteriors or pre-softmax,
