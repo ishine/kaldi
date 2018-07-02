@@ -85,6 +85,8 @@ namespace nnet0 {
      //gradient related
      l_filter_corr_.Resize(l_order_, input_dim_, kSetZero);
      r_filter_corr_.Resize(r_order_, input_dim_, kSetZero);
+
+     KALDI_ASSERT(clip_gradient_ >= 0.0);
    }
 
    void ReadData(std::istream &is, bool binary) {
@@ -108,7 +110,11 @@ namespace nnet0 {
      if ('<' == Peek(is, binary)) {
        ExpectToken(is, binary, "<RStride>");
        ReadBasicType(is, binary, &r_stride_);
-     }        
+     }
+     if ('<' == Peek(is, binary)) {
+    	   ExpectToken(is, binary, "<ClipGradient>");
+       ReadBasicType(is, binary, &clip_gradient_);
+     }
      // weights
      l_filter_.Read(is, binary);
      r_filter_.Read(is, binary);
@@ -135,6 +141,8 @@ namespace nnet0 {
      WriteBasicType(os, binary, l_stride_);
      WriteToken(os, binary, "<RStride>");
      WriteBasicType(os, binary, r_stride_);
+     WriteToken(os, binary, "<ClipGradient>");
+     WriteBasicType(os, binary, clip_gradient_);
      // weights
      l_filter_.Write(os, binary);
      r_filter_.Write(os, binary);
