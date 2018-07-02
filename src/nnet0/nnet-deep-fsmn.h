@@ -33,7 +33,8 @@ namespace nnet0 {
   public:
    DeepFsmn(int32 dim_in, int32 dim_out)
      : UpdatableComponent(dim_in, dim_out),
-     learn_rate_coef_(1.0)
+     learn_rate_coef_(1.0),
+	 clip_gradient_(0.0)
    {
    }
    ~DeepFsmn()
@@ -64,8 +65,9 @@ namespace nnet0 {
        else if (token == "<ROrder>") ReadBasicType(is, false, &r_order);
        else if (token == "<LStride>") ReadBasicType(is, false, &l_stride);
        else if (token == "<RStride>") ReadBasicType(is, false, &r_stride);
+       else if (token == "<ClipGradient>") ReadBasicType(is, false, &clip_gradient_);
        else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
-         << " (LearnRateCoef|HidSize|LOrder|ROrder|LStride|LStride)";
+         << " (LearnRateCoef|HidSize|LOrder|ROrder|LStride|LStride|ClipGradient)";
      }
      //parameters
      learn_rate_coef_ = learn_rate_coef;
@@ -264,7 +266,13 @@ namespace nnet0 {
        ", l_order " + ToString(l_order_) +
        ", r_order " + ToString(r_order_) +
        ", l_stride " + ToString(l_stride_) +
-       ", r_stride " + ToString(r_stride_);
+       ", r_stride " + ToString(r_stride_) +
+
+	   "\n  l_filter_grad" + MomentStatistics(l_filter_corr_) +
+	   "\n  r_filter_grad" + MomentStatistics(r_filter_corr_) +
+	   "\n  p_weight_grad" + MomentStatistics(p_weight_corr_) +
+	   "\n  linearity_grad" + MomentStatistics(linearity_corr_) +
+	   "\n  bias_grad" + MomentStatistics(bias_corr_);
    }
 
    void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
@@ -353,6 +361,19 @@ namespace nnet0 {
 	 //Step3. nonlinear affine transform
 	 linearity_corr_.AddMatMat(1.0, hid_out_err_, kTrans, input, kNoTrans, mmt);
 	 bias_corr_.AddRowSumMat(1.0, hid_out_err_, mmt);
+
+	 if (clip_gradient_ > 0.0) {
+		l_filter_corr_.ApplyFloor(-clip_gradient_);
+		l_filter_corr_.ApplyCeiling(clip_gradient_);
+		r_filter_corr_.ApplyFloor(-clip_gradient_);
+		r_filter_corr_.ApplyCeiling(clip_gradient_);
+		p_weight_corr_.ApplyFloor(-clip_gradient_);
+		p_weight_corr_.ApplyCeiling(clip_gradient_);
+		linearity_corr_.ApplyFloor(-clip_gradient_);
+		linearity_corr_.ApplyCeiling(clip_gradient_);
+		bias_corr_.ApplyFloor(-clip_gradient_);
+		bias_corr_.ApplyCeiling(clip_gradient_);
+	 }
    }
 
    void UpdateGradient() {
@@ -495,6 +516,7 @@ namespace nnet0 {
    CuVector<BaseFloat> bias_corr_;
 
    BaseFloat learn_rate_coef_;
+   BaseFloat clip_gradient_;
    int l_order_;
    int r_order_;
    int l_stride_;

@@ -34,7 +34,8 @@ namespace nnet0 {
   public:
    UniFsmn(int32 dim_in, int32 dim_out)
      : UpdatableComponent(dim_in, dim_out),
-     learn_rate_coef_(1.0)
+     learn_rate_coef_(1.0),
+	 clip_gradient_(0.0)
    {
    }
    ~UniFsmn()
@@ -60,8 +61,9 @@ namespace nnet0 {
        /**/ if (token == "<LearnRateCoef>") ReadBasicType(is, false, &learn_rate_coef);
        else if (token == "<LOrder>") ReadBasicType(is, false, &l_order);
        else if (token == "<LStride>") ReadBasicType(is, false, &l_stride);
+       else if (token == "<ClipGradient>") ReadBasicType(is, false, &clip_gradient_);
        else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
-         << " (LearnRateCoef|LOrder|LStride)";
+         << " (LearnRateCoef|LOrder|LStride|ClipGradient)";
      }
 
      //init
@@ -148,6 +150,8 @@ namespace nnet0 {
      return std::string("\n, lr-coef ") + ToString(learn_rate_coef_) +
        ", l_order " + ToString(l_order_) +
        ", l_stride " + ToString(l_stride_);
+
+	   "\n  l_filter_grad" + MomentStatistics(l_filter_corr_);
    }
 
    void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
@@ -168,6 +172,10 @@ namespace nnet0 {
    void Gradient(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out_diff) {
 
      l_filter_corr_.GetLfilterErr(out_diff, in, flags_, l_order_, l_stride_, 1.0);
+
+     if (clip_gradient_ > 0.0) {
+		l_filter_corr_.ApplyFloor(-clip_gradient_);
+     }
    }   
 
    void UpdateGradient() {
@@ -238,6 +246,7 @@ namespace nnet0 {
    CuVector<BaseFloat> flags_;
 
    BaseFloat learn_rate_coef_;
+   BaseFloat clip_gradient_;
    int l_order_;
    int l_stride_;
  };

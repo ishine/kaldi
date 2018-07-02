@@ -33,7 +33,8 @@ namespace nnet0 {
   public:
    Fsmn(int32 dim_in, int32 dim_out)
      : UpdatableComponent(dim_in, dim_out),
-     learn_rate_coef_(1.0)
+     learn_rate_coef_(1.0),
+	 clip_gradient_(0.0)
    {
    }
    ~Fsmn()
@@ -61,8 +62,9 @@ namespace nnet0 {
        else if (token == "<ROrder>") ReadBasicType(is, false, &r_order);
        else if (token == "<LStride>") ReadBasicType(is, false, &l_stride);
        else if (token == "<RStride>") ReadBasicType(is, false, &r_stride);
+       else if (token == "<ClipGradient>") ReadBasicType(is, false, &clip_gradient_);
        else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
-         << " (LearnRateCoef|LOrder|ROrder|LStride|LStride)";
+         << " (LearnRateCoef|LOrder|ROrder|LStride|LStride|ClipGradient)";
      }
 
      //init
@@ -143,7 +145,7 @@ namespace nnet0 {
 
    void ResetGradient() {
 	   l_filter_corr_.SetZero();
-	   l_filter_corr_.SetZero();
+	   r_filter_corr_.SetZero();
    }
 
    int32 NumParams() const { 
@@ -180,11 +182,15 @@ namespace nnet0 {
        "\n  r_filter" + MomentStatistics(r_filter_);
    }
    std::string InfoGradient() const {
-     return std::string("\n, lr-coef ") + ToString(learn_rate_coef_) +
+     return std::string("\n  lr-coef ") + ToString(learn_rate_coef_) +
        ", l_order " + ToString(l_order_) +
        ", r_order " + ToString(r_order_) +
        ", l_stride " + ToString(l_stride_) +
-       ", r_stride " + ToString(r_stride_);
+       ", r_stride " + ToString(r_stride_) +
+
+	   "\n  l_filter_grad" + MomentStatistics(l_filter_corr_) +
+	   "\n  r_filter_grad" + MomentStatistics(r_filter_corr_);
+
    }
 
 
@@ -222,6 +228,13 @@ namespace nnet0 {
      //r_filter_corr_.Set(0.0);
      l_filter_corr_.GetLfilterErr(out_diff, in, flags_, l_order_, l_stride_, 1.0);
      r_filter_corr_.GetRfilterErr(out_diff, in, flags_, r_order_, r_stride_, 1.0);
+
+     if (clip_gradient_ > 0.0) {
+		l_filter_corr_.ApplyFloor(-clip_gradient_);
+		l_filter_corr_.ApplyCeiling(clip_gradient_);
+		r_filter_corr_.ApplyFloor(-clip_gradient_);
+		r_filter_corr_.ApplyCeiling(clip_gradient_);
+     }
    }
 
    void UpdateGradient() {
@@ -306,6 +319,7 @@ namespace nnet0 {
 
    CuVector<BaseFloat> flags_;
    BaseFloat learn_rate_coef_;
+   BaseFloat clip_gradient_;
    int l_order_;
    int r_order_;
    int l_stride_;
