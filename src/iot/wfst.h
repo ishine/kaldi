@@ -15,6 +15,7 @@ typedef BaseFloat  WfstWeight;
 const WfstLabelId kWfstEpsilon       = 0;
 const std::string kWfstEpsilonString = "<eps>";
 const WfstWeight  kWfstDefaultWeight = 0.0f;
+const WfstWeight  kWfstNullWeight    = std::numeric_limits<BaseFloat>::infinity();
 
 class WfstSymbolTable {
 public:
@@ -40,7 +41,6 @@ private:
   std::vector<std::string> symbols_;
 };
 
-
 struct WfstArc {
   WfstLabelId ilabel;
   WfstLabelId olabel;
@@ -50,7 +50,7 @@ struct WfstArc {
   WfstArc() :
     ilabel(kWfstEpsilon),
     olabel(kWfstEpsilon),
-    weight(kWfstDefaultWeight),
+    weight(kWfstNullWeight),
     dst(0)
   { }
 
@@ -71,7 +71,7 @@ struct WfstState {
   WfstState() :
     arc_base(0),
     num_arcs(0),
-    weight(kWfstDefaultWeight)
+    weight(kWfstNullWeight)
   { }
 };
 

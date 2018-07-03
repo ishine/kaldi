@@ -267,8 +267,8 @@ namespace iot {
     for (WfstStateId i = 0; i < NumStates(); i++) {
       WfstState *state = State(i);
       fprintf(fp, "%d [label = \"%d\", shape = %s, style = %s, fontsize = 14]\n", i, i,
-        ((state->weight != kWfstDefaultWeight) ? "doublecircle" : "circle"), // final
-        (i == 0) ? "bold" : "solid");  // isititial
+        ((state->weight != kWfstNullWeight) ? "doublecircle" : "circle"), // is final
+        (i == 0) ? "bold" : "solid");  // is initial
 
       WfstArc *arc = Arc(state->arc_base);
       for (int32 j = 0; j < state->num_arcs; j++,arc++) {

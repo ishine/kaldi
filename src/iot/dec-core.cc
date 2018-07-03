@@ -587,9 +587,6 @@ void DecCore::ComputeFinalCosts(
     Token *tok = final_toks->val;
     const Elem *next = final_toks->tail;
     BaseFloat final_cost = fst_->Final(state);
-    if (final_cost == 0.0f) {
-      final_cost = infinity;
-    }
     BaseFloat cost = tok->tot_cost,
         cost_with_final = cost + final_cost;
     best_cost = std::min(cost, best_cost);
