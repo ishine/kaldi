@@ -176,12 +176,12 @@ int main(int argc, char *argv[]) {
     nnet3::DecodableNnetSimpleLoopedInfo decodable_info(decodable_opts,
                                                         &am_nnet);
 
-      Wfst *decode_fst = new Wfst;
-      {
-        bool binary;
-        Input ki(fst_rxfilename, &binary);
-        decode_fst->Read(ki.Stream(), binary);
-      }
+    Wfst *decode_fst = new Wfst;
+    {
+      bool binary;
+      Input ki(fst_rxfilename, &binary);
+      decode_fst->Read(ki.Stream(), binary);
+    }
 
     fst::SymbolTable *word_syms = NULL;
     if (word_syms_rxfilename != "")
@@ -255,7 +255,7 @@ int main(int argc, char *argv[]) {
             // no more input. flush out last frames
             feature_pipeline.InputFinished();
           }
-/*
+          /*
           if (silence_weighting.Active() &&
               feature_pipeline.IvectorFeature() != NULL) {
             silence_weighting.ComputeCurrentTraceback(decoder.Decoder());
@@ -263,7 +263,7 @@ int main(int argc, char *argv[]) {
                                               &delta_weights);
             feature_pipeline.IvectorFeature()->UpdateFrameWeights(delta_weights);
           }
-*/
+          */
           decoder.AdvanceDecoding();
           /*
           if (do_endpointing && decoder.EndpointDetected(endpoint_opts)) {
@@ -296,7 +296,8 @@ int main(int argc, char *argv[]) {
         num_done++;
       }
     }
-    timing_stats.Print(online);
+    //timing_stats.Print(online);
+    timing_stats.Print(false);
 
     KALDI_LOG << "Decoded " << num_done << " utterances, "
               << num_err << " with errors.";
