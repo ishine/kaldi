@@ -296,7 +296,7 @@ void DecCore::PossiblyResizeHash(size_t num_toks) {
 // and also into the singly linked list of tokens active on this frame
 // (whose head is at active_toks_[frame]).
 inline DecCore::Token *DecCore::FindOrAddToken(
-    StateId state, int32 frame_plus_one, BaseFloat tot_cost,
+    StateId state, int32 frame_plus_one, BaseFloat total_cost,
     Token *backpointer, bool *changed) {
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true
   // if the token was newly created or the cost changed.
@@ -308,7 +308,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(
     // tokens on the currently final frame have zero extra_cost
     // as any of them could end up
     // on the winning path.
-    Token *new_tok = new Token (tot_cost, extra_cost, NULL, toks, backpointer);
+    Token *new_tok = new Token (total_cost, extra_cost, NULL, toks, backpointer);
     // NULL: no forward links yet
     toks = new_tok;
     num_toks_++;
@@ -317,11 +317,11 @@ inline DecCore::Token *DecCore::FindOrAddToken(
     return new_tok;
   } else {
     Token *tok = e_found->val;  // There is an existing Token for this state.
-    if (tok->tot_cost > tot_cost) {  // replace old token
-      tok->tot_cost = tot_cost;
+    if (tok->total_cost > total_cost) {  // replace old token
+      tok->total_cost = total_cost;
       tok->backpointer = backpointer;
       // we don't allocate a new token, the old stays linked in active_toks_
-      // we only replace the tot_cost
+      // we only replace the total_cost
       // in the current frame, there are no forward links (and no extra_cost)
       // only in ProcessNonemitting we have to delete forward links
       // in case we visit a state for the second time
@@ -373,8 +373,8 @@ void DecCore::PruneForwardLinks(
         // See if we need to excise this link...
         Token *next_tok = link->next_tok;
         BaseFloat link_extra_cost = next_tok->extra_cost +
-            ((tok->tot_cost + link->acoustic_cost + link->graph_cost)
-             - next_tok->tot_cost);  // difference in brackets is >= 0
+            ((tok->total_cost + link->acoustic_cost + link->graph_cost)
+             - next_tok->total_cost);  // difference in brackets is >= 0
         // link_exta_cost is the difference in score between the best paths
         // through link source state and through link destination state
         KALDI_ASSERT(link_extra_cost == link_extra_cost);  // check for NaN
@@ -455,7 +455,7 @@ void DecCore::PruneForwardLinksFinal() {
         else
           final_cost = std::numeric_limits<BaseFloat>::infinity();
       }
-      BaseFloat tok_extra_cost = tok->tot_cost + final_cost - final_best_cost_;
+      BaseFloat tok_extra_cost = tok->total_cost + final_cost - final_best_cost_;
       // tok_extra_cost will be a "min" over either directly being final, or
       // being indirectly final through other links, and the loop below may
       // decrease its value:
@@ -463,8 +463,8 @@ void DecCore::PruneForwardLinksFinal() {
         // See if we need to excise this link...
         Token *next_tok = link->next_tok;
         BaseFloat link_extra_cost = next_tok->extra_cost +
-            ((tok->tot_cost + link->acoustic_cost + link->graph_cost)
-             - next_tok->tot_cost);
+            ((tok->total_cost + link->acoustic_cost + link->graph_cost)
+             - next_tok->total_cost);
         if (link_extra_cost > config_.lattice_beam) {  // excise link
           ForwardLink *next_link = link->next;
           if (prev_link != NULL) prev_link->next = next_link;
@@ -587,7 +587,7 @@ void DecCore::ComputeFinalCosts(
     Token *tok = final_toks->val;
     const Elem *next = final_toks->tail;
     BaseFloat final_cost = fst_->Final(state);
-    BaseFloat cost = tok->tot_cost,
+    BaseFloat cost = tok->total_cost,
         cost_with_final = cost + final_cost;
     best_cost = std::min(cost, best_cost);
     best_cost_with_final = std::min(cost_with_final, best_cost_with_final);
@@ -636,7 +636,7 @@ DecCore::BestPathIterator DecCore::BestPathEnd(
   BaseFloat best_final_cost = 0;
   Token *best_tok = NULL;
   for (Token *tok = active_toks_.back().toks; tok != NULL; tok = tok->next) {
-    BaseFloat cost = tok->tot_cost, final_cost = 0.0;
+    BaseFloat cost = tok->total_cost, final_cost = 0.0;
     if (use_final_probs && !final_costs.empty()) {
       // if we are instructed to use final-probs, and any final tokens were
       // active on final frame, include the final-prob in the cost of the token.
@@ -756,7 +756,7 @@ BaseFloat DecCore::GetCutoff(Elem *list_head, size_t *tok_count,
   if (config_.max_active == std::numeric_limits<int32>::max() &&
       config_.min_active == 0) {
     for (Elem *e = list_head; e != NULL; e = e->tail, count++) {
-      BaseFloat w = static_cast<BaseFloat>(e->val->tot_cost);
+      BaseFloat w = static_cast<BaseFloat>(e->val->total_cost);
       if (w < best_weight) {
         best_weight = w;
         if (best_elem) *best_elem = e;
@@ -768,7 +768,7 @@ BaseFloat DecCore::GetCutoff(Elem *list_head, size_t *tok_count,
   } else {
     tmp_array_.clear();
     for (Elem *e = list_head; e != NULL; e = e->tail, count++) {
-      BaseFloat w = e->val->tot_cost;
+      BaseFloat w = e->val->total_cost;
       tmp_array_.push_back(w);
       if (w < best_weight) {
         best_weight = w;
@@ -848,7 +848,7 @@ BaseFloat DecCore::ProcessEmitting(
   if (best_elem) {
     StateId state = best_elem->key;
     Token *tok = best_elem->val;
-    cost_offset = - tok->tot_cost;
+    cost_offset = - tok->total_cost;
 
     const WfstState *s = fst_->State(state);
     const WfstArc *a = fst_->Arc(s->arc_base);
@@ -856,7 +856,7 @@ BaseFloat DecCore::ProcessEmitting(
     for (int32 j = 0; j < s->num_arcs; j++,a++) {
       WfstArc arc = *a;
       if (arc.ilabel != kWfstEpsilon) {  // propagate..
-        BaseFloat new_weight = tok->tot_cost + arc.weight + (-decodable->LogLikelihood(frame, arc.ilabel)) + cost_offset;
+        BaseFloat new_weight = tok->total_cost + arc.weight + (-decodable->LogLikelihood(frame, arc.ilabel)) + cost_offset;
         if (new_weight + adaptive_beam < next_cutoff)
           next_cutoff = new_weight + adaptive_beam;
       }
@@ -876,7 +876,7 @@ BaseFloat DecCore::ProcessEmitting(
     // loop this way because we delete "e" as we go.
     StateId state = e->key;
     Token *tok = e->val;
-    if (tok->tot_cost <= cur_cutoff) {
+    if (tok->total_cost <= cur_cutoff) {
       const WfstState *s = fst_->State(state);
       const WfstArc *a = fst_->Arc(s->arc_base);
       for (int32 j = 0; j < s->num_arcs; j++, a++) {
@@ -885,14 +885,14 @@ BaseFloat DecCore::ProcessEmitting(
           WfstArc arc = *a;
           BaseFloat ac_cost = cost_offset + (-decodable->LogLikelihood(frame, arc.ilabel)),
               graph_cost = arc.weight,
-              cur_cost = tok->tot_cost,
-              tot_cost = cur_cost + ac_cost + graph_cost;
-          if (tot_cost > next_cutoff) continue;
-          else if (tot_cost + adaptive_beam < next_cutoff)
-            next_cutoff = tot_cost + adaptive_beam; // prune by best current token
+              cur_cost = tok->total_cost,
+              total_cost = cur_cost + ac_cost + graph_cost;
+          if (total_cost > next_cutoff) continue;
+          else if (total_cost + adaptive_beam < next_cutoff)
+            next_cutoff = total_cost + adaptive_beam; // prune by best current token
           // Note: the frame indexes into active_toks_ are one-based,
           // hence the + 1.
-          Token *next_tok = FindOrAddToken(arc.dst, frame + 1, tot_cost, tok, NULL);
+          Token *next_tok = FindOrAddToken(arc.dst, frame + 1, total_cost, tok, NULL);
           // NULL: no change indicator needed
 
           // Add ForwardLink from tok to next_tok (put on head of list tok->links)
@@ -936,7 +936,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
     queue_.pop_back();
 
     Token *tok = toks_.Find(state)->val;  // would segfault if state not in toks_ but this can't happen.
-    BaseFloat cur_cost = tok->tot_cost;
+    BaseFloat cur_cost = tok->total_cost;
     if (cur_cost > cutoff) // Don't bother processing successors.
       continue;
     // If "tok" has any existing forward links, delete them,
@@ -953,10 +953,10 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
       WfstArc arc = *a;
       if (arc.ilabel == kWfstEpsilon) {  // non-emitting
         BaseFloat graph_cost = arc.weight,
-            tot_cost = cur_cost + graph_cost;
-        if (tot_cost < cutoff) {
+            total_cost = cur_cost + graph_cost;
+        if (total_cost < cutoff) {
           bool changed;
-          Token *new_tok = FindOrAddToken(arc.dst, frame + 1, tot_cost, tok, &changed);
+          Token *new_tok = FindOrAddToken(arc.dst, frame + 1, total_cost, tok, &changed);
           tok->links = new ForwardLink(new_tok, 0, arc.olabel, graph_cost, 0, tok->links);
 
           // "changed" tells us whether the new token has a different
