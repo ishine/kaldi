@@ -1250,6 +1250,19 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
   diff->AddMat(-1.0, net_out_tmp);
 
+  int num_droped = 0;
+  for (int s = 0; s < num_sequence; s++) {
+	  if (pzx(s) > -1000)
+		  continue;
+
+	  for (int t = 0; t < num_frames_per_sequence; t++) {
+		  diff->Row(t*num_sequence + s).Set(0.0);
+	  }
+	  KALDI_WARN << "Dropped: " << s << "/" << frame_num_utt[s] << "frames.";
+	  num_droped++;
+	  pzx(s) = 0;
+  }
+
   // update registries
   obj_progress_ += pzx.Sum();
   sequences_progress_ += num_sequence;
