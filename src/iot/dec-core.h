@@ -11,6 +11,7 @@
 #include "lat/determinize-lattice-pruned.h"
 #include "lat/kaldi-lattice.h"
 
+#include "iot/memory-pool.h"
 #include "iot/wfst.h"
 
 namespace kaldi {
@@ -32,9 +33,13 @@ struct DecCoreConfig {
   // Most of the options inside det_opts are not actually queried by the
   // LatticeFasterDecoder class itself, but by the code that calls it, for
   // example in the function DecodeUtteranceLatticeFaster.
+
+  int32 token_pool_realloc;
+  int32 link_pool_realloc;
+  
   fst::DeterminizeLatticePhonePrunedOptions det_opts;
 
-  DecCoreConfig(): 
+  DecCoreConfig() : 
     beam(16.0),
     max_active(std::numeric_limits<int32>::max()),
     min_active(200),
@@ -43,7 +48,9 @@ struct DecCoreConfig {
     determinize_lattice(true),
     beam_delta(0.5),
     hash_ratio(2.0),
-    prune_scale(0.1) 
+    prune_scale(0.1),
+    token_pool_realloc(2048),
+    link_pool_realloc(2048)
   { }
 
   void Register(OptionsItf *opts) {
@@ -64,7 +71,12 @@ struct DecCoreConfig {
                    "max-active constraint is applied.  Larger is more accurate.");
     opts->Register("hash-ratio", &hash_ratio, "Setting used in decoder to "
                    "control hash behavior");
+    opts->Register("token-pool-realloc", &token_pool_realloc,
+                   "number of tokens per alloc in memory pool");
+    opts->Register("link-pool-realloc", &link_pool_realloc,
+                   "number of forward-links per alloc in memory pool");
   }
+
   void Check() const {
     KALDI_ASSERT(beam > 0.0 && max_active > 1 && lattice_beam > 0.0
                  && prune_interval > 0 && beam_delta > 0.0 && hash_ratio >= 1.0
@@ -265,18 +277,11 @@ class DecCore {
   BaseFloat ProcessEmitting(DecodableInterface *decodable);
   void ProcessNonemitting(BaseFloat cost_cutoff);
 
-  // HashList defined in ../util/hash-list.h.  It actually allows us to maintain
-  // more than one list (e.g. for current and previous frames), but only one of
-  // them at a time can be indexed by StateId.  It is indexed by frame-index
-  // plus one, where the frame-index is zero-based, as used in decodable object.
-  // That is, the emitting probs of frame t are accounted for in tokens at
-  // toks_[t+1].  The zeroth frame is for nonemitting transition at the start of
-  // the graph.
-  HashList<StateId, Token*> toks_;
+  MemoryPool *token_pool_;
+  MemoryPool *link_pool_;
 
-  std::vector<TokenList> active_toks_; // Lists of tokens, indexed by
-  // frame (members of TokenList are toks, must_prune_forward_links,
-  // must_prune_tokens).
+  HashList<StateId, Token*> toks_;
+  std::vector<TokenList> active_toks_;
 
   std::vector<StateId> queue_;
   std::vector<BaseFloat> tmp_array_;
