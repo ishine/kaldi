@@ -241,6 +241,7 @@ private:
 	    Vector<BaseFloat> frame_mask_host;
 	    Posterior target;
 	    std::vector<Posterior> targets_utt(num_stream);
+        std::string utt;
 
 	    CTCNnetExample *ctc_example = NULL;
 	    DNNNnetExample *dnn_example = NULL;
@@ -270,7 +271,7 @@ private:
 
 			while (s < num_stream && cur_frames < frame_limit && NULL != example) {
 
-				std::string key = example->utt;
+				utt = example->utt;
 				Matrix<BaseFloat> &mat = example->input_frames;
 
 				if (objective_function == "xent"){
@@ -392,6 +393,15 @@ private:
 	        // Propagation and CTC training
 	        nnet.Propagate(CuMatrix<BaseFloat>(feat_mat_host), &nnet_out);
 	        p_nnet_out = &nnet_out;
+
+			// check there's no nan/inf,
+			if (!KALDI_ISFINITE(nnet_out.Sum())) {
+			    KALDI_LOG << "NaN or inf found in final output nn-output for " << utt;
+                KALDI_VLOG(1) << nnet.Info();
+				monitor(&nnet, 0, num_frames);
+                break;
+			}
+
 	        if (opts->network_type == "fsmn") {
 	        		indexes = idx;
 	        		nnet_out_rearrange.Resize(out_frames_pad, nnet.OutputDim(), kSetZero);
@@ -411,6 +421,14 @@ private:
 	        else
 	        		KALDI_ERR<< "Unknown objective function code : " << objective_function;
 
+
+			// check there's no nan/inf,
+			if (!KALDI_ISFINITE(nnet_diff.Sum())) {
+			    KALDI_LOG << "NaN or inf found in final nnet diff for " << utt;
+                KALDI_VLOG(1) << nnet.Info();
+				monitor(&nnet, 0, num_frames);
+                break;
+			}
 
 	        p_nnet_diff = &nnet_diff;
 	        if (opts->network_type == "fsmn") {
