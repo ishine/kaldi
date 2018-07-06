@@ -5,13 +5,19 @@ namespace iot {
 
 DecCore::DecCore(Wfst *fst, const DecCoreConfig &config):
     fst_(fst), config_(config), num_toks_(0) {
-  config.Check();
+  config_.Check();
   toks_.SetSize(1000);
+
+  token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
+  link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
 }
 
 DecCore::~DecCore() {
   DeleteElems(toks_.Clear());
   ClearActiveTokens();
+
+  DELETE(token_pool_);
+  DELETE(link_pool_);
 }
 
 void DecCore::InitDecoding() {
@@ -26,7 +32,7 @@ void DecCore::InitDecoding() {
   StateId start_state = fst_->Start();
   KALDI_ASSERT(start_state != fst::kNoStateId);
   active_toks_.resize(1);
-  Token *start_tok = new Token(0.0, 0.0, NULL, NULL, NULL);
+  Token *start_tok = NewToken(0.0, 0.0, NULL, NULL, NULL);
   active_toks_[0].toks = start_tok;
   toks_.Insert(start_state, start_tok);
   num_toks_++;
@@ -308,7 +314,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(
     // tokens on the currently final frame have zero extra_cost
     // as any of them could end up
     // on the winning path.
-    Token *new_tok = new Token (total_cost, extra_cost, NULL, toks, backpointer);
+    Token *new_tok = NewToken (total_cost, extra_cost, NULL, toks, backpointer);
     // NULL: no forward links yet
     toks = new_tok;
     num_toks_++;
@@ -382,7 +388,7 @@ void DecCore::PruneForwardLinks(
           ForwardLink *next_link = link->next;
           if (prev_link != NULL) prev_link->next = next_link;
           else tok->links = next_link;
-          delete link;
+          DeleteLink(link);
           link = next_link;  // advance link but leave prev_link the same.
           *links_pruned = true;
         } else {   // keep the link and update the tok_extra_cost if needed.
@@ -469,7 +475,7 @@ void DecCore::PruneForwardLinksFinal() {
           ForwardLink *next_link = link->next;
           if (prev_link != NULL) prev_link->next = next_link;
           else tok->links = next_link;
-          delete link;
+          DeleteLink(link);
           link = next_link; // advance link but leave prev_link the same.
         } else { // keep the link and update the tok_extra_cost if needed.
           if (link_extra_cost < 0.0) { // this is just a precaution.
@@ -529,7 +535,7 @@ void DecCore::PruneTokensForFrame(int32 frame_plus_one) {
       // excise tok from list and delete tok.
       if (prev_tok != NULL) prev_tok->next = tok->next;
       else toks = tok->next;
-      delete tok;
+      DeleteToken(tok);
       num_toks_--;
     } else {  // fetch next Token
       prev_tok = tok;
@@ -896,7 +902,7 @@ BaseFloat DecCore::ProcessEmitting(
           // NULL: no change indicator needed
 
           // Add ForwardLink from tok to next_tok (put on head of list tok->links)
-          tok->links = new ForwardLink(next_tok, arc.ilabel, arc.olabel,
+          tok->links = NewLink(next_tok, arc.ilabel, arc.olabel,
                                        graph_cost, ac_cost, tok->links);
         }
       } // for all arcs
@@ -943,7 +949,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
     // because we're about to regenerate them.  This is a kind
     // of non-optimality (remember, this is the simple decoder),
     // but since most states are emitting it's not a huge issue.
-    tok->DeleteForwardLinks(); // necessary when re-visiting
+    DeleteLinksFromToken(tok); // necessary when re-visiting
     tok->links = NULL;
 
     const WfstState *s = fst_->State(state);
@@ -957,7 +963,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
         if (total_cost < cutoff) {
           bool changed;
           Token *new_tok = FindOrAddToken(arc.dst, frame + 1, total_cost, tok, &changed);
-          tok->links = new ForwardLink(new_tok, 0, arc.olabel, graph_cost, 0, tok->links);
+          tok->links = NewLink(new_tok, 0, arc.olabel, graph_cost, 0, tok->links);
 
           // "changed" tells us whether the new token has a different
           // cost from before, or is new [if so, add into queue].
@@ -982,9 +988,9 @@ void DecCore::ClearActiveTokens() { // a cleanup routine, at utt end/begin
     // Delete all tokens alive on this frame, and any forward
     // links they may have.
     for (Token *tok = active_toks_[i].toks; tok != NULL; ) {
-      tok->DeleteForwardLinks();
+      DeleteLinksFromToken(tok);
       Token *next_tok = tok->next;
-      delete tok;
+      DeleteToken(tok);
       num_toks_--;
       tok = next_tok;
     }

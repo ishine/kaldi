@@ -156,7 +156,36 @@ class DecCore {
       acoustic_cost(acoustic_cost),
       next(next)
     { }
+
+    inline ~ForwardLink() { }
   };
+
+  inline ForwardLink* NewLink(Token *next_tok,
+                              Label ilabel,
+                              Label olabel,
+                              BaseFloat graph_cost,
+                              BaseFloat acoustic_cost,
+                              ForwardLink *next) {
+    ForwardLink *link = (ForwardLink*)link_pool_->MallocElem();
+    // placement new
+    new (link) ForwardLink(next_tok, ilabel, olabel, graph_cost, acoustic_cost, next);
+    return link;
+  }
+
+  inline void DeleteLink(ForwardLink *link) {
+    link->~ForwardLink();
+    link_pool_->FreeElem(link);
+  }
+
+  inline void DeleteLinksFromToken(Token *tok) {
+    ForwardLink *l = tok->links, *next = NULL;
+    while (l != NULL) {
+      next = l->next;
+      DeleteLink(l);
+      l = next;
+    }
+    tok->links = NULL;
+  }
 
   struct Token {
     BaseFloat total_cost;
@@ -177,16 +206,25 @@ class DecCore {
       backpointer(backpointer) 
     { }
 
-    inline void DeleteForwardLinks() {
-      ForwardLink *l = links, *m;
-      while (l != NULL) {
-        m = l->next;
-        delete l;
-        l = m;
-      }
-      links = NULL;
-    }
+    inline ~Token() { }
   };
+
+  inline Token* NewToken(BaseFloat total_cost,
+                         BaseFloat extra_cost,
+                         ForwardLink *links,
+                         Token *next,
+                         Token *backpointer) {
+    Token *tok = (Token*) token_pool_->MallocElem();
+    // placement new
+    new (tok) Token(total_cost, extra_cost, links, next, backpointer);
+    return tok;
+  }
+
+  inline void DeleteToken(Token *tok) {
+    // Forward links are not owned by token
+    tok->~Token();
+    token_pool_->FreeElem(tok);
+  }
 
   struct TokenList {
     Token *toks;
