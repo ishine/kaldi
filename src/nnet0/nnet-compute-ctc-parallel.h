@@ -47,12 +47,17 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     int32 max_frames;
     int32 batch_size;
     int32 blank_label;
+
+    // l2 regularization constant on the 'ctc' output; the actual term added to
+    // the objf will be -0.5 times this constant times the squared l2 norm.
+    // (squared so it's additive across the dimensions).  e.g. try 0.0005.
+    BaseFloat l2_regularize;
     std::string ctc_imp;
     std::string network_type;
 
 
     NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), blank_label(0),
+    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
 		  ctc_imp("eesen"), network_type("lstm") { }
 
   	  void Register(OptionsItf *po)
@@ -63,6 +68,9 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
 	      	po->Register("max-frames", &max_frames, "Max number of frames to be processed");
 	        po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
 	        po->Register("blank-label", &blank_label, "CTC output bank label id");
+	        opts->Register("l2-regularize", &l2_regularize, "l2 regularization "
+	                       "constant for 'ctc' training, applied to the output "
+	                       "of the neural net.");
 	        po->Register("ctc-imp", &ctc_imp, "CTC objective function implementation, (eesen|warp)");
 	        po->Register("network-type", &network_type, "CTC neural network type, (lstm|fsmn)");
   	  }

@@ -252,6 +252,7 @@ private:
 		int32 cur_stream_num = 0, num_skip, in_rows, out_rows, 
               in_frames, out_frames, in_frames_pad, out_frames_pad;
 		int32 feat_dim = nnet.InputDim();
+		BaseFloat l2_term;
 	    num_skip = opts->skip_inner ? skip_frames : 1;
         frame_limit *= num_skip;
 
@@ -436,6 +437,12 @@ private:
 	        		nnet_diff_rearrange.Resize(utt_flags.Dim(), nnet.OutputDim(), kUndefined);
 	        		nnet_diff_rearrange.CopyRows(nnet_diff, indexes);
 	        		p_nnet_diff = &nnet_diff_rearrange;
+
+	        		l2_term = 0;
+	        		if (opts->l2_regularize > 0.0) {
+	        			l2_term += -0.5 * opts->l2_regularize * TraceMatMat(nnet_out, nnet_out, kTrans);
+	        			p_nnet_diff->AddMat(opts->l2_regularize, nnet_out);
+	        		}
 	        }
 
 		        // backward pass
