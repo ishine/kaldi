@@ -116,7 +116,7 @@ class DecCore {
   void AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frames = -1);
   void FinalizeDecoding();
 
-  inline int32 NumFramesDecoded() const { return active_toks_.size() - 1; }
+  inline int32 NumFramesDecoded() const { return token_net_.size() - 1; }
   BaseFloat FinalRelativeCost() const;
 
   bool ReachedFinal() const {
@@ -246,16 +246,16 @@ class DecCore {
   // inserts a new, empty token (i.e. with no forward links) for the current
   // frame.  [note: it's inserted if necessary into hash toks_ and also into the
   // singly linked list of tokens active on this frame (whose head is at
-  // active_toks_[frame]).  The frame_plus_one argument is the acoustic frame
-  // index plus one, which is used to index into the active_toks_ array.
+  // token_net_[frame]).  The frame_plus_one argument is the acoustic frame
+  // index plus one, which is used to index into the token_net_ array.
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.
   inline Token *FindOrAddToken(StateId state, int32 frame_plus_one,
                                BaseFloat total_cost, Token *backpointer,
                                bool *changed);
 
-  // prunes outgoing links for all tokens in active_toks_[frame]
-  // it's called by PruneActiveTokens
+  // prunes outgoing links for all tokens in token_net_[frame]
+  // it's called by PruneTokenNet
   // all links, that have link_extra_cost > lattice_beam are pruned
   // delta is the amount by which the extra_costs must change
   // before we set *extra_costs_changed = true.
@@ -295,7 +295,7 @@ class DecCore {
   // Prune away any tokens on this frame that have no forward links.
   // [we don't do this in PruneForwardLinks because it would give us
   // a problem with dangling pointers].
-  // It's called by PruneActiveTokens if any forward links have been pruned
+  // It's called by PruneTokenNet if any forward links have been pruned
   void PruneTokensForFrame(int32 frame_plus_one);
 
 
@@ -306,7 +306,7 @@ class DecCore {
   // delta controls when it considers a cost to have changed enough to continue
   // going backward and propagating the change.  larger delta -> will recurse
   // less far.
-  void PruneActiveTokens(BaseFloat delta);
+  void PruneTokenNet(BaseFloat delta);
 
   /// Gets the weight cutoff.  Also counts the active tokens.
   BaseFloat GetCutoff(Elem *list_head, size_t *tok_count,
@@ -319,7 +319,7 @@ class DecCore {
   MemoryPool *link_pool_;
 
   HashList<StateId, Token*> toks_;
-  std::vector<TokenList> active_toks_;
+  std::vector<TokenList> token_net_;
 
   std::vector<StateId> queue_;
   std::vector<BaseFloat> tmp_array_;
