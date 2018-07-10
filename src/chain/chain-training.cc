@@ -37,7 +37,7 @@ bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
                                  BaseFloat *l2_term,
                                  BaseFloat *weight,
                                  CuMatrixBase<BaseFloat> *nnet_output_deriv,
-                                 CuMatrix<BaseFloat> *xent_output_deriv) {
+                                 CuMatrixBase<BaseFloat> *xent_output_deriv) {
   BaseFloat num_logprob_weighted, den_logprob_weighted;
   bool denominator_ok = true;
   bool numerator_ok = true;
@@ -67,8 +67,9 @@ bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
     // chain-denominator.cc, which has just been freed; it also uses the
     // kStrideEqualNumCols arg (its shape is the transpose of this matrix's
     // shape).
-    xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
-                              kSetZero, kStrideEqualNumCols);
+    // xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
+    //                          kSetZero, kStrideEqualNumCols);
+    xent_output_deriv->SetZero();
   }
 
 
@@ -152,7 +153,7 @@ bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                               BaseFloat *l2_term,
                               BaseFloat *weight,
                               CuMatrixBase<BaseFloat> *nnet_output_deriv,
-                              CuMatrix<BaseFloat> *xent_output_deriv) {
+                              CuMatrixBase<BaseFloat> *xent_output_deriv) {
   bool ok = true;
   if (supervision.e2e) {
     ok = ComputeChainObjfAndDerivE2e(opts, den_graph, supervision,
@@ -185,8 +186,9 @@ bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
     // chain-denominator.cc, which has just been freed; it also uses the
     // kStrideEqualNumCols arg (its shape is the transpose of this matrix's
     // shape).
-    xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
-                              kSetZero, kStrideEqualNumCols);
+    // xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
+    //                          kSetZero, kStrideEqualNumCols);
+    xent_output_deriv->SetZero();
   }
 
 
