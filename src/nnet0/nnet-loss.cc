@@ -1250,18 +1250,23 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
   diff->AddMat(-1.0, net_out_tmp);
 
-  int num_droped = 0;
+  /*
   for (int s = 0; s < num_sequence; s++) {
-	  if (pzx(s) > -1000)
+	  if (pzx(s) > -500.0)
 		  continue;
 
 	  for (int t = 0; t < num_frames_per_sequence; t++) {
 		  diff->Row(t*num_sequence + s).Set(0.0);
 	  }
-	  KALDI_WARN << "Dropped: " << s << "/" << frame_num_utt[s] << "frames.";
-	  num_droped++;
+	  KALDI_WARN << "Dropped: " << s << "th/" << frame_num_utt[s] << " frames.";
+	  num_droped_++;
 	  pzx(s) = 0;
   }
+  */
+
+  // Clip gradient
+  diff->ApplyFloor(-1.0);
+  diff->ApplyCeiling(1.0);
 
   // update registries
   obj_progress_ += pzx.Sum();
@@ -1344,7 +1349,7 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 		}
 	}
 
-	Vector<BaseFloat> score(num_sequence, kSetZero);
+	Vector<BaseFloat> pzx(num_sequence, kSetZero);
     
 	// get ctc workspace size
 	size_t workspace_alloc_bytes;
@@ -1369,7 +1374,7 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 									frame_num_utt.data(),
 									alphabet_size,
 									num_sequence,
-									score.Data(),
+									pzx.Data(),
 									ctc_workspace_.Data(),
 									options_),
 				   "Error: compute_ctc_loss int EvalParallel");
@@ -1379,12 +1384,12 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
         CuDevice::Instantiate().AccuProfile("compute_ctc_loss", tim);
 #endif
 
-	// Clip gradient
-	// diff->ApplyFloor(-1.0);
-	// diff->ApplyCeiling(1.0);
+	// Clip loss
+	diff->ApplyFloor(-1.0);
+	diff->ApplyCeiling(1.0);
 
 	// update registries
-	obj_progress_ += -score.Sum();
+	obj_progress_ += -pzx.Sum();
 	sequences_progress_ += num_sequence;
 	sequences_num_ += num_sequence;
 	for (int s = 0; s < num_sequence; s++) {
