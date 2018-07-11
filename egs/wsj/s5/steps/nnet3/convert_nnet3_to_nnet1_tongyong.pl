@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 # This script convert kaldi's nnet3 to nnet1. It only support the lstm structure for now.
 # Other nnet layers will be added later.
-# Date: Thur. Oct 27 2017 -- Wangzhichao
+# Date: Thur. May 31 2018 -- wangzhichao214232@sogou-inc.com
 #########################################################################################
 if(@ARGV!=2)
 {
@@ -10,40 +10,223 @@ if(@ARGV!=2)
 }
 
 ################### Set net config ######################
-$lstm_layers=3;      #lstm layer number
-$lstm_nodes="355 2560 768;768 2560 768;768 2560 768";   # nodes config per layer, separated by semicolons; (each layer:input_dim cell_dim output_dim)
-$output_node=3766;    #the final layer i.e. output layer node number
+$NumComponents=31;
+################### tdnn-lstm example ###################
+system("cat <<EOF > nnet.proto
+name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1024
+name=relu1 type=RectifiedLinearComponent 
+name=renorm1 type=NormalizeComponent
+name=splice1 type=Splice offset=[-1,0,1] input=1024 output=3072
+name=tdnn2 type=NaturalGradientAffineComponent input=3072 output=1024
+name=relu2 type=RectifiedLinearComponent
+name=renorm2 type=NormalizeComponent
+name=splice2 type=Splice offset=[-1,0,1] input=1024 output=3072
+name=tdnn3 type=NaturalGradientAffineComponent input=3072 output=1024
+name=relu3 type=RectifiedLinearComponent
+name=renorm3 type=NormalizeComponent
+name=lstm1 type=Lstm input=1024 cell=2048 output=768 discard=4
+name=splice3 type=Splice offset=[-1,0,1] input=768 output=2304
+name=tdnn4 type=NaturalGradientAffineComponent input=2304 output=1024
+name=relu4 type=RectifiedLinearComponent
+name=renorm4 type=NormalizeComponent
+name=splice4 type=Splice offset=[-1,0,1] input=1024 output=3072
+name=tdnn5 type=NaturalGradientAffineComponent input=3072 output=1024
+name=relu5 type=RectifiedLinearComponent
+name=renorm5 type=NormalizeComponent
+name=lstm2 type=Lstm input=1024 cell=2048 output=512 discard=8
+name=splice5 type=Splice offset=[-1,0,1] input=512 output=1536
+name=tdnn6 type=NaturalGradientAffineComponent input=1536 output=1024
+name=relu6 type=RectifiedLinearComponent
+name=renorm6 type=NormalizeComponent
+name=splice6 type=Splice offset=[-1,0,1] input=1024 output=3072
+name=tdnn7 type=NaturalGradientAffineComponent input=3072 output=1024
+name=relu7 type=RectifiedLinearComponent
+name=renorm7 type=NormalizeComponent
+name=lstm3 type=Lstm input=1024 cell=2048 output=512 discard=12
+name=output type=NaturalGradientAffineComponent input=512 output=3766
+EOF");
 
+################### lstm example #######################
+#system("cat <<EOF > nnet.proto
+#name=lstm1 type=Lstm input=355 cell=2560 output=768 discard=0
+#name=lstm2 type=Lstm input=768 cell=2560 output=768 discard=0
+#name=lstm3 type=Lstm input=768 cell=2560 output=768 discard=0
+#name=output type=NaturalGradientAffineComponent input=768 output=3766
+#EOF");
 ################### Net conf end ########################
 $model_in=$ARGV[0];
 $model_out=$ARGV[1];
 
-@nodes=split /;/, $lstm_nodes;
-if(@nodes != $lstm_layers)
-{
-  print "Error: layer num and nodes config not match!\n";
-  exit 1;
-}
-
+open PROTO, "<nnet.proto" or die "$!";
 open IN, "<$model_in" or die "$!";
 open OUT, ">$model_out" or die "$!";
 
 print OUT "<Nnet>\n";
 
-# read nnet3 lstm params layer by layer
 $layer_cnt = 0;
-while($layer_cnt < $lstm_layers)
+while($layer_cnt < $NumComponents)
 {
-  @current_nodes = split /\s+/, $nodes[$layer_cnt];
-  $input_dim = $current_nodes[0];
-  $cell_dim = $current_nodes[1];
-  $output_dim = $current_nodes[2];
+  $component = <PROTO>;
+  chomp $component;
+  if($component=~/AffineComponent/) {
+    &parse_affine($component);
+  }
+  elsif($component=~/RectifiedLinearComponent/) {
+    &parse_relu($component);
+  }  
+  elsif($component=~/NormalizeComponen/) {
+    &parse_renorm($component);
+  }
+  elsif($component=~/Splice/) {
+    &parse_splice($component);
+  }
+  elsif($component=~/Lstm/) {
+    &parse_lstm($component);
+  }else {
+    print "Error: $layer_cnt+1 th Component no support - $component\n";
+    exit 1;
+  }
+  $layer_cnt++;
+}
+
+print OUT "</Nnet>\n";
+print "Success! Converting finished!\n";
+
+sub parse_node {
+  @a = split /=/, $_[0];
+  return $a[1];
+}
+
+sub parse_affine {
+  $find = 0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $output_dim = &parse_node($units[3]);
+
+  @linear_affine=();   # $output_dim * $input_dim;
   
+  while($line=<IN>)
+  {  
+    if($line=~/ComponentName/ && $line=~/AffineComponent/)
+    {
+      $find = 1;
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+        push @linear_affine, @params[1..$input_dim];
+        $cnt++;
+      }
+
+      # write to nnet1 model
+      print OUT "<AffineTransform> $output_dim $input_dim\n";
+      print OUT "<LearnRateCoef> 2.5 <BiasLearnRateCoef> 2.5 <MaxNorm> 0\n";
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        if ($cnt == ($output_dim-1))
+        {
+          print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n"; 
+        $cnt++;
+      }
+
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @affine_bias=();   # 1 * $output_dim; 
+      push @affine_bias, @params[1..$output_dim];
+      print OUT " [ @affine_bias ]\n";
+      last;
+    }
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting  $_[0] finished...\n";
+}
+
+sub parse_relu {
+  $find = 0;
+  
+  while($line=<IN>)
+  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/RectifiedLinearComponent/)
+    {
+      $find = 1;
+      @a = split /\s+/, $line;
+      $dim = $a[4];
+      print OUT "<ReLU> $dim $dim\n";
+      last;
+    }
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting  $_[0] finished...\n";
+}
+
+sub parse_renorm {
+  $find=0;
+  while($line=<IN>)
+  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/NormalizeComponent/)
+    {
+      $find = 1;
+      @a = split /\s+/, $line;
+      $dim = $a[4];
+      $target_rms = $a[6];
+      print OUT "<NormalizeComponent> $dim $dim\n";
+      print OUT "<TargetRms> $target_rms\n";
+      last;
+    }
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting  $_[0] finished...\n";
+}
+sub parse_splice {
+  @units = split /\s+/, $_[0];
+  $offset = &parse_node($units[2]);
+  $input_dim = &parse_node($units[3]);
+  $output_dim = &parse_node($units[4]);
+  print OUT "<Splice> $output_dim $input_dim\n";
+  $offset =~ s/\[(.*)\]/$1/;
+  @splice_idx = split /,/, $offset;
+  print OUT "[ @splice_idx ]\n";
+  
+  print "converting  $_[0] finished...\n";
+}
+
+sub parse_lstm {
+  $find=0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $cell_dim = &parse_node($units[3]);
+  $output_dim = &parse_node($units[4]);
+  $discard = &parse_node($units[5]); 
+
   while($line=<IN>)
   {
     chomp $line;
     if($line=~/ComponentName/ && $line=~/W_all/)
     {
+      $find=1;	    
     # read ifco_x and ifco_r
       @ix=();   # $cell_dim * $input_dim
       @ir=();   # $cell_dim * $output_dim
@@ -89,7 +272,7 @@ while($layer_cnt < $lstm_layers)
 
       ########## write nne1 cifo_x ###########
       print OUT "<LstmProjectedNnet3Streams> $output_dim $input_dim\n";
-      print OUT "<CellDim> $cell_dim <ClipGradient> 5\n";
+      print OUT "<CellDim> $cell_dim <ClipGradient> 5 <DiscardInput> $discard\n";
       print OUT " [\n";
       $cnt = 0;
       while($cnt < $cell_dim)
@@ -268,57 +451,14 @@ while($layer_cnt < $lstm_layers)
       }
       last;
     }
-  } 
-  $layer_cnt++;
-}
-
-# read the final affine layer and write to nnet1
-$line=<IN>;
-$line=<IN>;
-@final_affine=();   # $output_node * $output_dim;
-if($line=~/ComponentName/ && $line=~/output\.affine/)
-{
-  $cnt=0;
-  while($cnt < $output_node)
-  {
-    $line=<IN>;
-    chomp $line;
-    @params=split /\s+/, $line;
-    push @final_affine, @params[1..$output_dim];
-    $cnt++;
   }
-}else
-{
-  print "Error: should be final layer but not!(Now the nnet config must be:n*lstm+final layer)\n";
-}
-
-print OUT "<AffineTransform> $output_node $output_dim\n";
-print OUT "<LearnRateCoef> 2.5 <BiasLearnRateCoef> 2.5 <MaxNorm> 0\n";
-print OUT " [\n";
-$cnt=0;
-while($cnt < $output_node)
-{
-  if ($cnt == ($output_node-1))
-  {
-    print OUT "  @final_affine[$cnt*$output_dim..($cnt+1)*$output_dim-1] ]\n";
-    last;
+  if ($find == 0) {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
   }
-  print OUT "  @final_affine[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n"; 
-  $cnt++;
+  print "converting  $_[0] finished...\n";
 }
 
-$line=<IN>;
-chomp $line;
-@params = split /\s+/, $line;
-shift @params;
-@final_bias=();   # 1 * $output_node; 
-push @final_bias, @params[1..$output_node];
-
-print OUT " [ @final_bias ]\n";
-#print OUT "<!EndOfComponent>\n";
-print OUT "</Nnet>\n";
-#print "@final_affine[0..$output_dim-1]\n@final_affine[$output_dim*($output_node-1)..$output_dim*$output_node-1]\n";
-#print "@final_bias\n";
 close(IN);
 close(OUT);
-
+close(PROTO);

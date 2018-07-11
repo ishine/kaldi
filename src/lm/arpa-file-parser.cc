@@ -108,7 +108,7 @@ void ArpaFileParser::Read(std::istream &is) {
     std::vector<std::string> col;
     SplitStringToVector(current_line_, " \t", true, &col);
     if (col.size() == 4 && col[0] == "ngram" && col[2] == "=") {
-      int32 order, ngram_count = 0;
+      int64 order, ngram_count = 0;
       if (!ConvertStringToInteger(col[1], &order) ||
           !ConvertStringToInteger(col[3], &ngram_count)) {
         PARSE_ERR << "cannot parse ngram count";
@@ -148,7 +148,7 @@ void ArpaFileParser::Read(std::istream &is) {
     }
     KALDI_LOG << "Reading " << current_line_ << " section.";
 
-    int32 ngram_count = 0;
+    int64 ngram_count = 0;
     while (++line_number_, getline(is, current_line_) && !is.eof()) {
       if (current_line_.find_first_not_of(" \n\t\r") == std::string::npos) {
         continue;
@@ -202,7 +202,7 @@ void ArpaFileParser::Read(std::istream &is) {
       ngram.words.resize(cur_order);
       bool skip_ngram = false;
       for (int32 index = 0; !skip_ngram && index < cur_order; ++index) {
-        int32 word;
+        int64 word;
         if (symbols_) {
           // Symbol table provided, so symbol labels are expected.
           if (options_.oov_handling == ArpaParseOptions::kAddToSymbols) {

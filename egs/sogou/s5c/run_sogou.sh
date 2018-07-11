@@ -9,7 +9,7 @@
 . path.sh
 set -e # exit on error
 
-stage=9
+stage=1
 train_nn_stage=12
 train_LM=false
 # Prepare sogou Acoustic data and Language data first:
@@ -37,7 +37,7 @@ if [ $stage -le 1 ]; then
       data/lang $LM data/local/dict/lexicon.txt data/lang_nosp_sw1_tg
   fi
 fi
-
+exit 1;
 # Now make MFCC features.
 # mfccdir should be some place with a largish disk where you
 # want to store MFCC features.

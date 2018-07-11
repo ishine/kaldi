@@ -12,8 +12,9 @@ set -e
 . cmd.sh
 
 
-stage=0
-train_stage=-10 # can be used to start training in the middle.
+stage=4
+#train_stage=-10 # can be used to start training in the middle.
+train_stage=676 # can be used to start training in the middle.
 get_egs_stage=-10
 use_gpu=true  # for training
 cleanup=false  # run with --cleanup true --stage 6 to clean up (remove large things like denlats,
@@ -30,8 +31,8 @@ extra_right_context_final=0
 . ./path.sh
 . ./utils/parse_options.sh
 
-srcdir=exp/chain/lstm_6j_offline_1024_256_sogoufeat_7000h_ld5
-train_data_dir=data/train_sogou_fbank_500h
+srcdir=exp/chain/tdnn_lstm_1c_LFR_noLD_60M_4w5
+train_data_dir=data/train_sogou_fbank_1000h_4dt
 online_ivector_dir=
 degs_dir=                     # If provided, will skip the degs directory creation
 lats_dir=                     # If provided, will skip denlats creation
@@ -50,7 +51,7 @@ frames_overlap_per_eg=30
 effective_learning_rate=0.000000125
 max_param_change=1
 num_jobs_nnet=4
-num_epochs=4
+num_epochs=2     # 4 in the original setup, but here we always use fresh data to train the dt model
 regularization_opts="--xent-regularize=0.1 --l2-regularize=0.00005"          # Applicable for providing --xent-regularize and --l2-regularize options
 minibatch_size=64
 
@@ -116,9 +117,9 @@ fi
 if [ $stage -le 1 ]; then
   # hardcode no-GPU for alignment, although you could use GPU [you wouldn't
   # get excellent GPU utilization though.]
-  nj=40 # have a high number of jobs because this could take a while, and we might
+  nj=160 # have a high number of jobs because this could take a while, and we might
          # have some stragglers.
-  steps/nnet3/align.sh  --cmd "$decode_cmd" --use-gpu false \
+  steps/nnet3/align.sh  --cmd "$decode_only_cmd" --use-gpu false \
     $context_opts \
     --scale-opts "--transition-scale=1.0 --acoustic-scale=1.0 --self-loop-scale=1.0" \
     --nj $nj $train_data_dir $lang $srcdir ${srcdir}_ali${affix}
@@ -127,15 +128,15 @@ fi
 if [ -z "$lats_dir" ]; then
   lats_dir=${srcdir}_denlats${affix}
   if [ $stage -le 2 ]; then
-    nj=40
+    nj=50
     # this doesn't really affect anything strongly, except the num-jobs for one of
     # the phases of get_egs_discriminative.sh below.
-    num_threads_denlats=2
-    subsplit=20 # number of jobs that run per job (but 2 run at a time, so total jobs is 80, giving
+    num_threads_denlats=1
+    subsplit=70 # number of jobs that run per job (but 2 run at a time, so total jobs is 80, giving
     # total slots = 80 * 6 = 480.
-    steps/nnet3/make_denlats.sh --cmd "$decode_cmd" \
+    steps/nnet3/make_denlats.sh --cmd "$decode_only_cmd" \
       --self-loop-scale 1.0 --acwt 1.0 --determinize true $context_opts \
-      --nj $nj --sub-split $subsplit --num-threads "$num_threads_denlats" --config conf/decode.config \
+      --nj $nj --sub-split $subsplit --num-threads $num_threads_denlats --config conf/decode.config \
       $train_data_dir $lang $srcdir ${lats_dir} ;
   fi
 fi
@@ -169,7 +170,10 @@ if [ -z "$degs_dir" ]; then
       $train_data_dir $lang ${srcdir}_ali${affix} $lats_dir $srcdir/final.mdl $degs_dir ;
   fi
 fi
+
 ###################  adjust params ##################
+degs_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/tdnn_lstm_1c_LFR_noLD_60M_4w5_degs_fs
+echo "decode_cmd "$decode_cmd"";
 if [ $stage -le 4 ]; then
   steps/nnet3/train_discriminative.sh --cmd "$decode_cmd" \
     --stage $train_stage \
@@ -177,12 +181,12 @@ if [ $stage -le 4 ]; then
     --criterion $criterion --drop-frames true --acoustic-scale 1.0 \
     --num-epochs $num_epochs --one-silence-class $one_silence_class --minibatch-size $minibatch_size \
     --num-jobs-nnet $num_jobs_nnet --num-threads $num_threads \
-    --keep-model-iters 50 \
+    --keep-model-iters 25 \
     --regularization-opts "$regularization_opts" --use-frame-shift false \
       ${degs_dir} $dir ;
 fi
-exit 1;
-graph_dir=$srcdir/graph_offline
+
+graph_dir=exp/chain/tdnn_lstm_1c_LFR_noLD_60M_4w5/graph_0528
 if [ $stage -le 5 ]; then
   for x in `seq $decode_start_epoch $num_epochs`; do
     for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
