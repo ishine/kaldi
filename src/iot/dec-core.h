@@ -246,7 +246,7 @@ class DecCore {
   // inserts a new, empty token (i.e. with no forward links) for the current
   // frame.  [note: it's inserted if necessary into hash toks_ and also into the
   // singly linked list of tokens active on this frame (whose head is at
-  // token_net_[frame]).  The frame_plus_one argument is the acoustic frame
+  // token_net_[t]).  The 't' argument is the acoustic frame
   // index plus one, which is used to index into the token_net_ array.
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.

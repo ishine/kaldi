@@ -296,24 +296,18 @@ void DecCore::PossiblyResizeHash(size_t num_toks) {
   }
 }
 
-// FindOrAddToken either locates a token in hash of toks_,
-// or if necessary inserts a new, empty token (i.e. with no forward links)
-// for the current frame.  [note: it's inserted if necessary into hash toks_
-// and also into the singly linked list of tokens active on this frame
-// (whose head is at token_net_[frame]).
+
 inline DecCore::Token *DecCore::FindOrAddToken(
     StateId state, int32 t, BaseFloat total_cost,
     Token *backpointer, bool *changed) {
-  // Returns the Token pointer.  Sets "changed" (if non-NULL) to true
-  // if the token was newly created or the cost changed.
+
   KALDI_ASSERT(t < token_net_.size());
   Token *&toks = token_net_[t].toks;
   Elem *e_found = toks_.Find(state);
-  if (e_found == NULL) {  // no such token presently.
+  if (e_found == NULL) {
     const BaseFloat extra_cost = 0.0;
     // tokens on the currently final frame have zero extra_cost
-    // as any of them could end up
-    // on the winning path.
+    // as any of them could end up on the winning path.
     Token *new_tok = NewToken(total_cost, extra_cost, NULL, toks, backpointer);
     // NULL: no forward links yet
     toks = new_tok;
@@ -322,7 +316,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(
     if (changed) *changed = true;
     return new_tok;
   } else {
-    Token *tok = e_found->val;  // There is an existing Token for this state.
+    Token *tok = e_found->val;
     if (tok->total_cost > total_cost) {  // replace old token
       tok->total_cost = total_cost;
       tok->backpointer = backpointer;
@@ -341,18 +335,10 @@ inline DecCore::Token *DecCore::FindOrAddToken(
   }
 }
 
-// prunes outgoing links for all tokens in token_net_[frame]
-// it's called by PruneTokenNet
-// all links, that have link_extra_cost > lattice_beam are pruned
+
 void DecCore::PruneForwardLinks(
     int32 t, bool *extra_costs_changed,
     bool *links_pruned, BaseFloat delta) {
-  // delta is the amount by which the extra_costs must change
-  // If delta is larger,  we'll tend to go back less far
-  //    toward the beginning of the file.
-  // extra_costs_changed is set to true if extra_cost was changed for any token
-  // links_pruned is set to true if any link in any token was pruned
-
   *extra_costs_changed = false;
   *links_pruned = false;
   KALDI_ASSERT(t >= 0 && t < token_net_.size());
@@ -417,9 +403,7 @@ void DecCore::PruneForwardLinks(
   } // while changed
 }
 
-// PruneForwardLinksFinal is a version of PruneForwardLinks that we call
-// on the final frame.  If there are final tokens active, it uses
-// the final-probs for pruning, otherwise it treats all tokens as final.
+
 void DecCore::PruneForwardLinksFinal() {
   KALDI_ASSERT(!token_net_.empty());
   int32 end_time = NumFramesDecoded();
@@ -518,10 +502,6 @@ BaseFloat DecCore::FinalRelativeCost() const {
 }
 
 
-// Prune away any tokens on this frame that have no forward links.
-// [we don't do this in PruneForwardLinks because it would give us
-// a problem with dangling pointers].
-// It's called by PruneTokenNet if any forward links have been pruned
 void DecCore::PruneTokenList(int32 t) {
   KALDI_ASSERT(t >= 0 && t < token_net_.size());
   Token *&toks = token_net_[t].toks;
@@ -531,33 +511,24 @@ void DecCore::PruneTokenList(int32 t) {
   for (tok = toks; tok != NULL; tok = next_tok) {
     next_tok = tok->next;
     if (tok->extra_cost == std::numeric_limits<BaseFloat>::infinity()) {
-      // token is unreachable from end of graph; (no forward links survived)
-      // excise tok from list and delete tok.
+      // token is unreachable from end of graph
       if (prev_tok != NULL) prev_tok->next = tok->next;
       else toks = tok->next;
       DeleteToken(tok);
       num_toks_--;
-    } else {  // fetch next Token
+    } else {
       prev_tok = tok;
     }
   }
 }
 
-// Go backwards through still-alive tokens, pruning them, starting not from
-// the current frame (where we want to keep all tokens) but from the frame before
-// that.  We go backwards through the frames and stop when we reach a point
-// where the delta-costs are not changing (and the delta controls when we consider
-// a cost to have "not changed").
+
 void DecCore::PruneTokenNet(BaseFloat delta) {
   int32 cur_time = NumFramesDecoded();
   int32 num_toks_begin = num_toks_;
-  // The index "f" below represents a "frame plus one", i.e. you'd have to subtract
-  // one to get the corresponding index for the decodable object.
+
   for (int32 t = cur_time - 1; t >= 0; t--) {
-    // Reason why we need to prune forward links in this situation:
-    // (1) we have never pruned them (new TokenList)
-    // (2) we have not yet pruned the forward links to the next f,
-    // after any of those tokens have changed their extra_cost.
+
     if (token_net_[t].must_prune_forward_links) {
       bool extra_costs_changed = false, links_pruned = false;
       PruneForwardLinks(t, &extra_costs_changed, &links_pruned, delta);
