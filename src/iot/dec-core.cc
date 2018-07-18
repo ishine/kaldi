@@ -302,12 +302,12 @@ void DecCore::PossiblyResizeHash(size_t num_toks) {
 // and also into the singly linked list of tokens active on this frame
 // (whose head is at token_net_[frame]).
 inline DecCore::Token *DecCore::FindOrAddToken(
-    StateId state, int32 frame_plus_one, BaseFloat total_cost,
+    StateId state, int32 t, BaseFloat total_cost,
     Token *backpointer, bool *changed) {
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true
   // if the token was newly created or the cost changed.
-  KALDI_ASSERT(frame_plus_one < token_net_.size());
-  Token *&toks = token_net_[frame_plus_one].toks;
+  KALDI_ASSERT(t < token_net_.size());
+  Token *&toks = token_net_[t].toks;
   Elem *e_found = toks_.Find(state);
   if (e_found == NULL) {  // no such token presently.
     const BaseFloat extra_cost = 0.0;
@@ -345,7 +345,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(
 // it's called by PruneTokenNet
 // all links, that have link_extra_cost > lattice_beam are pruned
 void DecCore::PruneForwardLinks(
-    int32 frame_plus_one, bool *extra_costs_changed,
+    int32 t, bool *extra_costs_changed,
     bool *links_pruned, BaseFloat delta) {
   // delta is the amount by which the extra_costs must change
   // If delta is larger,  we'll tend to go back less far
@@ -355,8 +355,8 @@ void DecCore::PruneForwardLinks(
 
   *extra_costs_changed = false;
   *links_pruned = false;
-  KALDI_ASSERT(frame_plus_one >= 0 && frame_plus_one < token_net_.size());
-  if (token_net_[frame_plus_one].toks == NULL) {  // empty list; should not happen.
+  KALDI_ASSERT(t >= 0 && t < token_net_.size());
+  if (token_net_[t].toks == NULL) {  // empty list; should not happen.
     if (!warned_) {
       KALDI_WARN << "No tokens alive [doing pruning].. warning first "
           "time only for each utterance\n";
@@ -369,7 +369,7 @@ void DecCore::PruneForwardLinks(
   bool changed = true;  // difference new minus old extra cost >= delta ?
   while (changed) {
     changed = false;
-    for (Token *tok = token_net_[frame_plus_one].toks;
+    for (Token *tok = token_net_[t].toks;
          tok != NULL; tok = tok->next) {
       ForwardLink *link, *prev_link = NULL;
       // will recompute tok_extra_cost for tok.
@@ -422,16 +422,16 @@ void DecCore::PruneForwardLinks(
 // the final-probs for pruning, otherwise it treats all tokens as final.
 void DecCore::PruneForwardLinksFinal() {
   KALDI_ASSERT(!token_net_.empty());
-  int32 frame_plus_one = token_net_.size() - 1;
+  int32 end_time = NumFramesDecoded();
 
-  if (token_net_[frame_plus_one].toks == NULL )  // empty list; should not happen.
+  if (token_net_[end_time].toks == NULL )  // empty list; should not happen.
     KALDI_WARN << "No tokens alive at end of file\n";
 
   typedef unordered_map<Token*, BaseFloat>::const_iterator IterType;
   ComputeFinalCosts(&final_costs_, &final_relative_cost_, &final_best_cost_);
   decoding_finalized_ = true;
   // We call DeleteElems() as a nicety, not because it's really necessary;
-  // otherwise there would be a time, after calling PruneTokensForFrame() on the
+  // otherwise there would be a time, after calling PruneTokenList() on the
   // final frame, when toks_.GetList() or toks_.Clear() would contain pointers
   // to nonexistent tokens.
   DeleteElems(toks_.Clear());
@@ -444,7 +444,7 @@ void DecCore::PruneForwardLinksFinal() {
   BaseFloat delta = 1.0e-05;
   while (changed) {
     changed = false;
-    for (Token *tok = token_net_[frame_plus_one].toks;
+    for (Token *tok = token_net_[end_time].toks;
          tok != NULL; tok = tok->next) {
       ForwardLink *link, *prev_link = NULL;
       // will recompute tok_extra_cost.  It has a term in it that corresponds
@@ -495,7 +495,7 @@ void DecCore::PruneForwardLinksFinal() {
       // an extra component relating to the final-prob.
       if (tok_extra_cost > config_.lattice_beam)
         tok_extra_cost = std::numeric_limits<BaseFloat>::infinity();
-      // to be pruned in PruneTokensForFrame
+      // to be pruned in PruneTokenList
 
       if (!ApproxEqual(tok->extra_cost, tok_extra_cost, delta))
         changed = true;
@@ -522,9 +522,9 @@ BaseFloat DecCore::FinalRelativeCost() const {
 // [we don't do this in PruneForwardLinks because it would give us
 // a problem with dangling pointers].
 // It's called by PruneTokenNet if any forward links have been pruned
-void DecCore::PruneTokensForFrame(int32 frame_plus_one) {
-  KALDI_ASSERT(frame_plus_one >= 0 && frame_plus_one < token_net_.size());
-  Token *&toks = token_net_[frame_plus_one].toks;
+void DecCore::PruneTokenList(int32 t) {
+  KALDI_ASSERT(t >= 0 && t < token_net_.size());
+  Token *&toks = token_net_[t].toks;
   if (toks == NULL)
     KALDI_WARN << "No tokens alive [doing pruning]\n";
   Token *tok, *next_tok, *prev_tok = NULL;
@@ -549,28 +549,29 @@ void DecCore::PruneTokensForFrame(int32 frame_plus_one) {
 // where the delta-costs are not changing (and the delta controls when we consider
 // a cost to have "not changed").
 void DecCore::PruneTokenNet(BaseFloat delta) {
-  int32 cur_frame_plus_one = NumFramesDecoded();
+  int32 cur_time = NumFramesDecoded();
   int32 num_toks_begin = num_toks_;
   // The index "f" below represents a "frame plus one", i.e. you'd have to subtract
   // one to get the corresponding index for the decodable object.
-  for (int32 f = cur_frame_plus_one - 1; f >= 0; f--) {
+  for (int32 t = cur_time - 1; t >= 0; t--) {
     // Reason why we need to prune forward links in this situation:
     // (1) we have never pruned them (new TokenList)
     // (2) we have not yet pruned the forward links to the next f,
     // after any of those tokens have changed their extra_cost.
-    if (token_net_[f].must_prune_forward_links) {
+    if (token_net_[t].must_prune_forward_links) {
       bool extra_costs_changed = false, links_pruned = false;
-      PruneForwardLinks(f, &extra_costs_changed, &links_pruned, delta);
-      if (extra_costs_changed && f > 0) // any token has changed extra_cost
-        token_net_[f-1].must_prune_forward_links = true;
-      if (links_pruned) // any link was pruned
-        token_net_[f].must_prune_tokens = true;
-      token_net_[f].must_prune_forward_links = false; // job done
+      PruneForwardLinks(t, &extra_costs_changed, &links_pruned, delta);
+      if (extra_costs_changed && t > 0) {
+        token_net_[t-1].must_prune_forward_links = true;
+      }
+      if (links_pruned) {
+        token_net_[t].must_prune_tokens = true;
+      }
+      token_net_[t].must_prune_forward_links = false;
     }
-    if (f+1 < cur_frame_plus_one &&      // except for last f (no forward links)
-        token_net_[f+1].must_prune_tokens) {
-      PruneTokensForFrame(f+1);
-      token_net_[f+1].must_prune_tokens = false;
+    if (t != cur_time - 1 && token_net_[t+1].must_prune_tokens) {
+      PruneTokenList(t+1);
+      token_net_[t+1].must_prune_tokens = false;
     }
   }
   KALDI_VLOG(4) << "PruneTokenNet: pruned tokens from " << num_toks_begin
@@ -736,18 +737,18 @@ void DecCore::AdvanceDecoding(DecodableInterface *decodable,
 // (optionally) on the final frame.  Takes into account the final-prob of
 // tokens.  This function used to be called PruneTokenNetFinal().
 void DecCore::FinalizeDecoding() {
-  int32 final_frame_plus_one = NumFramesDecoded();
+  int32 end_time = NumFramesDecoded();
   int32 num_toks_begin = num_toks_;
   // PruneForwardLinksFinal() prunes final frame (with final-probs), and
   // sets decoding_finalized_.
   PruneForwardLinksFinal();
-  for (int32 f = final_frame_plus_one - 1; f >= 0; f--) {
+  for (int32 t = end_time - 1; t >= 0; t--) {
     bool b1, b2; // values not used.
     BaseFloat dontcare = 0.0; // delta of zero means we must always update
-    PruneForwardLinks(f, &b1, &b2, dontcare);
-    PruneTokensForFrame(f + 1);
+    PruneForwardLinks(t, &b1, &b2, dontcare);
+    PruneTokenList(t + 1);
   }
-  PruneTokensForFrame(0);
+  PruneTokenList(0);
   KALDI_VLOG(4) << "pruned tokens from " << num_toks_begin
                 << " to " << num_toks_;
 }

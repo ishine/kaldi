@@ -250,22 +250,9 @@ class DecCore {
   // index plus one, which is used to index into the token_net_ array.
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.
-  inline Token *FindOrAddToken(StateId state, int32 frame_plus_one,
+  inline Token *FindOrAddToken(StateId state, int32 t,
                                BaseFloat total_cost, Token *backpointer,
                                bool *changed);
-
-  // prunes outgoing links for all tokens in token_net_[frame]
-  // it's called by PruneTokenNet
-  // all links, that have link_extra_cost > lattice_beam are pruned
-  // delta is the amount by which the extra_costs must change
-  // before we set *extra_costs_changed = true.
-  // If delta is larger,  we'll tend to go back less far
-  //    toward the beginning of the file.
-  // extra_costs_changed is set to true if extra_cost was changed for any token
-  // links_pruned is set to true if any link in any token was pruned
-  void PruneForwardLinks(int32 frame_plus_one, bool *extra_costs_changed,
-                         bool *links_pruned,
-                         BaseFloat delta);
 
   // This function computes the final-costs for tokens active on the final
   // frame.  It outputs to final-costs, if non-NULL, a map from the Token*
@@ -287,17 +274,25 @@ class DecCore {
                          BaseFloat *final_relative_cost,
                          BaseFloat *final_best_cost) const;
 
+  // prunes outgoing links for all tokens in token_net_[t]
+  // it's called by PruneTokenNet
+  // all links, that have link_extra_cost > lattice_beam are pruned
+  // delta is the amount by which the extra_costs must change
+  // before we set *extra_costs_changed = true.
+  // If delta is larger,  we'll tend to go back less far
+  //    toward the beginning of the file.
+  // extra_costs_changed is set to true if extra_cost was changed for any token
+  // links_pruned is set to true if any link in any token was pruned
+  void PruneForwardLinks(int32 t, bool *extra_costs_changed,
+                         bool *links_pruned,
+                         BaseFloat delta);
+
   // PruneForwardLinksFinal is a version of PruneForwardLinks that we call
   // on the final frame.  If there are final tokens active, it uses
   // the final-probs for pruning, otherwise it treats all tokens as final.
   void PruneForwardLinksFinal();
 
-  // Prune away any tokens on this frame that have no forward links.
-  // [we don't do this in PruneForwardLinks because it would give us
-  // a problem with dangling pointers].
-  // It's called by PruneTokenNet if any forward links have been pruned
-  void PruneTokensForFrame(int32 frame_plus_one);
-
+  void PruneTokenList(int32 t);
 
   // Go backwards through still-alive tokens, pruning them if the
   // forward+backward cost is more than lat_beam away from the best path.  It's
