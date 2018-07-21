@@ -136,20 +136,20 @@ class DecCore {
   struct Token;
 
   struct ForwardLink {
-    Token *next_tok; // the next token [or NULL if represents final-state]
+    Token *dst_tok; // the next token [or NULL if represents final-state]
     Label ilabel;
     Label olabel;
     BaseFloat graph_cost; // graph cost of traversing link (contains LM, etc.)
     BaseFloat acoustic_cost; // acoustic cost (pre-scaled) of traversing link
     ForwardLink *next;
 
-    inline ForwardLink(Token *next_tok,
+    inline ForwardLink(Token *dst_tok,
                        Label ilabel,
                        Label olabel,
                        BaseFloat graph_cost,
                        BaseFloat acoustic_cost,
                        ForwardLink *next) :
-      next_tok(next_tok),
+      dst_tok(dst_tok),
       ilabel(ilabel),
       olabel(olabel),
       graph_cost(graph_cost),
@@ -160,15 +160,14 @@ class DecCore {
     inline ~ForwardLink() { }
   };
 
-  inline ForwardLink* NewLink(Token *next_tok,
+  inline ForwardLink* NewLink(Token *dst_tok,
                               Label ilabel,
                               Label olabel,
                               BaseFloat graph_cost,
                               BaseFloat acoustic_cost,
                               ForwardLink *next) {
     ForwardLink *link = (ForwardLink*)link_pool_->MallocElem();
-    // placement new
-    new (link) ForwardLink(next_tok, ilabel, olabel, graph_cost, acoustic_cost, next);
+    new (link) ForwardLink(dst_tok, ilabel, olabel, graph_cost, acoustic_cost, next); // placement new
     return link;
   }
 

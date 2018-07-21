@@ -162,7 +162,7 @@ bool DecCore::GetRawLattice(Lattice *ofst, bool use_final_probs) const {
            l != NULL;
            l = l->next) {
         unordered_map<Token*, StateId>::const_iterator iter =
-            tok_map.find(l->next_tok);
+            tok_map.find(l->dst_tok);
         StateId nextstate = iter->second;
         KALDI_ASSERT(iter != tok_map.end());
         BaseFloat cost_offset = 0.0;
@@ -255,16 +255,16 @@ bool DecCore::GetRawLatticePruned(
     for (ForwardLink *l = cur_tok->links;
          l != NULL;
          l = l->next) {
-      Token *next_tok = l->next_tok;
-      if (next_tok->extra_cost < beam) {
+      Token *dst_tok = l->dst_tok;
+      if (dst_tok->extra_cost < beam) {
         // so both the current and the next token are good; create the arc
         int32 next_frame = l->ilabel == 0 ? cur_frame : cur_frame + 1;
         StateId nextstate;
-        if (tok_map.find(next_tok) == tok_map.end()) {
-          nextstate = tok_map[next_tok] = ofst->AddState();
-          tok_queue.push(std::pair<Token*, int32>(next_tok, next_frame));
+        if (tok_map.find(dst_tok) == tok_map.end()) {
+          nextstate = tok_map[dst_tok] = ofst->AddState();
+          tok_queue.push(std::pair<Token*, int32>(dst_tok, next_frame));
         } else {
-          nextstate = tok_map[next_tok];
+          nextstate = tok_map[dst_tok];
         }
         BaseFloat cost_offset = (l->ilabel != 0 ? cost_offsets_[cur_frame] : 0);
         Arc arc(l->ilabel, l->olabel,
@@ -363,10 +363,10 @@ void DecCore::PruneForwardLinks(
       // tok_extra_cost is the best (min) of link_extra_cost of outgoing links
       for (link = tok->links; link != NULL; ) {
         // See if we need to excise this link...
-        Token *next_tok = link->next_tok;
-        BaseFloat link_extra_cost = next_tok->extra_cost +
+        Token *dst_tok = link->dst_tok;
+        BaseFloat link_extra_cost = dst_tok->extra_cost +
             ((tok->total_cost + link->acoustic_cost + link->graph_cost)
-             - next_tok->total_cost);  // difference in brackets is >= 0
+             - dst_tok->total_cost);  // difference in brackets is >= 0
         // link_exta_cost is the difference in score between the best paths
         // through link source state and through link destination state
         KALDI_ASSERT(link_extra_cost == link_extra_cost);  // check for NaN
@@ -451,10 +451,10 @@ void DecCore::PruneForwardLinksFinal() {
       // decrease its value:
       for (link = tok->links; link != NULL; ) {
         // See if we need to excise this link...
-        Token *next_tok = link->next_tok;
-        BaseFloat link_extra_cost = next_tok->extra_cost +
+        Token *dst_tok = link->dst_tok;
+        BaseFloat link_extra_cost = dst_tok->extra_cost +
             ((tok->total_cost + link->acoustic_cost + link->graph_cost)
-             - next_tok->total_cost);
+             - dst_tok->total_cost);
         if (link_extra_cost > config_.lattice_beam) {  // excise link
           ForwardLink *next_link = link->next;
           if (prev_link != NULL) prev_link->next = next_link;
@@ -652,7 +652,7 @@ DecCore::BestPathIterator DecCore::TraceBackBestPath(
     ForwardLink *link;
     for (link = tok->backpointer->links;
          link != NULL; link = link->next) {
-      if (link->next_tok == tok) { // this is the link to "tok"
+      if (link->dst_tok == tok) { // this is the link to "tok"
         oarc->ilabel = link->ilabel;
         oarc->olabel = link->olabel;
         BaseFloat graph_cost = link->graph_cost,
@@ -870,12 +870,11 @@ BaseFloat DecCore::ProcessEmitting(
             next_cutoff = total_cost + adaptive_beam; // prune by best current token
           // Note: the frame indexes into token_net_ are one-based,
           // hence the + 1.
-          Token *next_tok = FindOrAddToken(arc.dst, frame + 1, total_cost, tok, NULL);
+          Token *dst_tok = FindOrAddToken(arc.dst, frame + 1, total_cost, tok, NULL);
           // NULL: no change indicator needed
 
-          // Add ForwardLink from tok to next_tok (put on head of list tok->links)
-          tok->links = NewLink(next_tok, arc.ilabel, arc.olabel,
-                                       graph_cost, ac_cost, tok->links);
+          // Add ForwardLink from tok to dst_tok (put on head of list tok->links)
+          tok->links = NewLink(dst_tok, arc.ilabel, arc.olabel, graph_cost, ac_cost, tok->links);
         }
       } // for all arcs
     }
@@ -996,13 +995,13 @@ void DecCore::TopSortTokens(Token *tok_list, std::vector<Token*> *topsorted_list
         // We only need to consider epsilon links, since non-epsilon links
         // transition between frames and this function only needs to sort a list
         // of tokens from a single frame.
-        IterType following_iter = token2pos.find(link->next_tok);
+        IterType following_iter = token2pos.find(link->dst_tok);
         if (following_iter != token2pos.end()) { // another token on this frame,
                                                  // so must consider it.
           int32 next_pos = following_iter->second;
           if (next_pos < pos) { // reassign the position of the next Token.
             following_iter->second = cur_pos++;
-            reprocess.insert(link->next_tok);
+            reprocess.insert(link->dst_tok);
           }
         }
       }
@@ -1027,12 +1026,12 @@ void DecCore::TopSortTokens(Token *tok_list, std::vector<Token*> *topsorted_list
       // Repeat the processing we did above (for comments, see above).
       for (ForwardLink *link = tok->links; link != NULL; link = link->next) {
         if (link->ilabel == 0) {
-          IterType following_iter = token2pos.find(link->next_tok);
+          IterType following_iter = token2pos.find(link->dst_tok);
           if (following_iter != token2pos.end()) {
             int32 next_pos = following_iter->second;
             if (next_pos < pos) {
               following_iter->second = cur_pos++;
-              reprocess.insert(link->next_tok);
+              reprocess.insert(link->dst_tok);
             }
           }
         }
