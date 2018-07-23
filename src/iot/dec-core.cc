@@ -489,18 +489,6 @@ void DecCore::PruneForwardLinksFinal() {
 
 }
 
-BaseFloat DecCore::FinalRelativeCost() const {
-  if (!decoding_finalized_) {
-    BaseFloat relative_cost;
-    ComputeFinalCosts(NULL, &relative_cost, NULL);
-    return relative_cost;
-  } else {
-    // we're not allowed to call that function if FinalizeDecoding() has
-    // been called; return a cached value.
-    return final_relative_cost_;
-  }
-}
-
 
 void DecCore::PruneTokenList(int32 t) {
   KALDI_ASSERT(t >= 0 && t < token_net_.size());
@@ -547,6 +535,19 @@ void DecCore::PruneTokenNet(BaseFloat delta) {
   }
   KALDI_VLOG(4) << "PruneTokenNet: pruned tokens from " << num_toks_begin
                 << " to " << num_toks_;
+}
+
+
+BaseFloat DecCore::FinalRelativeCost() const {
+  if (!decoding_finalized_) {
+    BaseFloat relative_cost;
+    ComputeFinalCosts(NULL, &relative_cost, NULL);
+    return relative_cost;
+  } else {
+    // we're not allowed to call that function if FinalizeDecoding() has
+    // been called; return a cached value.
+    return final_relative_cost_;
+  }
 }
 
 
@@ -651,8 +652,7 @@ DecCore::BestPathIterator DecCore::TraceBackBestPath(
   int32 cur_t = iter.frame, ret_t = cur_t;
   if (tok->backpointer != NULL) {
     ForwardLink *link;
-    for (link = tok->backpointer->links;
-         link != NULL; link = link->next) {
+    for (link = tok->backpointer->links; link != NULL; link = link->next) {
       if (link->dst_tok == tok) { // this is the link to "tok"
         oarc->ilabel = link->ilabel;
         oarc->olabel = link->olabel;

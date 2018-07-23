@@ -92,18 +92,6 @@ class DecCore {
   typedef Arc::StateId StateId;
   typedef Arc::Weight Weight;
 
-  struct BestPathIterator {
-    void *tok;
-    int32 frame;
-    // note, "frame" is the frame-index of the frame you'll get the
-    // transition-id for next time, if you call TraceBackBestPath on this
-    // iterator (assuming it's not an epsilon transition).  Note that this
-    // is one less than you might reasonably expect, e.g. it's -1 for
-    // the nonemitting transitions before the first frame.
-    BestPathIterator(void *t, int32 f): tok(t), frame(f) { }
-    bool Done() { return tok == NULL; }
-  };
-
   DecCore(Wfst *fst, const DecCoreConfig &config);
   ~DecCore();
 
@@ -122,6 +110,18 @@ class DecCore {
   bool ReachedFinal() const {
     return FinalRelativeCost() != std::numeric_limits<BaseFloat>::infinity();
   }
+
+  struct BestPathIterator {
+    void *tok;
+    int32 frame;
+    // note, "frame" is the frame-index of the frame you'll get the
+    // transition-id for next time, if you call TraceBackBestPath on this
+    // iterator (assuming it's not an epsilon transition).  Note that this
+    // is one less than you might reasonably expect, e.g. it's -1 for
+    // the nonemitting transitions before the first frame.
+    BestPathIterator(void *t, int32 f): tok(t), frame(f) { }
+    bool Done() { return tok == NULL; }
+  };
 
   BestPathIterator BestPathEnd(bool use_final_probs, BaseFloat *final_cost = NULL) const;
   BestPathIterator TraceBackBestPath(BestPathIterator iter, LatticeArc *arc) const;
