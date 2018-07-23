@@ -14,7 +14,7 @@ DecCore::DecCore(Wfst *fst, const DecCoreConfig &config):
 
 DecCore::~DecCore() {
   DeleteElems(tok_set_.Clear());
-  ClearActiveTokens();
+  ClearTokenNet();
 
   DELETE(token_pool_);
   DELETE(link_pool_);
@@ -24,7 +24,7 @@ void DecCore::InitDecoding() {
   // clean up from last time:
   DeleteElems(tok_set_.Clear());
   cost_offsets_.clear();
-  ClearActiveTokens();
+  ClearTokenNet();
   warned_ = false;
   num_toks_ = 0;
   decoding_finalized_ = false;
@@ -63,23 +63,191 @@ bool DecCore::Decode(DecodableInterface *decodable) {
 }
 
 
-bool DecCore::TestGetBestPath(bool use_final_probs) const {
-  Lattice lat1;
-  {
-    Lattice raw_lat;
-    GetRawLattice(&raw_lat, use_final_probs);
-    ShortestPath(raw_lat, &lat1);
+void DecCore::AdvanceDecoding(DecodableInterface *decodable,
+                                                   int32 max_num_frames) {
+  KALDI_ASSERT(!token_net_.empty() && !decoding_finalized_ &&
+               "You must call InitDecoding() before AdvanceDecoding");
+  int32 num_frames_ready = decodable->NumFramesReady();
+  // num_frames_ready must be >= num_frames_decoded, or else
+  // the number of frames ready must have decreased (which doesn't
+  // make sense) or the decodable object changed between calls
+  // (which isn't allowed).
+  KALDI_ASSERT(num_frames_ready >= NumFramesDecoded());
+  int32 target_frames_decoded = num_frames_ready;
+  if (max_num_frames >= 0)
+    target_frames_decoded = std::min(target_frames_decoded,
+                                     NumFramesDecoded() + max_num_frames);
+  while (NumFramesDecoded() < target_frames_decoded) {
+    if (NumFramesDecoded() % config_.prune_interval == 0) {
+      PruneTokenNet(config_.lattice_beam * config_.prune_scale);
+    }
+    // note: ProcessEmitting() increments NumFramesDecoded().
+    BaseFloat cost_cutoff = ProcessEmitting(decodable);
+    ProcessNonemitting(cost_cutoff);
   }
-  Lattice lat2;
-  GetBestPath(&lat2, use_final_probs);  
-  BaseFloat delta = 0.1;
-  int32 num_paths = 1;
-  if (!fst::RandEquivalent(lat1, lat2, num_paths, delta, rand())) {
-    KALDI_WARN << "Best-path test failed";
-    return false;
+}
+
+
+// FinalizeDecoding() is a version of PruneTokenNet that we call
+// (optionally) on the final frame.  Takes into account the final-prob of
+// tokens.  This function used to be called PruneTokenNetFinal().
+void DecCore::FinalizeDecoding() {
+  int32 end_time = NumFramesDecoded();
+  int32 num_toks_begin = num_toks_;
+  // PruneForwardLinksFinal() prunes final frame (with final-probs), and
+  // sets decoding_finalized_.
+  PruneForwardLinksFinal();
+  for (int32 t = end_time - 1; t >= 0; t--) {
+    bool b1, b2; // values not used.
+    BaseFloat dontcare = 0.0; // delta of zero means we must always update
+    PruneForwardLinks(t, &b1, &b2, dontcare);
+    PruneTokenList(t + 1);
+  }
+  PruneTokenList(0);
+  KALDI_VLOG(4) << "pruned tokens from " << num_toks_begin
+                << " to " << num_toks_;
+}
+
+
+BaseFloat DecCore::FinalRelativeCost() const {
+  if (!decoding_finalized_) {
+    BaseFloat relative_cost;
+    ComputeFinalCosts(NULL, &relative_cost, NULL);
+    return relative_cost;
   } else {
-    return true;
+    // we're not allowed to call that function if FinalizeDecoding() has
+    // been called; return a cached value.
+    return final_relative_cost_;
   }
+}
+
+
+void DecCore::ComputeFinalCosts(
+    unordered_map<Token*, BaseFloat> *final_costs,
+    BaseFloat *final_relative_cost,
+    BaseFloat *final_best_cost) const {
+  KALDI_ASSERT(!decoding_finalized_);
+  if (final_costs != NULL)
+    final_costs->clear();
+  const Elem *final_toks = tok_set_.GetList();
+  BaseFloat infinity = std::numeric_limits<BaseFloat>::infinity();
+  BaseFloat best_cost = infinity,
+      best_cost_with_final = infinity;
+  while (final_toks != NULL) {
+    StateId state = final_toks->key;
+    Token *tok = final_toks->val;
+    const Elem *next = final_toks->tail;
+    BaseFloat final_cost = fst_->Final(state);
+    BaseFloat cost = tok->total_cost,
+        cost_with_final = cost + final_cost;
+    best_cost = std::min(cost, best_cost);
+    best_cost_with_final = std::min(cost_with_final, best_cost_with_final);
+    if (final_costs != NULL && final_cost != infinity)
+      (*final_costs)[tok] = final_cost;
+    final_toks = next;
+  }
+  if (final_relative_cost != NULL) {
+    if (best_cost == infinity && best_cost_with_final == infinity) {
+      // Likely this will only happen if there are no tokens surviving.
+      // This seems the least bad way to handle it.
+      *final_relative_cost = infinity;
+    } else {
+      *final_relative_cost = best_cost_with_final - best_cost;
+    }
+  }
+  if (final_best_cost != NULL) {
+    if (best_cost_with_final != infinity) { // final-state exists.
+      *final_best_cost = best_cost_with_final;
+    } else { // no final-state exists.
+      *final_best_cost = best_cost;
+    }
+  }
+}
+
+
+DecCore::BestPathIterator DecCore::BestPathEnd(
+    bool use_final_probs,
+    BaseFloat *final_cost_out) const {
+  if (decoding_finalized_ && !use_final_probs)
+    KALDI_ERR << "You cannot call FinalizeDecoding() and then call "
+              << "BestPathEnd() with use_final_probs == false";
+  KALDI_ASSERT(NumFramesDecoded() > 0 &&
+               "You cannot call BestPathEnd if no frames were decoded.");
+  
+  unordered_map<Token*, BaseFloat> final_costs_local;
+
+  const unordered_map<Token*, BaseFloat> &final_costs =
+      (decoding_finalized_ ? final_costs_ : final_costs_local);
+  if (!decoding_finalized_ && use_final_probs)
+    ComputeFinalCosts(&final_costs_local, NULL, NULL);
+  
+  // Singly linked list of tokens on last frame (access list through "next"
+  // pointer).
+  BaseFloat best_cost = std::numeric_limits<BaseFloat>::infinity();
+  BaseFloat best_final_cost = 0;
+  Token *best_tok = NULL;
+  for (Token *tok = token_net_.back().toks; tok != NULL; tok = tok->next) {
+    BaseFloat cost = tok->total_cost, final_cost = 0.0;
+    if (use_final_probs && !final_costs.empty()) {
+      // if we are instructed to use final-probs, and any final tokens were
+      // active on final frame, include the final-prob in the cost of the token.
+      unordered_map<Token*, BaseFloat>::const_iterator iter = final_costs.find(tok);
+      if (iter != final_costs.end()) {
+        final_cost = iter->second;
+        cost += final_cost;
+      } else {
+        cost = std::numeric_limits<BaseFloat>::infinity();
+      }
+    }
+    if (cost < best_cost) {
+      best_cost = cost;
+      best_tok = tok;
+      best_final_cost = final_cost;
+    }
+  }    
+  if (best_tok == NULL) {  // this should not happen, and is likely a code error or
+    // caused by infinities in likelihoods, but I'm not making
+    // it a fatal error for now.
+    KALDI_WARN << "No final token found.";
+  }
+  if (final_cost_out)
+    *final_cost_out = best_final_cost;
+  return BestPathIterator(best_tok, NumFramesDecoded() - 1);
+}
+
+
+DecCore::BestPathIterator DecCore::TraceBackBestPath(
+    BestPathIterator iter, LatticeArc *oarc) const {
+  KALDI_ASSERT(!iter.Done() && oarc != NULL);
+  Token *tok = static_cast<Token*>(iter.tok);
+  int32 cur_t = iter.frame, ret_t = cur_t;
+  if (tok->backpointer != NULL) {
+    ForwardLink *link;
+    for (link = tok->backpointer->links; link != NULL; link = link->next) {
+      if (link->dst_tok == tok) { // this is the link to "tok"
+        oarc->ilabel = link->ilabel;
+        oarc->olabel = link->olabel;
+        BaseFloat graph_cost = link->graph_cost,
+            acoustic_cost = link->acoustic_cost;
+        if (link->ilabel != 0) {
+          KALDI_ASSERT(static_cast<size_t>(cur_t) < cost_offsets_.size());
+          acoustic_cost -= cost_offsets_[cur_t];
+          ret_t--;
+        }
+        oarc->weight = LatticeWeight(graph_cost, acoustic_cost);
+        break;
+      }
+    }
+    if (link == NULL) { // Did not find correct link.
+      KALDI_ERR << "Error tracing best-path back (likely "
+                << "bug in token-pruning algorithm)";
+    }
+  } else {
+    oarc->ilabel = 0;
+    oarc->olabel = 0;
+    oarc->weight = LatticeWeight::One(); // zero costs.
+  }
+  return BestPathIterator(tok->backpointer, ret_t);
 }
 
 
@@ -102,6 +270,26 @@ bool DecCore::GetBestPath(Lattice *olat, bool use_final_probs) const {
   }
   olat->SetStart(state);
   return true;
+}
+
+
+bool DecCore::TestGetBestPath(bool use_final_probs) const {
+  Lattice lat1;
+  {
+    Lattice raw_lat;
+    GetRawLattice(&raw_lat, use_final_probs);
+    ShortestPath(raw_lat, &lat1);
+  }
+  Lattice lat2;
+  GetBestPath(&lat2, use_final_probs);  
+  BaseFloat delta = 0.1;
+  int32 num_paths = 1;
+  if (!fst::RandEquivalent(lat1, lat2, num_paths, delta, rand())) {
+    KALDI_WARN << "Best-path test failed";
+    return false;
+  } else {
+    return true;
+  }
 }
 
 
@@ -158,9 +346,7 @@ bool DecCore::GetRawLattice(Lattice *ofst, bool use_final_probs) const {
   for (int32 f = 0; f <= num_frames; f++) {
     for (Token *tok = token_net_[f].toks; tok != NULL; tok = tok->next) {
       StateId cur_state = tok_map[tok];
-      for (ForwardLink *l = tok->links;
-           l != NULL;
-           l = l->next) {
+      for (ForwardLink *l = tok->links; l != NULL; l = l->next) {
         unordered_map<Token*, StateId>::const_iterator iter =
             tok_map.find(l->dst_tok);
         StateId nextstate = iter->second;
@@ -189,6 +375,7 @@ bool DecCore::GetRawLattice(Lattice *ofst, bool use_final_probs) const {
   }
   return (ofst->NumStates() > 0);
 }
+
 
 bool DecCore::GetRawLatticePruned(
     Lattice *ofst,
@@ -486,7 +673,6 @@ void DecCore::PruneForwardLinksFinal() {
       tok->extra_cost = tok_extra_cost; // will be +infinity or <= lattice_beam_.
     }
   } // while changed
-
 }
 
 
@@ -534,194 +720,6 @@ void DecCore::PruneTokenNet(BaseFloat delta) {
     }
   }
   KALDI_VLOG(4) << "PruneTokenNet: pruned tokens from " << num_toks_begin
-                << " to " << num_toks_;
-}
-
-
-BaseFloat DecCore::FinalRelativeCost() const {
-  if (!decoding_finalized_) {
-    BaseFloat relative_cost;
-    ComputeFinalCosts(NULL, &relative_cost, NULL);
-    return relative_cost;
-  } else {
-    // we're not allowed to call that function if FinalizeDecoding() has
-    // been called; return a cached value.
-    return final_relative_cost_;
-  }
-}
-
-
-void DecCore::ComputeFinalCosts(
-    unordered_map<Token*, BaseFloat> *final_costs,
-    BaseFloat *final_relative_cost,
-    BaseFloat *final_best_cost) const {
-  KALDI_ASSERT(!decoding_finalized_);
-  if (final_costs != NULL)
-    final_costs->clear();
-  const Elem *final_toks = tok_set_.GetList();
-  BaseFloat infinity = std::numeric_limits<BaseFloat>::infinity();
-  BaseFloat best_cost = infinity,
-      best_cost_with_final = infinity;
-  while (final_toks != NULL) {
-    StateId state = final_toks->key;
-    Token *tok = final_toks->val;
-    const Elem *next = final_toks->tail;
-    BaseFloat final_cost = fst_->Final(state);
-    BaseFloat cost = tok->total_cost,
-        cost_with_final = cost + final_cost;
-    best_cost = std::min(cost, best_cost);
-    best_cost_with_final = std::min(cost_with_final, best_cost_with_final);
-    if (final_costs != NULL && final_cost != infinity)
-      (*final_costs)[tok] = final_cost;
-    final_toks = next;
-  }
-  if (final_relative_cost != NULL) {
-    if (best_cost == infinity && best_cost_with_final == infinity) {
-      // Likely this will only happen if there are no tokens surviving.
-      // This seems the least bad way to handle it.
-      *final_relative_cost = infinity;
-    } else {
-      *final_relative_cost = best_cost_with_final - best_cost;
-    }
-  }
-  if (final_best_cost != NULL) {
-    if (best_cost_with_final != infinity) { // final-state exists.
-      *final_best_cost = best_cost_with_final;
-    } else { // no final-state exists.
-      *final_best_cost = best_cost;
-    }
-  }
-}
-
-
-DecCore::BestPathIterator DecCore::BestPathEnd(
-    bool use_final_probs,
-    BaseFloat *final_cost_out) const {
-  if (decoding_finalized_ && !use_final_probs)
-    KALDI_ERR << "You cannot call FinalizeDecoding() and then call "
-              << "BestPathEnd() with use_final_probs == false";
-  KALDI_ASSERT(NumFramesDecoded() > 0 &&
-               "You cannot call BestPathEnd if no frames were decoded.");
-  
-  unordered_map<Token*, BaseFloat> final_costs_local;
-
-  const unordered_map<Token*, BaseFloat> &final_costs =
-      (decoding_finalized_ ? final_costs_ : final_costs_local);
-  if (!decoding_finalized_ && use_final_probs)
-    ComputeFinalCosts(&final_costs_local, NULL, NULL);
-  
-  // Singly linked list of tokens on last frame (access list through "next"
-  // pointer).
-  BaseFloat best_cost = std::numeric_limits<BaseFloat>::infinity();
-  BaseFloat best_final_cost = 0;
-  Token *best_tok = NULL;
-  for (Token *tok = token_net_.back().toks; tok != NULL; tok = tok->next) {
-    BaseFloat cost = tok->total_cost, final_cost = 0.0;
-    if (use_final_probs && !final_costs.empty()) {
-      // if we are instructed to use final-probs, and any final tokens were
-      // active on final frame, include the final-prob in the cost of the token.
-      unordered_map<Token*, BaseFloat>::const_iterator iter = final_costs.find(tok);
-      if (iter != final_costs.end()) {
-        final_cost = iter->second;
-        cost += final_cost;
-      } else {
-        cost = std::numeric_limits<BaseFloat>::infinity();
-      }
-    }
-    if (cost < best_cost) {
-      best_cost = cost;
-      best_tok = tok;
-      best_final_cost = final_cost;
-    }
-  }    
-  if (best_tok == NULL) {  // this should not happen, and is likely a code error or
-    // caused by infinities in likelihoods, but I'm not making
-    // it a fatal error for now.
-    KALDI_WARN << "No final token found.";
-  }
-  if (final_cost_out)
-    *final_cost_out = best_final_cost;
-  return BestPathIterator(best_tok, NumFramesDecoded() - 1);
-}
-
-
-DecCore::BestPathIterator DecCore::TraceBackBestPath(
-    BestPathIterator iter, LatticeArc *oarc) const {
-  KALDI_ASSERT(!iter.Done() && oarc != NULL);
-  Token *tok = static_cast<Token*>(iter.tok);
-  int32 cur_t = iter.frame, ret_t = cur_t;
-  if (tok->backpointer != NULL) {
-    ForwardLink *link;
-    for (link = tok->backpointer->links; link != NULL; link = link->next) {
-      if (link->dst_tok == tok) { // this is the link to "tok"
-        oarc->ilabel = link->ilabel;
-        oarc->olabel = link->olabel;
-        BaseFloat graph_cost = link->graph_cost,
-            acoustic_cost = link->acoustic_cost;
-        if (link->ilabel != 0) {
-          KALDI_ASSERT(static_cast<size_t>(cur_t) < cost_offsets_.size());
-          acoustic_cost -= cost_offsets_[cur_t];
-          ret_t--;
-        }
-        oarc->weight = LatticeWeight(graph_cost, acoustic_cost);
-        break;
-      }
-    }
-    if (link == NULL) { // Did not find correct link.
-      KALDI_ERR << "Error tracing best-path back (likely "
-                << "bug in token-pruning algorithm)";
-    }
-  } else {
-    oarc->ilabel = 0;
-    oarc->olabel = 0;
-    oarc->weight = LatticeWeight::One(); // zero costs.
-  }
-  return BestPathIterator(tok->backpointer, ret_t);
-}
-
-
-void DecCore::AdvanceDecoding(DecodableInterface *decodable,
-                                                   int32 max_num_frames) {
-  KALDI_ASSERT(!token_net_.empty() && !decoding_finalized_ &&
-               "You must call InitDecoding() before AdvanceDecoding");
-  int32 num_frames_ready = decodable->NumFramesReady();
-  // num_frames_ready must be >= num_frames_decoded, or else
-  // the number of frames ready must have decreased (which doesn't
-  // make sense) or the decodable object changed between calls
-  // (which isn't allowed).
-  KALDI_ASSERT(num_frames_ready >= NumFramesDecoded());
-  int32 target_frames_decoded = num_frames_ready;
-  if (max_num_frames >= 0)
-    target_frames_decoded = std::min(target_frames_decoded,
-                                     NumFramesDecoded() + max_num_frames);
-  while (NumFramesDecoded() < target_frames_decoded) {
-    if (NumFramesDecoded() % config_.prune_interval == 0) {
-      PruneTokenNet(config_.lattice_beam * config_.prune_scale);
-    }
-    // note: ProcessEmitting() increments NumFramesDecoded().
-    BaseFloat cost_cutoff = ProcessEmitting(decodable);
-    ProcessNonemitting(cost_cutoff);
-  }
-}
-
-
-// FinalizeDecoding() is a version of PruneTokenNet that we call
-// (optionally) on the final frame.  Takes into account the final-prob of
-// tokens.  This function used to be called PruneTokenNetFinal().
-void DecCore::FinalizeDecoding() {
-  int32 end_time = NumFramesDecoded();
-  int32 num_toks_begin = num_toks_;
-  // PruneForwardLinksFinal() prunes final frame (with final-probs), and
-  // sets decoding_finalized_.
-  PruneForwardLinksFinal();
-  for (int32 t = end_time - 1; t >= 0; t--) {
-    bool b1, b2; // values not used.
-    BaseFloat dontcare = 0.0; // delta of zero means we must always update
-    PruneForwardLinks(t, &b1, &b2, dontcare);
-    PruneTokenList(t + 1);
-  }
-  PruneTokenList(0);
-  KALDI_VLOG(4) << "pruned tokens from " << num_toks_begin
                 << " to " << num_toks_;
 }
 
@@ -798,8 +796,7 @@ BaseFloat DecCore::GetCutoff(Elem *list_head, size_t *tok_count,
 }
 
 
-BaseFloat DecCore::ProcessEmitting(
-    DecodableInterface *decodable) {
+BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   KALDI_ASSERT(token_net_.size() > 0);
   int32 frame = token_net_.size() - 1; // frame is the frame-index
   // (zero-based) used to get likelihoods
@@ -955,7 +952,8 @@ void DecCore::DeleteElems(Elem *list) {
   }
 }
 
-void DecCore::ClearActiveTokens() { // a cleanup routine, at utt end/begin
+
+void DecCore::ClearTokenNet() { // a cleanup routine, at utt end/begin
   for (size_t i = 0; i < token_net_.size(); i++) {
     // Delete all tokens alive on this frame, and any forward
     // links they may have.
@@ -970,6 +968,7 @@ void DecCore::ClearActiveTokens() { // a cleanup routine, at utt end/begin
   token_net_.clear();
   KALDI_ASSERT(num_toks_ == 0);
 }
+
 
 // static
 void DecCore::TopSortTokens(Token *tok_list, std::vector<Token*> *topsorted_list) {

@@ -360,7 +360,7 @@ class DecCore {
   // the algorithm to output a list that contains NULLs.
   static void TopSortTokens(Token *tok_list, std::vector<Token*> *topsorted_list);
 
-  void ClearActiveTokens();
+  void ClearTokenNet();
   
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecCore);
 };
