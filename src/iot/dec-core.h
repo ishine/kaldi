@@ -241,9 +241,9 @@ class DecCore {
 
   void PossiblyResizeHash(size_t num_toks);
 
-  // FindOrAddToken either locates a token in hash of toks_, or if necessary
+  // FindOrAddToken either locates a token in hash of tok_set_, or if necessary
   // inserts a new, empty token (i.e. with no forward links) for the current
-  // frame.  [note: it's inserted if necessary into hash toks_ and also into the
+  // frame.  [note: it's inserted if necessary into hash tok_set_ and also into the
   // singly linked list of tokens active on this frame (whose head is at
   // token_net_[t]).  The 't' argument is the acoustic frame
   // index plus one, which is used to index into the token_net_ array.
@@ -312,7 +312,7 @@ class DecCore {
   MemoryPool *token_pool_;
   MemoryPool *link_pool_;
 
-  HashList<StateId, Token*> toks_;
+  HashList<StateId, Token*> tok_set_;
   std::vector<TokenList> token_net_;
 
   std::vector<StateId> queue_;
@@ -330,7 +330,7 @@ class DecCore {
   /// if this is set, then the output of ComputeFinalCosts() is in the next
   /// three variables.  The reason we need to do this is that after
   /// FinalizeDecoding() calls PruneTokensForFrame() for the final frame, some
-  /// of the tokens on the last frame are freed, so we free the list from toks_
+  /// of the tokens on the last frame are freed, so we free the list from tok_set_
   /// to avoid having dangling pointers hanging around.
   bool decoding_finalized_;
   /// For the meaning of the next 3 variables, see the comment for
@@ -339,13 +339,13 @@ class DecCore {
   BaseFloat final_relative_cost_;
   BaseFloat final_best_cost_;
 
-  // There are various cleanup tasks... the the toks_ structure contains
+  // There are various cleanup tasks... the the tok_set_ structure contains
   // singly linked lists of Token pointers, where Elem is the list type.
   // It also indexes them in a hash, indexed by state (this hash is only
-  // maintained for the most recent frame).  toks_.Clear()
+  // maintained for the most recent frame).  tok_set_.Clear()
   // deletes them from the hash and returns the list of Elems.  The
-  // function DeleteElems calls toks_.Delete(elem) for each elem in
-  // the list, which returns ownership of the Elem to the toks_ structure
+  // function DeleteElems calls tok_set_.Delete(elem) for each elem in
+  // the list, which returns ownership of the Elem to the tok_set_ structure
   // for reuse, but does not delete the Token pointer.  The Token pointers
   // are reference-counted and are ultimately deleted in PruneTokensForFrame,
   // but are also linked together on each frame by their own linked-list,

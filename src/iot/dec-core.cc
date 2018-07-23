@@ -6,14 +6,14 @@ namespace iot {
 DecCore::DecCore(Wfst *fst, const DecCoreConfig &config):
     fst_(fst), config_(config), num_toks_(0) {
   config_.Check();
-  toks_.SetSize(1000);
+  tok_set_.SetSize(1000);
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
 }
 
 DecCore::~DecCore() {
-  DeleteElems(toks_.Clear());
+  DeleteElems(tok_set_.Clear());
   ClearActiveTokens();
 
   DELETE(token_pool_);
@@ -22,7 +22,7 @@ DecCore::~DecCore() {
 
 void DecCore::InitDecoding() {
   // clean up from last time:
-  DeleteElems(toks_.Clear());
+  DeleteElems(tok_set_.Clear());
   cost_offsets_.clear();
   ClearActiveTokens();
   warned_ = false;
@@ -34,7 +34,7 @@ void DecCore::InitDecoding() {
   token_net_.resize(1);
   Token *start_tok = NewToken(0.0, 0.0, NULL, NULL, NULL);
   token_net_[0].toks = start_tok;
-  toks_.Insert(start_state, start_tok);
+  tok_set_.Insert(start_state, start_tok);
   num_toks_++;
   ProcessNonemitting(config_.beam);
 }
@@ -291,8 +291,8 @@ bool DecCore::GetRawLatticePruned(
 void DecCore::PossiblyResizeHash(size_t num_toks) {
   size_t new_size = static_cast<size_t>(static_cast<BaseFloat>(num_toks)
                                       * config_.hash_ratio);
-  if (new_size > toks_.Size()) {
-    toks_.SetSize(new_size);
+  if (new_size > tok_set_.Size()) {
+    tok_set_.SetSize(new_size);
   }
 }
 
@@ -303,7 +303,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(
 
   KALDI_ASSERT(t < token_net_.size());
   Token *&toks = token_net_[t].toks;
-  Elem *e_found = toks_.Find(state);
+  Elem *e_found = tok_set_.Find(state);
   if (e_found == NULL) {
     const BaseFloat extra_cost = 0.0;
     // tokens on the currently final frame have zero extra_cost
@@ -312,7 +312,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(
     // NULL: no forward links yet
     toks = new_tok;
     num_toks_++;
-    toks_.Insert(state, new_tok);
+    tok_set_.Insert(state, new_tok);
     if (changed) *changed = true;
     return new_tok;
   } else {
@@ -416,9 +416,9 @@ void DecCore::PruneForwardLinksFinal() {
   decoding_finalized_ = true;
   // We call DeleteElems() as a nicety, not because it's really necessary;
   // otherwise there would be a time, after calling PruneTokenList() on the
-  // final frame, when toks_.GetList() or toks_.Clear() would contain pointers
+  // final frame, when tok_set_.GetList() or tok_set_.Clear() would contain pointers
   // to nonexistent tokens.
-  DeleteElems(toks_.Clear());
+  DeleteElems(tok_set_.Clear());
 
   // Now go through tokens on this frame, pruning forward links...  may have to
   // iterate a few times until there is no more change, because the list is not
@@ -549,6 +549,7 @@ void DecCore::PruneTokenNet(BaseFloat delta) {
                 << " to " << num_toks_;
 }
 
+
 void DecCore::ComputeFinalCosts(
     unordered_map<Token*, BaseFloat> *final_costs,
     BaseFloat *final_relative_cost,
@@ -556,7 +557,7 @@ void DecCore::ComputeFinalCosts(
   KALDI_ASSERT(!decoding_finalized_);
   if (final_costs != NULL)
     final_costs->clear();
-  const Elem *final_toks = toks_.GetList();
+  const Elem *final_toks = tok_set_.GetList();
   BaseFloat infinity = std::numeric_limits<BaseFloat>::infinity();
   BaseFloat best_cost = infinity,
       best_cost_with_final = infinity;
@@ -805,9 +806,9 @@ BaseFloat DecCore::ProcessEmitting(
   // from the decodable object.
   token_net_.resize(token_net_.size() + 1);
 
-  Elem *final_toks = toks_.Clear(); // analogous to swapping prev_toks_ / cur_toks_
+  Elem *final_toks = tok_set_.Clear(); // analogous to swapping prev_toks_ / cur_toks_
   // in simple-decoder.h.   Removes the Elems from
-  // being indexed in the hash in toks_.
+  // being indexed in the hash in tok_set_.
   Elem *best_elem = NULL;
   BaseFloat adaptive_beam;
   size_t tok_cnt;
@@ -849,7 +850,7 @@ BaseFloat DecCore::ProcessEmitting(
 
   // the tokens are now owned here, in final_toks, and the hash is empty.
   // 'owned' is a complex thing here; the point is we need to call DeleteElem
-  // on each elem 'e' to let toks_ know we're done with them.
+  // on each elem 'e' to let tok_set_ know we're done with them.
   for (Elem *e = final_toks, *e_tail; e != NULL; e = e_tail) {
     // loop this way because we delete "e" as we go.
     StateId state = e->key;
@@ -879,7 +880,7 @@ BaseFloat DecCore::ProcessEmitting(
       } // for all arcs
     }
     e_tail = e->tail;
-    toks_.Delete(e); // delete Elem
+    tok_set_.Delete(e); // delete Elem
   }
   return next_cutoff;
 }
@@ -892,14 +893,14 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
   // we are processing the nonemitting transitions before the
   // first frame (called from InitDecoding()).
 
-  // Processes nonemitting arcs for one frame.  Propagates within toks_.
+  // Processes nonemitting arcs for one frame.  Propagates within tok_set_.
   // Note-- this queue structure is is not very optimal as
   // it may cause us to process states unnecessarily (e.g. more than once),
   // but in the baseline code, turning this vector into a set to fix this
   // problem did not improve overall speed.
 
   KALDI_ASSERT(queue_.empty());
-  for (const Elem *e = toks_.GetList(); e != NULL;  e = e->tail)
+  for (const Elem *e = tok_set_.GetList(); e != NULL;  e = e->tail)
     queue_.push_back(e->key);
   if (queue_.empty()) {
     if (!warned_) {
@@ -912,7 +913,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
     StateId state = queue_.back();
     queue_.pop_back();
 
-    Token *tok = toks_.Find(state)->val;  // would segfault if state not in toks_ but this can't happen.
+    Token *tok = tok_set_.Find(state)->val;  // would segfault if state not in tok_set_ but this can't happen.
     BaseFloat cur_cost = tok->total_cost;
     if (cur_cost > cutoff) // Don't bother processing successors.
       continue;
@@ -950,7 +951,7 @@ void DecCore::DeleteElems(Elem *list) {
   for (Elem *e = list, *e_tail; e != NULL; e = e_tail) {
     // Token::TokenDelete(e->val);
     e_tail = e->tail;
-    toks_.Delete(e);
+    tok_set_.Delete(e);
   }
 }
 
