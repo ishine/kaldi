@@ -28,7 +28,7 @@
 #include "util/kaldi-thread.h"
 #include "nnet3/nnet-utils.h"
 
-#include "iot/online-decoder.h"
+#include "iot/decoder.h"
 
 namespace kaldi {
 namespace iot {
@@ -173,8 +173,7 @@ int main(int argc, char *argv[]) {
     // this object contains precomputed stuff that is used by all decodable
     // objects.  It takes a pointer to am_nnet because if it has iVectors it has
     // to modify the nnet to accept iVectors at intervals.
-    nnet3::DecodableNnetSimpleLoopedInfo decodable_info(decodable_opts,
-                                                        &am_nnet);
+    nnet3::DecodableNnetSimpleLoopedInfo decodable_info(decodable_opts, &am_nnet);
 
     Wfst *decode_fst = new Wfst;
     {
@@ -224,11 +223,9 @@ int main(int argc, char *argv[]) {
             feature_info.silence_weighting_config,
             decodable_opts.frame_subsampling_factor);
 
-        OnlineDecoder decoder(decoder_opts, trans_model,
-                                            decodable_info,
-                                            decode_fst, &feature_pipeline);
+        Decoder decoder(decoder_opts, trans_model, decodable_info, decode_fst, &feature_pipeline);
+        decoder.Initialize();
         OnlineTimer decoding_timer(utt);
-
         BaseFloat samp_freq = wave_data.SampFreq();
         int32 chunk_length;
         if (chunk_length_secs > 0) {
@@ -243,8 +240,7 @@ int main(int argc, char *argv[]) {
 
         while (samp_offset < data.Dim()) {
           int32 samp_remaining = data.Dim() - samp_offset;
-          int32 num_samp = chunk_length < samp_remaining ? chunk_length
-                                                         : samp_remaining;
+          int32 num_samp = chunk_length < samp_remaining ? chunk_length : samp_remaining;
 
           SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
           feature_pipeline.AcceptWaveform(samp_freq, wave_part);
@@ -264,21 +260,20 @@ int main(int argc, char *argv[]) {
             feature_pipeline.IvectorFeature()->UpdateFrameWeights(delta_weights);
           }
           */
-          decoder.AdvanceDecoding();
+          decoder.Advance();
           /*
           if (do_endpointing && decoder.EndpointDetected(endpoint_opts)) {
             break;
           }
           */
         }
-        decoder.FinalizeDecoding();
+        decoder.Finalize();
 
         CompactLattice clat;
         bool end_of_utterance = true;
         decoder.GetLattice(end_of_utterance, &clat);
 
-        GetDiagnosticsAndPrintOutput(utt, word_syms, clat,
-                                     &num_frames, &tot_like);
+        GetDiagnosticsAndPrintOutput(utt, word_syms, clat, &num_frames, &tot_like);
 
         decoding_timer.OutputStats(&timing_stats);
 
