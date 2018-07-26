@@ -10,7 +10,7 @@ TESTFILES = memory-pool-test link-test list-test phone-set-test vocab-test lexic
 OBJFILES = tinycthread.o common.o memory-pool.o link.o list.o graph.o \
            phone-set.o vocab.o lexicon.o \
            word-loop.o wfst.o \
-           dec-core.o decoder.o
+           dec-core.o end-pointer.o decoder.o
 LIBNAME = kaldi-iot
 
 #ADDLIBS = ../base/kaldi-base.a 
