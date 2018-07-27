@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
     OnlineNnet2FeaturePipelineConfig feature_opts;
     nnet3::NnetSimpleLoopedComputationOptions decodable_opts;
     DecCoreConfig decoder_opts;
-    OnlineEndpointConfig endpoint_opts;
+    EndPointerConfig end_pointer_opts;
 
     BaseFloat chunk_length_secs = 0.18;
     bool do_endpointing = false;
@@ -134,8 +134,7 @@ int main(int argc, char *argv[]) {
     feature_opts.Register(&po);
     decodable_opts.Register(&po);
     decoder_opts.Register(&po);
-    endpoint_opts.Register(&po);
-
+    end_pointer_opts.Register(&po);
 
     po.Read(argc, argv);
 
@@ -223,8 +222,8 @@ int main(int argc, char *argv[]) {
             feature_info.silence_weighting_config,
             decodable_opts.frame_subsampling_factor);
 
-        Decoder decoder(decoder_opts, trans_model, decodable_info, decode_fst, &feature_pipeline);
-        decoder.Initialize();
+        Decoder decoder(decode_fst, trans_model, decodable_info, &feature_pipeline, decoder_opts, end_pointer_opts);
+        decoder.StartUtterance();
         OnlineTimer decoding_timer(utt);
         BaseFloat samp_freq = wave_data.SampFreq();
         int32 chunk_length;
@@ -261,13 +260,12 @@ int main(int argc, char *argv[]) {
           }
           */
           decoder.Advance();
-          /*
-          if (do_endpointing && decoder.EndpointDetected(endpoint_opts)) {
+
+          if (do_endpointing && decoder.EndpointDetected()) {
             break;
           }
-          */
         }
-        decoder.Finalize();
+        decoder.StopUtterance();
 
         CompactLattice clat;
         bool end_of_utterance = true;

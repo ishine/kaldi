@@ -13,31 +13,35 @@
 #include "util/common-utils.h"
 #include "base/kaldi-error.h"
 #include "itf/online-feature-itf.h"
-#include "online2/online-endpoint.h"
 #include "online2/online-nnet2-feature-pipeline.h"
 #include "lat/lattice-functions.h"
 #include "lat/determinize-lattice-pruned.h"
 
 #include "iot/dec-core.h"
+#include "iot/end-pointer.h"
 
 namespace kaldi {
 namespace iot {
 
 class Decoder {
  public:
-
   // Constructor. The pointer 'features' is not being given to this class to own
   // and deallocate, it is owned externally.
-  Decoder(const DecCoreConfig &decoder_opts,
+  Decoder(Wfst *fst, 
           const TransitionModel &trans_model,
           const nnet3::DecodableNnetSimpleLoopedInfo &info,
-          Wfst *fst,
-          OnlineNnet2FeaturePipeline *features);
+          OnlineNnet2FeaturePipeline *features,
+          const DecCoreConfig &dec_core_config,
+          const EndPointerConfig &end_pointer_config);
 
-  void Initialize();
+  void StartUtterance();
   void Advance();
-  void Finalize();
+  void StopUtterance();
   int32 NumFramesDecoded() const;
+
+  /// This function calls EndpointDetected from online-endpoint.h,
+  /// with the required arguments.
+  bool EndpointDetected();
 
   /// Gets the lattice.  The output lattice has any acoustic scaling in it
   /// (which will typically be desirable in an online-decoding context); if you
@@ -52,28 +56,23 @@ class Decoder {
   /// all final-probs as one.
   void GetBestPath(bool use_final_prob, Lattice *best_path) const;
 
-  /// This function calls EndpointDetected from online-endpoint.h,
-  /// with the required arguments.
-  //bool EndpointDetected(const OnlineEndpointConfig &config);
-
   const DecCore &GetDecCore() const { return dec_core_; }
 
   ~Decoder() { }
+
  private:
-
-  const DecCoreConfig &decoder_opts_;
-
-  // this is remembered from the constructor; it's ultimately
-  // derived from calling FrameShiftInSeconds() on the feature pipeline.
-  BaseFloat input_feature_frame_shift_in_seconds_;
-
-  // we need to keep a reference to the transition model around only because
-  // it's needed by the endpointing code.
   const TransitionModel &trans_model_;
 
   nnet3::DecodableAmNnetLoopedOnline decodable_;
+  // this is remembered from the constructor; it's ultimately
+  // derived from calling FrameShiftInSeconds() on the feature pipeline.
+  BaseFloat feature_frame_shift_in_sec_;
 
+  const DecCoreConfig &dec_core_config_;
   DecCore dec_core_;
+
+  const EndPointerConfig &end_pointer_config_;
+  EndPointer end_pointer_;
 };
 
 

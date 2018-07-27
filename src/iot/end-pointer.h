@@ -15,35 +15,34 @@
 #include "lat/kaldi-lattice.h"
 #include "hmm/transition-model.h"
 
-#include "iot/decoder.h"
+#include "iot/dec-core.h"
 
 namespace kaldi {
 namespace iot {
 
+struct EndPointerConfig {
+  BaseFloat silence_timeout;
+  BaseFloat max_utterance_length;
+  BaseFloat min_trailing_silence;
+  BaseFloat max_relative_cost;
+
+  void Register(OptionsItf *opts) {
+    ;
+  }
+};
+
 class EndPointer {
  public:
-  EndPointer() :
-    min_trailing_silence_in_sec_(0.5f),
-    max_relative_cost_(2.0f),
-    max_utterance_length_in_sec_(20.0f)
+  EndPointer(const EndPointerConfig &config)
+    : config_(config)
   { }
 
-  EndPointer(BaseFloat min_trailing_silence_in_sec,
-             BaseFloat max_relative_cost,
-             BaseFloat max_utterance_length_in_sec) :
-    min_trailing_silence_in_sec_(min_trailing_silence_in_sec),
-    max_relative_cost_(max_relative_cost),
-    max_utterance_length_in_sec_(max_utterance_length_in_sec)
-  { }
-
-  ~EndPointer();
+  ~EndPointer() { }
   
-  bool Detected(Decoder &decoder);
+  bool Detected(const DecCore &dec_core, BaseFloat frame_shift_in_sec);
 
  private:
-  BaseFloat min_trailing_silence_in_sec_;
-  BaseFloat max_relative_cost_;
-  BaseFloat max_utterance_length_in_sec_;
+  const EndPointerConfig &config_;
 };
 
 }  // namespace iot

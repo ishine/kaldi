@@ -92,7 +92,7 @@ class DecCore {
   typedef Arc::StateId StateId;
   typedef Arc::Weight Weight;
 
-  DecCore(Wfst *fst, const DecCoreConfig &config);
+  DecCore(Wfst *fst, const TransitionModel &trans_model, const DecCoreConfig &config);
   ~DecCore();
 
   void SetOptions(const DecCoreConfig &config) { config_ = config; }
@@ -104,9 +104,11 @@ class DecCore {
   void AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frames = -1);
   void FinalizeDecoding();
 
-  inline int32 NumFramesDecoded() const { return token_net_.size() - 1; }
-  BaseFloat FinalRelativeCost() const;
+  int32 TrailingSilenceFrames() const;
 
+  inline int32 NumFramesDecoded() const { return token_net_.size() - 1; }
+  
+  BaseFloat FinalRelativeCost() const;
   bool ReachedFinal() const {
     return FinalRelativeCost() != std::numeric_limits<BaseFloat>::infinity();
   }
@@ -319,6 +321,7 @@ class DecCore {
   std::vector<BaseFloat> tmp_array_;
 
   Wfst *fst_;
+  const TransitionModel &trans_model_;
 
   std::vector<BaseFloat> cost_offsets_;
   DecCoreConfig config_;

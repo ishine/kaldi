@@ -3,8 +3,8 @@
 namespace kaldi {
 namespace iot {
 
-DecCore::DecCore(Wfst *fst, const DecCoreConfig &config):
-    fst_(fst), config_(config), num_toks_(0) {
+DecCore::DecCore(Wfst *fst, const TransitionModel &trans_model, const DecCoreConfig &config):
+    fst_(fst), trans_model_(trans_model), config_(config), num_toks_(0) {
   config_.Check();
   token_set_.SetSize(1000);
 
@@ -106,6 +106,26 @@ void DecCore::FinalizeDecoding() {
   PruneTokenList(0);
   KALDI_VLOG(4) << "pruned tokens from " << num_toks_begin
                 << " to " << num_toks_;
+}
+
+
+int32 DecCore::TrailingSilenceFrames() const {
+  bool use_final_probs = false;
+  DecCore::BestPathIterator iter = BestPathEnd(use_final_probs, NULL);
+  int32 trailing_silence_frames = 0;
+  while (!iter.Done()) {
+    LatticeArc arc;
+    iter = TraceBackBestPath(iter, &arc);
+    if (arc.ilabel != kWfstEpsilon) {
+      int32 phone_id = trans_model_.TransitionIdToPhone(arc.ilabel);
+      if (phone_id == kSilencePhoneId) {
+        trailing_silence_frames++;
+      } else {
+        break; // stop counting as soon as we hit non-silence.
+      }
+    }
+  }
+  return trailing_silence_frames;
 }
 
 
