@@ -34,9 +34,9 @@ class Decoder {
           const DecCoreConfig &dec_core_config,
           const EndPointerConfig &end_pointer_config);
 
-  void StartUtterance();
+  void StartSession(const char* session_key = NULL);
   void Advance();
-  void StopUtterance();
+  void StopSession();
   int32 NumFramesDecoded() const;
 
   /// This function calls EndpointDetected from online-endpoint.h,

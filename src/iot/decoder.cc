@@ -19,7 +19,7 @@ Decoder::Decoder(Wfst *fst,
 { }
 
 
-void Decoder::StartUtterance() {
+void Decoder::StartSession(const char* session_key) {
   dec_core_.InitDecoding();
 }
 
@@ -29,7 +29,7 @@ void Decoder::Advance() {
 }
 
 
-void Decoder::StopUtterance() {
+void Decoder::StopSession() {
   dec_core_.FinalizeDecoding();
 }
 

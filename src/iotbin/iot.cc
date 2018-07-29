@@ -222,8 +222,12 @@ int main(int argc, char *argv[]) {
             feature_info.silence_weighting_config,
             decodable_opts.frame_subsampling_factor);
 
-        Decoder decoder(decode_fst, trans_model, decodable_info, &feature_pipeline, decoder_opts, end_pointer_opts);
-        decoder.StartUtterance();
+        Decoder decoder(decode_fst, 
+                        trans_model, 
+                        decodable_info, &feature_pipeline, 
+                        decoder_opts, 
+                        end_pointer_opts);
+        decoder.StartSession(utt.c_str());
         OnlineTimer decoding_timer(utt);
         BaseFloat samp_freq = wave_data.SampFreq();
         int32 chunk_length;
@@ -265,7 +269,7 @@ int main(int argc, char *argv[]) {
             break;
           }
         }
-        decoder.StopUtterance();
+        decoder.StopSession();
 
         CompactLattice clat;
         bool end_of_utterance = true;
