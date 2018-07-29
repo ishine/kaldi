@@ -21,13 +21,20 @@ namespace kaldi {
 namespace iot {
 
 struct EndPointerConfig {
+  std::string silence_phones;
   BaseFloat silence_timeout;
   BaseFloat max_utterance_length;
   BaseFloat min_trailing_silence;
   BaseFloat max_relative_cost;
+  BaseFloat frame_shift_in_sec;
 
   void Register(OptionsItf *opts) {
-    ;
+    opts->Register("silence-phones", &silence_phones, "");
+    opts->Register("silence-timeout", &silence_timeout, "");
+    opts->Register("max-utterance-length", &max_utterance_length, "");
+    opts->Register("min-trailing-silence", &min_trailing_silence, "");
+    opts->Register("max-relative-cost", &max_relative_cost, "");
+    opts->Register("frame-shift-in-sec", &frame_shift_in_sec, "");
   }
 };
 
@@ -35,11 +42,11 @@ class EndPointer {
  public:
   EndPointer(const EndPointerConfig &config)
     : config_(config)
-  { }
+  { KALDI_ASSERT(config_.silence_phones == "1"); } // kSilPhoneId 1
 
   ~EndPointer() { }
   
-  bool Detected(const DecCore &dec_core, BaseFloat frame_shift_in_sec);
+  bool Detected(const DecCore &dec_core);
 
  private:
   const EndPointerConfig &config_;

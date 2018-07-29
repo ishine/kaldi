@@ -3,9 +3,9 @@
 namespace kaldi {
 namespace iot {
 
-bool EndPointer::Detected(const DecCore &dec_core, BaseFloat frame_shift_in_sec) {
-  int32 trailing_silence  = frame_shift_in_sec * dec_core.TrailingSilenceFrames();
-  int32 utterance_length  = frame_shift_in_sec * dec_core.NumFramesDecoded();
+bool EndPointer::Detected(const DecCore &dec_core) {
+  int32 trailing_silence  = config_.frame_shift_in_sec * dec_core.TrailingSilenceFrames();
+  int32 utterance_length  = config_.frame_shift_in_sec * dec_core.NumFramesDecoded();
   BaseFloat relative_cost = dec_core.FinalRelativeCost();
 
   bool contain_only_silence = (trailing_silence == utterance_length);

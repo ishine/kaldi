@@ -59,8 +59,8 @@ void Decoder::GetBestPath(bool use_final_prob, Lattice *best_path) const {
 
 
 bool Decoder::EndpointDetected() {
-  BaseFloat frame_shift_in_sec = feature_frame_shift_in_sec_ * decodable_.FrameSubsamplingFactor();
-  return end_pointer_.Detected(dec_core_, frame_shift_in_sec);
+  //BaseFloat frame_shift_in_sec = feature_frame_shift_in_sec_ * decodable_.FrameSubsamplingFactor();
+  return end_pointer_.Detected(dec_core_);
 }
 
 }
