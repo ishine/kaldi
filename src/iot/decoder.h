@@ -31,16 +31,14 @@ class Decoder {
           const TransitionModel &trans_model,
           const nnet3::DecodableNnetSimpleLoopedInfo &info,
           OnlineNnet2FeaturePipeline *features,
-          const DecCoreConfig &dec_core_config,
-          const EndPointerConfig &end_pointer_config);
+          const DecCoreConfig &dec_core_config);
 
   void StartSession(const char* session_key = NULL);
   void Advance();
   void StopSession();
   int32 NumFramesDecoded() const;
 
-  /// This function calls EndpointDetected from online-endpoint.h,
-  /// with the required arguments.
+  void EnableEndPointer(EndPointerConfig &end_pointer_config);
   bool EndpointDetected();
 
   /// Gets the lattice.  The output lattice has any acoustic scaling in it
@@ -58,7 +56,7 @@ class Decoder {
 
   const DecCore &GetDecCore() const { return dec_core_; }
 
-  ~Decoder() { }
+  ~Decoder();
 
  private:
   const TransitionModel &trans_model_;
@@ -71,8 +69,7 @@ class Decoder {
   const DecCoreConfig &dec_core_config_;
   DecCore dec_core_;
 
-  const EndPointerConfig &end_pointer_config_;
-  EndPointer end_pointer_;
+  EndPointer *end_pointer_;
 };
 
 

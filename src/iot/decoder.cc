@@ -7,16 +7,19 @@ Decoder::Decoder(Wfst *fst,
                  const TransitionModel &trans_model,
                  const nnet3::DecodableNnetSimpleLoopedInfo &info,
                  OnlineNnet2FeaturePipeline *features,
-                 const DecCoreConfig &dec_core_config,
-                 const EndPointerConfig &end_pointer_config) :
+                 const DecCoreConfig &dec_core_config) :
   trans_model_(trans_model),
   decodable_(trans_model_, info, features->InputFeature(), features->IvectorFeature()),
   feature_frame_shift_in_sec_(features->FrameShiftInSeconds()),
   dec_core_config_(dec_core_config),
   dec_core_(fst, trans_model, dec_core_config_),
-  end_pointer_config_(end_pointer_config),
-  end_pointer_(end_pointer_config)
+  end_pointer_(NULL)
 { }
+
+
+Decoder::~Decoder() {
+  DELETE(end_pointer_);
+}
 
 
 void Decoder::StartSession(const char* session_key) {
@@ -58,9 +61,15 @@ void Decoder::GetBestPath(bool use_final_prob, Lattice *best_path) const {
 }
 
 
+void Decoder::EnableEndPointer(EndPointerConfig &end_pointer_config) {
+  end_pointer_ = new EndPointer(end_pointer_config);
+}
+
+
 bool Decoder::EndpointDetected() {
+  KALDI_ASSERT(end_pointer_ != NULL);
   //BaseFloat frame_shift_in_sec = feature_frame_shift_in_sec_ * decodable_.FrameSubsamplingFactor();
-  return end_pointer_.Detected(dec_core_);
+  return end_pointer_->Detected(dec_core_);
 }
 
 }

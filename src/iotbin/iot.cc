@@ -225,8 +225,10 @@ int main(int argc, char *argv[]) {
         Decoder decoder(decode_fst, 
                         trans_model, 
                         decodable_info, &feature_pipeline, 
-                        decoder_opts, 
-                        end_pointer_opts);
+                        decoder_opts);
+        if (do_endpointing) {
+          decoder.EnableEndPointer(end_pointer_opts);
+        }
         decoder.StartSession(utt.c_str());
         OnlineTimer decoding_timer(utt);
         BaseFloat samp_freq = wave_data.SampFreq();
