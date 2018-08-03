@@ -1,5 +1,5 @@
-#ifndef KALDI_IOT_ONLINE_DECODER_H_
-#define KALDI_IOT_ONLINE_DECODER_H_
+#ifndef KALDI_IOT_DECODER_H_
+#define KALDI_IOT_DECODER_H_
 
 #include <string>
 #include <vector>
@@ -31,21 +31,22 @@ class Decoder {
           const TransitionModel &trans_model,
           const nnet3::DecodableNnetSimpleLoopedInfo &info,
           OnlineNnet2FeaturePipeline *features,
-          const DecCoreConfig &dec_core_config);
-
-  void StartSession(const char* session_key = NULL);
-  void Advance();
-  void StopSession();
-  int32 NumFramesDecoded() const;
+          const DecCoreConfig &core_config);
 
   void EnableEndPointer(EndPointerConfig &end_pointer_config);
+
+  void StartSession(const char* session_key = NULL);
+
+  void Advance();
+
+  int32 NumFramesDecoded() const;
+
   bool EndpointDetected();
 
-  /// Gets the lattice.  The output lattice has any acoustic scaling in it
-  /// (which will typically be desirable in an online-decoding context); if you
-  /// want an un-scaled lattice, scale it using ScaleLattice() with the inverse
-  /// of the acoustic weight.  "end_of_utterance" will be true if you want the
-  /// final-probs to be included.
+  void StopSession();
+
+  // Gets acoustic-scaled lattice.
+  // "use_final_prob" will be true if you want the final-probs to be included.
   void GetLattice(bool use_final_prob, CompactLattice *clat) const;
 
   /// Outputs an FST corresponding to the single best path through the current
@@ -54,7 +55,9 @@ class Decoder {
   /// all final-probs as one.
   void GetBestPath(bool use_final_prob, Lattice *best_path) const;
 
-  const DecCore &GetDecCore() const { return dec_core_; }
+  /*
+  const DecCore &GetDecCore() const { return core_; }
+  */
 
   ~Decoder();
 
@@ -62,12 +65,9 @@ class Decoder {
   const TransitionModel &trans_model_;
 
   nnet3::DecodableAmNnetLoopedOnline decodable_;
-  // this is remembered from the constructor; it's ultimately
-  // derived from calling FrameShiftInSeconds() on the feature pipeline.
-  BaseFloat feature_frame_shift_in_sec_;
 
-  const DecCoreConfig &dec_core_config_;
-  DecCore dec_core_;
+  const DecCoreConfig &core_config_;
+  DecCore core_;
 
   EndPointer *end_pointer_;
 };
