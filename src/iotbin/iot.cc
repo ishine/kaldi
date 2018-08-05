@@ -227,7 +227,6 @@ int main(int argc, char *argv[]) {
 
           SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
           decoder.AcceptAudio(samp_freq, wave_part);
-          decoder.AdvanceDecoding();
           samp_offset += num_samp;
           decoding_timer.WaitUntil(samp_offset / samp_freq);     
 

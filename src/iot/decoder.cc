@@ -45,13 +45,9 @@ void Decoder::StartSession(const char* session_key) {
 }
 
 
-void Decoder::AcceptAudio(BaseFloat sampling_rate, const VectorBase<BaseFloat> &wav) {
+void Decoder::AcceptAudio(BaseFloat sample_rate, const VectorBase<BaseFloat> &audio_chunk) {
   KALDI_ASSERT(feature_ != NULL);
-  feature_->AcceptWaveform(sampling_rate, wav);
-}
-
-
-void Decoder::AdvanceDecoding() {
+  feature_->AcceptWaveform(sample_rate, audio_chunk);
   core_.AdvanceDecoding(decodable_);
 }
 

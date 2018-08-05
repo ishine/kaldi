@@ -36,9 +36,7 @@ class Decoder {
 
   void StartSession(const char* session_key = NULL);
 
-  void AcceptAudio(BaseFloat sampling_rate, const VectorBase<BaseFloat> &waveform);
-
-  void AdvanceDecoding();
+  void AcceptAudio(BaseFloat sample_rate, const VectorBase<BaseFloat> &audio_chunk);
 
   int32 NumFramesDecoded() const;
 
