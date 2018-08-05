@@ -25,19 +25,20 @@ namespace iot {
 
 class Decoder {
  public:
-  // Constructor. The pointer 'features' is not being given to this class to own
-  // and deallocate, it is owned externally.
   Decoder(Wfst *fst, 
           const TransitionModel &trans_model,
-          const nnet3::DecodableNnetSimpleLoopedInfo &info,
-          OnlineNnet2FeaturePipeline *features,
+          nnet3::AmNnetSimple &am_nnet,
+          const OnlineNnet2FeaturePipelineConfig &feature_config,
+          const nnet3::NnetSimpleLoopedComputationOptions &decodable_config,
           const DecCoreConfig &core_config);
 
   void EnableEndPointer(EndPointerConfig &end_pointer_config);
 
   void StartSession(const char* session_key = NULL);
 
-  void Advance();
+  void AcceptAudio(BaseFloat sampling_rate, const VectorBase<BaseFloat> &waveform);
+
+  void AdvanceDecoding();
 
   int32 NumFramesDecoded() const;
 
@@ -61,11 +62,21 @@ class Decoder {
 
   ~Decoder();
 
+  OnlineNnet2FeaturePipeline* Feature() { return feature_; }
+  OnlineNnet2FeaturePipelineInfo& FeatureInfo() { return feature_info_; }
+
  private:
   const TransitionModel &trans_model_;
+  
+  // feature
+  OnlineNnet2FeaturePipelineInfo feature_info_;
+  OnlineNnet2FeaturePipeline *feature_;
 
-  nnet3::DecodableAmNnetLoopedOnline decodable_;
+  // decodable
+  nnet3::DecodableNnetSimpleLoopedInfo decodable_info_;
+  nnet3::DecodableAmNnetLoopedOnline *decodable_;
 
+  // core engine
   const DecCoreConfig &core_config_;
   DecCore core_;
 

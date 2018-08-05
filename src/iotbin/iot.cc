@@ -149,14 +149,6 @@ int main(int argc, char *argv[]) {
         wav_rspecifier = po.GetArg(4),
         clat_wspecifier = po.GetArg(5);
 
-    OnlineNnet2FeaturePipelineInfo feature_info(feature_opts);
-
-    if (!online) {
-      feature_info.ivector_extractor_info.use_most_recent_ivector = true;
-      feature_info.ivector_extractor_info.greedy_ivector_extractor = true;
-      chunk_length_secs = -1.0;
-    }
-
     TransitionModel trans_model;
     nnet3::AmNnetSimple am_nnet;
     {
@@ -168,11 +160,6 @@ int main(int argc, char *argv[]) {
       SetDropoutTestMode(true, &(am_nnet.GetNnet()));
       nnet3::CollapseModel(nnet3::CollapseModelConfig(), &(am_nnet.GetNnet()));
     }
-
-    // this object contains precomputed stuff that is used by all decodable
-    // objects.  It takes a pointer to am_nnet because if it has iVectors it has
-    // to modify the nnet to accept iVectors at intervals.
-    nnet3::DecodableNnetSimpleLoopedInfo decodable_info(decodable_opts, &am_nnet);
 
     Wfst *decode_fst = new Wfst;
     {
@@ -197,11 +184,20 @@ int main(int argc, char *argv[]) {
 
     OnlineTimingStats timing_stats;
 
+    Decoder decoder(decode_fst,
+                    trans_model,
+                    am_nnet,
+                    feature_opts,
+                    decodable_opts,
+                    decoder_opts);
+
+    if (do_endpointing) {
+      decoder.EnableEndPointer(end_pointer_opts);
+    }
+
     for (; !spk2utt_reader.Done(); spk2utt_reader.Next()) {
       std::string spk = spk2utt_reader.Key();
-      const std::vector<std::string> &uttlist = spk2utt_reader.Value();
-      OnlineIvectorExtractorAdaptationState adaptation_state(
-          feature_info.ivector_extractor_info);
+      const std::vector<std::string> &uttlist = spk2utt_reader.Value();  
       for (size_t i = 0; i < uttlist.size(); i++) {
         std::string utt = uttlist[i];
         if (!wav_reader.HasKey(utt)) {
@@ -210,25 +206,7 @@ int main(int argc, char *argv[]) {
           continue;
         }
         const WaveData &wave_data = wav_reader.Value(utt);
-        // get the data for channel zero (if the signal is not mono, we only
-        // take the first channel).
-        SubVector<BaseFloat> data(wave_data.Data(), 0);
-
-        OnlineNnet2FeaturePipeline feature_pipeline(feature_info);
-        feature_pipeline.SetAdaptationState(adaptation_state);
-
-        OnlineSilenceWeighting silence_weighting(
-            trans_model,
-            feature_info.silence_weighting_config,
-            decodable_opts.frame_subsampling_factor);
-
-        Decoder decoder(decode_fst, 
-                        trans_model, 
-                        decodable_info, &feature_pipeline, 
-                        decoder_opts);
-        if (do_endpointing) {
-          decoder.EnableEndPointer(end_pointer_opts);
-        }
+        SubVector<BaseFloat> data(wave_data.Data(), 0); // only use channel 0
         decoder.StartSession(utt.c_str());
         OnlineTimer decoding_timer(utt);
         BaseFloat samp_freq = wave_data.SampFreq();
@@ -248,24 +226,10 @@ int main(int argc, char *argv[]) {
           int32 num_samp = chunk_length < samp_remaining ? chunk_length : samp_remaining;
 
           SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
-          feature_pipeline.AcceptWaveform(samp_freq, wave_part);
-
+          decoder.AcceptAudio(samp_freq, wave_part);
+          decoder.AdvanceDecoding();
           samp_offset += num_samp;
-          decoding_timer.WaitUntil(samp_offset / samp_freq);
-          if (samp_offset == data.Dim()) {
-            // no more input. flush out last frames
-            feature_pipeline.InputFinished();
-          }
-          /*
-          if (silence_weighting.Active() &&
-              feature_pipeline.IvectorFeature() != NULL) {
-            silence_weighting.ComputeCurrentTraceback(decoder.Decoder());
-            silence_weighting.GetDeltaWeights(feature_pipeline.NumFramesReady(),
-                                              &delta_weights);
-            feature_pipeline.IvectorFeature()->UpdateFrameWeights(delta_weights);
-          }
-          */
-          decoder.Advance();
+          decoding_timer.WaitUntil(samp_offset / samp_freq);     
 
           if (do_endpointing && decoder.EndpointDetected()) {
             break;
@@ -280,13 +244,8 @@ int main(int argc, char *argv[]) {
         GetDiagnosticsAndPrintOutput(utt, word_syms, clat, &num_frames, &tot_like);
 
         decoding_timer.OutputStats(&timing_stats);
-
-        // In an application you might avoid updating the adaptation state if
-        // you felt the utterance had low confidence.  See lat/confidence.h
-        feature_pipeline.GetAdaptationState(&adaptation_state);
-
         // we want to output the lattice with un-scaled acoustics.
-        BaseFloat inv_acoustic_scale =
+        BaseFloat inv_acoustic_scale = 
             1.0 / decodable_opts.acoustic_scale;
         ScaleLattice(AcousticLatticeScale(inv_acoustic_scale), &clat);
 

@@ -63,8 +63,7 @@ bool DecCore::Decode(DecodableInterface *decodable) {
 }
 
 
-void DecCore::AdvanceDecoding(DecodableInterface *decodable,
-                                                   int32 max_num_frames) {
+void DecCore::AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frames) {
   KALDI_ASSERT(!token_net_.empty() && !decoding_finalized_ &&
                "You must call InitDecoding() before AdvanceDecoding");
   int32 num_frames_ready = decodable->NumFramesReady();
