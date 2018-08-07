@@ -168,12 +168,11 @@ def process_args(args):
                         "directory which is the output of "
                         "make_configs.py script")
 
-    if args.transform_dir is None:
-        args.transform_dir = args.ali_dir
-
     # set the options corresponding to args.use_gpu
     run_opts = common_train_lib.RunOpts()
-    if args.use_gpu:
+    if args.use_gpu in ["true", "false"]:
+        args.use_gpu = ("yes" if args.use_gpu == "true" else "no")
+    if args.use_gpu in ["yes", "wait"]:
         if not common_lib.check_if_cuda_compiled():
             logger.warning(
                 """You are running with one thread but you have not compiled
@@ -182,10 +181,10 @@ def process_args(args):
                    ./configure; make""")
 
         run_opts.train_queue_opt = "--gpu 1"
-        run_opts.parallel_train_opts = ""
-        run_opts.combine_gpu_opt = ""
+        run_opts.parallel_train_opts = "--use-gpu={}".format(args.use_gpu)
+        run_opts.combine_gpu_opt = "--use-gpu={}".format(args.use_gpu)
         run_opts.combine_queue_opt = "--gpu 1"
-        run_opts.prior_gpu_opt = "--use-gpu=yes"
+        run_opts.prior_gpu_opt = "--use-gpu={}".format(args.use_gpu)
         run_opts.prior_queue_opt = "--gpu 1"
 
     else:
@@ -264,7 +263,7 @@ def train(args, run_opts):
     # we do this as it's a convenient way to get the stats for the 'lda-like'
     # transform.
 
-    if args.stage <= -5:
+    if args.stage <= -5 and os.path.exists("{0}/configs/init.config".format(args.dir)):
         logger.info("Initializing a basic network for estimating "
                     "preconditioning matrix")
         common_lib.execute_command(
@@ -294,7 +293,6 @@ def train(args, run_opts):
             cmvn_opts=args.cmvn_opts,
             online_ivector_dir=args.online_ivector_dir,
             samples_per_iter=args.samples_per_iter,
-            transform_dir=args.transform_dir,
             stage=args.egs_stage)
 
     if args.egs_dir is None:
@@ -321,13 +319,13 @@ def train(args, run_opts):
     # use during decoding
     common_train_lib.copy_egs_properties_to_exp_dir(egs_dir, args.dir)
 
-    if args.stage <= -3:
-        logger.info('Computing the preconditioning matrix for input features')
-
-        train_lib.common.compute_preconditioning_matrix(
-            args.dir, egs_dir, num_archives, run_opts,
-            max_lda_jobs=args.max_lda_jobs,
-            rand_prune=args.rand_prune)
+#    if args.stage <= -3:
+#        logger.info('Computing the preconditioning matrix for input features')
+#
+#        train_lib.common.compute_preconditioning_matrix(
+#            args.dir, egs_dir, num_archives, run_opts,
+#            max_lda_jobs=args.max_lda_jobs,
+#            rand_prune=args.rand_prune)
 
     if args.stage <= -2:
         logger.info("Computing initial vector for FixedScaleComponent before"
@@ -402,6 +400,19 @@ def train(args, run_opts):
                                    if common_train_lib.should_do_shrinkage(
                                            iter, model_file,
                                            args.shrink_saturation_threshold) else 1.0)
+
+            percent = num_archives_processed * 100.0 / num_archives_to_process
+            epoch = (num_archives_processed * args.num_epochs
+                     / num_archives_to_process)
+            shrink_info_str = ''
+            if shrinkage_value != 1.0:
+                shrink_info_str = 'shrink: {0:0.5f}'.format(shrinkage_value)
+            logger.info("Iter: {0}/{1}    "
+                        "Epoch: {2:0.2f}/{3:0.1f} ({4:0.1f}% complete)    "
+                        "lr: {5:0.6f}    {6}".format(iter, num_iters - 1,
+                                                     epoch, args.num_epochs,
+                                                     percent,
+                                                     lrate, shrink_info_str))
 
             train_lib.common.train_one_iteration(
                 dir=args.dir,
