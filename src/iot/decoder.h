@@ -53,14 +53,7 @@ class Decoder {
   /// all final-probs as one.
   void GetBestPath(bool use_final_prob, Lattice *best_path) const;
 
-  /*
-  const DecCore &GetDecCore() const { return core_; }
-  */
-
   ~Decoder();
-
-  OnlineNnet2FeaturePipeline* Feature() { return feature_; }
-  OnlineNnet2FeaturePipelineInfo& FeatureInfo() { return feature_info_; }
 
  private:
   const TransitionModel &trans_model_;
