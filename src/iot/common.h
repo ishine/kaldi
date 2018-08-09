@@ -23,6 +23,12 @@ typedef int32 PhoneId;
 #define kSilencePhoneId 1
 #define kSilencePhoneString "<sil>"
 
+enum AudioFormat {
+  UNKNOWN_AUDIO_FORMAT,
+  RAW_FLOAT_8K,
+  RAW_FLOAT_16K
+};
+
 template<typename T>
 inline void DELETE(T& ptr) {
   if (ptr != NULL) {

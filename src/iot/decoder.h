@@ -36,7 +36,7 @@ class Decoder {
 
   void StartSession(const char* session_key = NULL);
 
-  void AcceptAudio(BaseFloat sample_rate, const VectorBase<BaseFloat> &audio_chunk);
+  void AcceptAudio(const void* data, int32 nbytes, AudioFormat audio_format);
 
   int32 NumFramesDecoded() const;
 
@@ -44,8 +44,7 @@ class Decoder {
 
   void StopSession();
 
-  // Gets acoustic-scaled lattice.
-  // "use_final_prob" will be true if you want the final-probs to be included.
+  // Gets acoustic-scaled lattice
   void GetLattice(bool use_final_prob, CompactLattice *clat) const;
 
   /// Outputs an FST corresponding to the single best path through the current

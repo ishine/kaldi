@@ -206,29 +206,38 @@ int main(int argc, char *argv[]) {
           continue;
         }
         const WaveData &wave_data = wav_reader.Value(utt);
-        SubVector<BaseFloat> data(wave_data.Data(), 0); // only use channel 0
-        decoder.StartSession(utt.c_str());
-        OnlineTimer decoding_timer(utt);
-        BaseFloat samp_freq = wave_data.SampFreq();
-        int32 chunk_length;
+        SubVector<BaseFloat> audio(wave_data.Data(), 0); // only use channel 0
+        BaseFloat sample_rate = wave_data.SampFreq();
+
+        AudioFormat audio_format = UNKNOWN_AUDIO_FORMAT;
+        if (sample_rate == 8000) {
+          audio_format = RAW_FLOAT_8K;
+        } else if (sample_rate == 16000) {
+          audio_format = RAW_FLOAT_16K;
+        }
+        KALDI_ASSERT(audio_format != UNKNOWN_AUDIO_FORMAT);
+
+        int32 chunk_samples;
         if (chunk_length_secs > 0) {
-          chunk_length = int32(samp_freq * chunk_length_secs);
-          if (chunk_length == 0) chunk_length = 1;
+          chunk_samples = int32(sample_rate * chunk_length_secs);
+          if (chunk_samples == 0) chunk_samples = 1;
         } else {
-          chunk_length = std::numeric_limits<int32>::max();
+          chunk_samples = std::numeric_limits<int32>::max();
         }
 
-        int32 samp_offset = 0;
-        std::vector<std::pair<int32, BaseFloat> > delta_weights;
+        decoder.StartSession(utt.c_str());
+        OnlineTimer decoding_timer(utt);
 
-        while (samp_offset < data.Dim()) {
-          int32 samp_remaining = data.Dim() - samp_offset;
-          int32 num_samp = chunk_length < samp_remaining ? chunk_length : samp_remaining;
+        int32 samples_done = 0;
+        while (samples_done < audio.Dim()) {
+          int32 samples_remaining = audio.Dim() - samples_done;
+          int32 n = chunk_samples < samples_remaining ? chunk_samples : samples_remaining;
 
-          SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
-          decoder.AcceptAudio(samp_freq, wave_part);
-          samp_offset += num_samp;
-          decoding_timer.WaitUntil(samp_offset / samp_freq);     
+          SubVector<BaseFloat> audio_chunk(audio, samples_done, n);
+          decoder.AcceptAudio(audio_chunk.Data(), audio_chunk.SizeInBytes(), audio_format);
+
+          samples_done += n;
+          decoding_timer.WaitUntil(samples_done / sample_rate);     
 
           if (do_endpointing && decoder.EndpointDetected()) {
             break;
@@ -237,15 +246,13 @@ int main(int argc, char *argv[]) {
         decoder.StopSession();
 
         CompactLattice clat;
-        bool end_of_utterance = true;
-        decoder.GetLattice(end_of_utterance, &clat);
+        decoder.GetLattice(true, &clat); // use_final_prob = true
 
         GetDiagnosticsAndPrintOutput(utt, word_syms, clat, &num_frames, &tot_like);
 
         decoding_timer.OutputStats(&timing_stats);
         // we want to output the lattice with un-scaled acoustics.
-        BaseFloat inv_acoustic_scale = 
-            1.0 / decodable_opts.acoustic_scale;
+        BaseFloat inv_acoustic_scale = 1.0 / decodable_opts.acoustic_scale;
         ScaleLattice(AcousticLatticeScale(inv_acoustic_scale), &clat);
 
         clat_writer.Write(utt, clat);

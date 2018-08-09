@@ -26,7 +26,7 @@ struct EndPointerConfig {
   BaseFloat max_utterance_length;
   BaseFloat min_trailing_silence;
   BaseFloat max_relative_cost;
-  BaseFloat subsampled_frame_shift;
+  BaseFloat decoder_frame_shift;
 
   void Register(OptionsItf *opts) {
     opts->Register("silence-phones", &silence_phones, "");
@@ -34,7 +34,7 @@ struct EndPointerConfig {
     opts->Register("max-utterance-length", &max_utterance_length, "");
     opts->Register("min-trailing-silence", &min_trailing_silence, "");
     opts->Register("max-relative-cost", &max_relative_cost, "");
-    opts->Register("subsampled-frame-shift", &subsampled_frame_shift, "");
+    opts->Register("decoder-frame-shift", &decoder_frame_shift, "");
   }
 };
 

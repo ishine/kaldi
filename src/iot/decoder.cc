@@ -45,8 +45,27 @@ void Decoder::StartSession(const char* session_key) {
 }
 
 
-void Decoder::AcceptAudio(BaseFloat sample_rate, const VectorBase<BaseFloat> &audio_chunk) {
+void Decoder::AcceptAudio(const void* data, int32 nbytes, AudioFormat audio_format) {
   KALDI_ASSERT(feature_ != NULL);
+
+  int sample_rate;
+  switch(audio_format) {
+    case RAW_FLOAT_8K:
+      sample_rate = 8000;
+      break;
+    case RAW_FLOAT_16K:
+      sample_rate = 16000;
+      break;
+    default:
+      sample_rate = -1;
+  }
+  KALDI_ASSERT(sample_rate != -1);
+
+  BaseFloat* p = (BaseFloat*)data;
+  int n = nbytes / sizeof(BaseFloat);
+  
+  SubVector<BaseFloat> audio_chunk(p, n);
+
   feature_->AcceptWaveform(sample_rate, audio_chunk);
   core_.AdvanceDecoding(decodable_);
 }
