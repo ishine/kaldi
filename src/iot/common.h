@@ -25,8 +25,10 @@ typedef int32 PhoneId;
 
 enum AudioFormat {
   UNKNOWN_AUDIO_FORMAT,
-  RAW_FLOAT_8K,
-  RAW_FLOAT_16K
+  FLOAT_8K,
+  FLOAT_16K,
+  SHORT_8K,
+  SHORT_16k
 };
 
 template<typename T>

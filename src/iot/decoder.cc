@@ -50,10 +50,10 @@ void Decoder::AcceptAudio(const void* data, int32 nbytes, AudioFormat audio_form
 
   int sample_rate;
   switch(audio_format) {
-    case RAW_FLOAT_8K:
+    case FLOAT_8K:
       sample_rate = 8000;
       break;
-    case RAW_FLOAT_16K:
+    case FLOAT_16K:
       sample_rate = 16000;
       break;
     default:
