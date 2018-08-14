@@ -162,17 +162,18 @@ void DecCore::ComputeFinalCosts(
   KALDI_ASSERT(!decoding_finalized_);
   if (final_costs != NULL)
     final_costs->clear();
-  const Elem *final_toks = token_set_.GetList();
+
   BaseFloat infinity = std::numeric_limits<BaseFloat>::infinity();
   BaseFloat best_cost = infinity,
             best_cost_with_final = infinity;
-  while (final_toks != NULL) {
-    ViterbiState state = final_toks->key;
+
+  const Elem *e = token_set_.GetList();
+  while (e != NULL) {
+    ViterbiState state = e->key;
     WfstStateId la_state = ExtractLaState(state),
                 lm_state = ExtractLmState(state);
 
-    Token *tok = final_toks->val;
-    const Elem *next = final_toks->tail;
+    Token *tok = e->val;
 
     BaseFloat la_final_cost = la_fst_->Final(la_state);
     BaseFloat lm_final_cost = (lm_fst_ == NULL) ? 0.0f : lm_fst_->Final(lm_state).Value(); //TODO: validate if 0.0f is appropriate
@@ -182,10 +183,13 @@ void DecCore::ComputeFinalCosts(
               cost_with_final = cost + final_cost;
     best_cost = std::min(cost, best_cost);
     best_cost_with_final = std::min(cost_with_final, best_cost_with_final);
+
     if (final_costs != NULL && final_cost != infinity)
       (*final_costs)[tok] = final_cost;
-    final_toks = next;
+      
+    e = e->tail;
   }
+
   if (final_relative_cost != NULL) {
     if (best_cost == infinity && best_cost_with_final == infinity) {
       // Likely this will only happen if there are no tokens surviving.
@@ -195,6 +199,7 @@ void DecCore::ComputeFinalCosts(
       *final_relative_cost = best_cost_with_final - best_cost;
     }
   }
+
   if (final_best_cost != NULL) {
     if (best_cost_with_final != infinity) { // final-state exists.
       *final_best_cost = best_cost_with_final;
