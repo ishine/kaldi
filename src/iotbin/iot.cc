@@ -211,9 +211,9 @@ int main(int argc, char *argv[]) {
 
         AudioFormat audio_format = UNKNOWN_AUDIO_FORMAT;
         if (sample_rate == 8000) {
-          audio_format = RAW_FLOAT_8K;
+          audio_format = FLOAT_8K;
         } else if (sample_rate == 16000) {
-          audio_format = RAW_FLOAT_16K;
+          audio_format = FLOAT_16K;
         }
         KALDI_ASSERT(audio_format != UNKNOWN_AUDIO_FORMAT);
 
