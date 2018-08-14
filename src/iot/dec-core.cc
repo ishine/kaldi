@@ -3,10 +3,18 @@
 namespace kaldi {
 namespace iot {
 
-DecCore::DecCore(Wfst *fst, const TransitionModel &trans_model, const DecCoreConfig &config):
-    fst_(fst), trans_model_(trans_model), config_(config), num_toks_(0) {
+DecCore::DecCore(Wfst *la_fst, 
+                 fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst,
+                 const TransitionModel &trans_model, 
+                 const DecCoreConfig &config)
+  : la_fst_(la_fst),
+    lm_fst_(lm_fst),
+    trans_model_(trans_model), 
+    config_(config)
+{
   config_.Check();
   token_set_.SetSize(1000);
+  num_toks_ = 0; 
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
@@ -29,13 +37,19 @@ void DecCore::InitDecoding() {
   num_toks_ = 0;
   decoding_finalized_ = false;
   final_costs_.clear();
-  StateId start_state = fst_->Start();
-  KALDI_ASSERT(start_state != fst::kNoStateId);
-  token_net_.resize(1);
-  Token *start_tok = NewToken(0.0, 0.0, NULL, NULL, NULL);
-  token_net_[0].toks = start_tok;
-  token_set_.Insert(start_state, start_tok);
+
+  WfstStateId la_start_state = la_fst_->Start();
+  WfstStateId lm_start_state = (lm_fst_ == NULL) ? 0 : lm_fst_->Start();
+  ViterbiState start_state = ComposeViterbiState(la_start_state, lm_start_state);
+
+  Token *start_token = NewToken(0.0, 0.0, NULL, NULL, NULL);
   num_toks_++;
+
+  token_net_.resize(1);
+  token_net_[0].toks = start_token;
+
+  token_set_.Insert(start_state, start_token);
+
   ProcessNonemitting(config_.beam);
 }
 
@@ -151,14 +165,21 @@ void DecCore::ComputeFinalCosts(
   const Elem *final_toks = token_set_.GetList();
   BaseFloat infinity = std::numeric_limits<BaseFloat>::infinity();
   BaseFloat best_cost = infinity,
-      best_cost_with_final = infinity;
+            best_cost_with_final = infinity;
   while (final_toks != NULL) {
-    StateId state = final_toks->key;
+    ViterbiState state = final_toks->key;
+    WfstStateId la_state = ExtractLaState(state),
+                lm_state = ExtractLmState(state);
+
     Token *tok = final_toks->val;
     const Elem *next = final_toks->tail;
-    BaseFloat final_cost = fst_->Final(state);
+
+    BaseFloat la_final_cost = la_fst_->Final(la_state);
+    BaseFloat lm_final_cost = (lm_fst_ == NULL) ? 0.0f : lm_fst_->Final(lm_state).Value(); //TODO: validate if 0.0f is appropriate
+    BaseFloat final_cost = la_final_cost + lm_final_cost;
+    
     BaseFloat cost = tok->total_cost,
-        cost_with_final = cost + final_cost;
+              cost_with_final = cost + final_cost;
     best_cost = std::min(cost, best_cost);
     best_cost_with_final = std::min(cost_with_final, best_cost_with_final);
     if (final_costs != NULL && final_cost != infinity)
@@ -247,7 +268,7 @@ DecCore::BestPathIterator DecCore::TraceBackBestPath(
         oarc->ilabel = link->ilabel;
         oarc->olabel = link->olabel;
         BaseFloat graph_cost = link->graph_cost,
-            acoustic_cost = link->acoustic_cost;
+                  acoustic_cost = link->acoustic_cost;
         if (link->ilabel != 0) {
           KALDI_ASSERT(static_cast<size_t>(cur_t) < cost_offsets_.size());
           acoustic_cost -= cost_offsets_[cur_t];
@@ -503,10 +524,11 @@ void DecCore::PossiblyResizeHash(size_t num_toks) {
 }
 
 
-inline DecCore::Token *DecCore::FindOrAddToken(
-    StateId state, int32 t, BaseFloat total_cost,
-    Token *backpointer, bool *changed) {
-
+inline DecCore::Token *DecCore::FindOrAddToken(ViterbiState state, 
+                                               int32 t, 
+                                               BaseFloat total_cost,
+                                               Token *backpointer, 
+                                               bool *changed) {
   KALDI_ASSERT(t < token_net_.size());
   Token *&toks = token_net_[t].toks;
   Elem *e_found = token_set_.Find(state);
@@ -815,6 +837,26 @@ BaseFloat DecCore::GetCutoff(Elem *list_head, size_t *tok_count,
 }
 
 
+WfstStateId DecCore::PropagateLm(WfstStateId lm_state, WfstArc *arc) { // returns new LM state.
+  if (arc->olabel == kWfstEpsilon) {
+    return lm_state; // no change in LM state if no word crossed.
+  } else { // Propagate in the LM-diff FST.
+    Arc lm_arc;
+    bool ans = lm_fst_->GetArc(lm_state, arc->olabel, &lm_arc);
+    if (!ans) { // this case is unexpected for statistical LMs.
+      KALDI_LOG << "No arc available in LM (unlikely to be correct "
+                   "if a statistical language model);";
+      exit(0);
+    } else {
+      arc->weight = arc->weight + lm_arc.weight.Value();
+      //TODO: ? KALDI_ASSERT(arc->olabel == lm_arc.olabel);
+      arc->olabel = lm_arc.olabel; // probably will be the same.
+      return lm_arc.nextstate; // return the new LM state.
+    }
+  }
+}
+
+
 BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   KALDI_ASSERT(token_net_.size() > 0);
   int32 frame = token_net_.size() - 1; // frame is the frame-index
@@ -822,13 +864,13 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   // from the decodable object.
   token_net_.resize(token_net_.size() + 1);
 
-  Elem *final_toks = token_set_.Clear(); // analogous to swapping prev_toks_ / cur_toks_
+  Elem *prev_toks = token_set_.Clear(); // analogous to swapping prev_toks_ / cur_toks_
   // in simple-decoder.h.   Removes the Elems from
   // being indexed in the hash in token_set_.
   Elem *best_elem = NULL;
   BaseFloat adaptive_beam;
   size_t tok_cnt;
-  BaseFloat cur_cutoff = GetCutoff(final_toks, &tok_cnt, &adaptive_beam, &best_elem);
+  BaseFloat cur_cutoff = GetCutoff(prev_toks, &tok_cnt, &adaptive_beam, &best_elem);
   PossiblyResizeHash(tok_cnt);  // This makes sure the hash is always big enough.
 
   BaseFloat next_cutoff = std::numeric_limits<BaseFloat>::infinity();
@@ -841,16 +883,22 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   // reasonably tight bound on the next cutoff.  The only
   // products of the next block are "next_cutoff" and "cost_offset".
   if (best_elem) {
-    StateId state = best_elem->key;
+    ViterbiState state = best_elem->key;
+    WfstStateId la_state = ExtractLaState(state),
+                lm_state = ExtractLmState(state);
+
     Token *tok = best_elem->val;
     cost_offset = - tok->total_cost;
 
-    const WfstState *s = fst_->State(state);
-    const WfstArc *a = fst_->Arc(s->arc_base);
+    const WfstState *s = la_fst_->State(la_state);
+    const WfstArc *a   = la_fst_->Arc(s->arc_base);
 
     for (int32 j = 0; j < s->num_arcs; j++,a++) {
       WfstArc arc = *a;
       if (arc.ilabel != kWfstEpsilon) {  // propagate..
+        if (lm_fst_ != NULL) {
+          PropagateLm(lm_state, &arc);
+        }
         BaseFloat new_weight = tok->total_cost + arc.weight + (-decodable->LogLikelihood(frame, arc.ilabel)) + cost_offset;
         if (new_weight + adaptive_beam < next_cutoff)
           next_cutoff = new_weight + adaptive_beam;
@@ -864,30 +912,37 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   cost_offsets_.resize(frame + 1, 0.0);
   cost_offsets_[frame] = cost_offset;
 
-  // the tokens are now owned here, in final_toks, and the hash is empty.
+  // the tokens are now owned here, in prev_toks, and the hash is empty.
   // 'owned' is a complex thing here; the point is we need to call DeleteElem
   // on each elem 'e' to let token_set_ know we're done with them.
-  for (Elem *e = final_toks, *e_tail; e != NULL; e = e_tail) {
+  for (Elem *e = prev_toks, *e_tail; e != NULL; e = e_tail) {
     // loop this way because we delete "e" as we go.
-    StateId state = e->key;
+    ViterbiState state = e->key;
+    WfstStateId la_state = ExtractLaState(state),
+                lm_state = ExtractLmState(state);
+
     Token *tok = e->val;
     if (tok->total_cost <= cur_cutoff) {
-      const WfstState *s = fst_->State(state);
-      const WfstArc *a = fst_->Arc(s->arc_base);
+      const WfstState *s = la_fst_->State(la_state);
+      const WfstArc *a   = la_fst_->Arc(s->arc_base);
       for (int32 j = 0; j < s->num_arcs; j++, a++) {
         WfstArc arc = *a;
         if (arc.ilabel != kWfstEpsilon) { // emitting
-          WfstArc arc = *a;
+          WfstStateId next_la_state = arc.dst;
+          WfstStateId next_lm_state = (lm_fst_ == NULL) ? 0 : PropagateLm(lm_state, &arc);
+          
           BaseFloat ac_cost = cost_offset + (-decodable->LogLikelihood(frame, arc.ilabel)),
-              graph_cost = arc.weight,
-              cur_cost = tok->total_cost,
-              total_cost = cur_cost + ac_cost + graph_cost;
+                    graph_cost = arc.weight,
+                    cur_cost = tok->total_cost,
+                    total_cost = cur_cost + ac_cost + graph_cost;
+
           if (total_cost > next_cutoff) continue;
           else if (total_cost + adaptive_beam < next_cutoff)
             next_cutoff = total_cost + adaptive_beam; // prune by best current token
-          // Note: the frame indexes into token_net_ are one-based,
-          // hence the + 1.
-          Token *dst_tok = FindOrAddToken(arc.dst, frame + 1, total_cost, tok, NULL);
+
+          ViterbiState next_state = ComposeViterbiState(next_la_state, next_lm_state);
+          // token_net_ is indexed by t, after processing frame f, t = f+1
+          Token *dst_tok = FindOrAddToken(next_state, frame + 1, total_cost, tok, NULL);
           // NULL: no change indicator needed
 
           // Add ForwardLink from tok to dst_tok (put on head of list tok->links)
@@ -904,7 +959,7 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
 
 void DecCore::ProcessNonemitting(BaseFloat cutoff) {
   KALDI_ASSERT(!token_net_.empty());
-  int32 frame = static_cast<int32>(token_net_.size()) - 2;
+  int32 cur_time = static_cast<int32>(token_net_.size()) - 1;
   // Note: "frame" is the time-index we just processed, or -1 if
   // we are processing the nonemitting transitions before the
   // first frame (called from InitDecoding()).
@@ -920,14 +975,17 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
     queue_.push_back(e->key);
   if (queue_.empty()) {
     if (!warned_) {
-      KALDI_WARN << "Error, no surviving tokens: frame is " << frame;
+      KALDI_WARN << "Error, no surviving tokens at time " << cur_time;
       warned_ = true;
     }
   }
 
   while (!queue_.empty()) {
-    StateId state = queue_.back();
+    ViterbiState state = queue_.back();
     queue_.pop_back();
+
+    WfstStateId la_state = ExtractLaState(state),
+                lm_state = ExtractLmState(state);
 
     Token *tok = token_set_.Find(state)->val;  // would segfault if state not in token_set_ but this can't happen.
     BaseFloat cur_cost = tok->total_cost;
@@ -940,22 +998,28 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
     DeleteLinksFromToken(tok); // necessary when re-visiting
     tok->links = NULL;
 
-    const WfstState *s = fst_->State(state);
-    const WfstArc *a = fst_->Arc(s->arc_base);
+    const WfstState *s = la_fst_->State(la_state);
+    const WfstArc   *a = la_fst_->Arc(s->arc_base);
 
     for (int32 j = 0; j < s->num_arcs; j++, a++) {
       WfstArc arc = *a;
       if (arc.ilabel == kWfstEpsilon) {  // non-emitting
+        WfstStateId next_la_state = arc.dst;
+        WfstStateId next_lm_state = (lm_fst_ == NULL) ? 0 : PropagateLm(lm_state, &arc);
+        
         BaseFloat graph_cost = arc.weight,
-            total_cost = cur_cost + graph_cost;
+                  total_cost = cur_cost + graph_cost;
+
         if (total_cost < cutoff) {
+          ViterbiState next_state = ComposeViterbiState(next_la_state, next_lm_state);
+          
           bool changed;
-          Token *new_tok = FindOrAddToken(arc.dst, frame + 1, total_cost, tok, &changed);
-          tok->links = NewLink(new_tok, 0, arc.olabel, graph_cost, 0, tok->links);
+          Token *dst_tok = FindOrAddToken(next_state, cur_time, total_cost, tok, &changed);
+          tok->links = NewLink(dst_tok, 0, arc.olabel, graph_cost, 0, tok->links);
 
           // "changed" tells us whether the new token has a different
           // cost from before, or is new [if so, add into queue].
-          if (changed) queue_.push_back(arc.dst);
+          if (changed) queue_.push_back(next_state);
         }
       }
     } // for all arcs

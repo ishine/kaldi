@@ -161,11 +161,11 @@ int main(int argc, char *argv[]) {
       nnet3::CollapseModel(nnet3::CollapseModelConfig(), &(am_nnet.GetNnet()));
     }
 
-    Wfst *decode_fst = new Wfst;
+    Wfst *la_fst = new Wfst;
     {
       bool binary;
       Input ki(fst_rxfilename, &binary);
-      decode_fst->Read(ki.Stream(), binary);
+      la_fst->Read(ki.Stream(), binary);
     }
 
     fst::SymbolTable *word_syms = NULL;
@@ -184,7 +184,8 @@ int main(int argc, char *argv[]) {
 
     OnlineTimingStats timing_stats;
 
-    Decoder decoder(decode_fst,
+    Decoder decoder(la_fst,
+                    NULL,
                     trans_model,
                     am_nnet,
                     feature_opts,
@@ -267,7 +268,7 @@ int main(int argc, char *argv[]) {
               << num_err << " with errors.";
     KALDI_LOG << "Overall likelihood per frame was " << (tot_like / num_frames)
               << " per frame over " << num_frames << " frames.";
-    delete decode_fst;
+    delete la_fst;
     delete word_syms; // will delete if non-NULL.
     return (num_done != 0 ? 0 : 1);
   } catch(const std::exception& e) {

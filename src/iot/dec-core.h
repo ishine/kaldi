@@ -92,7 +92,12 @@ class DecCore {
   typedef Arc::StateId StateId;
   typedef Arc::Weight Weight;
 
-  DecCore(Wfst *fst, const TransitionModel &trans_model, const DecCoreConfig &config);
+  typedef uint64 ViterbiState;
+
+  DecCore(Wfst *la_fst, 
+          fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst,
+          const TransitionModel &trans_model, 
+          const DecCoreConfig &config);
   ~DecCore();
 
   void SetOptions(const DecCoreConfig &config) { config_ = config; }
@@ -134,6 +139,16 @@ class DecCore {
   bool GetRawLatticePruned(Lattice *ofst, bool use_final_probs, BaseFloat beam) const;
 
  private:
+
+  inline ViterbiState ComposeViterbiState(WfstStateId la_state, WfstStateId lm_state) {
+    return static_cast<ViterbiState>(la_state) + (static_cast<ViterbiState>(lm_state) << 32);
+  }
+  static inline WfstStateId ExtractLaState(ViterbiState viterbi_state) {
+    return static_cast<WfstStateId>(static_cast<uint32>(viterbi_state));
+  }
+  static inline WfstStateId ExtractLmState(ViterbiState viterbi_state) {
+    return static_cast<WfstStateId>(static_cast<uint32>(viterbi_state >> 32));
+  }
 
   struct Token;
 
@@ -239,9 +254,11 @@ class DecCore {
     { }
   };
 
-  typedef HashList<StateId, Token*>::Elem Elem;
+  typedef HashList<ViterbiState, Token*>::Elem Elem;
 
   void PossiblyResizeHash(size_t num_toks);
+
+  inline WfstStateId PropagateLm(WfstStateId lm_state, WfstArc *arc);
 
   // FindOrAddToken either locates a token in hash of token_set_, or if necessary
   // inserts a new, empty token (i.e. with no forward links) for the current
@@ -251,7 +268,7 @@ class DecCore {
   // index plus one, which is used to index into the token_net_ array.
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.
-  inline Token *FindOrAddToken(StateId state, int32 t,
+  inline Token *FindOrAddToken(ViterbiState state, int32 t,
                                BaseFloat total_cost, Token *backpointer,
                                bool *changed);
 
@@ -314,13 +331,15 @@ class DecCore {
   MemoryPool *token_pool_;
   MemoryPool *link_pool_;
 
-  HashList<StateId, Token*> token_set_;
+  HashList<ViterbiState, Token*> token_set_;
   std::vector<TokenList> token_net_;
 
-  std::vector<StateId> queue_;
+  std::vector<ViterbiState> queue_;
   std::vector<BaseFloat> tmp_array_;
 
-  Wfst *fst_;
+  Wfst *la_fst_;
+  fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst_;
+
   const TransitionModel &trans_model_;
 
   std::vector<BaseFloat> cost_offsets_;

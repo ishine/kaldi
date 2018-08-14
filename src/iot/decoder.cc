@@ -3,7 +3,8 @@
 namespace kaldi {
 namespace iot {
 
-Decoder::Decoder(Wfst *fst,
+Decoder::Decoder(Wfst *la_fst,
+                 fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst,
                  const TransitionModel &trans_model,
                  nnet3::AmNnetSimple &am_nnet,
                  const OnlineNnet2FeaturePipelineConfig &feature_config,
@@ -15,7 +16,7 @@ Decoder::Decoder(Wfst *fst,
   decodable_info_(decodable_config, &am_nnet),
   decodable_(NULL),
   core_config_(core_config),
-  core_(fst, trans_model, core_config_),
+  core_(la_fst, lm_fst, trans_model, core_config_),
   end_pointer_(NULL)
 { }
 
