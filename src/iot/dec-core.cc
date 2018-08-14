@@ -81,20 +81,18 @@ void DecCore::AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frame
   KALDI_ASSERT(!token_net_.empty() && !decoding_finalized_ &&
                "You must call InitDecoding() before AdvanceDecoding");
   int32 num_frames_ready = decodable->NumFramesReady();
-  // num_frames_ready must be >= num_frames_decoded, or else
-  // the number of frames ready must have decreased (which doesn't
-  // make sense) or the decodable object changed between calls
-  // (which isn't allowed).
   KALDI_ASSERT(num_frames_ready >= NumFramesDecoded());
+
   int32 target_frames_decoded = num_frames_ready;
-  if (max_num_frames >= 0)
+  if (max_num_frames >= 0) {
     target_frames_decoded = std::min(target_frames_decoded,
                                      NumFramesDecoded() + max_num_frames);
+  }
+
   while (NumFramesDecoded() < target_frames_decoded) {
     if (NumFramesDecoded() % config_.prune_interval == 0) {
       PruneTokenNet(config_.lattice_beam * config_.prune_scale);
     }
-    // note: ProcessEmitting() increments NumFramesDecoded().
     BaseFloat cost_cutoff = ProcessEmitting(decodable);
     ProcessNonemitting(cost_cutoff);
   }
@@ -160,8 +158,9 @@ void DecCore::ComputeFinalCosts(
     BaseFloat *final_relative_cost,
     BaseFloat *final_best_cost) const {
   KALDI_ASSERT(!decoding_finalized_);
-  if (final_costs != NULL)
+  if (final_costs != NULL) {
     final_costs->clear();
+  }
 
   BaseFloat infinity = std::numeric_limits<BaseFloat>::infinity();
   BaseFloat best_cost = infinity,
@@ -210,9 +209,8 @@ void DecCore::ComputeFinalCosts(
 }
 
 
-DecCore::BestPathIterator DecCore::BestPathEnd(
-    bool use_final_probs,
-    BaseFloat *final_cost_out) const {
+DecCore::BestPathIterator DecCore::BestPathEnd(bool use_final_probs, 
+                                               BaseFloat *final_cost_out) const {
   if (decoding_finalized_ && !use_final_probs)
     KALDI_ERR << "You cannot call FinalizeDecoding() and then call "
               << "BestPathEnd() with use_final_probs == false";
@@ -338,8 +336,7 @@ bool DecCore::TestGetBestPath(bool use_final_probs) const {
 }
 
 
-// Outputs an FST corresponding to the raw, state-level
-// tracebacks.
+// Outputs an FST corresponding to the raw, state-level tracebacks.
 bool DecCore::GetRawLattice(Lattice *ofst, bool use_final_probs) const {
   typedef LatticeArc Arc;
   typedef Arc::StateId StateId;
@@ -484,9 +481,7 @@ bool DecCore::GetRawLatticePruned(
     KALDI_ASSERT(iter != tok_map.end());
     StateId cur_state = iter->second;
 
-    for (ForwardLink *l = cur_tok->links;
-         l != NULL;
-         l = l->next) {
+    for (ForwardLink *l = cur_tok->links; l != NULL; l = l->next) {
       Token *dst_tok = l->dst_tok;
       if (dst_tok->extra_cost < beam) {
         // so both the current and the next token are good; create the arc
