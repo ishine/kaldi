@@ -301,7 +301,8 @@ class DecCore {
   //    toward the beginning of the file.
   // extra_costs_changed is set to true if extra_cost was changed for any token
   // links_pruned is set to true if any link in any token was pruned
-  void PruneForwardLinks(int32 t, bool *extra_costs_changed,
+  void PruneForwardLinks(int32 t, 
+                         bool *extra_costs_changed,
                          bool *links_pruned,
                          BaseFloat delta);
 
@@ -322,11 +323,36 @@ class DecCore {
   void PruneTokenNet(BaseFloat delta);
 
   /// Gets the weight cutoff.  Also counts the active tokens.
-  BaseFloat GetCutoff(Elem *list_head, size_t *tok_count,
-                      BaseFloat *adaptive_beam, Elem **best_elem);
+  BaseFloat GetCutoff(Elem *list_head, 
+                      size_t *tok_count, 
+                      BaseFloat *adaptive_beam, 
+                      Elem **best_elem);
 
   BaseFloat ProcessEmitting(DecodableInterface *decodable);
   void ProcessNonemitting(BaseFloat cost_cutoff);
+
+  // There are various cleanup tasks... the the token_set_ structure contains
+  // singly linked lists of Token pointers, where Elem is the list type.
+  // It also indexes them in a hash, indexed by state (this hash is only
+  // maintained for the most recent frame).  token_set_.Clear()
+  // deletes them from the hash and returns the list of Elems.  The
+  // function DeleteElems calls token_set_.Delete(elem) for each elem in
+  // the list, which returns ownership of the Elem to the token_set_ structure
+  // for reuse, but does not delete the Token pointer.  The Token pointers
+  // are reference-counted and are ultimately deleted in PruneTokenList,
+  // but are also linked together on each frame by their own linked-list,
+  // using the "next" pointer.  We delete them manually.
+  void DeleteElems(Elem *list);
+
+  // This function takes a singly linked list of tokens for a single frame, and
+  // outputs a list of them in topological order (it will crash if no such order
+  // can be found, which will typically be due to decoding graphs with epsilon
+  // cycles, which are not allowed).  Note: the output list may contain NULLs,
+  // which the caller should pass over; it just happens to be more efficient for
+  // the algorithm to output a list that contains NULLs.
+  static void TopSortTokens(Token *tok_list, std::vector<Token*> *topsorted_list);
+
+  void ClearTokenNet();
 
   MemoryPool *token_pool_;
   MemoryPool *link_pool_;
@@ -360,29 +386,6 @@ class DecCore {
   unordered_map<Token*, BaseFloat> final_costs_;
   BaseFloat final_relative_cost_;
   BaseFloat final_best_cost_;
-
-  // There are various cleanup tasks... the the token_set_ structure contains
-  // singly linked lists of Token pointers, where Elem is the list type.
-  // It also indexes them in a hash, indexed by state (this hash is only
-  // maintained for the most recent frame).  token_set_.Clear()
-  // deletes them from the hash and returns the list of Elems.  The
-  // function DeleteElems calls token_set_.Delete(elem) for each elem in
-  // the list, which returns ownership of the Elem to the token_set_ structure
-  // for reuse, but does not delete the Token pointer.  The Token pointers
-  // are reference-counted and are ultimately deleted in PruneTokensForFrame,
-  // but are also linked together on each frame by their own linked-list,
-  // using the "next" pointer.  We delete them manually.
-  void DeleteElems(Elem *list);
-
-  // This function takes a singly linked list of tokens for a single frame, and
-  // outputs a list of them in topological order (it will crash if no such order
-  // can be found, which will typically be due to decoding graphs with epsilon
-  // cycles, which are not allowed).  Note: the output list may contain NULLs,
-  // which the caller should pass over; it just happens to be more efficient for
-  // the algorithm to output a list that contains NULLs.
-  static void TopSortTokens(Token *tok_list, std::vector<Token*> *topsorted_list);
-
-  void ClearTokenNet();
   
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecCore);
 };

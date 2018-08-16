@@ -59,20 +59,16 @@ void DecCore::InitDecoding() {
 bool DecCore::Decode(DecodableInterface *decodable) {
   InitDecoding();
 
-  // We use 1-based indexing for frames in this decoder (if you view it in
-  // terms of features), but note that the decodable object uses zero-based
-  // numbering, which we have to correct for when we call it.
-
   while (!decodable->IsLastFrame(NumFramesDecoded() - 1)) {
-    if (NumFramesDecoded() % config_.prune_interval == 0)
+    if (NumFramesDecoded() % config_.prune_interval == 0) {
       PruneTokenNet(config_.lattice_beam * config_.prune_scale);
-    BaseFloat cost_cutoff = ProcessEmitting(decodable);  // Note: the value returned by
+    }
+
+    BaseFloat cost_cutoff = ProcessEmitting(decodable);
     ProcessNonemitting(cost_cutoff);
   }
   FinalizeDecoding();
 
-  // Returns true if we have any kind of traceback available (not necessarily
-  // to the end state; query ReachedFinal() for that).
   return !token_net_.empty() && token_net_.back().toks != NULL;
 }
 
@@ -221,11 +217,11 @@ DecCore::BestPathIterator DecCore::BestPathEnd(bool use_final_probs,
 
   const unordered_map<Token*, BaseFloat> &final_costs =
       (decoding_finalized_ ? final_costs_ : final_costs_local);
-  if (!decoding_finalized_ && use_final_probs)
+  if (!decoding_finalized_ && use_final_probs) {
     ComputeFinalCosts(&final_costs_local, NULL, NULL);
+  }
   
-  // Singly linked list of tokens on last frame (access list through "next"
-  // pointer).
+  // Singly linked list of tokens on last frame (access list through "next" pointer).
   BaseFloat best_cost = std::numeric_limits<BaseFloat>::infinity();
   BaseFloat best_final_cost = 0;
   Token *best_tok = NULL;
@@ -564,9 +560,10 @@ inline DecCore::Token *DecCore::FindOrAddToken(ViterbiState state,
 }
 
 
-void DecCore::PruneForwardLinks(
-    int32 t, bool *extra_costs_changed,
-    bool *links_pruned, BaseFloat delta) {
+void DecCore::PruneForwardLinks(int32 t, 
+                                bool *extra_costs_changed, 
+                                bool *links_pruned, 
+                                BaseFloat delta) {
   *extra_costs_changed = false;
   *links_pruned = false;
   KALDI_ASSERT(t >= 0 && t < token_net_.size());
@@ -583,8 +580,7 @@ void DecCore::PruneForwardLinks(
   bool changed = true;  // difference new minus old extra cost >= delta ?
   while (changed) {
     changed = false;
-    for (Token *tok = token_net_[t].toks;
-         tok != NULL; tok = tok->next) {
+    for (Token *tok = token_net_[t].toks; tok != NULL; tok = tok->next) {
       ForwardLink *link, *prev_link = NULL;
       // will recompute tok_extra_cost for tok.
       BaseFloat tok_extra_cost = std::numeric_limits<BaseFloat>::infinity();
@@ -611,14 +607,16 @@ void DecCore::PruneForwardLinks(
               KALDI_WARN << "Negative extra_cost: " << link_extra_cost;
             link_extra_cost = 0.0;
           }
-          if (link_extra_cost < tok_extra_cost)
+          if (link_extra_cost < tok_extra_cost) {
             tok_extra_cost = link_extra_cost;
+          }
           prev_link = link;  // move to next link
           link = link->next;
         }
       }  // for all outgoing links
-      if (fabs(tok_extra_cost - tok->extra_cost) > delta)
+      if (fabs(tok_extra_cost - tok->extra_cost) > delta) {
         changed = true;   // difference new minus old is bigger than delta
+      }
       tok->extra_cost = tok_extra_cost;
       // will be +infinity or <= lattice_beam_.
       // infinity indicates, that no forward link survived pruning
@@ -636,8 +634,10 @@ void DecCore::PruneForwardLinksFinal() {
   KALDI_ASSERT(!token_net_.empty());
   int32 end_time = NumFramesDecoded();
 
-  if (token_net_[end_time].toks == NULL )  // empty list; should not happen.
+  if (token_net_[end_time].toks == NULL ) {
+    // empty list; should not happen.
     KALDI_WARN << "No tokens alive at end of file\n";
+  }
 
   typedef unordered_map<Token*, BaseFloat>::const_iterator IterType;
   ComputeFinalCosts(&final_costs_, &final_relative_cost_, &final_best_cost_);
@@ -656,8 +656,7 @@ void DecCore::PruneForwardLinksFinal() {
   BaseFloat delta = 1.0e-05;
   while (changed) {
     changed = false;
-    for (Token *tok = token_net_[end_time].toks;
-         tok != NULL; tok = tok->next) {
+    for (Token *tok = token_net_[end_time].toks;  tok != NULL;  tok = tok->next) {
       ForwardLink *link, *prev_link = NULL;
       // will recompute tok_extra_cost.  It has a term in it that corresponds
       // to the "final-prob", so instead of initializing tok_extra_cost to infinity
@@ -695,8 +694,9 @@ void DecCore::PruneForwardLinksFinal() {
               KALDI_WARN << "Negative extra_cost: " << link_extra_cost;
             link_extra_cost = 0.0;
           }
-          if (link_extra_cost < tok_extra_cost)
+          if (link_extra_cost < tok_extra_cost) {
             tok_extra_cost = link_extra_cost;
+          }
           prev_link = link;
           link = link->next;
         }
@@ -705,12 +705,13 @@ void DecCore::PruneForwardLinksFinal() {
       // was not necessary in the non-final case because then, this case
       // showed up as having no forward links.  Here, the tok_extra_cost has
       // an extra component relating to the final-prob.
-      if (tok_extra_cost > config_.lattice_beam)
+      if (tok_extra_cost > config_.lattice_beam) {
         tok_extra_cost = std::numeric_limits<BaseFloat>::infinity();
-      // to be pruned in PruneTokenList
+      } // to be pruned in PruneTokenList
 
-      if (!ApproxEqual(tok->extra_cost, tok_extra_cost, delta))
+      if (!ApproxEqual(tok->extra_cost, tok_extra_cost, delta)) {
         changed = true;
+      }
       tok->extra_cost = tok_extra_cost; // will be +infinity or <= lattice_beam_.
     }
   } // while changed
@@ -720,8 +721,10 @@ void DecCore::PruneForwardLinksFinal() {
 void DecCore::PruneTokenList(int32 t) {
   KALDI_ASSERT(t >= 0 && t < token_net_.size());
   Token *&toks = token_net_[t].toks;
-  if (toks == NULL)
+  if (toks == NULL) {
     KALDI_WARN << "No tokens alive [doing pruning]\n";
+  }
+
   Token *tok, *next_tok, *prev_tok = NULL;
   for (tok = toks; tok != NULL; tok = next_tok) {
     next_tok = tok->next;
@@ -743,7 +746,6 @@ void DecCore::PruneTokenNet(BaseFloat delta) {
   int32 num_toks_begin = num_toks_;
 
   for (int32 t = cur_time - 1; t >= 0; t--) {
-
     if (token_net_[t].must_prune_forward_links) {
       bool extra_costs_changed = false, links_pruned = false;
       PruneForwardLinks(t, &extra_costs_changed, &links_pruned, delta);
@@ -766,8 +768,10 @@ void DecCore::PruneTokenNet(BaseFloat delta) {
 
 
 /// Gets the weight cutoff.  Also counts the active tokens.
-BaseFloat DecCore::GetCutoff(Elem *list_head, size_t *tok_count,
-                                                BaseFloat *adaptive_beam, Elem **best_elem) {
+BaseFloat DecCore::GetCutoff(Elem *list_head, 
+                             size_t *tok_count,
+                             BaseFloat *adaptive_beam, 
+                             Elem **best_elem) {
   BaseFloat best_weight = std::numeric_limits<BaseFloat>::infinity();
   // positive == high cost == bad.
   size_t count = 0;
@@ -837,7 +841,7 @@ BaseFloat DecCore::GetCutoff(Elem *list_head, size_t *tok_count,
 }
 
 
-WfstStateId DecCore::PropagateLm(WfstStateId lm_state, WfstArc *arc) { // returns new LM state.
+WfstStateId DecCore::PropagateLm(WfstStateId lm_state, WfstArc *arc) {
   if (arc->olabel == kWfstEpsilon) {
     return lm_state; // no change in LM state if no word crossed.
   } else { // Propagate in the LM-diff FST.
@@ -859,14 +863,10 @@ WfstStateId DecCore::PropagateLm(WfstStateId lm_state, WfstArc *arc) { // return
 
 BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   KALDI_ASSERT(token_net_.size() > 0);
-  int32 frame = token_net_.size() - 1; // frame is the frame-index
-  // (zero-based) used to get likelihoods
-  // from the decodable object.
+  int32 frame = token_net_.size() - 1; // zero-based, to get likelihoods from the decodable object.
   token_net_.resize(token_net_.size() + 1);
 
-  Elem *prev_toks = token_set_.Clear(); // analogous to swapping prev_toks_ / cur_toks_
-  // in simple-decoder.h.   Removes the Elems from
-  // being indexed in the hash in token_set_.
+  Elem *prev_toks = token_set_.Clear(); // transfer elems from hash to list
   Elem *best_elem = NULL;
   BaseFloat adaptive_beam;
   size_t tok_cnt;
@@ -876,8 +876,7 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   BaseFloat next_cutoff = std::numeric_limits<BaseFloat>::infinity();
   // pruning "online" before having seen all tokens
 
-  BaseFloat cost_offset = 0.0; // Used to keep probabilities in a good
-  // dynamic range.
+  BaseFloat cost_offset = 0.0; // keep probabilities in a good dynamic range.
 
   // First process the best token to get a hopefully
   // reasonably tight bound on the next cutoff.  The only
@@ -900,8 +899,9 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
           PropagateLm(lm_state, &arc);
         }
         BaseFloat new_weight = tok->total_cost + arc.weight + (-decodable->LogLikelihood(frame, arc.ilabel)) + cost_offset;
-        if (new_weight + adaptive_beam < next_cutoff)
+        if (new_weight + adaptive_beam < next_cutoff) {
           next_cutoff = new_weight + adaptive_beam;
+        }
       }
     }
   }
@@ -912,19 +912,17 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   cost_offsets_.resize(frame + 1, 0.0);
   cost_offsets_[frame] = cost_offset;
 
-  // the tokens are now owned here, in prev_toks, and the hash is empty.
-  // 'owned' is a complex thing here; the point is we need to call DeleteElem
-  // on each elem 'e' to let token_set_ know we're done with them.
   for (Elem *e = prev_toks, *e_tail; e != NULL; e = e_tail) {
-    // loop this way because we delete "e" as we go.
     ViterbiState state = e->key;
+    Token *tok = e->val;
+
     WfstStateId la_state = ExtractLaState(state),
                 lm_state = ExtractLmState(state);
 
-    Token *tok = e->val;
     if (tok->total_cost <= cur_cutoff) {
       const WfstState *s = la_fst_->State(la_state);
       const WfstArc *a   = la_fst_->Arc(s->arc_base);
+
       for (int32 j = 0; j < s->num_arcs; j++, a++) {
         WfstArc arc = *a;
         if (arc.ilabel != kWfstEpsilon) { // emitting
@@ -936,23 +934,21 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
                     cur_cost = tok->total_cost,
                     total_cost = cur_cost + ac_cost + graph_cost;
 
-          if (total_cost > next_cutoff) continue;
-          else if (total_cost + adaptive_beam < next_cutoff)
-            next_cutoff = total_cost + adaptive_beam; // prune by best current token
+          if (total_cost > next_cutoff) {
+            continue;
+          } else if (total_cost + adaptive_beam < next_cutoff) { // prune by best current token
+            next_cutoff = total_cost + adaptive_beam;
+          }
 
           ViterbiState next_state = ComposeViterbiState(next_la_state, next_lm_state);
-          // token_net_ is indexed by t, after processing frame f, t = f+1
           Token *dst_tok = FindOrAddToken(next_state, frame + 1, total_cost, tok, NULL);
-          // NULL: no change indicator needed
-
-          // Add ForwardLink from tok to dst_tok (put on head of list tok->links)
           tok->links = NewLink(dst_tok, arc.ilabel, arc.olabel, graph_cost, ac_cost, tok->links);
         }
       } // for all arcs
     }
     e_tail = e->tail;
-    token_set_.Delete(e); // delete Elem
-  }
+    token_set_.Delete(e);
+  } // for all active token
   return next_cutoff;
 }
 
@@ -960,19 +956,11 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
 void DecCore::ProcessNonemitting(BaseFloat cutoff) {
   KALDI_ASSERT(!token_net_.empty());
   int32 cur_time = static_cast<int32>(token_net_.size()) - 1;
-  // Note: "frame" is the time-index we just processed, or -1 if
-  // we are processing the nonemitting transitions before the
-  // first frame (called from InitDecoding()).
-
-  // Processes nonemitting arcs for one frame.  Propagates within token_set_.
-  // Note-- this queue structure is is not very optimal as
-  // it may cause us to process states unnecessarily (e.g. more than once),
-  // but in the baseline code, turning this vector into a set to fix this
-  // problem did not improve overall speed.
 
   KALDI_ASSERT(queue_.empty());
-  for (const Elem *e = token_set_.GetList(); e != NULL;  e = e->tail)
+  for (const Elem *e = token_set_.GetList(); e != NULL;  e = e->tail) {
     queue_.push_back(e->key);
+  }
   if (queue_.empty()) {
     if (!warned_) {
       KALDI_WARN << "Error, no surviving tokens at time " << cur_time;
@@ -983,20 +971,17 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
   while (!queue_.empty()) {
     ViterbiState state = queue_.back();
     queue_.pop_back();
+    Token *tok = token_set_.Find(state)->val;
+
+    if (tok->total_cost > cutoff) {
+      continue;
+    }
+
+    DeleteLinksFromToken(tok);
+    tok->links = NULL;
 
     WfstStateId la_state = ExtractLaState(state),
                 lm_state = ExtractLmState(state);
-
-    Token *tok = token_set_.Find(state)->val;  // would segfault if state not in token_set_ but this can't happen.
-    BaseFloat cur_cost = tok->total_cost;
-    if (cur_cost > cutoff) // Don't bother processing successors.
-      continue;
-    // If "tok" has any existing forward links, delete them,
-    // because we're about to regenerate them.  This is a kind
-    // of non-optimality (remember, this is the simple decoder),
-    // but since most states are emitting it's not a huge issue.
-    DeleteLinksFromToken(tok); // necessary when re-visiting
-    tok->links = NULL;
 
     const WfstState *s = la_fst_->State(la_state);
     const WfstArc   *a = la_fst_->Arc(s->arc_base);
@@ -1007,16 +992,14 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
         WfstStateId next_la_state = arc.dst;
         WfstStateId next_lm_state = (lm_fst_ == NULL) ? 0 : PropagateLm(lm_state, &arc);
         
-        BaseFloat graph_cost = arc.weight,
-                  total_cost = cur_cost + graph_cost;
+        BaseFloat total_cost = tok->total_cost + arc.weight;
 
         if (total_cost < cutoff) {
           ViterbiState next_state = ComposeViterbiState(next_la_state, next_lm_state);
           
           bool changed;
           Token *dst_tok = FindOrAddToken(next_state, cur_time, total_cost, tok, &changed);
-          tok->links = NewLink(dst_tok, 0, arc.olabel, graph_cost, 0, tok->links);
-
+          tok->links = NewLink(dst_tok, 0, arc.olabel, arc.weight, 0, tok->links);
           // "changed" tells us whether the new token has a different
           // cost from before, or is new [if so, add into queue].
           if (changed) queue_.push_back(next_state);
@@ -1029,18 +1012,15 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
 
 void DecCore::DeleteElems(Elem *list) {
   for (Elem *e = list, *e_tail; e != NULL; e = e_tail) {
-    // Token::TokenDelete(e->val);
     e_tail = e->tail;
     token_set_.Delete(e);
   }
 }
 
 
-void DecCore::ClearTokenNet() { // a cleanup routine, at utt end/begin
-  for (size_t i = 0; i < token_net_.size(); i++) {
-    // Delete all tokens alive on this frame, and any forward
-    // links they may have.
-    for (Token *tok = token_net_[i].toks; tok != NULL; ) {
+void DecCore::ClearTokenNet() {
+  for (size_t t = 0; t < token_net_.size(); t++) {
+    for (Token *tok = token_net_[t].toks; tok != NULL; ) {
       DeleteLinksFromToken(tok);
       Token *next_tok = tok->next;
       DeleteToken(tok);
