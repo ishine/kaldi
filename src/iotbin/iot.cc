@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 5) {
+    if (po.NumArgs() != 6) {
       po.PrintUsage();
       return 1;
     }
@@ -147,7 +147,8 @@ int main(int argc, char *argv[]) {
         fst_rxfilename = po.GetArg(2),
         spk2utt_rspecifier = po.GetArg(3),
         wav_rspecifier = po.GetArg(4),
-        clat_wspecifier = po.GetArg(5);
+        clat_wspecifier = po.GetArg(5),
+        interp_lm_filename = po.GetArg(6);
 
     TransitionModel trans_model;
     nnet3::AmNnetSimple am_nnet;
@@ -167,6 +168,12 @@ int main(int argc, char *argv[]) {
       Input ki(fst_rxfilename, &binary);
       la_fst->Read(ki.Stream(), binary);
     }
+ 
+    BaseFloat interp_scale = 0.2f;
+    VectorFst<StdArc> *interp_lm_fst = fst::CastOrConvertToVectorFst(fst::ReadFstKaldiGeneric(interp_lm_filename));
+    ApplyProbabilityScale(interp_scale, interp_lm_fst);
+    fst::BackoffDeterministicOnDemandFst<StdArc> interp_lm_det_fst(*interp_lm_fst);
+    fst::CacheDeterministicOnDemandFst<StdArc> interp_lm_det_cache_fst(&interp_lm_det_fst);
 
     fst::SymbolTable *word_syms = NULL;
     if (word_syms_rxfilename != "")
