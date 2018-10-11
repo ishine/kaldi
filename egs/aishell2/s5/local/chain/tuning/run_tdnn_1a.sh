@@ -62,12 +62,13 @@ tree_dir=exp/chain/tree
 lang=data/lang_chain
 
 if [ $stage -le 6 ]; then
-  for data_set in ${train_set} ${test_sets}; do
-    utils/copy_data_dir.sh data/${data_set} data/${data_set}_mfcc_hires
-    utils/data/perturb_data_dir_volume.sh data/${data_set}_mfcc_hires || exit 1;
+  for x in ${train_set} ${test_sets}; do
+    utils/copy_data_dir.sh data/${x} data/${x}_mfcc_hires
+    utils/data/perturb_data_dir_volume.sh data/${x}_mfcc_hires || exit 1;
     steps/make_mfcc.sh --nj $nj --cmd "$decode_cmd" \
       --mfcc-config conf/mfcc_hires.conf \
-      data/${data_set}_mfcc_hires exp/make_mfcc/ mfcc_hires
+      data/${x}_mfcc_hires exp/make_mfcc mfcc_hires
+    steps/compute_cmvn_stats.sh data/${x}_mfcc_hires exp/make_mfcc mfcc_hires
   done
 fi
 
@@ -188,10 +189,11 @@ if [ $stage -le 12 ]; then
 fi
 
 if [ $stage -le 13 ]; then
-  for data_set in $test_sets; do
-    steps/nnet3/decode.sh --nj 5 --cmd "$decode_cmd" \
+  for x in $test_sets; do
+    nj=$(wc -l data/${x}_mfcc_hires/spk2utt | awk '{print $1}')
+    steps/nnet3/decode.sh --nj $nj --cmd "$decode_cmd" \
       --acwt 1.0 --post-decode-acwt 10.0 \
-      $dir/graph data/${data_set}_mfcc_hires $dir/decode_${data_set} || exit 1;
+      $dir/graph data/${x}_mfcc_hires $dir/decode_${x} || exit 1;
   done
 fi
 
