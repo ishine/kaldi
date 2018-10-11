@@ -1,24 +1,23 @@
 #!/bin/bash
 
-# this is the original baseline scripts, which is supposed to be deprecated.
-
 # results
-# local/chain/compare_wer.sh exp/chain/tdnn_1a_sp/
-# Model                tdnn_1a_sp
-# WER(%)                     9.89
-# Final train prob        -0.0653
-# Final valid prob        -0.0765
-# Final train prob (xent)   -0.7340
-# Final valid prob (xent)   -0.8030
+# local/chain/compare_wer.sh exp/chain/tdnn_1a
+# Model                  tdnn_1a
+# Num. of params             19.3M
+# WER(%)                     8.33
+# Final train prob        -0.0566
+# Final valid prob        -0.0595
+# Final train prob (xent)   -0.6346
+# Final valid prob (xent)   -0.6316
 
 set -e
 
 # configs for 'chain'
 affix=
-stage=10
+stage=0
 train_stage=-10
 get_egs_stage=-10
-dir=exp/chain/tdnn_1a  # Note: _sp will get added to this
+dir=exp/chain/tdnn_1a
 decode_iter=
 
 # training options
@@ -28,7 +27,7 @@ final_effective_lrate=0.0001
 max_param_change=2.0
 final_layer_normalize_target=0.5
 num_jobs_initial=2
-num_jobs_final=4
+num_jobs_final=2
 nj=10
 minibatch_size=128
 frames_per_eg=150,110,90
@@ -54,19 +53,21 @@ fi
 # we use 40-dim high-resolution mfcc features (w/o pitch and ivector) for nn training
 # no utt- and spk- level cmvn
 
-dir=${dir}${affix:+_$affix}_sp
+dir=${dir}${affix:+_$affix}
 train_set=train
 test_sets="dev test"
 ali_dir=exp/tri3_ali
-treedir=exp/chain/tri4_cd_tree_sp
+lat_dir=exp/tri3_lat
+tree_dir=exp/chain/tree
 lang=data/lang_chain
 
 if [ $stage -le 6 ]; then
-  mfccdir=mfcc_hires
-  for datadir in ${train_set} ${test_sets}; do
-  	utils/copy_data_dir.sh data/${datadir} data/${datadir}_hires
-	utils/data/perturb_data_dir_volume.sh data/${datadir}_hires || exit 1;
-	steps/make_mfcc.sh --mfcc-config conf/mfcc_hires.conf --nj $nj data/${datadir}_hires exp/make_mfcc/ ${mfccdir}
+  for data_set in ${train_set} ${test_sets}; do
+    utils/copy_data_dir.sh data/${data_set} data/${data_set}_mfcc_hires
+    utils/data/perturb_data_dir_volume.sh data/${data_set}_mfcc_hires || exit 1;
+    steps/make_mfcc.sh --nj $nj --cmd "$decode_cmd" \
+      --mfcc-config conf/mfcc_hires.conf \
+      data/${data_set}_mfcc_hires exp/make_mfcc/ mfcc_hires
   done
 fi
 
@@ -74,9 +75,9 @@ if [ $stage -le 7 ]; then
   # Get the alignments as lattices (gives the LF-MMI training more freedom).
   # use the same num-jobs as the alignments
   nj=$(cat $ali_dir/num_jobs) || exit 1;
-  steps/align_fmllr_lats.sh --nj $nj --cmd "$train_cmd" data/$train_set \
-    data/lang exp/tri3 exp/tri4_sp_lats
-  rm exp/tri4_sp_lats/fsts.*.gz # save space
+  steps/align_fmllr_lats.sh --nj $nj --cmd "$train_cmd" \
+    data/$train_set data/lang exp/tri3 $lat_dir
+  rm ${lat_dir}/fsts.*.gz # save space
 fi
 
 if [ $stage -le 8 ]; then
@@ -87,22 +88,22 @@ if [ $stage -le 8 ]; then
   cp -r data/lang $lang
   silphonelist=$(cat $lang/phones/silence.csl) || exit 1;
   nonsilphonelist=$(cat $lang/phones/nonsilence.csl) || exit 1;
-  # Use our special topology... note that later on may have to tune this
-  # topology.
+  # Use our special topology... note that later on may have to tune this topology.
   steps/nnet3/chain/gen_topo.py $nonsilphonelist $silphonelist >$lang/topo
 fi
 
 if [ $stage -le 9 ]; then
   # Build a tree using our new topology. This is the critically different
   # step compared with other recipes.
-  steps/nnet3/chain/build_tree.sh --frame-subsampling-factor 3 \
-      --context-opts "--context-width=2 --central-position=1" \
-      --cmd "$train_cmd" 5000 data/$train_set $lang $ali_dir $treedir
+  steps/nnet3/chain/build_tree.sh --cmd "$train_cmd" \
+    --context-opts "--context-width=2 --central-position=1" \
+    --frame-subsampling-factor 3 \
+    5000 data/$train_set $lang $ali_dir $tree_dir
 fi
 
 if [ $stage -le 10 ]; then
   echo "$0: creating neural net configs using the xconfig parser";
-  num_targets=$(tree-info $treedir/tree | grep num-pdfs | awk '{print $2}')
+  num_targets=$(tree-info ${tree_dir}/tree | grep num-pdfs | awk '{print $2}')
   learning_rate_factor=$(echo "print 0.5/$xent_regularize" | python)
   opts="l2-regularize=0.002"
   linear_opts="orthonormal-constraint=1.0"
@@ -152,11 +153,6 @@ EOF
 fi
 
 if [ $stage -le 11 ]; then
-  #if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
-  #  utils/create_split_dir.pl \
-  #   /export/b0{5,6,7,8}/$USER/kaldi-data/egs/aishell-$(date +'%m_%d_%H_%M')/s5c/$dir/egs/storage $dir/egs/storage
-  #fi
-
   steps/nnet3/chain/train.py --stage $train_stage \
     --cmd "$decode_cmd" \
     --feat.cmvn-opts "--norm-means=false --norm-vars=false" \
@@ -178,27 +174,26 @@ if [ $stage -le 11 ]; then
     --trainer.optimization.final-effective-lrate $final_effective_lrate \
     --trainer.max-param-change $max_param_change \
     --cleanup.remove-egs $remove_egs \
-    --feat-dir data/${train_set}_hires \
-    --tree-dir $treedir \
-    --lat-dir exp/tri4_sp_lats \
-    --dir $dir  || exit 1;
+    --feat-dir data/${train_set}_mfcc_hires \
+    --tree-dir $tree_dir \
+    --lat-dir $lat_dir \
+    --dir $dir || exit 1;
 fi
 
 if [ $stage -le 12 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
-  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_test $dir $dir/graph
+  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_test $dir $dir/graph || exit 1;
 fi
 
-graph_dir=$dir/graph
 if [ $stage -le 13 ]; then
-  for test_set in $test_sets; do
-    steps/nnet3/decode.sh --acwt 1.0 --post-decode-acwt 10.0 \
-      --nj 10 --cmd "$decode_cmd" \
-      $graph_dir data/${test_set}_hires $dir/decode_${test_set} || exit 1;
+  for data_set in $test_sets; do
+    steps/nnet3/decode.sh --nj 5 --cmd "$decode_cmd" \
+      --acwt 1.0 --post-decode-acwt 10.0 \
+      $dir/graph data/${data_set}_mfcc_hires $dir/decode_${data_set} || exit 1;
   done
 fi
 
-echo "local/chain/run_tdnn.sh succeeded"
+echo "local/chain/tuning/run_tdnn_1a.sh succeeded"
 exit 0;
