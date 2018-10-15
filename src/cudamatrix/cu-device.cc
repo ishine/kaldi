@@ -80,7 +80,7 @@ static bool GetCudaContext(int32 num_gpus, std::string *debug_str) {
 }
 
 
-void CuDevice::Initialize() {
+void CuDevice::InitializeLocal() {
   // This function may be called in the following two situations:
   //
   // (1) in the main thread, only when a GPU is not currently being used, either
@@ -478,6 +478,60 @@ void CuDevice::PrintProfile() {
 }
 
 
+std::string CuDevice::GetFreeMemory(int64* free, int64* total) const {
+  // WARNING! the CUDA API is inconsistent accross versions!
+#ifdef _MSC_VER
+  size_t mem_free, mem_total;
+  cuMemGetInfo_v2(&mem_free, &mem_total);
+#else
+#if (CUDA_VERSION >= 3020)
+  // define the function signature type
+  size_t mem_free, mem_total;
+#else
+  unsigned int mem_free, mem_total;
+#endif
+  {
+    // we will load cuMemGetInfo_v2 dynamically from libcuda.so
+    // pre-fill ``safe'' values that will not cause problems
+    mem_free = 1; mem_total = 1;
+    // open libcuda.so
+    void* libcuda = dlopen("libcuda.so",RTLD_LAZY);
+    if (NULL == libcuda) {
+      KALDI_WARN << "cannot open libcuda.so";
+    } else {
+      // define the function signature type
+      // and get the symbol
+#if (CUDA_VERSION >= 3020)
+      typedef CUresult (*cu_fun_ptr)(size_t*, size_t*);
+      cu_fun_ptr dl_cuMemGetInfo = (cu_fun_ptr)dlsym(libcuda,"cuMemGetInfo_v2");
+#else
+      typedef CUresult (*cu_fun_ptr)(int*, int*);
+      cu_fun_ptr dl_cuMemGetInfo = (cu_fun_ptr)dlsym(libcuda,"cuMemGetInfo");
+#endif
+      if (NULL == dl_cuMemGetInfo) {
+        KALDI_WARN << "cannot load cuMemGetInfo from libcuda.so";
+      } else {
+        // call the function
+        dl_cuMemGetInfo(&mem_free, &mem_total);
+      }
+      // close the library
+      dlclose(libcuda);
+    }
+  }
+#endif
+  // copy the output values outside
+  if (NULL != free) *free = mem_free;
+  if (NULL != total) *total = mem_total;
+  // prepare the text output
+  std::ostringstream os;
+  os << "free:" << mem_free/(1024*1024) << "M, "
+     << "used:" << (mem_total-mem_free)/(1024*1024) << "M, "
+     << "total:" << mem_total/(1024*1024) << "M, "
+     << "free/total:" << mem_free/(float)mem_total;
+  return os.str();
+}
+
+
 void CuDevice::DeviceGetName(char* name, int32 len, int32 dev) {
   // prefill with something reasonable
   strncpy(name,"Unknown GPU",len);
@@ -767,7 +821,7 @@ bool CuDevice::Initialize()
 	    }
 	  }
 
-	  active_gpu_id_ = 0;
+	  device_id_ = 0;
       
       return true;
 }

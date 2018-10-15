@@ -194,6 +194,8 @@ class CuDevice {
   /// the code will detect that you failed to call it, and will print a warning).
   inline void AllowMultithreading() { multi_threaded_ = true; }
 
+  /// Get the actual GPU memory use stats
+  std::string GetFreeMemory(int64* free = NULL, int64* total = NULL) const;
   /// Get the name of the GPU
   void DeviceGetName(char* name, int32 len, int32 dev);
 
@@ -239,7 +241,7 @@ class CuDevice {
   /// cudaSetDevice(), and set up cublas_handle_ and cusparse_handle_.  It does
   /// get called in the main thread (see documentation by its definition), but
   /// does nothing interesting there.
-  void Initialize();
+  void InitializeLocal();
 
   /// Automatically select GPU and get CUDA context (this is only called, from
   /// SelectGpuId(), if the GPUs are in non-exclusive mode).  Returns true on

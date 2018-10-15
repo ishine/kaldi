@@ -805,7 +805,6 @@ void cuda_uncompress_uint8(dim3 Gr, dim3 Bl, BaseFloat *dest,
                           MatrixDim dim, const uint8_t *src,
                           int src_stride, float scale);
 
-<<<<<<< HEAD
 /// LSTM language model
 void cudaF_copy_row_to_vecid(dim3 Gr, dim3 Bl, const float *mat, MatrixIndexT_cuda *vec_id, MatrixDim dim);
 void cudaD_copy_row_to_vecid(dim3 Gr, dim3 Bl, const double *mat, MatrixIndexT_cuda *vec_id, MatrixDim dim);
