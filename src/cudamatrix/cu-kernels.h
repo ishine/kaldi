@@ -6,7 +6,7 @@
 //                2013  Hainan Xu
 //                2013  Xiaohui Zhang
 //           2013-2015  Guoguo Chen
-//           2016-2017  Shiyin Kang
+//           2016-2018  Shiyin Kang
 //			 2018 Alibaba.Inc (Author: ShiLiang Zhang)
 
 // See ../../COPYING for clarification regarding multiple authors
@@ -86,14 +86,18 @@ inline void cuda_add_diag_mat_mat_MNT(int Gr, int Bl, const float alpha,
 inline void cuda_add_diag_mat_mat_MTN(dim3 Gr, dim3 Bl, const double alpha,
                                       const double* M, const int stride_M,
                                       const double* N, const MatrixDim dim_N,
-                                      const double beta, double* v) {
-  cudaD_add_diag_mat_mat_MTN(Gr, Bl, alpha, M, stride_M, N, dim_N, beta, v);
+                                      const double beta, double* v,
+                                      const int stride_v) {
+  cudaD_add_diag_mat_mat_MTN(Gr, Bl, alpha, M, stride_M, N, dim_N, beta, v,
+                             stride_v);
 }
 inline void cuda_add_diag_mat_mat_MTN(dim3 Gr, dim3 Bl, const float alpha,
                                       const float* M, const int stride_M,
                                       const float* N, const MatrixDim dim_N,
-                                      const float beta, float* v) {
-  cudaF_add_diag_mat_mat_MTN(Gr, Bl, alpha, M, stride_M, N, dim_N, beta, v);
+                                      const float beta, float* v,
+                                      const int stride_v) {
+  cudaF_add_diag_mat_mat_MTN(Gr, Bl, alpha, M, stride_M, N, dim_N, beta, v,
+                             stride_v);
 }
 inline void cuda_add_diag_packed(int Gr, int Bl, double* mat, double value,
                                  int dim) {
@@ -346,6 +350,14 @@ inline void cuda_apply_exp(dim3 Gr, dim3 Bl, double* mat, MatrixDim d, cudaStrea
 }
 inline void cuda_apply_exp(dim3 Gr, dim3 Bl, float* mat, MatrixDim d, cudaStream_t s=NULL) {
   cudaF_apply_exp(Gr, Bl, mat, d, s);
+}
+inline void cuda_apply_exp_limited(dim3 Gr, dim3 Bl, double* mat, MatrixDim d,
+                                   double lower_limit, double upper_limit) {
+  cudaD_apply_exp_limited(Gr, Bl, mat, d, lower_limit, upper_limit);
+}
+inline void cuda_apply_exp_limited(dim3 Gr, dim3 Bl, float* mat, MatrixDim d,
+                                   float lower_limit, float upper_limit) {
+  cudaF_apply_exp_limited(Gr, Bl, mat, d, lower_limit, upper_limit);
 }
 inline void cuda_apply_exp_special(dim3 Gr, dim3 Bl, double* out,
                                    MatrixDim out_dim, const double* in,

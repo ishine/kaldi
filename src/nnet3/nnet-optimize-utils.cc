@@ -696,18 +696,15 @@ void RenumberComputation(NnetComputation *computation) {
 }
 
 
+static bool IsNoop(const NnetComputation::Command &command) {
+  return command.command_type == kNoOperation;
+}
+
 void RemoveNoOps(NnetComputation *computation) {
-  std::vector<NnetComputation::Command>::iterator
-      input_iter = computation->commands.begin(),
-      input_end = computation->commands.end(),
-      output_iter = computation->commands.begin();
-  for (; input_iter != input_end; ++input_iter) {
-    if (input_iter->command_type != kNoOperation) {
-      *output_iter = *input_iter;
-      ++output_iter;
-    }
-  }
-  computation->commands.resize(output_iter - computation->commands.begin());
+  computation->commands.erase(
+      std::remove_if(computation->commands.begin(),
+                     computation->commands.end(),
+                     IsNoop), computation->commands.end());
 }
 
 
@@ -2948,7 +2945,7 @@ static int32 FindNStride(const std::vector<Index> &indexes,
   int32 size = indexes.size();
   KALDI_ASSERT(size > 0);
   int32 N = indexes[size-1].n + 1,
-      n_stride;
+        n_stride = -1;
   if (N <= 1) {
     // we wouldn't be able to determine the stride if N <= 1.
     return 0;
@@ -2977,7 +2974,7 @@ static int32 FindNStride(const std::vector<Index> &indexes,
         break;
       }
     }
-    if (stride == size / N) {
+    if (n_stride == -1) {
       // if we fell off the loop then we found no candidates, which is strange
       // and means we did not find the expected structure; we'll return 0 as we
       // failed.
@@ -3038,7 +3035,7 @@ static int32 FindNStride(const std::vector<Cindex> &cindexes,
   int32 size = cindexes.size();
   KALDI_ASSERT(size > 0);
   int32 N = cindexes[size-1].second.n + 1,
-      n_stride;
+      n_stride = 0;
   if (N <= 1)
     return 0;
   Cindex cindex(cindexes[0]);
@@ -4695,7 +4692,7 @@ class MemoryCompressionOptimizer {
 
   /** @param [in] nnet         The neural net the computation is for.
       @param [in] memory_compression_level.  The level of compression:
-         0 = no compression (the constructor should not be calle with this value).
+         0 = no compression (the constructor should not be called with this value).
          1 = compression that doesn't affect the results (but still takes time).
          2 = compression that affects the results only very slightly
          3 = compression that affects the results a little more.
@@ -4931,14 +4928,15 @@ void OptimizeMemoryCompression(const Nnet &nnet,
   }
   if (memory_compression_level >= 1) {
     int64 bytes_used_initial, bytes_used_final;
-    if (GetVerboseLevel() >= 2)
+    bool verbose_ge_2 = GetVerboseLevel() >= 2;
+    if (verbose_ge_2)
       bytes_used_initial = GetMaxMemoryUse(*computation);
 
     MemoryCompressionOptimizer opt(nnet, memory_compression_level,
                                    middle_command, computation);
     opt.Optimize();
 
-    if (GetVerboseLevel() >= 2) {
+    if (verbose_ge_2) {
       bytes_used_final = GetMaxMemoryUse(*computation);
       if (bytes_used_final != bytes_used_initial) {
         KALDI_VLOG(2) << "Memory compression reduced  memory use from "
@@ -4949,6 +4947,127 @@ void OptimizeMemoryCompression(const Nnet &nnet,
   }
 }
 
+
+std::shared_ptr<const NnetComputation> ComputationCache::Find(
+    const ComputationRequest &in_request) {
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  CacheType::iterator iter = computation_cache_.find(&in_request);
+  if (iter == computation_cache_.end()) {
+    return NULL;
+  } else {
+    std::shared_ptr<const NnetComputation> ans = iter->second.first;
+    // Update access record by moving the accessed request to the end of the
+    // access queue, which declares that it's the most recently used.
+    access_queue_.splice(access_queue_.end(), access_queue_,
+                         iter->second.second);
+    return ans;
+  }
+}
+
+
+ComputationCache::ComputationCache(int32 cache_capacity):
+    cache_capacity_(cache_capacity) {
+  KALDI_ASSERT(cache_capacity > 0);
+}
+
+std::shared_ptr<const NnetComputation> ComputationCache::Insert(
+    const ComputationRequest &request_in,
+    const NnetComputation *computation_in) {
+
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (static_cast<int32>(computation_cache_.size()) >= cache_capacity_) {
+    //  Cache has reached capacity; purge the least-recently-accessed request
+    const CacheType::iterator iter =
+        computation_cache_.find(access_queue_.front());
+    KALDI_ASSERT(iter != computation_cache_.end());
+    const ComputationRequest *request = iter->first;
+    computation_cache_.erase(iter);
+    delete request;
+    // we don't need to delete the computation in iter->second.first, as the
+    // shared_ptr takes care of that automatically.
+    access_queue_.pop_front();
+  }
+
+  // Now insert the thing we need to insert.  We'll own the pointer 'request' in
+  // 'computation_cache_', so we need to allocate our own version.
+  ComputationRequest *request = new ComputationRequest(request_in);
+  // When we construct this shared_ptr, it takes ownership of the pointer
+  // 'computation_in'.
+  std::shared_ptr<const NnetComputation> computation(computation_in);
+
+  AqType::iterator ait = access_queue_.insert(access_queue_.end(), request);
+
+  std::pair<CacheType::iterator, bool> p = computation_cache_.insert(
+      std::make_pair(request, std::make_pair(computation, ait)));
+  if (!p.second) {
+    // if p.second is false, this pair was not inserted because
+    // a computation for the same computation-request already existed in
+    // the map. This is possible in multi-threaded operations, if two
+    // threads try to compile the same computation at the same time (only
+    // one of them will successfully add it).
+    // We need to erase the access-queue element that we just added, it's
+    // no longer going to be needed.
+    access_queue_.erase(ait);
+    delete request;
+  }
+  return computation;
+}
+
+
+void ComputationCache::Read(std::istream &is, bool binary) {
+  // Note: the object on disk doesn't have tokens like "<ComputationCache>"
+  // and "</ComputationCache>" for back-compatibility reasons.
+  int32 computation_cache_size;
+  ExpectToken(is, binary, "<ComputationCacheSize>");
+  ReadBasicType(is, binary, &computation_cache_size);
+  KALDI_ASSERT(computation_cache_size >= 0);
+  computation_cache_.clear();
+  access_queue_.clear();
+  ExpectToken(is, binary, "<ComputationCache>");
+  for (size_t c = 0; c < computation_cache_size; c++) {
+    ComputationRequest request;
+    request.Read(is, binary);
+    NnetComputation *computation = new NnetComputation();
+    computation->Read(is, binary);
+    Insert(request, computation);
+  }
+}
+
+void ComputationCache::Check(const Nnet &nnet) const {
+  CacheType::const_iterator iter = computation_cache_.begin(),
+      end = computation_cache_.end();
+  // We only need to explicitly delete the pointer to the ComputationRequest.
+  // The pointers to Computation are deleted automatically by std::shared_ptr
+  // when the reference count goes to zero.
+  for (; iter != end; ++iter) {
+    const NnetComputation &computation = *(iter->second.first);
+    CheckComputationOptions check_config;
+    ComputationChecker checker(check_config, nnet, computation);
+    checker.Check();
+  }
+}
+
+void ComputationCache::Write(std::ostream &os, bool binary) const {
+  WriteToken(os, binary, "<ComputationCacheSize>");
+  WriteBasicType(os, binary, static_cast<int32>(computation_cache_.size()));
+  WriteToken(os, binary, "<ComputationCache>");
+  for (CacheType::const_iterator iter = computation_cache_.begin();
+           iter != computation_cache_.end(); ++iter) {
+    iter->first->Write(os, binary);
+    iter->second.first->Write(os, binary);
+  }
+}
+
+ComputationCache::~ComputationCache() {
+  CacheType::const_iterator iter = computation_cache_.begin(),
+      end = computation_cache_.end();
+  // We only need to explicitly delete the pointer to the ComputationRequest.
+  // The pointers to Computation are deleted automatically by std::shared_ptr
+  // when the reference count goes to zero.
+  for (; iter != end; ++iter)
+    delete iter->first;
+}
 
 } // namespace nnet3
 } // namespace kaldi

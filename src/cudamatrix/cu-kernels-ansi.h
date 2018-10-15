@@ -5,7 +5,7 @@
 //                2013  Hainan Xu
 //                2013  Xiaohui Zhang
 //           2013-2015  Guoguo Chen
-//           2016-2017  Shiyin Kang
+//           2016-2018  Shiyin Kang
 //                2018 Alibaba.Inc (Author: ShiLiang Zhang)
 
 // See ../../COPYING for clarification regarding multiple authors
@@ -71,11 +71,12 @@ void cudaF_add_diag_mat_mat_MNT(int Gr, int Bl, const float alpha,
 void cudaD_add_diag_mat_mat_MTN(dim3 Gr, dim3 Bl, const double alpha,
                                 const double* M, const int strid_M,
                                 const double* N, const MatrixDim dim_N,
-                                const double beta, double* v);
+                                const double beta, double* v,
+                                const int stride_v);
 void cudaF_add_diag_mat_mat_MTN(dim3 Gr, dim3 Bl, const float alpha,
                                 const float* M, const int strid_M,
                                 const float* N, const MatrixDim dim_N,
-                                const float beta, float* v);
+                                const float beta, float* v, const int stride_v);
 void cudaD_add_diag_packed(int Gr, int Bl, double* mat, double value, int dim);
 void cudaF_add_diag_packed(int Gr, int Bl, float* mat, float value, int dim);
 void cudaD_add_diag_vec_mat(dim3 Gr, dim3 Bl, double alpha, double *mat,
@@ -203,6 +204,10 @@ void cudaD_apply_exp(dim3 Gr, dim3 Bl, double* mat, MatrixDim d, cudaStream_t s=
 void cudaF_apply_exp(dim3 Gr, dim3 Bl, float* mat, MatrixDim d, cudaStream_t s=NULL);
 void cudaD_apply_fixed(dim3 Gr, dim3 Bl, double* mat, double resolution, int mode, MatrixDim d);
 void cudaF_apply_fixed(dim3 Gr, dim3 Bl, float* mat, float resolution, int mode, MatrixDim d);
+void cudaD_apply_exp_limited(dim3 Gr, dim3 Bl, double* mat, MatrixDim d,
+                             double lower_limit, double upper_limit);
+void cudaF_apply_exp_limited(dim3 Gr, dim3 Bl, float* mat, MatrixDim d,
+                             float lower_limit, float upper_limit);
 void cudaD_apply_exp_special(dim3 Gr, dim3 Bl, double* out, MatrixDim out_dim,
                              const double* in, int in_stride);
 void cudaF_apply_exp_special(dim3 Gr, dim3 Bl, float* out, MatrixDim out_dim,
@@ -800,6 +805,7 @@ void cuda_uncompress_uint8(dim3 Gr, dim3 Bl, BaseFloat *dest,
                           MatrixDim dim, const uint8_t *src,
                           int src_stride, float scale);
 
+<<<<<<< HEAD
 /// LSTM language model
 void cudaF_copy_row_to_vecid(dim3 Gr, dim3 Bl, const float *mat, MatrixIndexT_cuda *vec_id, MatrixDim dim);
 void cudaD_copy_row_to_vecid(dim3 Gr, dim3 Bl, const double *mat, MatrixIndexT_cuda *vec_id, MatrixDim dim);
@@ -920,6 +926,10 @@ void cudaF_get_l_filter_err(dim3 Gr, dim3 Bl, float *mat_out, const float* diff,
                             int l_order, int l_stride, float lr);
 void cudaD_get_l_filter_err(dim3 Gr, dim3 Bl, double *mat_out, const double* diff, const double* mat_in, float* flags, MatrixDim d,
                             int l_order, int l_stride, float lr);
+// Launches a kernel that does nothing, explicitly using the legacy default stream;
+// this will synchronize all CUDA streams (except for non-blocking streams) on the
+// device.
+void cuda_legacy_noop();
 
 void cudaF_get_r_filter_err(dim3 Gr, dim3 Bl, float *mat_out, const float* diff, const float* mat_in, float* flags, MatrixDim d,
                             int r_order, int r_stride, float lr);

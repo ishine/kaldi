@@ -34,10 +34,10 @@ wsj1=/export/corpora5/LDC/LDC94S13B
 # _char for character-based dictionary and lang directories.
 
 if [ $stage -le 0 ]; then
-  [[ -f data/train_si284/text ]] || \
+  [[ -d data/local/data ]] || \
     local/wsj_data_prep.sh $wsj0/??-{?,??}.? $wsj1/??-{?,??}.?
   [[ -f data/local/dict_nosp/lexicon.txt ]] || \
-    local/wsj_prepare_phn_dict.sh --dict-suffix "_nosp"
+    local/wsj_prepare_dict.sh --dict-suffix "_nosp"
 
   local/wsj_prepare_char_dict.sh
   utils/prepare_lang.sh data/local/dict_char \
@@ -85,8 +85,8 @@ else
 
     # 12 in the following command means the allowed lengths are spaced
     # by 12% change in length.
-    python utils/data/perturb_speed_to_allowed_lengths.py 12 data/${trainset} \
-           data/${trainset}_spe2e_hires
+    utils/data/perturb_speed_to_allowed_lengths.py 12 data/${trainset} \
+                                                   data/${trainset}_spe2e_hires
     cat data/${trainset}_spe2e_hires/utt2dur | \
       awk '{print $1 " " substr($1,5)}' >data/${trainset}_spe2e_hires/utt2uniq
     utils/fix_data_dir.sh data/${trainset}_spe2e_hires
@@ -101,17 +101,6 @@ else
 fi
 
 if [ $stage -le 5 ]; then
-  echo "$0: estimating character language model for the denominator graph"
-  mkdir -p exp/chain/e2e_base/log
-  $train_cmd exp/chain/e2e_base/log/make_char_lm.log \
-  cat data/$trainset/text \| \
-    steps/nnet3/chain/e2e/text_to_phones.py data/lang_char data/local/dict_char/lexicon.txt \| \
-    utils/sym2int.pl -f 2- data/lang_char/phones.txt \| \
-    chain-est-phone-lm --num-extra-lm-states=2000 \
-                       ark:- exp/chain/e2e_base/char_lm.fst
-fi
-
-if [ $stage -le 6 ]; then
   echo "$0: calling the flat-start chain recipe..."
   local/chain/e2e/run_tdnn_lstm_flatstart.sh
 fi

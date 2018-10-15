@@ -6,7 +6,7 @@
 //                2013  Hainan Xu
 //                2013  Xiaohui Zhang
 //           2013-2015  Guoguo Chen
-//           2016-2017  Shiyin Kang
+//           2016-2018  Shiyin Kang
 //                2017  Hossein Hadian, Daniel Galvez
 
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -425,6 +425,24 @@ static void _apply_fixed(Real* mat, Real resolution, int mode, MatrixDim d) {
     } 
   }
 }
+
+static void _apply_exp_limited(Real* mat, MatrixDim d,
+                               Real lower_limit, Real upper_limit) {
+  int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
+  int32_cuda j = blockIdx.y * blockDim.y + threadIdx.y;
+  int32_cuda index = i + j * d.stride;
+  if (i < d.cols && j < d.rows) {
+    Real x = mat[index];
+    // I'm writing !(x >= lower_limit) instead of (x < lower_limit) so that
+    // nan's will be set to the lower-limit.
+    if (!(x >= lower_limit))
+      x = lower_limit;
+    else if (x > upper_limit)
+      x = upper_limit;
+    mat[index] = exp(x);
+  }
+}
+
 
 template<typename Real>
 __global__
@@ -1124,7 +1142,7 @@ __global__
 static void _add_diag_mat_mat_MTN(const Real alpha, const Real* M,
                                   const int stride_M, const Real* N,
                                   const MatrixDim dim_N, const Real beta,
-                                  Real* v) {
+                                  Real* v, const int stride_v) {
   __shared__ Real ssum[CU1DBLOCK];
   const int tid = threadIdx.y * blockDim.x + threadIdx.x;
   const int j = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1133,9 +1151,12 @@ static void _add_diag_mat_mat_MTN(const Real alpha, const Real* M,
     return;
 
   // Loop along the matrix column.
-  // Reduce to CU1DBLOCK / TileDim elements per column.
+  // Reduce to gridDim.y * CU1DBLOCK / TileDim elements per column.
   Real tsum = Real(0);
-  for (int i = threadIdx.y; i < dim_N.rows; i += blockDim.y) {
+
+  const int grid_stride_y = blockDim.y * gridDim.y;
+  for (int i = blockIdx.y * blockDim.y + threadIdx.y; i < dim_N.rows; i +=
+      grid_stride_y) {
     tsum += M[i * stride_M + j] * N[i * dim_N.stride + j];
   }
   ssum[tid] = tsum;
@@ -1162,7 +1183,12 @@ static void _add_diag_mat_mat_MTN(const Real alpha, const Real* M,
 
   // output TileDim sums per thread block
   if (tid < TileDim) {
-    v[j] = alpha * ssum[tid] + beta * v[j];
+    if (beta != Real(0)) {
+      v[blockIdx.y * stride_v + j] = alpha * ssum[tid]
+          + beta * v[blockIdx.y * stride_v + j];
+    } else {
+      v[blockIdx.y * stride_v + j] = alpha * ssum[tid];
+    }
   }
 }
 
@@ -3944,7 +3970,9 @@ static void _cuda_uncompress(BaseFloat *dest, MatrixDim dim,
   }
 }
 
-
+__global__
+static void _noop_kernel() {
+}
 
 /***********************************************************************
  * ANSI-C wrappers of CUDA kernels
@@ -4005,6 +4033,11 @@ void cudaFD_copy_from_tp(dim3 Gr, dim3 Bl, float* A, const double* B,
 
 void cudaF_apply_exp(dim3 Gr, dim3 Bl, float* mat, MatrixDim d, cudaStream_t s) {
   _apply_exp<<<Gr,Bl,0,s>>>(mat,d);
+}
+
+void cudaF_apply_exp_limited(dim3 Gr, dim3 Bl, float* mat, MatrixDim d,
+                             float lower_limit, float upper_limit) {
+  _apply_exp_limited<<<Gr,Bl>>>(mat, d, lower_limit, upper_limit);
 }
 
 void cudaF_apply_pow(dim3 Gr, dim3 Bl, float* mat, float power, MatrixDim d) {
@@ -4341,11 +4374,14 @@ void cudaF_add_diag_mat_mat_MNT(int Gr, int Bl, const float alpha,
 void cudaF_add_diag_mat_mat_MTN(dim3 Gr, dim3 Bl, const float alpha,
                                 const float* M, const int stride_M,
                                 const float* N, const MatrixDim dim_N,
-                                const float beta, float* v) {
+                                const float beta, float* v,
+                                const int stride_v) {
   if (Bl.x == 16) {
-    _add_diag_mat_mat_MTN<16> <<<Gr,Bl>>>(alpha,M,stride_M,N,dim_N,beta,v);
-  } else if (Bl.x==32) {
-    _add_diag_mat_mat_MTN<32><<<Gr,Bl>>>(alpha,M,stride_M,N,dim_N,beta,v);
+    _add_diag_mat_mat_MTN<16> <<<Gr, Bl>>>(alpha, M, stride_M, N, dim_N, beta,
+                                           v, stride_v);
+  } else if (Bl.x == 32) {
+    _add_diag_mat_mat_MTN<32> <<<Gr, Bl>>>(alpha, M, stride_M, N, dim_N, beta,
+                                           v, stride_v);
   }
 }
 
@@ -4720,6 +4756,13 @@ void cudaD_apply_exp(dim3 Gr, dim3 Bl, double* mat, MatrixDim d, cudaStream_t s)
   _apply_exp<<<Gr,Bl,0,s>>>(mat,d);
 }
 
+void cudaD_apply_exp_limited(dim3 Gr, dim3 Bl, double* mat, MatrixDim d,
+                             double lower_limit, double upper_limit) {
+  _apply_exp_limited<<<Gr,Bl>>>(mat, d, lower_limit, upper_limit);
+}
+
+
+
 void cudaD_apply_pow(dim3 Gr, dim3 Bl, double* mat, double power, MatrixDim d) {
   _apply_pow<<<Gr,Bl>>>(mat, power, d);
 }
@@ -5048,11 +5091,14 @@ void cudaD_add_diag_mat_mat_MNT(int Gr, int Bl, const double alpha,
 void cudaD_add_diag_mat_mat_MTN(dim3 Gr, dim3 Bl, const double alpha,
                                 const double* M, const int stride_M,
                                 const double* N, const MatrixDim dim_N,
-                                const double beta, double* v) {
+                                const double beta, double* v,
+                                const int stride_v) {
   if (Bl.x == 16) {
-    _add_diag_mat_mat_MTN<16> <<<Gr,Bl>>>(alpha,M,stride_M,N,dim_N,beta,v);
-  } else if (Bl.x==32) {
-    _add_diag_mat_mat_MTN<32><<<Gr,Bl>>>(alpha,M,stride_M,N,dim_N,beta,v);
+    _add_diag_mat_mat_MTN<16> <<<Gr, Bl>>>(alpha, M, stride_M, N, dim_N, beta,
+                                           v, stride_v);
+  } else if (Bl.x == 32) {
+    _add_diag_mat_mat_MTN<32> <<<Gr, Bl>>>(alpha, M, stride_M, N, dim_N, beta,
+                                           v, stride_v);
   }
 }
 
@@ -5717,7 +5763,6 @@ void cuda_uncompress_int16(dim3 Gr, dim3 Bl, BaseFloat *dest,
                            int src_stride, float scale) {
   _cuda_uncompress<<<Gr, Bl>>>(dest, dim, src, src_stride, scale);
 }
-
 
 
 /*
@@ -7071,4 +7116,10 @@ void cudaD_get_r_filter_err(dim3 Gr, dim3 Bl, double *mat_out, const double *dif
                             int r_order, int r_stride, float lr)
 {
   _get_r_filter_err <<<Gr, Bl >>>(mat_out, diff, mat_in, flags, d, r_order, r_stride, lr);
+}
+
+// Launches a kernel that does nothing, explicitly using the legacy default stream;
+// this will synchronize all threads without blocking.
+void cuda_legacy_noop() {
+  _noop_kernel<<<1, 1, 0, cudaStreamLegacy>>>();
 }

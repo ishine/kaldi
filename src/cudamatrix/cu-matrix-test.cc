@@ -194,6 +194,30 @@ static void UnitTestCuMatrixApplyExp() {
 }
 
 
+template<typename Real>
+static void UnitTestCuMatrixApplyExpLimited() {
+  int32 M = 10 + Rand() % 20, N = 10 + Rand() % 20;
+  Matrix<Real> H(M, N);
+  H.SetRandn();
+
+
+  BaseFloat lower_limit = -0.2, upper_limit = 0.2;
+
+  CuMatrix<Real> D(H);
+
+  D.ApplyExpLimited(lower_limit, upper_limit);
+
+
+  H.ApplyFloor(lower_limit);
+  H.ApplyCeiling(upper_limit);
+  H.ApplyExp();
+
+  Matrix<Real> H2(D);
+
+  AssertEqual(H,H2);
+}
+
+
 
 template<typename Real>
 static void UnitTestCuMatrixSigmoid() {
@@ -1302,6 +1326,8 @@ template<typename Real> static void UnitTestCuMatrixSetMatMatDivMat() {
   A.SetRandn();
   B.SetRandn();
   C.SetRandn();
+
+  C.ApplyFloor(0.01);  // make sure there are no zeros.
 
   M.SetMatMatDivMat(A,B,C);
   ref.AddMatMatElements(1.0, A, B, 0.0);
@@ -2596,7 +2622,11 @@ static int32 DoubleFactorial(int32 i) {
 template <typename Real>
 static void UnitTestCuMatrixSetRandn() {
 
-  { // First test consistency when called twice.
+
+  if (false) {
+    // This block tests consistency when called twice.
+    // It has been disabled since we added multi-threaded testing,
+    // since consistency wouldn't be expected if other threads were running.
     int32 dimM = 100 + Rand() % 200, dimN = 100 + Rand() % 200;
     Matrix<Real> M(dimM, dimN), N(dimM, dimN);
     srand(104);
@@ -2895,6 +2925,7 @@ static void UnitTestCuMatrixEqualElementMask() {
 
 template<typename Real> void CudaMatrixUnitTest() {
   UnitTestCuMatrixApplyExpSpecial<Real>();
+  UnitTestCuMatrixApplyExpLimited<Real>();
   UnitTextCuMatrixAddSmatMat<Real>();
   UnitTextCuMatrixAddMatSmat<Real>();
   UnitTextCuMatrixAddSmat<Real>();
@@ -3015,16 +3046,38 @@ template<typename Real> void CudaMatrixUnitTest() {
 int main() {
   SetVerboseLevel(1);
   int32 loop = 0;
+  bool test_threads = true;
+  // num_threads only matters if test_threads == true.   Don't make it
+  // to large, because it will affect CPU usage if you are using CPU.
+  int32 num_threads = 4;
+
+
 #if HAVE_CUDA == 1
   for (loop = 0; loop < 2; loop++) {
     CuDevice::Instantiate().SetDebugStrideMode(true);
+    if (test_threads)
+      CuDevice::Instantiate().AllowMultithreading();
     if (loop == 0)
       CuDevice::Instantiate().SelectGpuId("no");
     else
       CuDevice::Instantiate().SelectGpuId("yes");
 #endif
 
-    kaldi::CudaMatrixUnitTest<float>();
+    if (test_threads) {
+      KALDI_LOG << "Doing matrix unit test with "
+                << num_threads << " threads.";
+      std::vector<std::thread*> threads;
+      for (int32 i = 0;  i < num_threads - 1; i++)
+        threads.push_back(new std::thread(kaldi::CudaMatrixUnitTest<float>));
+      // the last thread running is the main thread.
+      kaldi::CudaMatrixUnitTest<float>();
+      for (size_t i = 0; i < threads.size(); i++) {
+        threads[i]->join();
+        delete threads[i];
+      }
+    } else {
+      kaldi::CudaMatrixUnitTest<float>();
+    }
 
 #if HAVE_CUDA == 1
     if (CuDevice::Instantiate().DoublePrecisionSupported()) {

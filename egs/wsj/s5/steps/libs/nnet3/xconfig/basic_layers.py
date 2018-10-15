@@ -367,6 +367,14 @@ class XconfigTrivialOutputLayer(XconfigLayerBase):
     This is for outputs that are not really output "layers"
     (there is no affine transform or nonlinearity), they just directly map to an
     output-node in nnet3.
+
+    Parameters of the class, and their defaults:
+        input='[-1]'    :   Descriptor giving the input of the layer.
+        objective-type=linear   :   the only other choice currently is
+            'quadratic', for use in regression problems
+        output-delay=0    :  Can be used to shift the frames on the output, equivalent
+             to delaying labels by this many frames (positive value increases latency
+             in online decoding but may help if you're using unidirectional LSTMs.
     """
 
     def __init__(self, first_token, key_to_value, prev_names=None):
@@ -378,11 +386,17 @@ class XconfigTrivialOutputLayer(XconfigLayerBase):
 
         # note: self.config['input'] is a descriptor, '[-1]' means output
         # the most recent layer.
-        self.config = {'input': '[-1]', 'dim': -1}
+        self.config = {'input': '[-1]', 'dim': -1,
+                       'objective-type': 'linear',
+                       'output-delay': 0}
 
     def check_configs(self):
 
-        pass  # nothing to check; descriptor-parsing can't happen in this function.
+        if self.config['objective-type'] != 'linear' and \
+                self.config['objective-type'] != 'quadratic':
+            raise RuntimeError("In output, objective-type has"
+                               " invalid value {0}"
+                               "".format(self.config['objective-type']))
 
     def output_name(self, auxiliary_outputs=None):
 
@@ -412,11 +426,19 @@ class XconfigTrivialOutputLayer(XconfigLayerBase):
         # by 'output-string' we mean a string that can appear in
         # config-files, i.e. it contains the 'final' names of nodes.
         descriptor_final_str = self.descriptors['input']['final-string']
+        objective_type = self.config['objective-type']
+        output_delay = self.config['output-delay']
 
-        for config_name in ['init', 'ref', 'final']:
+        if output_delay != 0:
+            descriptor_final_str = (
+                'Offset({0}, {1})'.format(descriptor_final_str, output_delay))
+
+        for config_name in ['ref', 'final']:
             ans.append((config_name,
-                        'output-node name={0} input={1}'.format(
-                            self.name, descriptor_final_str)))
+                        'output-node name={0} input={1} '
+                        'objective={2}'.format(
+                            self.name, descriptor_final_str,
+                            objective_type)))
         return ans
 
 
@@ -478,16 +500,22 @@ class XconfigOutputLayer(XconfigLayerBase):
                        'objective-type': 'linear',
                             # see Nnet::ProcessOutputNodeConfigLine in
                             # nnet-nnet.cc for other options
-                       'learning-rate-factor': 1.0,
-                            # used in DNN (not RNN) training when using
-                            # frame-level objfns,
-                       'max-change': 1.5,
-                       'param-stddev': 0.0,
-                       'bias-stddev': 0.0,
-                       'l2-regularize': 0.0,
                        'output-delay': 0,
                        'ng-affine-options': '',
-                       'ng-linear-options': ''    # only affects bottleneck output layers.
+                       'ng-linear-options': '',    # only affects bottleneck output layers.
+
+                       # The following are just passed through to the affine
+                       # component, and (in the bottleneck case) the linear
+                       # component.
+                       'learning-rate-factor': '',  # effective default: 1.0
+                       'l2-regularize': '',         # effective default: 0.0
+                       'max-change': 1.5,
+
+                       # The following are passed through to the affine component only.
+                       # It tends to be beneficial to initialize the output layer with
+                       # zero values, unlike the hidden layers.
+                       'param-stddev': 0.0,
+                       'bias-stddev': 0.0,
                       }
 
     def check_configs(self):
@@ -502,33 +530,43 @@ class XconfigOutputLayer(XconfigLayerBase):
                                " invalid value {0}"
                                "".format(self.config['objective-type']))
 
-        if self.config['learning-rate-factor'] <= 0.0:
-            raise RuntimeError("In output-layer, learning-rate-factor has"
-                               " invalid value {0}"
-                               "".format(self.config['learning-rate-factor']))
+        if self.config['orthonormal-constraint'] <= 0.0:
+            raise RuntimeError("output-layer does not support negative (floating) "
+                               "orthonormal constraint; use a separate linear-component "
+                               "followed by batchnorm-component.")
 
-    # you cannot access the output of this layer from other layers... see
-    # comment in output_name for the reason why.
     def auxiliary_outputs(self):
 
-        return []
+        auxiliary_outputs = ['affine']
+        if self.config['include-log-softmax']:
+            auxiliary_outputs.append('log-softmax')
 
-    def output_name(self, auxiliary_outputs=None):
+        return auxiliary_outputs
 
-        # Note: nodes of type output-node in nnet3 may not be accessed in
-        # Descriptors, so calling this with auxiliary_outputs=None doesn't
-        # make sense.  But it might make sense to make the output of the softmax
-        # layer and/or the output of the affine layer available as inputs to
-        # other layers, in some circumstances.
-        # we'll implement that when it's needed.
-        raise RuntimeError("Outputs of output-layer may not be used by other"
-                           " layers")
+    def output_name(self, auxiliary_output=None):
+
+        if auxiliary_output is None:
+            # Note: nodes of type output-node in nnet3 may not be accessed in
+            # Descriptors, so calling this with auxiliary_outputs=None doesn't
+            # make sense.
+            raise RuntimeError("Outputs of output-layer may not be used by other"
+                               " layers")
+
+        if auxiliary_output in self.auxiliary_outputs():
+            return '{0}.{1}'.format(self.name, auxiliary_output)
+        else:
+            raise RuntimeError("Unknown auxiliary output name {0}"
+                               "".format(auxiliary_output))
 
     def output_dim(self, auxiliary_output=None):
 
-        # see comment in output_name().
-        raise RuntimeError("Outputs of output-layer may not be used by other"
-                           " layers")
+        if auxiliary_output is None:
+            # Note: nodes of type output-node in nnet3 may not be accessed in
+            # Descriptors, so calling this with auxiliary_outputs=None doesn't
+            # make sense.
+            raise RuntimeError("Outputs of output-layer may not be used by other"
+                               " layers")
+        return self.config['dim']
 
     def get_full_config(self):
         ans = []
@@ -555,18 +593,14 @@ class XconfigOutputLayer(XconfigLayerBase):
         output_dim = self.config['dim']
         bottleneck_dim = self.config['bottleneck-dim']
         objective_type = self.config['objective-type']
-        learning_rate_factor = self.config['learning-rate-factor']
         include_log_softmax = self.config['include-log-softmax']
-        param_stddev = self.config['param-stddev']
-        bias_stddev = self.config['bias-stddev']
-        l2_regularize = self.config['l2-regularize']
         output_delay = self.config['output-delay']
-        max_change = self.config['max-change']
-        ng_affine_options = self.config['ng-affine-options']
-        learning_rate_option = ('learning-rate-factor={0} '.format(learning_rate_factor) if
-                                learning_rate_factor != 1.0 else '')
-        l2_regularize_option = ('l2-regularize={0} '.format(l2_regularize)
-                                if l2_regularize != 0.0 else '')
+
+        affine_options = self.config['ng-affine-options']
+        for opt in [ 'learning-rate-factor', 'l2-regularize', 'max-change',
+                     'param-stddev', 'bias-stddev' ]:
+            if self.config[opt] != '':
+                affine_options += ' {0}={1}'.format(opt, self.config[opt])
 
         cur_node = descriptor_final_string
         cur_dim = input_dim
@@ -581,6 +615,10 @@ class XconfigOutputLayer(XconfigLayerBase):
             # We don't include the l2-regularize option because it's useless
             # given the orthonormality constraint.
             linear_options = self.config['ng-linear-options']
+            for opt in [ 'learning-rate-factor', 'l2-regularize', 'max-change' ]:
+                if self.config[opt] != '':
+                    linear_options += ' {0}={1}'.format(opt, self.config[opt])
+
 
             # note: by default the LinearComponent uses natural gradient.
             line = ('component name={0}.linear type=LinearComponent '
@@ -599,14 +637,8 @@ class XconfigOutputLayer(XconfigLayerBase):
 
         line = ('component name={0}.affine'
                 ' type=NaturalGradientAffineComponent'
-                ' input-dim={1}'
-                ' output-dim={2}'
-                ' param-stddev={3}'
-                ' bias-stddev={4}'
-                ' max-change={5} {6} {7} {8}'
-                ''.format(self.name, cur_dim, output_dim,
-                          param_stddev, bias_stddev, max_change, ng_affine_options,
-                          learning_rate_option, l2_regularize_option))
+                ' input-dim={1} output-dim={2} {3}'
+                ''.format(self.name, cur_dim, output_dim, affine_options))
         configs.append(line)
         line = ('component-node name={0}.affine'
                 ' component={0}.affine input={1}'
@@ -679,7 +711,9 @@ class XconfigBasicLayer(XconfigLayerBase):
         # the most recent layer.
         self.config = {'input': '[-1]',
                        'dim': -1,
-                       'bottleneck-dim': -1,
+                       'bottleneck-dim': -1,  # Deprecated!  Use tdnnf-layer for
+                                              # factorized TDNNs, or prefinal-layer
+                                              # for bottlenecks just before the output.
                        'self-repair-scale': 1.0e-05,
                        'target-rms': 1.0,
                        'ng-affine-options': '',
@@ -694,7 +728,8 @@ class XconfigBasicLayer(XconfigLayerBase):
                                                     # continuous-valued (not zero-one) mask.
                        'add-log-stddev': False,
                        # the following are not really inspected by this level of
-                       # code, just passed through (but not if left at '').
+                       # code, just passed through to the affine component if
+                       # their value is not ''.
                        'bias-stddev': '',
                        'l2-regularize': '',
                        'learning-rate-factor': '',
@@ -713,7 +748,8 @@ class XconfigBasicLayer(XconfigLayerBase):
         if self.config['target-rms'] < 0.0:
             raise RuntimeError("target-rms has invalid value {0}"
                                .format(self.config['target-rms']))
-        if self.config['learning-rate-factor'] <= 0.0:
+        if (self.config['learning-rate-factor'] != '' and
+            self.config['learning-rate-factor'] <= 0.0):
             raise RuntimeError("learning-rate-factor has invalid value {0}"
                                .format(self.config['learning-rate-factor']))
 
@@ -789,6 +825,9 @@ class XconfigBasicLayer(XconfigLayerBase):
 
         # First the affine node (or linear then affine, if bottleneck).
         if self.config['bottleneck-dim'] > 0:
+            # The 'bottleneck-dim' option is deprecated and may eventually be
+            # removed.  Best to use tdnnf-layer if you want factorized TDNNs.
+
             # This is the bottleneck case (it doesn't necessarily imply we
             # will be using the features from the bottleneck; it's just a factorization
             # of the matrix into two pieces without a nonlinearity in between).

@@ -29,7 +29,7 @@ namespace chain {
 
 
 
-bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
+void ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
                                  const DenominatorGraph &den_graph,
                                  const Supervision &supervision,
                                  const CuMatrixBase<BaseFloat> &nnet_output,
@@ -37,11 +37,10 @@ bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
                                  BaseFloat *l2_term,
                                  BaseFloat *weight,
                                  CuMatrixBase<BaseFloat> *nnet_output_deriv,
-                                 CuMatrixBase<BaseFloat> *xent_output_deriv) {
+                                 CuMatrix<BaseFloat> *xent_output_deriv) {
   BaseFloat num_logprob_weighted, den_logprob_weighted;
   bool denominator_ok = true;
   bool numerator_ok = true;
-  bool ok = true;
   *weight = supervision.weight * supervision.num_sequences *
       supervision.frames_per_sequence;
 
@@ -67,9 +66,8 @@ bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
     // chain-denominator.cc, which has just been freed; it also uses the
     // kStrideEqualNumCols arg (its shape is the transpose of this matrix's
     // shape).
-    // xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
-    //                          kSetZero, kStrideEqualNumCols);
-    xent_output_deriv->SetZero();
+    xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
+                              kSetZero, kStrideEqualNumCols);
   }
 
 
@@ -77,25 +75,22 @@ bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
     GenericNumeratorComputation numerator(supervision, nnet_output);
     // note: supervision.weight is included as a factor in the derivative from
     // the numerator object, as well as the returned logprob.
-    num_logprob_weighted = numerator.Forward();
-    KALDI_VLOG(2) << "Numerator logprob per frame: "
-                  << num_logprob_weighted / (*weight);
-    numerator_ok = (num_logprob_weighted - num_logprob_weighted == 0);
-    if (!numerator_ok)
-      KALDI_LOG << "Numerator forward failed.";
-
-    if (xent_output_deriv && numerator_ok) {
-      numerator_ok = numerator.Backward(xent_output_deriv);
-      if (!numerator_ok)
-        KALDI_LOG << "Numerator backward failed.";
-      if (nnet_output_deriv)
+    if (xent_output_deriv) {
+      numerator_ok = numerator.ForwardBackward(&num_logprob_weighted,
+                                               xent_output_deriv);
+      if (numerator_ok && nnet_output_deriv)
         nnet_output_deriv->AddMat(1.0, *xent_output_deriv);
-    } else if (nnet_output_deriv && numerator_ok) {
-      numerator_ok = numerator.Backward(nnet_output_deriv);
-      if (!numerator_ok)
-        KALDI_LOG << "Numerator backward failed.";
+    } else if (nnet_output_deriv) {
+      numerator_ok = numerator.ForwardBackward(&num_logprob_weighted,
+                                               nnet_output_deriv);
+    } else {
+      num_logprob_weighted = numerator.ComputeObjf();
     }
+    if (!numerator_ok)
+        KALDI_WARN << "Numerator forward-backward failed.";
   }
+  numerator_ok = numerator_ok &&
+                 (num_logprob_weighted - num_logprob_weighted == 0);
 
   *objf = num_logprob_weighted - den_logprob_weighted;
   if (!((*objf) - (*objf) == 0) || !denominator_ok || !numerator_ok) {
@@ -113,7 +108,6 @@ bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
                << ", setting objective function to " << default_objf
                << " per frame.";
     *objf  = default_objf * *weight;
-    ok = false;
   }
 
   // This code helps us see how big the derivatives are, on average,
@@ -141,11 +135,10 @@ bool ComputeChainObjfAndDerivE2e(const ChainTrainingOptions &opts,
     if (nnet_output_deriv)
       nnet_output_deriv->AddMat(-1.0 * scale, nnet_output);
   }
-  return ok;
 }
 
 
-bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
+void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                               const DenominatorGraph &den_graph,
                               const Supervision &supervision,
                               const CuMatrixBase<BaseFloat> &nnet_output,
@@ -153,17 +146,16 @@ bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                               BaseFloat *l2_term,
                               BaseFloat *weight,
                               CuMatrixBase<BaseFloat> *nnet_output_deriv,
-                              CuMatrixBase<BaseFloat> *xent_output_deriv) {
-  bool ok = true;
-  if (supervision.e2e) {
-    ok = ComputeChainObjfAndDerivE2e(opts, den_graph, supervision,
+                              CuMatrix<BaseFloat> *xent_output_deriv) {
+  if (!supervision.e2e_fsts.empty()) {
+    ComputeChainObjfAndDerivE2e(opts, den_graph, supervision,
                                 nnet_output, objf, l2_term,
                                 weight, nnet_output_deriv, xent_output_deriv);
-    return ok;
+    return;
   }
 
   BaseFloat num_logprob_weighted, den_logprob_weighted;
-
+  bool ok = true;
   if (nnet_output_deriv != NULL)
     nnet_output_deriv->SetZero();
 
@@ -186,9 +178,8 @@ bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
     // chain-denominator.cc, which has just been freed; it also uses the
     // kStrideEqualNumCols arg (its shape is the transpose of this matrix's
     // shape).
-    // xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
-    //                          kSetZero, kStrideEqualNumCols);
-    xent_output_deriv->SetZero();
+    xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
+                              kSetZero, kStrideEqualNumCols);
   }
 
 
@@ -223,7 +214,6 @@ bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                << ", setting objective function to " << default_objf
                << " per frame.";
     *objf  = default_objf * *weight;
-    ok = false;
   }
 
   // This code helps us see how big the derivatives are, on average,
@@ -252,7 +242,6 @@ bool ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
     if (nnet_output_deriv)
       nnet_output_deriv->AddMat(-1.0 * scale, nnet_output);
   }
-  return ok;
 }
 
 

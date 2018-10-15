@@ -1385,7 +1385,10 @@ void ConstantComponent::UnVectorize(const VectorBase<BaseFloat> &params) {
   output_.CopyFromVec(params);
 }
 
-
+void ConstantComponent::ConsolidateMemory() {
+  OnlineNaturalGradient temp(preconditioner_);
+  preconditioner_.Swap(&temp);
+}
 
 std::string DropoutMaskComponent::Info() const {
   std::ostringstream stream;
@@ -1414,7 +1417,7 @@ void* DropoutMaskComponent::Propagate(
   BaseFloat dropout_proportion = dropout_proportion_;
   KALDI_ASSERT(dropout_proportion >= 0.0 && dropout_proportion <= 1.0);
 
-  if (dropout_proportion_ == 0) {
+  if (dropout_proportion == 0) {
     out->Set(1.0);
     return NULL;
   }

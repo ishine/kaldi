@@ -18,7 +18,7 @@
 #
 #
 # local/chain/compare_wer_general.sh --rt03 tdnn7n_sp tdnn7m26o_sp
-# System                tdnn7n_sp tdnn7m26j_sp
+# System                tdnn7n_sp tdnn7m26o_sp
 # WER on train_dev(tg)      12.18     11.74
 # WER on train_dev(fg)      11.12     10.69
 # WER on eval2000(tg)        14.9      14.6
@@ -197,6 +197,7 @@ if [ $stage -le 13 ]; then
 
 
   steps/nnet3/chain/train.py --stage $train_stage \
+    --cmd "$train_cmd" \
     --feat.online-ivector-dir exp/nnet3/ivectors_${train_set} \
     --feat.cmvn-opts "--norm-means=false --norm-vars=false" \
     --chain.xent-regularize $xent_regularize \
