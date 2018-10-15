@@ -426,6 +426,8 @@ static void _apply_fixed(Real* mat, Real resolution, int mode, MatrixDim d) {
   }
 }
 
+template<typename Real>
+__global__
 static void _apply_exp_limited(Real* mat, MatrixDim d,
                                Real lower_limit, Real upper_limit) {
   int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -2099,6 +2101,24 @@ static void _mul_rows(Real* dst, const Real *src,
   }
 }
 
+template<typename Real>
+__global__
+static void _div_rows(Real* dst, const Real *src,
+                      const MatrixIndexT_cuda* reorder, MatrixDim dst_dim,
+                      int src_stride) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x;  // col index
+  int j = blockIdx.y * blockDim.y + threadIdx.y;  // row index
+  if (i < dst_dim.cols && j < dst_dim.rows) {
+    int dst_index = j * dst_dim.stride + i;
+    if (reorder[j] >= 0) {
+      int src_index = reorder[j] * src_stride + i;
+      if (src[src_index] == 0 && fabs(dst[dst_index]) <= 1e-6)
+        dst[dst_index] = 0;
+      else
+        dst[dst_index] /= src[src_index];
+    }
+  }
+}
 
 template<typename Real>
 __global__
@@ -4093,6 +4113,12 @@ void cudaF_mul_rows(dim3 Gr, dim3 Bl, float* dst, const float* src,
   _mul_rows<<<Gr,Bl>>>(dst, src, reorder, dst_dim, src_stride);
 }
 
+void cudaF_div_rows(dim3 Gr, dim3 Bl, float* dst, const float* src,
+                    const MatrixIndexT_cuda* reorder, MatrixDim dst_dim,
+                    int src_stride) {
+  _div_rows<<<Gr,Bl>>>(dst, src, reorder, dst_dim, src_stride);
+}
+
 void cudaF_add_rows_direct(dim3 Gr, dim3 Bl, float alpha, float* dst,
                            const float* const * src, MatrixDim dst_dim) {
   _add_rows<<<Gr,Bl>>>(alpha, dst, src, dst_dim);
@@ -4818,6 +4844,12 @@ void cudaD_mul_rows(dim3 Gr, dim3 Bl, double* dst,
                     const double* src, const MatrixIndexT_cuda* reorder,
                     MatrixDim dst_dim, int src_stride) {
   _mul_rows<<<Gr,Bl>>>(dst, src, reorder, dst_dim, src_stride);
+}
+
+void cudaD_div_rows(dim3 Gr, dim3 Bl, double* dst,
+                    const double* src, const MatrixIndexT_cuda* reorder,
+                    MatrixDim dst_dim, int src_stride) {
+  _div_rows<<<Gr,Bl>>>(dst, src, reorder, dst_dim, src_stride);
 }
 
 void cudaD_add_rows_direct(dim3 Gr, dim3 Bl, double alpha, double* dst,
@@ -5763,6 +5795,7 @@ void cuda_uncompress_int16(dim3 Gr, dim3 Bl, BaseFloat *dest,
                            int src_stride, float scale) {
   _cuda_uncompress<<<Gr, Bl>>>(dest, dim, src, src_stride, scale);
 }
+
 
 
 /*

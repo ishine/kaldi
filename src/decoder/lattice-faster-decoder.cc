@@ -82,10 +82,10 @@ void LatticeFasterDecoderTpl<FST, Token>::InitDecodingCtc() {
   num_toks_ = 0;
   decoding_finalized_ = false;
   final_costs_.clear();
-  StateId start_state = fst_.Start();
+  StateId start_state = fst_->Start();
   KALDI_ASSERT(start_state != fst::kNoStateId);
   active_toks_.resize(1);
-  Token *start_tok = new Token(0.0, 0.0, NULL, NULL);
+  Token *start_tok = new Token(0.0, 0.0, NULL, NULL, NULL);
   active_toks_[0].toks = start_tok;
   toks_.Insert(start_state, start_tok);
   num_toks_++;
@@ -807,6 +807,7 @@ BaseFloat LatticeFasterDecoderTpl<FST, Token>::GetCutoff(Elem *list_head, size_t
 }
 
 /// Gets the weight cutoff.  Also counts the active tokens.
+template <typename FST, typename Token>
 BaseFloat LatticeFasterDecoderTpl<FST, Token>::GetCutoffCtc(Elem *list_head, size_t *tok_count,
                                           BaseFloat *adaptive_beam, Elem **best_elem) {
   BaseFloat best_weight = std::numeric_limits<BaseFloat>::infinity();
@@ -1008,7 +1009,7 @@ void LatticeFasterDecoderTpl<FST, Token>::ProcessEmittingCtc(
     StateId state = best_elem->key;
     Token *tok = best_elem->val;
     cost_offset = - tok->tot_cost;
-    for (fst::ArcIterator<FST> aiter(fst, state);
+    for (fst::ArcIterator<FST> aiter(*fst_, state);
          !aiter.Done();
          aiter.Next()) {
       Arc arc = aiter.Value();
@@ -1037,7 +1038,7 @@ void LatticeFasterDecoderTpl<FST, Token>::ProcessEmittingCtc(
     StateId state = e->key;
     Token *tok = e->val;
     if (tok->tot_cost <=  cur_cutoff) {
-      for (fst::ArcIterator<FST> aiter(fst, state);
+      for (fst::ArcIterator<FST> aiter(*fst_, state);
            !aiter.Done();
            aiter.Next()) {
         const Arc &arc = aiter.Value();
@@ -1053,11 +1054,11 @@ void LatticeFasterDecoderTpl<FST, Token>::ProcessEmittingCtc(
           // Note: the frame indexes into active_toks_ are one-based,
           // hence the + 1.
           Token *next_tok = FindOrAddToken(arc.nextstate,
-                                           frame + 1, tot_cost, NULL);
+                                           frame + 1, tot_cost, tok, NULL);
           // NULL: no change indicator needed
 
           // Add ForwardLink from tok to next_tok (put on head of list tok->links)
-          tok->links = new ForwardLink(next_tok, arc.ilabel, arc.olabel,
+          tok->links = new ForwardLinkT(next_tok, arc.ilabel, arc.olabel,
                                        graph_cost, ac_cost, tok->links);
         }
       } // for all arcs
@@ -1139,7 +1140,7 @@ void LatticeFasterDecoderTpl<FST, Token>::ProcessNonemitting(BaseFloat cutoff) {
 
 
 template <typename FST, typename Token>
-void LatticeFasterDecoderTpl<FST, Token>::ProcessNonemittingCtc(BaseFloat cutoff) {
+void LatticeFasterDecoderTpl<FST, Token>::ProcessNonemittingCtc() {
   KALDI_ASSERT(!active_toks_.empty());
   int32 frame = static_cast<int32>(active_toks_.size()) - 2;
   // Note: "frame" is the time-index we just processed, or -1 if
@@ -1179,9 +1180,9 @@ void LatticeFasterDecoderTpl<FST, Token>::ProcessNonemittingCtc(BaseFloat cutoff
     // because we're about to regenerate them.  This is a kind
     // of non-optimality (remember, this is the simple decoder),
     // but since most states are emitting it's not a huge issue.
-    tok->DeleteForwardLinks(); // necessary when re-visiting
+    DeleteForwardLinks(tok); // necessary when re-visiting
     tok->links = NULL;
-    for (fst::ArcIterator<FST> aiter(fst, state);
+    for (fst::ArcIterator<FST> aiter(*fst_, state);
          !aiter.Done();
          aiter.Next()) {
       const Arc &arc = aiter.Value();
@@ -1192,14 +1193,15 @@ void LatticeFasterDecoderTpl<FST, Token>::ProcessNonemittingCtc(BaseFloat cutoff
           bool changed;
 
           Token *new_tok = FindOrAddToken(arc.nextstate, frame + 1, tot_cost,
-                                          &changed);
+                                          tok, &changed);
 
-          tok->links = new ForwardLink(new_tok, 0, arc.olabel,
+          tok->links = new ForwardLinkT(new_tok, 0, arc.olabel,
                                        graph_cost, 0, tok->links);
 
           // "changed" tells us whether the new token has a different
           // cost from before, or is new [if so, add into queue].
-          if (changed) queue_.push_back(arc.nextstate);
+          if (changed && fst_->NumInputEpsilons(arc.nextstate) != 0)
+            queue_.push_back(arc.nextstate);
         }
       }
     } // for all arcs

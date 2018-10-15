@@ -605,19 +605,18 @@ CuMemoryAllocator::~CuMemoryAllocator() {
 
 CuMemoryAllocator g_cuda_allocator;
 
-
-}  // namespace kaldi
-
 void* CuMemoryAllocator::MallocLocal(size_t size)
 {
 	void *ans;
 	cudaError_t e;
 	Timer tim;
 	e = cudaMalloc(&ans, size);
-	tot_time_taken_in_cuda_malloc_pitch_ += tim.Elapsed();
+    double elapsed = tim.Elapsed();
+    tot_time_taken_ += elapsed;
+    malloc_time_taken_ += elapsed;
 
 	if (e != cudaSuccess) {
-      		PrintMemoryUsage();
+        PrintMemoryUsage();
 		KALDI_ERR << "Cannot allocate the requested memory ("
                   << size << " bytes)";
 	}
@@ -632,11 +631,13 @@ void* CuMemoryAllocator::MallocPitchLocal(size_t row_bytes, size_t num_rows, siz
         cudaError_t e;
 	Timer tim;
 	e = cudaMallocPitch(&ans, pitch, row_bytes, num_rows);
-	tot_time_taken_in_cuda_malloc_pitch_ += tim.Elapsed();
+    double elapsed = tim.Elapsed();
+    tot_time_taken_ += elapsed;
+    malloc_time_taken_ += elapsed;
 
         if (e != cudaSuccess) {
       		PrintMemoryUsage();
-		KALDI_ERR << "Cannot allocate the requested memory ("
+		    KALDI_ERR << "Cannot allocate the requested memory ("
                   << row_bytes << " x " << num_rows << " = "
                   << row_bytes * num_rows << " bytes)";
         }   
@@ -651,6 +652,9 @@ void  CuMemoryAllocator::FreeLocal(void *ptr)
 	CU_SAFE_CALL(cudaFree(ptr));
 	ptr = NULL;
 }
+
+
+}  // namespace kaldi
 
 
 #endif // HAVE_CUDA
