@@ -112,6 +112,9 @@ int main(int argc, char *argv[]) {
     bool do_endpointing = false;
     bool online = true;
 
+    std::string interp_lm_filename = "";
+    BaseFloat interp_lm_scale = 0.0f;
+
     po.Register("chunk-length", &chunk_length_secs,
                 "Length of chunk size in seconds, that we process.  Set to <= 0 "
                 "to use all input in one chunk.");
@@ -131,6 +134,9 @@ int main(int argc, char *argv[]) {
     po.Register("num-threads-startup", &g_num_threads,
                 "Number of threads used when initializing iVector extractor.");
 
+    po.Register("interp-lm", &interp_lm_filename, "interp lm filename.");
+    po.Register("interp-lm-scale", &interp_lm_scale, "interp lm scale.");
+
     feature_opts.Register(&po);
     decodable_opts.Register(&po);
     decoder_opts.Register(&po);
@@ -138,7 +144,7 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 6) {
+    if (po.NumArgs() != 5) {
       po.PrintUsage();
       return 1;
     }
@@ -147,8 +153,12 @@ int main(int argc, char *argv[]) {
         fst_rxfilename = po.GetArg(2),
         spk2utt_rspecifier = po.GetArg(3),
         wav_rspecifier = po.GetArg(4),
-        clat_wspecifier = po.GetArg(5),
-        interp_lm_filename = po.GetArg(6);
+        clat_wspecifier = po.GetArg(5);
+
+    VectorFst<StdArc> *interp_lm = fst::CastOrConvertToVectorFst(fst::ReadFstKaldiGeneric(interp_lm_filename));
+    ApplyProbabilityScale(interp_lm_scale, interp_lm);
+    fst::BackoffDeterministicOnDemandFst<StdArc> backoff_lm(*interp_lm);
+    fst::CacheDeterministicOnDemandFst<StdArc> cached_interp_lm(&backoff_lm);
 
     TransitionModel trans_model;
     nnet3::AmNnetSimple am_nnet;
@@ -168,12 +178,6 @@ int main(int argc, char *argv[]) {
       Input ki(fst_rxfilename, &binary);
       la_fst->Read(ki.Stream(), binary);
     }
- 
-    BaseFloat interp_scale = 0.2f;
-    VectorFst<StdArc> *interp_lm_fst = fst::CastOrConvertToVectorFst(fst::ReadFstKaldiGeneric(interp_lm_filename));
-    ApplyProbabilityScale(interp_scale, interp_lm_fst);
-    fst::BackoffDeterministicOnDemandFst<StdArc> interp_lm_det_fst(*interp_lm_fst);
-    fst::CacheDeterministicOnDemandFst<StdArc> interp_lm_det_cache_fst(&interp_lm_det_fst);
 
     fst::SymbolTable *word_syms = NULL;
     if (word_syms_rxfilename != "")
@@ -192,7 +196,7 @@ int main(int argc, char *argv[]) {
     OnlineTimingStats timing_stats;
 
     Decoder decoder(la_fst,
-                    NULL,
+                    ((interp_lm_scale == 0.0f) ? NULL : &cached_interp_lm),
                     trans_model,
                     am_nnet,
                     feature_opts,
