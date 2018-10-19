@@ -42,7 +42,7 @@ void Decoder::StartSession(const char* session_key) {
                                                       decodable_info_, 
                                                       feature_->InputFeature(), 
                                                       feature_->IvectorFeature());
-  core_.InitDecoding();
+  core_.StartSession(session_key);
 }
 
 
@@ -86,7 +86,7 @@ bool Decoder::EndpointDetected() {
 void Decoder::StopSession() {
   feature_->InputFinished();
   core_.AdvanceDecoding(decodable_);
-  core_.FinalizeDecoding();
+  core_.StopSession();
 }
 
 

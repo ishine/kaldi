@@ -103,11 +103,13 @@ class DecCore {
   void SetOptions(const DecCoreConfig &config) { config_ = config; }
   const DecCoreConfig &GetOptions() const { return config_; }
 
+  // offline ASR interfaces
   bool Decode(DecodableInterface *decodable);
 
-  void InitDecoding();
+  // online streaming ASR interfaces
+  void StartSession(const char* session_key = NULL);
   void AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frames = -1);
-  void FinalizeDecoding();
+  void StopSession();
 
   int32 TrailingSilenceFrames() const;
 
@@ -328,8 +330,15 @@ class DecCore {
                       BaseFloat *adaptive_beam, 
                       Elem **best_elem);
 
+  void SessionPreCondition();
+  void SessionPostCondition();
+
+  void FramePreCondition();
+  void FramePostCondition();
+
   BaseFloat ProcessEmitting(DecodableInterface *decodable);
   void ProcessNonemitting(BaseFloat cost_cutoff);
+
 
   // There are various cleanup tasks... the the token_set_ structure contains
   // singly linked lists of Token pointers, where Elem is the list type.
@@ -353,6 +362,8 @@ class DecCore {
   static void TopSortTokens(Token *tok_list, std::vector<Token*> *topsorted_list);
 
   void ClearTokenNet();
+
+  const char * session_key_; // no ownership
 
   MemoryPool *token_pool_;
   MemoryPool *link_pool_;

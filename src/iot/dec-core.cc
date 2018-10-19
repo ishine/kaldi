@@ -15,6 +15,7 @@ DecCore::DecCore(Wfst *la_fst,
   config_.Check();
   token_set_.SetSize(1000);
   num_toks_ = 0; 
+  session_key_ = NULL;
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
@@ -23,13 +24,14 @@ DecCore::DecCore(Wfst *la_fst,
 DecCore::~DecCore() {
   DeleteElems(token_set_.Clear());
   ClearTokenNet();
+  session_key_ = NULL;
 
   DELETE(token_pool_);
   DELETE(link_pool_);
 }
 
-void DecCore::InitDecoding() {
-  // clean up from last time:
+void DecCore::StartSession(const char* session_key) {
+  // clean up last session
   DeleteElems(token_set_.Clear());
   cost_offsets_.clear();
   ClearTokenNet();
@@ -37,7 +39,10 @@ void DecCore::InitDecoding() {
   num_toks_ = 0;
   decoding_finalized_ = false;
   final_costs_.clear();
+  session_key_ = NULL;
 
+  // setup new session
+  session_key_ = session_key;
   WfstStateId la_start_state = la_fst_->Start();
   WfstStateId lm_start_state = (lm_fst_ == NULL) ? 0 : lm_fst_->Start();
   ViterbiState start_state = ComposeViterbiState(la_start_state, lm_start_state);
@@ -51,31 +56,52 @@ void DecCore::InitDecoding() {
   token_set_.Insert(start_state, start_token);
 
   ProcessNonemitting(config_.beam);
+
+  SessionPreCondition();
 }
 
 // Returns true if any kind of traceback is available (not necessarily from
 // a final state).  It should only very rarely return false; this indicates
 // an unusual search error.
 bool DecCore::Decode(DecodableInterface *decodable) {
-  InitDecoding();
-
+  StartSession();
   while (!decodable->IsLastFrame(NumFramesDecoded() - 1)) {
     if (NumFramesDecoded() % config_.prune_interval == 0) {
       PruneTokenNet(config_.lattice_beam * config_.prune_scale);
     }
-
+    FramePreCondition();
     BaseFloat cost_cutoff = ProcessEmitting(decodable);
     ProcessNonemitting(cost_cutoff);
+    FramePostCondition();
   }
-  FinalizeDecoding();
-
+  StopSession();
   return !token_net_.empty() && token_net_.back().toks != NULL;
 }
 
+void DecCore::SessionPreCondition() {
+  ;
+}
+
+void DecCore::SessionPostCondition() {
+  ;
+}
+
+void DecCore::FramePreCondition() {
+  ;
+}
+
+void DecCore::FramePostCondition() {
+  // num of tokens
+  int n = 0;
+  for (Token* tok = token_net_.back().toks; tok != NULL; tok = tok->next) {
+    n++;
+  }
+  KALDI_VLOG(2) << NumFramesDecoded() << " num_toks:"<< n ;
+}
 
 void DecCore::AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frames) {
   KALDI_ASSERT(!token_net_.empty() && !decoding_finalized_ &&
-               "You must call InitDecoding() before AdvanceDecoding");
+               "You must call StartSession() before AdvanceDecoding");
   int32 num_frames_ready = decodable->NumFramesReady();
   KALDI_ASSERT(num_frames_ready >= NumFramesDecoded());
 
@@ -89,16 +115,18 @@ void DecCore::AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frame
     if (NumFramesDecoded() % config_.prune_interval == 0) {
       PruneTokenNet(config_.lattice_beam * config_.prune_scale);
     }
+    FramePreCondition();
     BaseFloat cost_cutoff = ProcessEmitting(decodable);
     ProcessNonemitting(cost_cutoff);
+    FramePostCondition();
   }
 }
 
 
-// FinalizeDecoding() is a version of PruneTokenNet that we call
+// StopSession() is a version of PruneTokenNet that we call
 // (optionally) on the final frame.  Takes into account the final-prob of
 // tokens.  This function used to be called PruneTokenNetFinal().
-void DecCore::FinalizeDecoding() {
+void DecCore::StopSession() {
   int32 end_time = NumFramesDecoded();
   int32 num_toks_begin = num_toks_;
   // PruneForwardLinksFinal() prunes final frame (with final-probs), and
@@ -111,8 +139,9 @@ void DecCore::FinalizeDecoding() {
     PruneTokenList(t + 1);
   }
   PruneTokenList(0);
-  KALDI_VLOG(4) << "pruned tokens from " << num_toks_begin
-                << " to " << num_toks_;
+  KALDI_VLOG(4) << "pruned tokens from " << num_toks_begin << " to " << num_toks_;
+
+  SessionPostCondition();
 }
 
 
@@ -142,7 +171,7 @@ BaseFloat DecCore::FinalRelativeCost() const {
     ComputeFinalCosts(NULL, &relative_cost, NULL);
     return relative_cost;
   } else {
-    // we're not allowed to call that function if FinalizeDecoding() has
+    // we're not allowed to call that function if StopSession() has
     // been called; return a cached value.
     return final_relative_cost_;
   }
@@ -208,7 +237,7 @@ void DecCore::ComputeFinalCosts(
 DecCore::BestPathIterator DecCore::BestPathEnd(bool use_final_probs, 
                                                BaseFloat *final_cost_out) const {
   if (decoding_finalized_ && !use_final_probs)
-    KALDI_ERR << "You cannot call FinalizeDecoding() and then call "
+    KALDI_ERR << "You cannot call StopSession() and then call "
               << "BestPathEnd() with use_final_probs == false";
   KALDI_ASSERT(NumFramesDecoded() > 0 &&
                "You cannot call BestPathEnd if no frames were decoded.");
@@ -341,9 +370,9 @@ bool DecCore::GetRawLattice(Lattice *ofst, bool use_final_probs) const {
 
   // Note: you can't use the old interface (Decode()) if you want to
   // get the lattice with use_final_probs = false.  You'd have to do
-  // InitDecoding() and then AdvanceDecoding().
+  // StartSession() and then AdvanceDecoding().
   if (decoding_finalized_ && !use_final_probs)
-    KALDI_ERR << "You cannot call FinalizeDecoding() and then call "
+    KALDI_ERR << "You cannot call StopSession() and then call "
               << "GetRawLattice() with use_final_probs == false";
 
   unordered_map<Token*, BaseFloat> final_costs_local;
@@ -426,9 +455,9 @@ bool DecCore::GetRawLatticePruned(
 
   // Note: you can't use the old interface (Decode()) if you want to
   // get the lattice with use_final_probs = false.  You'd have to do
-  // InitDecoding() and then AdvanceDecoding().
+  // StartSession() and then AdvanceDecoding().
   if (decoding_finalized_ && !use_final_probs)
-    KALDI_ERR << "You cannot call FinalizeDecoding() and then call "
+    KALDI_ERR << "You cannot call StopSession() and then call "
               << "GetRawLattice() with use_final_probs == false";
 
   unordered_map<Token*, BaseFloat> final_costs_local;
