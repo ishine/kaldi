@@ -29,6 +29,7 @@
 #include "nnet3/nnet-utils.h"
 
 #include "iot/decoder.h"
+#include "iot/language-model.h"
 
 namespace kaldi {
 namespace iot {
@@ -112,8 +113,8 @@ int main(int argc, char *argv[]) {
     bool do_endpointing = false;
     bool online = true;
 
-    std::string interp_lm_filename = "";
-    BaseFloat interp_lm_scale = 0.0f;
+    std::string ext_lm_string = "";
+    std::string ext_lm_scale_string = "";
 
     po.Register("chunk-length", &chunk_length_secs,
                 "Length of chunk size in seconds, that we process.  Set to <= 0 "
@@ -134,8 +135,8 @@ int main(int argc, char *argv[]) {
     po.Register("num-threads-startup", &g_num_threads,
                 "Number of threads used when initializing iVector extractor.");
 
-    po.Register("interp-lm", &interp_lm_filename, "interp lm filename.");
-    po.Register("interp-lm-scale", &interp_lm_scale, "interp lm scale.");
+    po.Register("ext-lm", &ext_lm_string, "lm1:lm2");
+    po.Register("ext-lm-scale", &ext_lm_scale_string, "scale1:scale2");
 
     feature_opts.Register(&po);
     decodable_opts.Register(&po);
@@ -155,11 +156,7 @@ int main(int argc, char *argv[]) {
         wav_rspecifier = po.GetArg(4),
         clat_wspecifier = po.GetArg(5);
 
-    VectorFst<StdArc> *interp_lm = fst::CastOrConvertToVectorFst(fst::ReadFstKaldiGeneric(interp_lm_filename));
-    ApplyProbabilityScale(interp_lm_scale, interp_lm);
-    fst::BackoffDeterministicOnDemandFst<StdArc> backoff_lm(*interp_lm);
-    fst::CacheDeterministicOnDemandFst<StdArc> cached_interp_lm(&backoff_lm);
-
+    // load AM
     TransitionModel trans_model;
     nnet3::AmNnetSimple am_nnet;
     {
@@ -172,6 +169,7 @@ int main(int argc, char *argv[]) {
       nnet3::CollapseModel(nnet3::CollapseModelConfig(), &(am_nnet.GetNnet()));
     }
 
+    // Load LA
     Wfst *la_fst = new Wfst;
     {
       bool binary;
@@ -184,7 +182,35 @@ int main(int argc, char *argv[]) {
       if (!(word_syms = fst::SymbolTable::ReadText(word_syms_rxfilename)))
         KALDI_ERR << "Could not read symbol table from file "
                   << word_syms_rxfilename;
+    
+    // load ext LMs
+    std::vector<VectorFst<fst::StdArc>*> ext_raw_fst;
+    std::vector<float> ext_lm_scale;
+    std::vector<NgramLmFst<fst::StdArc>*> ext_ngram_lm;
+    std::vector<ScaleCacheLmFst<fst::StdArc>*> ext_cache_lm;
+    std::vector<LmFst<fst::StdArc>*> ext_lm;
 
+    size_t num_ext_lms = 0;
+    if (ext_lm_string != "" && ext_lm_scale_string != "") {
+      std::vector<std::string> ext_lm_files;
+      SplitStringToVector(ext_lm_string, ":", true, &ext_lm_files);
+      SplitStringToFloats(ext_lm_scale_string, ":", true, &ext_lm_scale);
+      KALDI_ASSERT(ext_lm_files.size() == ext_lm_scale.size());
+
+      num_ext_lms = ext_lm_files.size();
+      KALDI_ASSERT(num_ext_lms == 1);  // TODO: add multiple LM support to dec-core
+
+      KALDI_VLOG(1) << "num of ext LMs: " << num_ext_lms;
+      for (int i = 0; i != num_ext_lms; i++) {
+        KALDI_VLOG(1) << "LM" << i+1 << ":" << ext_lm_files[i] << " scale:" << ext_lm_scale[i];
+        ext_raw_fst.push_back(fst::CastOrConvertToVectorFst(fst::ReadFstKaldiGeneric(ext_lm_files[i])));
+        ext_ngram_lm.push_back(new NgramLmFst<fst::StdArc>(ext_raw_fst[i]));
+        ext_cache_lm.push_back(new ScaleCacheLmFst<fst::StdArc>(ext_ngram_lm[i], ext_lm_scale[i]));
+        ext_lm.push_back(ext_cache_lm[i]);
+      }
+    }
+
+    // create decoder
     int32 num_done = 0, num_err = 0;
     double tot_like = 0.0;
     int64 num_frames = 0;
@@ -196,7 +222,7 @@ int main(int argc, char *argv[]) {
     OnlineTimingStats timing_stats;
 
     Decoder decoder(la_fst,
-                    ((interp_lm_scale == 0.0f) ? NULL : &cached_interp_lm),
+                    ((num_ext_lms == 0) ? NULL : ext_cache_lm[0]), /* TODO */
                     trans_model,
                     am_nnet,
                     feature_opts,
@@ -207,13 +233,14 @@ int main(int argc, char *argv[]) {
       decoder.EnableEndPointer(end_pointer_opts);
     }
 
+    // decode
     for (; !spk2utt_reader.Done(); spk2utt_reader.Next()) {
       std::string spk = spk2utt_reader.Key();
       const std::vector<std::string> &uttlist = spk2utt_reader.Value();  
       for (size_t i = 0; i < uttlist.size(); i++) {
         std::string utt = uttlist[i];
         if (!wav_reader.HasKey(utt)) {
-          KALDI_WARN << "Did not find audio for utterance " << utt;
+          //KALDI_WARN << "Did not find audio for utterance " << utt;
           num_err++;
           continue;
         }

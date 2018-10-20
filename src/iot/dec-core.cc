@@ -4,7 +4,7 @@ namespace kaldi {
 namespace iot {
 
 DecCore::DecCore(Wfst *la_fst, 
-                 fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst,
+                 LmFst<fst::StdArc> *lm_fst,
                  const TransitionModel &trans_model, 
                  const DecCoreConfig &config)
   : la_fst_(la_fst),

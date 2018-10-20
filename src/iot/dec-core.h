@@ -13,6 +13,7 @@
 
 #include "iot/memory-pool.h"
 #include "iot/wfst.h"
+#include "iot/language-model.h"
 
 namespace kaldi {
 namespace iot {
@@ -95,7 +96,7 @@ class DecCore {
   typedef uint64 ViterbiState;
 
   DecCore(Wfst *la_fst, 
-          fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst,
+          LmFst<fst::StdArc> *lm_fst,
           const TransitionModel &trans_model, 
           const DecCoreConfig &config);
   ~DecCore();
@@ -375,7 +376,7 @@ class DecCore {
   std::vector<BaseFloat> tmp_array_;
 
   Wfst *la_fst_;
-  fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst_;
+  LmFst<fst::StdArc> *lm_fst_;
 
   const TransitionModel &trans_model_;
 

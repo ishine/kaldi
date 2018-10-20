@@ -19,6 +19,7 @@
 
 #include "iot/dec-core.h"
 #include "iot/end-pointer.h"
+#include "iot/language-model.h"
 
 namespace kaldi {
 namespace iot {
@@ -26,7 +27,7 @@ namespace iot {
 class Decoder {
  public:
   Decoder(Wfst *la_fst, 
-          fst::DeterministicOnDemandFst<fst::StdArc> *lm_fst,
+          LmFst<fst::StdArc> *lm_fst,
           const TransitionModel &trans_model,
           nnet3::AmNnetSimple &am_nnet,
           const OnlineNnet2FeaturePipelineConfig &feature_config,
