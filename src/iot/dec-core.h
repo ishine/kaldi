@@ -10,6 +10,7 @@
 #include "fstext/fstext-lib.h"
 #include "lat/determinize-lattice-pruned.h"
 #include "lat/kaldi-lattice.h"
+#include "base/timer.h"
 
 #include "iot/memory-pool.h"
 #include "iot/wfst.h"
@@ -96,10 +97,11 @@ class DecCore {
   typedef uint64 ViterbiState;
 
   DecCore(Wfst *la_fst, 
-          LmFst<fst::StdArc> *lm_fst,
           const TransitionModel &trans_model, 
           const DecCoreConfig &config);
   ~DecCore();
+
+  void AddExtLM(LmFst<fst::StdArc>* lm);
 
   void SetOptions(const DecCoreConfig &config) { config_ = config; }
   const DecCoreConfig &GetOptions() const { return config_; }
@@ -327,7 +329,7 @@ class DecCore {
 
   /// Gets the weight cutoff.  Also counts the active tokens.
   BaseFloat GetCutoff(Elem *list_head, 
-                      size_t *tok_count, 
+                      size_t *tok_count,
                       BaseFloat *adaptive_beam, 
                       Elem **best_elem);
 
@@ -375,7 +377,8 @@ class DecCore {
   std::vector<ViterbiState> queue_;
   std::vector<BaseFloat> tmp_array_;
 
-  Wfst *la_fst_;
+  Wfst *la_fst_;  // no ownership
+  std::vector<LmFst<fst::StdArc>*> ext_lm_;  // no ownership
   LmFst<fst::StdArc> *lm_fst_;
 
   const TransitionModel &trans_model_;
@@ -398,6 +401,8 @@ class DecCore {
   unordered_map<Token*, BaseFloat> final_costs_;
   BaseFloat final_relative_cost_;
   BaseFloat final_best_cost_;
+
+  float timer_;
   
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecCore);
 };

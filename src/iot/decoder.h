@@ -16,10 +16,12 @@
 #include "online2/online-nnet2-feature-pipeline.h"
 #include "lat/lattice-functions.h"
 #include "lat/determinize-lattice-pruned.h"
+#include "base/timer.h"
 
 #include "iot/dec-core.h"
 #include "iot/end-pointer.h"
 #include "iot/language-model.h"
+
 
 namespace kaldi {
 namespace iot {
@@ -27,7 +29,6 @@ namespace iot {
 class Decoder {
  public:
   Decoder(Wfst *la_fst, 
-          LmFst<fst::StdArc> *lm_fst,
           const TransitionModel &trans_model,
           nnet3::AmNnetSimple &am_nnet,
           const OnlineNnet2FeaturePipelineConfig &feature_config,
@@ -35,6 +36,8 @@ class Decoder {
           const DecCoreConfig &core_config);
 
   void EnableEndPointer(EndPointerConfig &end_pointer_config);
+
+  void AddExtLM(LmFst<fst::StdArc> *lm);
 
   void StartSession(const char* session_key = NULL);
 

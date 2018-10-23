@@ -3,7 +3,7 @@ all:
 
 include ../kaldi.mk
 
-CXXFLAGS += -Wno-invalid-offsetof
+CXXFLAGS += -Wno-invalid-offsetof 
 
 TESTFILES = memory-pool-test link-test list-test phone-set-test vocab-test lexicon-test word-loop-test
 
@@ -11,9 +11,8 @@ OBJFILES = tinycthread.o common.o memory-pool.o link.o list.o graph.o \
            phone-set.o vocab.o lexicon.o \
            word-loop.o wfst.o \
            dec-core.o end-pointer.o decoder.o
-LIBNAME = kaldi-iot
 
-#ADDLIBS = ../base/kaldi-base.a 
+LIBNAME = kaldi-iot
 
 ADDLIBS = ../ivector/kaldi-ivector.a ../nnet3/kaldi-nnet3.a \
           ../chain/kaldi-chain.a ../nnet2/kaldi-nnet2.a \

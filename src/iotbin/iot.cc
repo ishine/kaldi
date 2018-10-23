@@ -170,11 +170,11 @@ int main(int argc, char *argv[]) {
     }
 
     // Load LA
-    Wfst *la_fst = new Wfst;
+    Wfst *HCLg = new Wfst;
     {
       bool binary;
       Input ki(fst_rxfilename, &binary);
-      la_fst->Read(ki.Stream(), binary);
+      HCLg->Read(ki.Stream(), binary);
     }
 
     fst::SymbolTable *word_syms = NULL;
@@ -188,7 +188,6 @@ int main(int argc, char *argv[]) {
     std::vector<float> ext_lm_scale;
     std::vector<NgramLmFst<fst::StdArc>*> ext_ngram_lm;
     std::vector<ScaleCacheLmFst<fst::StdArc>*> ext_cache_lm;
-    std::vector<LmFst<fst::StdArc>*> ext_lm;
 
     size_t num_ext_lms = 0;
     if (ext_lm_string != "" && ext_lm_scale_string != "") {
@@ -198,16 +197,19 @@ int main(int argc, char *argv[]) {
       KALDI_ASSERT(ext_lm_files.size() == ext_lm_scale.size());
 
       num_ext_lms = ext_lm_files.size();
-      KALDI_ASSERT(num_ext_lms == 1);  // TODO: add multiple LM support to dec-core
 
       KALDI_VLOG(1) << "num of ext LMs: " << num_ext_lms;
       for (int i = 0; i != num_ext_lms; i++) {
         KALDI_VLOG(1) << "LM" << i+1 << ":" << ext_lm_files[i] << " scale:" << ext_lm_scale[i];
         ext_raw_fst.push_back(fst::CastOrConvertToVectorFst(fst::ReadFstKaldiGeneric(ext_lm_files[i])));
-        ext_ngram_lm.push_back(new NgramLmFst<fst::StdArc>(ext_raw_fst[i]));
-        ext_cache_lm.push_back(new ScaleCacheLmFst<fst::StdArc>(ext_ngram_lm[i], ext_lm_scale[i]));
-        ext_lm.push_back(ext_cache_lm[i]);
+        ApplyProbabilityScale(ext_lm_scale[i], ext_raw_fst[i]);
+        //ext_ngram_lm.push_back(new NgramLmFst<fst::StdArc>(ext_raw_fst[i]));
+        //ext_cache_lm.push_back(new ScaleCacheLmFst<fst::StdArc>(ext_ngram_lm[i], ext_lm_scale[i]));
       }
+      NgramLmFst<fst::StdArc>* fst1 = new NgramLmFst<fst::StdArc>(ext_raw_fst[0]);
+      NgramLmFst<fst::StdArc>* fst2 = new NgramLmFst<fst::StdArc>(ext_raw_fst[1]);
+      ComposeLmFst<fst::StdArc>* composed_fst = new ComposeLmFst<fst::StdArc>(fst1, fst2);
+      ext_cache_lm.push_back(new ScaleCacheLmFst<fst::StdArc>(composed_fst, 1.0));
     }
 
     // create decoder
@@ -221,13 +223,16 @@ int main(int argc, char *argv[]) {
 
     OnlineTimingStats timing_stats;
 
-    Decoder decoder(la_fst,
-                    ((num_ext_lms == 0) ? NULL : ext_cache_lm[0]), /* TODO */
+    Decoder decoder(HCLg,
                     trans_model,
                     am_nnet,
                     feature_opts,
                     decodable_opts,
                     decoder_opts);
+
+    for (int i = 0; i < ext_cache_lm.size(); i++) {
+      decoder.AddExtLM(ext_cache_lm[i]);
+    }
 
     if (do_endpointing) {
       decoder.EnableEndPointer(end_pointer_opts);
@@ -306,7 +311,7 @@ int main(int argc, char *argv[]) {
               << num_err << " with errors.";
     KALDI_LOG << "Overall likelihood per frame was " << (tot_like / num_frames)
               << " per frame over " << num_frames << " frames.";
-    delete la_fst;
+    delete HCLg;
     delete word_syms; // will delete if non-NULL.
     return (num_done != 0 ? 0 : 1);
   } catch(const std::exception& e) {

@@ -4,11 +4,10 @@ namespace kaldi {
 namespace iot {
 
 DecCore::DecCore(Wfst *la_fst, 
-                 LmFst<fst::StdArc> *lm_fst,
                  const TransitionModel &trans_model, 
                  const DecCoreConfig &config)
   : la_fst_(la_fst),
-    lm_fst_(lm_fst),
+    lm_fst_(NULL),
     trans_model_(trans_model), 
     config_(config)
 {
@@ -19,6 +18,8 @@ DecCore::DecCore(Wfst *la_fst,
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
+
+  timer_ = 0.0f;
 }
 
 DecCore::~DecCore() {
@@ -28,6 +29,13 @@ DecCore::~DecCore() {
 
   DELETE(token_pool_);
   DELETE(link_pool_);
+
+  KALDI_VLOG(2) << "lm rescore time:" << timer_;
+}
+
+void DecCore::AddExtLM(LmFst<fst::StdArc> *lm_fst) {
+  ext_lm_.push_back(lm_fst);
+  lm_fst_ = ext_lm_[0]; // TODO
 }
 
 void DecCore::StartSession(const char* session_key) {
@@ -83,7 +91,13 @@ void DecCore::SessionPreCondition() {
 }
 
 void DecCore::SessionPostCondition() {
-  ;
+  for (int t = 0; t != token_net_.size(); t++) {
+    int n = 0;
+    for(Token *tok = token_net_[t].toks; tok != NULL; tok = tok->next) {
+      n++;
+    }
+    KALDI_VLOG(2) << " t:" << t << " n:" << n;
+  }
 }
 
 void DecCore::FramePreCondition() {
@@ -96,7 +110,7 @@ void DecCore::FramePostCondition() {
   for (Token* tok = token_net_.back().toks; tok != NULL; tok = tok->next) {
     n++;
   }
-  KALDI_VLOG(2) << NumFramesDecoded() << " num_toks:"<< n ;
+  KALDI_VLOG(2) << NumFramesDecoded() << " n:"<< n;
 }
 
 void DecCore::AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frames) {
@@ -139,7 +153,7 @@ void DecCore::StopSession() {
     PruneTokenList(t + 1);
   }
   PruneTokenList(0);
-  KALDI_VLOG(4) << "pruned tokens from " << num_toks_begin << " to " << num_toks_;
+  KALDI_VLOG(2) << "pruned tokens from " << num_toks_begin << " to " << num_toks_;
 
   SessionPostCondition();
 }
@@ -234,8 +248,9 @@ void DecCore::ComputeFinalCosts(
 }
 
 
-DecCore::BestPathIterator DecCore::BestPathEnd(bool use_final_probs, 
-                                               BaseFloat *final_cost_out) const {
+DecCore::BestPathIterator DecCore::BestPathEnd(
+    bool use_final_probs,
+    BaseFloat *final_cost_out) const {
   if (decoding_finalized_ && !use_final_probs)
     KALDI_ERR << "You cannot call StopSession() and then call "
               << "BestPathEnd() with use_final_probs == false";
@@ -875,7 +890,9 @@ WfstStateId DecCore::PropagateLm(WfstStateId lm_state, WfstArc *arc) {
     return lm_state; // no change in LM state if no word crossed.
   } else { // Propagate in the LM-diff FST.
     Arc lm_arc;
+    Timer timer(true);
     bool ans = lm_fst_->GetArc(lm_state, arc->olabel, &lm_arc);
+    timer_ += timer.Elapsed();
     if (!ans) { // this case is unexpected for statistical LMs.
       KALDI_LOG << "No arc available in LM (unlikely to be correct "
                    "if a statistical language model);";
