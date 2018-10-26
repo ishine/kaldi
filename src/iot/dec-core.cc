@@ -3,10 +3,10 @@
 namespace kaldi {
 namespace iot {
 
-DecCore::DecCore(Wfst *la_fst, 
+DecCore::DecCore(Wfst *fst, 
                  const TransitionModel &trans_model, 
                  const DecCoreConfig &config)
-  : la_fst_(la_fst),
+  : fst_(fst),
     lm_fst_(NULL),
     trans_model_(trans_model), 
     config_(config)
@@ -18,6 +18,7 @@ DecCore::DecCore(Wfst *la_fst,
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
+  lm_token_pool_ = new MemoryPool(sizeof(LmToken), config_.token_pool_realloc);
 
   timer_ = 0.0f;
 }
@@ -29,6 +30,7 @@ DecCore::~DecCore() {
 
   DELETE(token_pool_);
   DELETE(link_pool_);
+  DELETE(lm_token_pool_);
 
   KALDI_VLOG(2) << "lm rescore time:" << timer_;
 }
@@ -51,12 +53,16 @@ void DecCore::StartSession(const char* session_key) {
 
   // setup new session
   session_key_ = session_key;
-  WfstStateId la_start_state = la_fst_->Start();
-  WfstStateId lm_start_state = (lm_fst_ == NULL) ? 0 : lm_fst_->Start();
-  ViterbiState start_state = ComposeViterbiState(la_start_state, lm_start_state);
-
+  WfstStateId start_state = fst_->Start();
   Token *start_token = NewToken(0.0, 0.0, NULL, NULL, NULL);
   num_toks_++;
+
+  if (lm_fst_ != NULL) {
+    WfstStateId start_lm_state = lm_fst_->Start();
+    LmToken *start_lm_token = NewLmToken(start_lm_state, 0.0f, NULL);
+    start_token->lm_toks.head = start_lm_token;
+    start_token->lm_toks.best = start_lm_token;
+  }
 
   token_net_.resize(1);
   token_net_[0].toks = start_token;
@@ -112,6 +118,7 @@ void DecCore::FramePostCondition() {
   }
   KALDI_VLOG(2) << NumFramesDecoded() << " n:"<< n;
 }
+
 
 void DecCore::AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frames) {
   KALDI_ASSERT(!token_net_.empty() && !decoding_finalized_ &&
@@ -208,13 +215,13 @@ void DecCore::ComputeFinalCosts(
   const Elem *e = token_set_.GetList();
   while (e != NULL) {
     ViterbiState state = e->key;
-    WfstStateId la_state = ExtractLaState(state),
-                lm_state = ExtractLmState(state);
-
     Token *tok = e->val;
 
-    BaseFloat la_final_cost = la_fst_->Final(la_state);
-    BaseFloat lm_final_cost = (lm_fst_ == NULL) ? 0.0f : lm_fst_->Final(lm_state).Value(); //TODO: validate if 0.0f is appropriate
+    WfstStateId la_state, lm_state;
+    DecomposeViterbiState(state, tok, &la_state, &lm_state);
+
+    BaseFloat la_final_cost = fst_->Final(la_state);
+    BaseFloat lm_final_cost = (lm_fst_ == NULL) ? 0.0f : lm_fst_->Final(lm_state).Value();
     BaseFloat final_cost = la_final_cost + lm_final_cost;
     
     BaseFloat cost = tok->total_cost,
@@ -564,7 +571,8 @@ void DecCore::PossiblyResizeHash(size_t num_toks) {
 }
 
 
-inline DecCore::Token *DecCore::FindOrAddToken(ViterbiState state, 
+inline DecCore::Token *DecCore::FindOrAddToken(ViterbiState state,
+                                               WfstStateId lm_state,
                                                int32 t, 
                                                BaseFloat total_cost,
                                                Token *backpointer, 
@@ -576,7 +584,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(ViterbiState state,
     const BaseFloat extra_cost = 0.0;
     // tokens on the currently final frame have zero extra_cost
     // as any of them could end up on the winning path.
-    Token *new_tok = NewToken(total_cost, extra_cost, NULL, toks, backpointer);
+    Token *new_tok = NewToken(total_cost, extra_cost, NULL, toks, backpointer, lm_state);
     // NULL: no forward links yet
     toks = new_tok;
     num_toks_++;
@@ -588,6 +596,7 @@ inline DecCore::Token *DecCore::FindOrAddToken(ViterbiState state,
     if (tok->total_cost > total_cost) {  // replace old token
       tok->total_cost = total_cost;
       tok->backpointer = backpointer;
+      tok->lm_state = lm_state;
       // we don't allocate a new token, the old stays linked in token_net_
       // we only replace the total_cost
       // in the current frame, there are no forward links (and no extra_cost)
@@ -890,15 +899,16 @@ WfstStateId DecCore::PropagateLm(WfstStateId lm_state, WfstArc *arc) {
     return lm_state; // no change in LM state if no word crossed.
   } else { // Propagate in the LM-diff FST.
     Arc lm_arc;
-    Timer timer(true);
+    //Timer timer(true);
     bool ans = lm_fst_->GetArc(lm_state, arc->olabel, &lm_arc);
-    timer_ += timer.Elapsed();
+    //timer_ += timer.Elapsed();
     if (!ans) { // this case is unexpected for statistical LMs.
       KALDI_LOG << "No arc available in LM (unlikely to be correct "
                    "if a statistical language model);";
       exit(0);
     } else {
       arc->weight = arc->weight + lm_arc.weight.Value();
+      //KALDI_VLOG(2) << lm_arc.weight.Value();
       //TODO: ? KALDI_ASSERT(arc->olabel == lm_arc.olabel);
       arc->olabel = lm_arc.olabel; // probably will be the same.
       return lm_arc.nextstate; // return the new LM state.
@@ -929,19 +939,20 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   // products of the next block are "next_cutoff" and "cost_offset".
   if (best_elem) {
     ViterbiState state = best_elem->key;
-    WfstStateId la_state = ExtractLaState(state),
-                lm_state = ExtractLmState(state);
-
     Token *tok = best_elem->val;
+
+    WfstStateId la_state, lm_state;
+    DecomposeViterbiState(state, tok, &la_state, &lm_state);
+
     cost_offset = - tok->total_cost;
 
-    const WfstState *s = la_fst_->State(la_state);
-    const WfstArc *a   = la_fst_->Arc(s->arc_base);
+    const WfstState *s = fst_->State(la_state);
+    const WfstArc *a   = fst_->Arc(s->arc_base);
 
     for (int32 j = 0; j < s->num_arcs; j++,a++) {
       WfstArc arc = *a;
       if (arc.ilabel != kWfstEpsilon) {  // propagate..
-        if (lm_fst_ != NULL) {
+        if (arc.olabel != kWfstEpsilon && lm_fst_ != NULL) {
           PropagateLm(lm_state, &arc);
         }
         BaseFloat new_weight = tok->total_cost + arc.weight + (-decodable->LogLikelihood(frame, arc.ilabel)) + cost_offset;
@@ -962,18 +973,18 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
     ViterbiState state = e->key;
     Token *tok = e->val;
 
-    WfstStateId la_state = ExtractLaState(state),
-                lm_state = ExtractLmState(state);
+    WfstStateId la_state, lm_state;
+    DecomposeViterbiState(state, tok, &la_state, &lm_state);
 
     if (tok->total_cost <= cur_cutoff) {
-      const WfstState *s = la_fst_->State(la_state);
-      const WfstArc *a   = la_fst_->Arc(s->arc_base);
+      const WfstState *s = fst_->State(la_state);
+      const WfstArc *a   = fst_->Arc(s->arc_base);
 
       for (int32 j = 0; j < s->num_arcs; j++, a++) {
         WfstArc arc = *a;
         if (arc.ilabel != kWfstEpsilon) { // emitting
           WfstStateId next_la_state = arc.dst;
-          WfstStateId next_lm_state = (lm_fst_ == NULL) ? 0 : PropagateLm(lm_state, &arc);
+          WfstStateId next_lm_state = (arc.olabel != kWfstEpsilon && lm_fst_ != NULL) ?  PropagateLm(lm_state, &arc) : 0;
           
           BaseFloat ac_cost = cost_offset + (-decodable->LogLikelihood(frame, arc.ilabel)),
                     graph_cost = arc.weight,
@@ -987,7 +998,7 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
           }
 
           ViterbiState next_state = ComposeViterbiState(next_la_state, next_lm_state);
-          Token *dst_tok = FindOrAddToken(next_state, frame + 1, total_cost, tok, NULL);
+          Token *dst_tok = FindOrAddToken(next_state, next_lm_state, frame + 1, total_cost, tok, NULL);
           tok->links = NewLink(dst_tok, arc.ilabel, arc.olabel, graph_cost, ac_cost, tok->links);
         }
       } // for all arcs
@@ -1026,17 +1037,17 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
     DeleteLinksFromToken(tok);
     tok->links = NULL;
 
-    WfstStateId la_state = ExtractLaState(state),
-                lm_state = ExtractLmState(state);
+    WfstStateId la_state, lm_state;
+    DecomposeViterbiState(state, tok, &la_state, &lm_state);
 
-    const WfstState *s = la_fst_->State(la_state);
-    const WfstArc   *a = la_fst_->Arc(s->arc_base);
+    const WfstState *s = fst_->State(la_state);
+    const WfstArc   *a = fst_->Arc(s->arc_base);
 
     for (int32 j = 0; j < s->num_arcs; j++, a++) {
       WfstArc arc = *a;
       if (arc.ilabel == kWfstEpsilon) {  // non-emitting
         WfstStateId next_la_state = arc.dst;
-        WfstStateId next_lm_state = (lm_fst_ == NULL) ? 0 : PropagateLm(lm_state, &arc);
+        WfstStateId next_lm_state = (arc.olabel != kWfstEpsilon && lm_fst_ != NULL) ?  PropagateLm(lm_state, &arc) : 0;
         
         BaseFloat total_cost = tok->total_cost + arc.weight;
 
@@ -1044,8 +1055,8 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
           ViterbiState next_state = ComposeViterbiState(next_la_state, next_lm_state);
           
           bool changed;
-          Token *dst_tok = FindOrAddToken(next_state, cur_time, total_cost, tok, &changed);
-          tok->links = NewLink(dst_tok, 0, arc.olabel, arc.weight, 0, tok->links);
+          Token *dst_tok = FindOrAddToken(next_state, next_lm_state, cur_time, total_cost, tok, &changed);
+          tok->links = NewLink(dst_tok, arc.ilabel /* kWfstEpsilon */, arc.olabel, arc.weight, 0, tok->links);
           // "changed" tells us whether the new token has a different
           // cost from before, or is new [if so, add into queue].
           if (changed) queue_.push_back(next_state);

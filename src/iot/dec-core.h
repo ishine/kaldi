@@ -94,9 +94,7 @@ class DecCore {
   typedef Arc::StateId StateId;
   typedef Arc::Weight Weight;
 
-  typedef uint64 ViterbiState;
-
-  DecCore(Wfst *la_fst, 
+  DecCore(Wfst *fst,
           const TransitionModel &trans_model, 
           const DecCoreConfig &config);
   ~DecCore();
@@ -143,20 +141,82 @@ class DecCore {
   bool GetRawLattice(Lattice *ofst, bool use_final_probs = true) const;
   bool GetRawLatticePruned(Lattice *ofst, bool use_final_probs, BaseFloat beam) const;
 
+
  private:
 
-  inline ViterbiState ComposeViterbiState(WfstStateId la_state, WfstStateId lm_state) {
+  struct Token;
+  struct TokenList;
+  struct ForwardLink;
+  struct LmToken;
+  struct LmTokenList;
+
+  typedef WfstStateId ViterbiState;
+
+/* ----- For standard on-the-fly (LA o LM) composition implementation -----
+  typedef uint64 ViterbiState;
+
+  inline ViterbiState (WfstStateId la_state, WfstStateId lm_state) {
     return static_cast<ViterbiState>(la_state) + (static_cast<ViterbiState>(lm_state) << 32);
   }
+
+  static inline void DecomposeViterbiState(ViterbiState viterbi_state, Token* tok, WfstStateId *la_state, WfstStateId *lm_state) {
+    *la_state = static_cast<WfstStateId>(static_cast<uint32>(viterbi_state));
+    *lm_state = static_cast<WfstStateId>(static_cast<uint32>(viterbi_state >> 32));
+  }
+
   static inline WfstStateId ExtractLaState(ViterbiState viterbi_state) {
     return static_cast<WfstStateId>(static_cast<uint32>(viterbi_state));
   }
   static inline WfstStateId ExtractLmState(ViterbiState viterbi_state) {
     return static_cast<WfstStateId>(static_cast<uint32>(viterbi_state >> 32));
   }
+*/
 
-  struct Token;
+/* ------------------------------ LmToken ------------------------------ */
+  struct LmToken {
+    WfstStateId state;
+    BaseFloat cost;
+    struct LmToken *next;
 
+    inline LmToken(WfstStateId state, BaseFloat cost, LmToken *next) 
+     : state(state), cost(cost), next(next)
+    { }
+
+    inline ~LmToken() { }
+  };
+
+  inline LmToken* NewLmToken(WfstStateId state, BaseFloat cost, LmToken *next) {
+    LmToken *tok = (LmToken*) lm_token_pool_->MallocElem();
+    new (tok) LmToken(state, cost, next);  // placement new
+    return tok;
+  }
+
+  inline void DeleteLmToken(LmToken *tok) {
+    tok->~LmToken();
+    lm_token_pool_->FreeElem(tok);
+  }
+
+  struct LmTokenList {
+    LmToken *head;
+    LmToken *best;
+
+    LmTokenList() : 
+      head(NULL),
+      best(NULL)
+    { }
+  };
+
+  inline void DeleteLmTokenListFromToken(Token *tok) {
+    LmToken *p = tok->lm_toks.head, *next;
+    while (p != NULL) {
+      next = p->next;
+      DeleteLmToken(p);
+      p = next;
+    }
+    tok->lm_toks.best = NULL;
+  }
+
+  /*------------------------------ ForwardLinks ------------------------------*/
   struct ForwardLink {
     Token *dst_tok; // the next token [or NULL if represents final-state]
     Label ilabel;
@@ -165,12 +225,13 @@ class DecCore {
     BaseFloat acoustic_cost; // acoustic cost (pre-scaled) of traversing link
     ForwardLink *next;
 
-    inline ForwardLink(Token *dst_tok,
-                       Label ilabel,
-                       Label olabel,
-                       BaseFloat graph_cost,
-                       BaseFloat acoustic_cost,
-                       ForwardLink *next) :
+    inline ForwardLink(
+        Token *dst_tok,
+        Label ilabel,
+        Label olabel,
+        BaseFloat graph_cost,
+        BaseFloat acoustic_cost,
+        ForwardLink *next) :
       dst_tok(dst_tok),
       ilabel(ilabel),
       olabel(olabel),
@@ -182,14 +243,16 @@ class DecCore {
     inline ~ForwardLink() { }
   };
 
-  inline ForwardLink* NewLink(Token *dst_tok,
-                              Label ilabel,
-                              Label olabel,
-                              BaseFloat graph_cost,
-                              BaseFloat acoustic_cost,
-                              ForwardLink *next) {
+  inline ForwardLink* NewLink(
+      Token *dst_tok,
+      Label ilabel,
+      Label olabel,
+      BaseFloat graph_cost,
+      BaseFloat acoustic_cost,
+      ForwardLink *next) {
     ForwardLink *link = (ForwardLink*)link_pool_->MallocElem();
-    new (link) ForwardLink(dst_tok, ilabel, olabel, graph_cost, acoustic_cost, next); // placement new
+    // placement new
+    new (link) ForwardLink(dst_tok, ilabel, olabel, graph_cost, acoustic_cost, next);
     return link;
   }
 
@@ -208,6 +271,7 @@ class DecCore {
     tok->links = NULL;
   }
 
+/*------------------------------ Token ------------------------------*/
   struct Token {
     BaseFloat total_cost;
     BaseFloat extra_cost;
@@ -215,26 +279,32 @@ class DecCore {
     Token *next;
     Token *backpointer;
 
-    inline Token(BaseFloat total_cost,
-                 BaseFloat extra_cost,
-                 ForwardLink *links,
-                 Token *next,
-                 Token *backpointer) :
+    // a list of lm hypothesis associate with this token
+    LmTokenList lm_toks;
+
+    inline Token(
+        BaseFloat total_cost,
+        BaseFloat extra_cost,
+        ForwardLink *links,
+        Token *next,
+        Token *backpointer) :
       total_cost(total_cost),
       extra_cost(extra_cost),
       links(links),
       next(next),
-      backpointer(backpointer) 
+      backpointer(backpointer),
+      lm_toks()
     { }
 
     inline ~Token() { }
   };
 
-  inline Token* NewToken(BaseFloat total_cost,
-                         BaseFloat extra_cost,
-                         ForwardLink *links,
-                         Token *next,
-                         Token *backpointer) {
+  inline Token* NewToken(
+      BaseFloat total_cost,
+      BaseFloat extra_cost,
+      ForwardLink *links,
+      Token *next,
+      Token *backpointer) {
     Token *tok = (Token*) token_pool_->MallocElem();
     // placement new
     new (tok) Token(total_cost, extra_cost, links, next, backpointer);
@@ -243,6 +313,7 @@ class DecCore {
 
   inline void DeleteToken(Token *tok) {
     // Forward links are not owned by token
+    DeleteLmTokenListFromToken(tok);
     tok->~Token();
     token_pool_->FreeElem(tok);
   }
@@ -273,7 +344,7 @@ class DecCore {
   // index plus one, which is used to index into the token_net_ array.
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.
-  inline Token *FindOrAddToken(ViterbiState state, int32 t,
+  inline Token *FindOrAddToken(ViterbiState state, WfstStateId lm_state, int32 t,
                                BaseFloat total_cost, Token *backpointer,
                                bool *changed);
 
@@ -336,8 +407,8 @@ class DecCore {
   void SessionPreCondition();
   void SessionPostCondition();
 
-  void FramePreCondition();
-  void FramePostCondition();
+  inline void FramePreCondition();
+  inline void FramePostCondition();
 
   BaseFloat ProcessEmitting(DecodableInterface *decodable);
   void ProcessNonemitting(BaseFloat cost_cutoff);
@@ -370,6 +441,7 @@ class DecCore {
 
   MemoryPool *token_pool_;
   MemoryPool *link_pool_;
+  MemoryPool *lm_token_pool_;
 
   HashList<ViterbiState, Token*> token_set_;
   std::vector<TokenList> token_net_;
@@ -377,7 +449,7 @@ class DecCore {
   std::vector<ViterbiState> queue_;
   std::vector<BaseFloat> tmp_array_;
 
-  Wfst *la_fst_;  // no ownership
+  Wfst *fst_;  // no ownership
   std::vector<LmFst<fst::StdArc>*> ext_lm_;  // no ownership
   LmFst<fst::StdArc> *lm_fst_;
 
