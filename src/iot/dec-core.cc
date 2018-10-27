@@ -899,9 +899,7 @@ WfstStateId DecCore::PropagateLm(WfstStateId lm_state, WfstArc *arc) {
     return lm_state; // no change in LM state if no word crossed.
   } else { // Propagate in the LM-diff FST.
     Arc lm_arc;
-    //Timer timer(true);
     bool ans = lm_fst_->GetArc(lm_state, arc->olabel, &lm_arc);
-    //timer_ += timer.Elapsed();
     if (!ans) { // this case is unexpected for statistical LMs.
       KALDI_LOG << "No arc available in LM (unlikely to be correct "
                    "if a statistical language model);";
@@ -984,8 +982,11 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
         WfstArc arc = *a;
         if (arc.ilabel != kWfstEpsilon) { // emitting
           WfstStateId next_la_state = arc.dst;
-          WfstStateId next_lm_state = (arc.olabel != kWfstEpsilon && lm_fst_ != NULL) ?  PropagateLm(lm_state, &arc) : 0;
-          
+
+          Timer timer(true);
+          WfstStateId next_lm_state = (lm_fst_ == NULL) ? 0 : PropagateLm(lm_state, &arc);
+          timer_ += timer.Elapsed();
+
           BaseFloat ac_cost = cost_offset + (-decodable->LogLikelihood(frame, arc.ilabel)),
                     graph_cost = arc.weight,
                     cur_cost = tok->total_cost,
@@ -1047,7 +1048,10 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
       WfstArc arc = *a;
       if (arc.ilabel == kWfstEpsilon) {  // non-emitting
         WfstStateId next_la_state = arc.dst;
-        WfstStateId next_lm_state = (arc.olabel != kWfstEpsilon && lm_fst_ != NULL) ?  PropagateLm(lm_state, &arc) : 0;
+
+        Timer timer(true);
+        WfstStateId next_lm_state = (lm_fst_ == NULL) ? 0 : PropagateLm(lm_state, &arc);
+        timer_ += timer.Elapsed();
         
         BaseFloat total_cost = tok->total_cost + arc.weight;
 
