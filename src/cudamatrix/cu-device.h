@@ -95,7 +95,7 @@ class CuDevice {
   static inline CuDevice& Instantiate() {
     CuDevice &ans = this_thread_device_;
     if (!ans.initialized_)
-      ans.Initialize();
+      ans.InitializeLocal();
     return ans;
   }
 
