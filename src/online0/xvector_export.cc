@@ -87,7 +87,7 @@ int GetCurrentXvector(void *lp_extractor, float *result, int type) {
 	return dim;
 }
 
-float GetScore(void *lp_extractor, float *enroll, float *eval,
+float GetXvectorScore(void *lp_extractor, float *enroll, float *eval,
 		int size, int enroll_num, int type) {
 	OnlineXvectorExtractor *extractor = (OnlineXvectorExtractor *)lp_extractor;
 	SubVector<BaseFloat> vec1(enroll, size);

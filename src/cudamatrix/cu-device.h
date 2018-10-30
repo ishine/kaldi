@@ -108,7 +108,7 @@ class CuDevice {
   // CUDA's allocation seems to give for some setups.
   inline void* Malloc(size_t size) {
     return multi_threaded_ ? g_cuda_allocator.MallocLocking(size) :
-        g_cuda_allocator.Malloc(size);
+        g_cuda_allocator.MallocLocal(size);
   }
 
   inline void* MallocPitch(size_t row_bytes, size_t num_rows, size_t *pitch) {
@@ -119,17 +119,17 @@ class CuDevice {
       // It is 512 on K40c with CUDA 7.5
       // "% 8" ensures that any 8 adjacent allocations have different pitches
       // if their original pitches are same in the normal mode.
-      return g_cuda_allocator.MallocPitch(
+      return g_cuda_allocator.MallocPitchLocal(
           row_bytes + 512 * RandInt(0, 4), num_rows,
           pitch);
     } else {
-      return g_cuda_allocator.MallocPitch(row_bytes, num_rows, pitch);
+      return g_cuda_allocator.MallocPitchLocal(row_bytes, num_rows, pitch);
     }
   }
 
   inline void Free(void *ptr) {
     if (multi_threaded_) g_cuda_allocator.FreeLocking(ptr);
-    else g_cuda_allocator.Free(ptr);
+    else g_cuda_allocator.FreeLocal(ptr);
   }
 
   /// Select a GPU for computation.  You are supposed to call this function just
@@ -267,7 +267,8 @@ class CuDevice {
   // Each thread has its own CuDevice object, which contains the cublas and
   // cusparse handles.  These are unique to the thread (which is what is
   // recommended by NVidia).
-  static thread_local CuDevice this_thread_device_;
+  // static thread_local CuDevice this_thread_device_;
+  static CuDevice this_thread_device_;
 
   // The GPU device-id that we are using.  This will be initialized to -1, and will
   // be set when the user calls

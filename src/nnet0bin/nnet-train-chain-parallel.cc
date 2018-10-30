@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     LossOptions loss_opts;
     loss_opts.Register(&po);
 
-    NnetChainUpdateOptions opts(&trn_opts, loss_opts, &rnd_opts, &parallel_opts);
+    NnetChainUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -86,7 +86,7 @@ int main(int argc, char *argv[]) {
 
 
     Nnet nnet;
-    NnetChainStats stats;
+    NnetChainStats stats(loss_opts);
 
     fst::StdVectorFst den_fst;
     ReadFstKaldi(den_fst_rxfilename, &den_fst);

@@ -199,7 +199,7 @@ private:
 
 	    model_sync->Initialize(&nnet, this->thread_id_);
 
-        nnet0::Xent xent;
+	    nnet0::Xent xent(*opts->loss_opts);
 
 		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;

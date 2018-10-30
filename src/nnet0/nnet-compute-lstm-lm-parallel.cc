@@ -212,8 +212,8 @@ private:
 	    VectorRandomizer weights_randomizer(*rnd_opts);
 
 	    CBXent cbxent;
-        Xent xent;
-	    Mse mse;
+	    Xent xent(*opts->loss_opts);
+	    Mse mse(*opts->loss_opts);
 
         if (NULL != class_affine)
         {

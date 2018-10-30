@@ -59,7 +59,7 @@ int GetCurrentIvector(void *lp_extractor, float *result, int type) {
 	return dim;
 }
 
-float GetScore(void *lp_extractor, float *ivec1, float *ivec2, int size, int type) {
+float GetIvectorScore(void *lp_extractor, float *ivec1, float *ivec2, int size, int type) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
 	SubVector<BaseFloat> vec1(ivec1, size);
 	SubVector<BaseFloat> vec2(ivec2, size);

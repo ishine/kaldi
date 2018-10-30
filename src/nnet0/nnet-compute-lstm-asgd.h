@@ -48,7 +48,8 @@ struct NnetLstmUpdateOptions : public NnetUpdateOptions {
     int32 dump_interval;
     //lstm
 
-    NnetLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
+    NnetLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
+                            LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
     	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), batch_size(20), num_stream(4), dump_interval(0) { }
 
   	  void Register(OptionsItf *po)

@@ -55,7 +55,8 @@ struct NnetChainUpdateOptions : public NnetUpdateOptions {
     int32 context_left;
     int32 print_interval;
 
-    NnetChainUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
+    NnetChainUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
+                                LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
     	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), apply_deriv_weights(true),
 		  num_stream(4), batch_size(0), targets_delay(0), context_left(-1), print_interval(100) { }
 
@@ -106,7 +107,7 @@ struct NnetChainStats: NnetStats {
 
 	unordered_map<std::string, ChainInfo, StringHasher> objf_info_;
 
-    NnetChainStats() { }
+    NnetChainStats(LossOptions &loss_opts):NnetStats(loss_opts) { }
 
     void Add(unordered_map<std::string, ChainInfo, StringHasher> &objf_info) {
         auto iter = objf_info.begin(), end = objf_info.end();

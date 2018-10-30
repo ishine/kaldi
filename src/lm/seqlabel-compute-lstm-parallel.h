@@ -42,12 +42,14 @@ namespace lm {
 typedef nnet0::NnetTrainOptions NnetTrainOptions;
 typedef nnet0::NnetDataRandomizerOptions NnetDataRandomizerOptions;
 typedef nnet0::NnetParallelOptions NnetParallelOptions;
+typedef nnet0::LossOptions LossOptions;
 
 struct SeqLabelLstmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
 
 
-	SeqLabelLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, parallel_opts) { }
+	SeqLabelLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
+                                LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
+    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts) { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -62,7 +64,8 @@ struct SeqLabelStats: nnet0::NnetStats {
 
 	nnet0::Xent xent;
 
-	SeqLabelStats() { }
+    SeqLabelStats(LossOptions &loss_opts):
+            NnetStats(loss_opts), xent(loss_opts){}
 
     void MergeStats(nnet0::NnetUpdateOptions *opts, int root)
     {

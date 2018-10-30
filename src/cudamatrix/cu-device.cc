@@ -820,9 +820,7 @@ bool CuDevice::Initialize()
 	                  << cudaGetErrorString((cudaError_t)ret);
 	    }
 	  }
-
-	  device_id_ = 0;
-      
+      //device_id_ = 0;
       return true;
 }
 
@@ -892,6 +890,7 @@ int CuDevice::SelectGpu()
 	}
 
 	gpuinfo_[max_id].used = true;
+    device_id_ = max_id;
 	return max_id;
 }
 
@@ -1104,6 +1103,7 @@ int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, in
 	//CU_SAFE_CALL(cublasInit());
 
 	gpuinfo_[gpuid].used = true;
+    device_id_ = gpuinfo[id].gpuid;
 
 	return gpuinfo[id].gpuid;
 }
@@ -1128,7 +1128,8 @@ CuDevice::~CuDevice() {
 
 // Each thread has its own copy of the CuDevice object.
 // Note: this was declared "static".
-thread_local CuDevice CuDevice::this_thread_device_;
+// thread_local CuDevice CuDevice::this_thread_device_;
+   CuDevice CuDevice::this_thread_device_;
 
 // define and initialize the static members of the CuDevice object.
 int32 CuDevice::device_id_ = -1;

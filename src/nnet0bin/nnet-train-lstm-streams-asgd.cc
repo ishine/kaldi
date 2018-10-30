@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
 
 
     if (!opts.crossvalidate) {
-      nnet.Write(target_model_filename, opts.binary);
+        nnet.Write(target_model_filename, opts.binary);
     }
 
     KALDI_LOG << "TRAINING FINISHED; ";

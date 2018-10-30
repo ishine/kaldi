@@ -47,7 +47,7 @@ extern "C" {
 	/// eval: test or evaluate xvector
 	/// size: xvector size
 	/// type: plda(2)
-	float GetScore(void *lp_extractor, float *enroll, float *eval, int size,
+	float GetXvectorScore(void *lp_extractor, float *enroll, float *eval, int size,
 			int enroll_num = 1, int type = 2);
 
 	/// speaker enroll (unimplemented)

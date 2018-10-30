@@ -42,6 +42,7 @@ namespace lm {
 typedef nnet0::NnetTrainOptions NnetTrainOptions;
 typedef nnet0::NnetDataRandomizerOptions NnetDataRandomizerOptions;
 typedef nnet0::NnetParallelOptions NnetParallelOptions;
+typedef nnet0::LossOptions LossOptions;
 
 struct SluLstmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
 
@@ -61,8 +62,9 @@ struct SluLstmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
     BaseFloat slot_escale;
     BaseFloat intent_escale;
 
-	SluLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, parallel_opts), class_boundary(""), num_class(0),
+	SluLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
+                            LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
+    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), class_boundary(""), num_class(0),
 		  slot_rspecifier(""), intent_rspecifier(""), slot_delay(0), intent_delay(0), lm_escale(1.0), slot_escale(1.0), intent_escale(1.0) { }
 
   	  void Register(OptionsItf *po)
@@ -96,7 +98,8 @@ struct SluStats: nnet0::NnetStats {
 	nnet0::CBXent cbxent;
 	nnet0::Xent xent, slot_xent, intent_xent;
 
-	SluStats() { }
+    SluStats(LossOptions &loss_opts):
+            NnetStats(loss_opts), xent(loss_opts), slot_xent(loss_opts), intent_xent(loss_opts){}
 
     void MergeStats(nnet0::NnetUpdateOptions *opts, int root)
     {

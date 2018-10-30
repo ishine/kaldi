@@ -236,8 +236,8 @@ private:
 	    model_sync->Initialize(&nnet, this->thread_id_);
 
 	    nnet0::CBXent cbxent;
-        nnet0::Xent xent;
-	    nnet0::Mse mse;
+	    nnet0::Xent xent(*opts->loss_opts);
+	    nnet0::Mse mse(*opts->loss_opts);
 
         if (NULL != class_affine) {
 	        class_affine->SetClassBoundary(class_boundary_);

@@ -28,18 +28,18 @@ namespace kaldi {
 
 struct OnlineNnet3ForwardOptions {
 	typedef nnet3::NnetSimpleComputationOptions NnetSimpleComputationOptions;
-	//typedef nnet3::CachingOptimizingCompilerOptions CachingOptimizingCompilerOptions;
+	typedef nnet3::CachingOptimizingCompilerOptions CachingOptimizingCompilerOptions;
 
     std::string use_gpu;
     std::string network_model;
 
     NnetSimpleComputationOptions compute_opts;
-    //CachingOptimizingCompilerOptions compiler_config;
+    CachingOptimizingCompilerOptions compiler_config;
 
     OnlineNnet3ForwardOptions():use_gpu("no"){}
 
     void Register(OptionsItf *po) {
-        //compiler_config.Register(po);
+        compiler_config.Register(po);
         compute_opts.Register(po);
 
         po->Register("use-gpu", &use_gpu,
@@ -58,13 +58,13 @@ public:
 
     	using namespace kaldi::nnet3;
 
+        opts->compute_opts.acoustic_scale = 1.0;
     	ReadKaldiObject(opts->network_model, &nnet_);
 		SetBatchnormTestMode(true, &nnet_);
 		SetDropoutTestMode(true, &nnet_);
 		CollapseModel(CollapseModelConfig(), &nnet_);
-		//compiler_(nnet_, opts.compute_opts.optimize_config, opts.compiler_config);
-		opts->compute_opts.acoustic_scale = 1.0;
-		compiler_ = new CachingOptimizingCompiler(nnet_, opts->compute_opts.optimize_config);
+        //compiler_ = new CachingOptimizingCompiler(nnet_, opts->compute_opts.optimize_config);
+        compiler_ = new CachingOptimizingCompiler(nnet_, opts->compute_opts.optimize_config, opts->compiler_config);
 	}
 
     virtual ~OnlineNnet3Forward() {
@@ -89,8 +89,8 @@ public:
 		request.outputs.resize(1);
 		request.outputs[0].Swap(&output_spec);
 
-		//std::shared_ptr<const NnetComputation> computation(std::move(compiler_->Compile(request)));
-        const NnetComputation *computation = compiler_->Compile(request);
+		std::shared_ptr<const NnetComputation> computation(std::move(compiler_->Compile(request)));
+        //const NnetComputation *computation = compiler_->Compile(request);
 		Nnet *nnet_to_update = NULL;  // we're not doing any update.
 		NnetComputer computer(NnetComputeOptions(), *computation, nnet_, nnet_to_update);
 
@@ -115,4 +115,4 @@ private:
 
 }
 
-#endif /* ONLINE0_ONLINE_NNET_FORWARD_H_ */
+#endif /* ONLINE0_ONLINE_NNET3_FORWARD_H_ */

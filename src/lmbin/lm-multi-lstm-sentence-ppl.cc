@@ -54,6 +54,9 @@ int main(int argc, char *argv[]) {
     std::string use_gpu="no";
     po.Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA"); 
 
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
+
     using namespace kaldi;
     using namespace kaldi::nnet0;
     typedef kaldi::int32 int32;
@@ -149,7 +152,7 @@ int main(int argc, char *argv[]) {
     }
 
     CBXent cbxent;
-    Xent xent;
+    Xent xent(loss_opts);
 
     for (auto it = class_affine.begin(); it != class_affine.end(); ++it) {
     	it->second->SetClassBoundary(class_boundary);
