@@ -329,11 +329,14 @@ private:
 
 	        BaseFloat tot_objf, tot_l2_term, tot_weight;
 	        // get mmi objective function derivative, and xent soft supervision label
+            bool ok = true;
+            /*
 			bool ok = kaldi::chain::ComputeChainObjfAndDeriv(opts->chain_config, den_graph,
 									 sup.supervision, *mmi_nnet_out,
 									 &tot_objf, &tot_l2_term, &tot_weight,
 									 mmi_deriv,
 									 (use_xent ? xent_deriv : NULL));
+            */
 
             if (!ok) {
                KALDI_WARN << "ComputeChainObjfAndDeriv return " << std::boolalpha << ok 

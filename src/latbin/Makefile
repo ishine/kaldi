@@ -32,16 +32,9 @@ OBJFILES =
 
 TESTFILES =
 
-<<<<<<< HEAD
 ADDLIBS = ../rnnlm/kaldi-rnnlm.a ../lat/kaldi-lat.a ../lm/kaldi-lm.a ../nnet0/kaldi-nnet0.a ../nnet3/kaldi-nnet3.a \
 		  ../cudamatrix/kaldi-cudamatrix.a ../fstext/kaldi-fstext.a \
           ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../util/kaldi-util.a \
           ../matrix/kaldi-matrix.a ../base/kaldi-base.a
-=======
-ADDLIBS = ../rnnlm/kaldi-rnnlm.a ../nnet3/kaldi-nnet3.a \
-          ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a ../lm/kaldi-lm.a \
-          ../fstext/kaldi-fstext.a ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a \
-          ../util/kaldi-util.a ../matrix/kaldi-matrix.a ../base/kaldi-base.a 
->>>>>>> kaldi-master/master
 
 include ../makefiles/default_rules.mk

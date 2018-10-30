@@ -1322,6 +1322,7 @@ void WarpCtc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int
 
 void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
+    /*
     net_out_act_.Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
 	diff->Resize(net_out.NumRows(), net_out.NumCols(), kSetZero, kStrideEqualNumCols);
     net_out_act_.CopyFromMat(net_out);
@@ -1411,6 +1412,7 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 		  ref_num_progress_ = 0;
 		}
 	}
+    */
 
 }
 

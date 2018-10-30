@@ -1,6 +1,6 @@
 # Optional make warp-ctc
 USE_CTC = true
-USE_WARP_CTC = true
+USE_WARP_CTC = false
 
 # Optinal make mpi parallel(multi-machine training)
 USE_MPI = false
