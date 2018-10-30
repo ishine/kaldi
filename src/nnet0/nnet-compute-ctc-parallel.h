@@ -57,8 +57,8 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     std::string network_type;
 
 
-    NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0), 
+    NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
+    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
           clip_loss(1.0), ctc_imp("eesen"), network_type("lstm") { }
 
   	  void Register(OptionsItf *po)
@@ -84,7 +84,7 @@ struct NnetCtcStats: NnetStats {
 
     CtcItf ctc;
 
-    NnetCtcStats() { }
+    NnetCtcStats(LossOptions &loss_opts): NnetStats(loss_opts) { }
 
     void MergeStats(NnetUpdateOptions *opts, int root)
     {
@@ -104,7 +104,7 @@ struct NnetCtcStats: NnetStats {
         MPI_Reduce(addr, (void*)(&this->num_other_error), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 
         if (opts->objective_function == "xent") {
-                        xent.Merge(myid, 0); 
+                xent.Merge(myid, 0); 
         }
         else if (opts->objective_function == "ctc") {
         		ctc.Merge(myid, 0);

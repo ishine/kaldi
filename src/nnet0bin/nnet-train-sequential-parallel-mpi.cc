@@ -36,19 +36,17 @@
 #include "nnet0/nnet-utils.h"
 #include "base/timer.h"
 #include "cudamatrix/cu-device.h"
+#include "nnet0/nnet-compute-sequential-parallel.h"
 
 #include <iomanip>
 #include <unistd.h>
-
-#include "nnet0/nnet-compute-sequential-parallel.h"
-
 #include <mpi.h>
-
 
 int main(int argc, char *argv[]) {
   using namespace kaldi;
   using namespace kaldi::nnet0;
   typedef kaldi::int32 int32;
+
   try {
     const char *usage =
         "Perform one iteration of DNN-MMI training by stochastic "
@@ -78,14 +76,14 @@ int main(int argc, char *argv[]) {
 
     NnetParallelOptions parallel_opts;
 	
-	    MPI_Init_thread(&argc,&argv, MPI_THREAD_MULTIPLE, &parallel_opts.thread_level);
-	    MPI_Comm_size(MPI_COMM_WORLD,&parallel_opts.num_procs);
-	    MPI_Comm_rank(MPI_COMM_WORLD,&parallel_opts.myid);
+    //multi-machine
+	MPI_Init_thread(&argc,&argv, MPI_THREAD_MULTIPLE, &parallel_opts.thread_level);
+	MPI_Comm_size(MPI_COMM_WORLD,&parallel_opts.num_procs);
+	MPI_Comm_rank(MPI_COMM_WORLD,&parallel_opts.myid);
 
-	    parallel_opts.Register(&po);
+	parallel_opts.Register(&po);
 
     NnetSequentialUpdateOptions opts(&trn_opts, &prior_opts, &parallel_opts);
-
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -131,19 +129,17 @@ int main(int argc, char *argv[]) {
     //mpi
     	NnetParallelUtil util;
 	    std::string scpfile;
-	    feature_rspecifier = util.AddSuffix(feature_rspecifier, parallel_opts.myid);
-	    den_lat_rspecifier = util.AddSuffix(den_lat_rspecifier, parallel_opts.myid);
+	    feature_rspecifier = util.ReplaceJobId(feature_rspecifier, parallel_opts.myid);
+	    den_lat_rspecifier = util.ReplaceJobId(den_lat_rspecifier, parallel_opts.myid);
 	    scpfile = util.GetFilename(feature_rspecifier);
 	    if (parallel_opts.myid == 0)
-	    {
 	    	parallel_opts.num_merge = util.NumofMerge(scpfile, parallel_opts.merge_size);
-	    }
 
 		MPI_Barrier(MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.merge_size), 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.num_merge), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	    std::string logfn = util.FAddSuffix(parallel_opts.log_file, parallel_opts.myid);
+	    std::string logfn = util.ReplaceJobId(parallel_opts.log_file, parallel_opts.myid);
 
 	    //stderr redirect to logfile
 	    int    fd;
@@ -154,11 +150,8 @@ int main(int argc, char *argv[]) {
 	    fd = dup(fileno(stderr));
 	    FILE * logfile = freopen(logfn.c_str(), "w", stderr);
 	    if (NULL == logfile)
-	    {
 	    	KALDI_ERR << "log path must be specified [--log-file]";
-	    }
-	    //setvbuf(logfile, NULL, _IONBF, 0);
-	
+	    setvbuf(logfile, NULL, _IONBF, 0);
 
     using namespace kaldi;
     using namespace kaldi::nnet0;
@@ -171,7 +164,6 @@ int main(int argc, char *argv[]) {
     #endif
 
     Nnet nnet;
-
     NnetSequentialStats stats;
 
     Timer time;
@@ -189,8 +181,7 @@ int main(int argc, char *argv[]) {
 								&nnet,
 								&stats);
 
-    if (parallel_opts.myid == 0)
-    {
+    if (parallel_opts.myid == 0) {
         //add back the softmax
         KALDI_LOG << "Appending the softmax " << target_model_filename;
         nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
@@ -198,10 +189,8 @@ int main(int argc, char *argv[]) {
         nnet.Write(target_model_filename, binary);
     }
 
-    //merge statistics data
-    stats.MergeStats(&opts, 0);
-
     KALDI_LOG << "TRAINING FINISHED; ";
+    time_now = time.Elapsed();
 
 #if HAVE_CUDA == 1
     CuDevice::Instantiate().PrintProfile();
@@ -214,15 +203,17 @@ int main(int argc, char *argv[]) {
     clearerr(stderr);
     fsetpos(stderr, &pos);
 
-    if (parallel_opts.myid == 0)
-    {
+    //merge statistics data
+    stats.MergeStats(&opts, 0);
+
+    if (parallel_opts.myid == 0) {
         time_now = time.Elapsed();
         stats.Print("mmi", time_now);
     }
 
     MPI_Finalize();
 
-
+    return 0;
   } catch(const std::exception &e) {
     std::cerr << e.what();
     return -1;

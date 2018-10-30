@@ -1,4 +1,4 @@
-// nnet0/nnet-train-frmshuff-parallel-mpi.h
+// nnet0/nnet-train-frmshuff-parallel-mpi.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -27,6 +27,9 @@
 #include "cudamatrix/cu-device.h"
 #include "nnet0/nnet-compute-parallel.h"
 
+#include <iomanip>
+#include <unistd.h>
+#include <mpi.h>
 
 int main(int argc, char *argv[]) {
   using namespace kaldi;
@@ -37,26 +40,31 @@ int main(int argc, char *argv[]) {
     const char *usage =
         "Perform one iteration of Neural Network training by mini-batch Stochastic Gradient Descent.\n"
         "This version use pdf-posterior as targets, prepared typically by ali-to-post.\n"
-        "Usage:  nnet-train-frmshuff [options] <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
+        "Usage:  nnet-train-frmshuff-parallel-mpi [options] <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
         "e.g.: \n"
-        " nnet-train-frmshuff scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
+        " nnet-train-frmshuff-mpi scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
 
     ParseOptions po(usage);
 
     NnetTrainOptions trn_opts;
     trn_opts.Register(&po);
+
     NnetDataRandomizerOptions rnd_opts;
     rnd_opts.Register(&po);
+    
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
 
     NnetParallelOptions parallel_opts;
 
+    //multi-machine
     MPI_Init_thread(&argc,&argv, MPI_THREAD_MULTIPLE, &parallel_opts.thread_level);
     MPI_Comm_size(MPI_COMM_WORLD,&parallel_opts.num_procs);
     MPI_Comm_rank(MPI_COMM_WORLD,&parallel_opts.myid);
 
     parallel_opts.Register(&po);
 
-    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -78,19 +86,17 @@ int main(int argc, char *argv[]) {
     //mpi
     	NnetParallelUtil util;
 	    std::string scpfile;
-	    feature_rspecifier = util.AddSuffix(feature_rspecifier, parallel_opts.myid);
-	    targets_rspecifier = util.AddSuffix(targets_rspecifier, parallel_opts.myid);
+	    feature_rspecifier = util.ReplaceJobId(feature_rspecifier, parallel_opts.myid);
+	    targets_rspecifier = util.ReplaceJobId(targets_rspecifier, parallel_opts.myid);
 	    scpfile = util.GetFilename(feature_rspecifier);
 	    if (parallel_opts.myid == 0)
-	    {
 	    	parallel_opts.num_merge = util.NumofCEMerge(scpfile, parallel_opts.merge_size);
-	    }
 
 		MPI_Barrier(MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.merge_size), 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.num_merge), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	    std::string logfn = util.FAddSuffix(parallel_opts.log_file, parallel_opts.myid);
+	    std::string logfn = util.ReplaceJobId(parallel_opts.log_file, parallel_opts.myid);
 
 	    //stderr redirect to logfile
 	    int    fd;
@@ -101,9 +107,7 @@ int main(int argc, char *argv[]) {
 	    fd = dup(fileno(stderr));
 	    FILE * logfile = freopen(logfn.c_str(), "w", stderr);
 	    if (NULL == logfile)
-	    {
 	    	KALDI_ERR << "log path must be specified [--log-file]";
-	    }
 	    setvbuf(logfile, NULL, _IONBF, 0);
 
     using namespace kaldi;
@@ -118,7 +122,7 @@ int main(int argc, char *argv[]) {
 
 
     Nnet nnet;
-    NnetStats stats;
+    NnetStats stats(loss_opts);
 
 
     Timer time;
@@ -157,8 +161,7 @@ int main(int argc, char *argv[]) {
      //merge global statistic data
      stats.MergeStats(&opts, 0);
 
-     if (parallel_opts.myid == 0)
-     {
+     if (parallel_opts.myid == 0) {
          time_now = time.Elapsed();
          stats.Print(&opts, time_now);
      }

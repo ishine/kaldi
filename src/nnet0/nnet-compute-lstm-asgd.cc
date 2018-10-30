@@ -1,4 +1,4 @@
-// nnet0/nnet-compute-parallel.cc
+// nnet0/nnet-compute-lstm-asgd.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -191,9 +191,9 @@ private:
 	    PosteriorRandomizer targets_randomizer(*rnd_opts);
 	    VectorRandomizer weights_randomizer(*rnd_opts);
 
-	    Xent xent;
-	    Mse mse;
-        MultiTaskLoss multitask;
+	    Xent xent(*opts->loss_opts);
+	    Mse mse(*opts->loss_opts);
+	    MultiTaskLoss multitask(*opts->loss_opts);
         if (0 == objective_function.compare(0, 9, "multitask")) {
           // objective_function contains something like :
           // 'multitask,xent,2456,1.0,mse,440,0.001'
@@ -225,6 +225,7 @@ private:
 	    std::vector<int> curt(num_stream, 0);
 	    std::vector<int> lent(num_stream, 0);
 	    std::vector<int> new_utt_flags(num_stream, 0);
+	    std::vector<int> valid_lengths(num_stream, 0);
 
 	    // bptt batch buffer
 	    //int32 feat_dim = nnet.InputDim();
@@ -278,6 +279,7 @@ private:
 	        int done = 1;
 	        for (int s = 0; s < num_stream; s++) {
 	            if (curt[s]  < lent[s] + targets_delay) done = 0;  // this stream still contains valid data, not exhausted
+	        	valid_lengths[s] = 0;
 	        }
 
 	        if (done) break;
@@ -289,37 +291,68 @@ private:
 				nnet_in.Resize(minibatch, feats[0].NumCols(), kSetZero);
 	        }
 
-	        // fill a multi-stream bptt batch
-	        // * frame_mask: 0 indicates padded frames, 1 indicates valid frames
-	        // * target: padded to batch_size
-	        // * feat: first shifted to achieve targets delay; then padded to batch_size
-	        for (int t = 0; t < batch_size; t++) {
-	            for (int s = 0; s < num_stream; s++) {
-	                // frame_mask & targets padding
-	                if (curt[s] < targets_delay) {
-	                	frame_mask(t * num_stream + s) = 0;
-	                	target[t * num_stream + s] = targets[s][0];
-	                }
-	                else if (curt[s] < lent[s] + targets_delay) {
-	                    frame_mask(t * num_stream + s) = 1;
-	                    target[t * num_stream + s] = targets[s][curt[s]-targets_delay];
-	                } else {
-	                    frame_mask(t * num_stream + s) = 0;
-	                    target[t * num_stream + s] = targets[s][lent[s]-1];
-	                }
-
-	                // feat shifting & padding
-	                int nframes = opts->skip_inner ? skip_frames : 1;
-	                for (int i = 0; i < nframes; i++) {
-	                	if (curt[s] < lent[s]) {
-							feat.Row((t*nframes+i) * num_stream + s).CopyFromVec(feats[s].Row(curt[s]*nframes+i));
-						} else {
-							int last = feats[s].NumRows()-1;
-							feat.Row((t*nframes+i) * num_stream + s).CopyFromVec(feats[s].Row(last));
+            int N, n, nframes;
+	        if (opts->network_type == "lstm") {
+		        // fill a multi-stream bptt batch
+		        // * frame_mask: 0 indicates padded frames, 1 indicates valid frames
+		        // * target: padded to batch_size
+		        // * feat: first shifted to achieve targets delay; then padded to batch_size
+				for (int t = 0; t < batch_size; t++) {
+					for (int s = 0; s < num_stream; s++) {
+						// frame_mask & targets padding
+						if (curt[s] < targets_delay) {
+							frame_mask(t * num_stream + s) = 0;
+							target[t * num_stream + s] = targets[s][0];
 						}
-	                }
-	                curt[s]++;
-	            }
+						else if (curt[s] < lent[s] + targets_delay) {
+							frame_mask(t * num_stream + s) = 1;
+							target[t * num_stream + s] = targets[s][curt[s]-targets_delay];
+						} else {
+							frame_mask(t * num_stream + s) = 0;
+							target[t * num_stream + s] = targets[s][lent[s]-1];
+						}
+
+						// feat shifting & padding
+						nframes = opts->skip_inner ? skip_frames : 1;
+						for (int i = 0; i < nframes; i++) {
+							if (curt[s] < lent[s]) {
+								feat.Row((t*nframes+i) * num_stream + s).CopyFromVec(feats[s].Row(curt[s]*nframes+i));
+								valid_lengths[s]++;
+							} else {
+								//int last = feats[s].NumRows()-1;
+								//feat.Row((t*nframes+i) * num_stream + s).CopyFromVec(feats[s].Row(last));
+								feat.Row((t*nframes+i) * num_stream + s).SetZero();
+							}
+						}
+						curt[s]++;
+					}
+				}
+	        } else { // fsmn tdnn ...
+	        	for (int s = 0; s < num_stream; s++) {
+	        		for (int t = 0; t < batch_size; t++) {
+	        			if (curt[s] < lent[s]) {
+	        				frame_mask(s*batch_size + t) = 1;
+	        				target[s*batch_size + t] = targets[s][curt[s] + t];
+	        			} else {
+	        				frame_mask(s*batch_size + t) = 0;
+	        				target[s*batch_size + t] = targets[s][lent[s]-1];
+	        			}
+	        		}
+
+	        		N = opts->skip_inner ? skip_frames : 1;
+	        		n = curt[s]+batch_size < lent[s] ? batch_size : lent[s]-curt[s];
+	        		nframes = (curt[s]+n)*N < feats[s].NumRows() ? n*N : feats[s].NumRows()-curt[s]*N;
+                    nframes = nframes < 0 ? 0 : nframes;
+	        		valid_lengths[s] = nframes;
+
+	        		if (nframes > 0)
+	        			feat.RowRange(s*batch_size*N, nframes).CopyFromMat(feats[s].RowRange(curt[s]*N, nframes));
+	        		if (nframes < batch_size*N)
+	        			feat.RowRange(s*batch_size*N+nframes, batch_size*N-nframes).SetZero();
+
+	        		curt[s] += batch_size;
+	        	}
+	        	nnet.ResetSubSample(num_stream, skip_frames);
 	        }
 
 			num_frames = minibatch;
@@ -337,6 +370,7 @@ private:
 
 	        // for streams with new utterance, history states need to be reset
 	        nnet.ResetLstmStreams(new_utt_flags);
+	        nnet.SetSeqLengths(valid_lengths);
 
 	        // forward pass
 	        nnet.Propagate(nnet_in, &nnet_out);
@@ -460,11 +494,9 @@ private:
 		        total_frames += num_frames;
 
 		        // track training process
-			    if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0)
-				{
+			    if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0) {
                     int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
-					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump)
-					{
+					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump) {
 						char name[512];
 						num_dump++;
 						sprintf(name, "%s_%d_%ld", model_filename.c_str(), num_dump, total_frames);

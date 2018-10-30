@@ -32,10 +32,27 @@
 namespace kaldi {
 namespace nnet0 {
 
+struct LossOptions {
+  int32 loss_report_frames; ///< Report loss value every 'report_interval' frames,
+  bool loss_report_class;
+
+  LossOptions():
+    loss_report_frames(1*3600*100), loss_report_class(false) // 5h,
+  { }
+
+  void Register(OptionsItf *opts) {
+    opts->Register("loss-report-frames", &loss_report_frames,
+        "Report loss per blocks of N frames (0 = no reports)");
+    opts->Register("loss-report-class", &loss_report_class,
+            "Generate string with per-class error report");
+  }
+};
 
 class LossItf {
  public:
-  LossItf() { }
+  LossItf(LossOptions& opts) {
+	opts_ = opts;
+  }
   virtual ~LossItf() { }
 
   /// Evaluate cross entropy using target-matrix (supports soft labels),
@@ -59,14 +76,18 @@ class LossItf {
   /// Merge statistic data
   virtual void Add(LossItf *loss){};
   virtual void Merge(int myid, int root){};
+
+ protected:
+  LossOptions opts_;
+  Timer timer_;
 };
 
 
 class Xent : public LossItf {
  public:
-  Xent() : frames_(0.0), correct_(0.0), loss_(0.0), entropy_(0.0), 
-           frames_progress_(0.0), loss_progress_(0.0), entropy_progress_(0.0),
-		   correct_progress_(0.0) { }
+  Xent(LossOptions &opts) : LossItf(opts), frames_(0.0), correct_(0.0), loss_(0.0), entropy_(0.0),
+           frames_progress_(0.0), xentropy_progress_(0.0), entropy_progress_(0.0),
+		   correct_progress_(0.0), elapsed_seconds_(0) { }
   ~Xent() { }
 
   /// Evaluate cross entropy using target-matrix (supports soft labels),
@@ -92,6 +113,9 @@ class Xent : public LossItf {
   /// Generate string with error report,
   std::string Report();
 
+  /// Generate string with per-class error report,
+  std::string ReportPerClass();
+
   /// Get loss value (frame average),
   BaseFloat AvgLoss() {
     return (loss_ - entropy_) / frames_;
@@ -102,6 +126,16 @@ class Xent : public LossItf {
   void Merge(int myid, int root);
 
  private: 
+  // main stats collected per target-class,
+  CuVector<double> frames_vec_;
+  CuVector<double> xentropy_vec_;
+  CuVector<double> entropy_vec_;
+
+  Vector<double> correct_vec_;
+  Vector<double> frames_h_vec_;
+  Vector<double> xentropy_h_vec_;
+  Vector<double> entropy_h_vec_;
+
   double frames_;
   double correct_;
   double loss_;
@@ -109,10 +143,11 @@ class Xent : public LossItf {
 
   // partial results during training
   double frames_progress_;
-  double loss_progress_;
+  double xentropy_progress_;
   double entropy_progress_;
   double correct_progress_;
   std::vector<float> loss_vec_;
+  double elapsed_seconds_;
 
   // weigting buffer,
   CuVector<BaseFloat> frame_weights_;
@@ -120,6 +155,7 @@ class Xent : public LossItf {
 
   // loss computation buffers
   CuMatrix<BaseFloat> tgt_mat_;
+  CuMatrix<BaseFloat> frames_aux_;
   CuMatrix<BaseFloat> xentropy_aux_;
   CuMatrix<BaseFloat> entropy_aux_;
 
@@ -257,7 +293,7 @@ class CBXent {
 
 class Mse : public LossItf {
  public:
-  Mse() : frames_(0.0), loss_(0.0), 
+  Mse(LossOptions &opts) : LossItf(opts), frames_(0.0), loss_(0.0),
           frames_progress_(0.0), loss_progress_(0.0) { }
   ~Mse() { }
 
@@ -301,7 +337,9 @@ class Mse : public LossItf {
 
 class MultiTaskLoss : public LossItf {
  public:
-  MultiTaskLoss() { }
+  MultiTaskLoss(LossOptions &opts):
+	  LossItf(opts) { }
+
   ~MultiTaskLoss() {
     while (loss_vec_.size() > 0) {
       delete loss_vec_.back();

@@ -51,6 +51,9 @@ int main(int argc, char *argv[]) {
 
     NnetDataRandomizerOptions rnd_opts;
     rnd_opts.Register(&po);
+    
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
 
     NnetParallelOptions parallel_opts;
 
@@ -61,7 +64,7 @@ int main(int argc, char *argv[]) {
 
     parallel_opts.Register(&po);
 
-    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -83,19 +86,17 @@ int main(int argc, char *argv[]) {
     //mpi
     	NnetParallelUtil util;
 	    std::string scpfile;
-	    feature_rspecifier = util.AddSuffix(feature_rspecifier, parallel_opts.myid);
-	    targets_rspecifier = util.AddSuffix(targets_rspecifier, parallel_opts.myid);
+	    feature_rspecifier = util.ReplaceJobId(feature_rspecifier, parallel_opts.myid);
+	    targets_rspecifier = util.ReplaceJobId(targets_rspecifier, parallel_opts.myid);
 	    scpfile = util.GetFilename(feature_rspecifier);
 	    if (parallel_opts.myid == 0)
-	    {
 	    	parallel_opts.num_merge = util.NumofCEMerge(scpfile, parallel_opts.merge_size);
-	    }
 
 		MPI_Barrier(MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.merge_size), 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.num_merge), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	    std::string logfn = util.FAddSuffix(parallel_opts.log_file, parallel_opts.myid);
+	    std::string logfn = util.ReplaceJobId(parallel_opts.log_file, parallel_opts.myid);
 
 	    //stderr redirect to logfile
 	    int    fd;
@@ -106,9 +107,7 @@ int main(int argc, char *argv[]) {
 	    fd = dup(fileno(stderr));
 	    FILE * logfile = freopen(logfn.c_str(), "w", stderr);
 	    if (NULL == logfile)
-	    {
 	    	KALDI_ERR << "log path must be specified [--log-file]";
-	    }
 	    setvbuf(logfile, NULL, _IONBF, 0);
 
     using namespace kaldi;
@@ -123,7 +122,7 @@ int main(int argc, char *argv[]) {
 
 
     Nnet nnet;
-    NnetStats stats;
+    NnetStats stats(loss_opts);
 
     Timer time;
     double time_now = 0;
@@ -161,8 +160,7 @@ int main(int argc, char *argv[]) {
      //merge global statistic data
      stats.MergeStats(&opts, 0);
 
-     if (parallel_opts.myid == 0)
-     {
+     if (parallel_opts.myid == 0) {
          time_now = time.Elapsed();
          stats.Print(&opts, time_now);
      }

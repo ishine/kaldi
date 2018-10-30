@@ -207,6 +207,7 @@ public:
 	std::string AddSuffix(std::string filename, int idx);
 	std::string FAddSuffix(std::string filename, int idx);
 	std::string GetFilename(std::string filename);
+	std::string ReplaceJobId(std::string filename, int idx, std::string wildcard = ".JOB");
 	int NumofMerge(std::string fn, int merge_size);
 	int NumofCEMerge(std::string fn, int merge_size);
 };

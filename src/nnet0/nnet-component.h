@@ -51,6 +51,8 @@ class Component {
     kUpdatableComponent = 0x0100, 
     kAffineTransform,
 	kTimeDelayTransform,
+	kStatisticsPoolingComponent,
+	kCompressedTimeDelayTransform,
 	kWordVectorTransform,
 	kClassAffineTransform,
 	kBatchNormalization,

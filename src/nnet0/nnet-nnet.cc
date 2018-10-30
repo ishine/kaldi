@@ -43,6 +43,7 @@
 #include "nnet0/nnet-deep-fsmn.h"
 #include "nnet0/nnet-uni-fsmn.h"
 #include "nnet0/nnet-uni-deep-fsmn.h"
+#include "nnet0/nnet-statistics-pooling-component.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -542,7 +543,26 @@ void Nnet::ResetLstmStreams(const std::vector<int32> &stream_reset_flag, int32 n
       SubSample& comp = dynamic_cast<SubSample&>(GetComponent(c));
       comp.SetStream(stream_reset_flag.size());
     }
+    else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
+    	StatisticsPoolingComponent& comp = dynamic_cast<StatisticsPoolingComponent&>(GetComponent(c));
+    	comp.SetStream(stream_reset_flag.size());
+	}
   }
+}
+
+void Nnet::ResetSubSample(int nstream, int skip_frames) {
+	for (int32 c=0; c < NumComponents(); c++) {
+		if (GetComponent(c).GetType() == Component::kSubSample) {
+			SubSample& comp = dynamic_cast<SubSample&>(GetComponent(c));
+			comp.SetStream(nstream);
+			comp.SetSubSampleRate(skip_frames);
+		}
+		else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
+			StatisticsPoolingComponent& comp = dynamic_cast<StatisticsPoolingComponent&>(GetComponent(c));
+			comp.SetStream(nstream);
+			comp.SetSubSampleRate(skip_frames);
+		}
+	}
 }
 
 void Nnet::UpdateLstmStreamsState(const std::vector<int32> &stream_update_flag) {
@@ -575,7 +595,11 @@ void Nnet::SetSeqLengths(const std::vector<int32> &sequence_lengths) {
     else if (GetComponent(c).GetType() == Component::kBLstmStreams) {
         BLstmStreams& comp = dynamic_cast<BLstmStreams&>(GetComponent(c));
         comp.SetSeqLengths(sequence_lengths);
-      }
+	}
+    else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
+    	StatisticsPoolingComponent& comp = dynamic_cast<StatisticsPoolingComponent&>(GetComponent(c));
+    	comp.SetSeqLengths(sequence_lengths);
+	}
   }
 }
 

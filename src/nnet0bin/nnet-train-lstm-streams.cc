@@ -49,6 +49,9 @@ int main(int argc, char *argv[]) {
     NnetTrainOptions trn_opts;
     trn_opts.Register(&po);
 
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
+
     bool binary = true, 
          crossvalidate = false;
     po.Register("binary", &binary, "Write output in binary mode");
@@ -144,8 +147,8 @@ int main(int argc, char *argv[]) {
     PosteriorRandomizer targets_randomizer(rnd_opts);
     VectorRandomizer weights_randomizer(rnd_opts);
 
-    Xent xent;
-    Mse mse;
+    Xent xent(loss_opts);
+    Mse mse(loss_opts);
     
     Timer time;
     KALDI_LOG << (crossvalidate?"CROSS-VALIDATION":"TRAINING") << " STARTED";

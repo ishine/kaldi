@@ -191,8 +191,8 @@ private:
 	    PosteriorRandomizer targets_randomizer(*rnd_opts);
 	    VectorRandomizer weights_randomizer(*rnd_opts);
 
-	    Xent xent;
-	    Mse mse;
+	    Xent xent(*opts->loss_opts);
+	    Mse mse(*opts->loss_opts);
 
 	    CtcItf *ctc;
 	    // Initialize CTC optimizer

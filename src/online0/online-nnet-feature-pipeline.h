@@ -31,6 +31,7 @@ struct OnlineNnetFeaturePipelineConfig {
 	std::string mfcc_config;
 	std::string plp_config;
 	std::string fbank_config;
+	std::string raw_config;
 
 	bool add_pitch;
 	// the following contains the type of options that you could give to
@@ -59,6 +60,8 @@ struct OnlineNnetFeaturePipelineConfig {
 	                   "PLP features (e.g. conf/plp.conf)");
 	    opts->Register("fbank-config", &fbank_config, "Configuration file for "
 	                   "filterbank features (e.g. conf/fbank.conf)");
+	    opts->Register("raw-config", &raw_config, "Configuration file for "
+	                   "raw features (e.g. conf/raw.conf)");
 	    opts->Register("add-pitch", &add_pitch, "Append pitch features to raw "
 	                   "MFCC/PLP/filterbank features [but not for iVector extraction]");
 	    opts->Register("online-pitch-config", &online_pitch_config, "Configuration "
@@ -94,6 +97,7 @@ struct OnlineNnetFeaturePipelineOptions {
 	MfccOptions mfcc_opts;    	// options for MFCC computation, if feature_type == "mfcc"
 	PlpOptions plp_opts;  		// options for PLP computation, if feature_type == "plp"
 	FbankOptions fbank_opts;  	// options for filterbank computation, if feature_type == "fbank"
+	RawFeaturesOptions raw_opts;  	// options for raw feature, if feature_type == "raw"
 
 	bool add_pitch;
 	//PitchExtractionOptions pitch_opts;  // Options for pitch extraction, if done.
@@ -139,6 +143,11 @@ public:
 	// of delta or LDA features, and finalize the pitch features
 	// (making them more accurate).
 	void InputFinished();
+
+	OnlineStreamBaseFeature* GetBaseFeature() const;
+	OnlineStreamCmvnFeature* GetCmvnFeature() const;
+	OnlineStreamDeltaFeature* GetDeltaFeature() const;
+	OnlineStreamSpliceFeature* GetSpliceFeature() const;
 
 private:
 

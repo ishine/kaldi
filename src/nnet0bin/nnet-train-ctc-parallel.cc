@@ -52,7 +52,10 @@ int main(int argc, char *argv[]) {
     NnetParallelOptions parallel_opts;
     parallel_opts.Register(&po);
 
-    NnetCtcUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
+
+    NnetCtcUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -93,12 +96,12 @@ int main(int argc, char *argv[]) {
 
 
     if (opts.objective_function == "xent"){
-    	stats = new NnetStats;
+    	stats = new NnetStats(loss_opts);
     	NnetCEUpdateParallel(&opts, model_filename, feature_rspecifier,
     			targets_rspecifier, &nnet, stats);
     }
     else if (opts.objective_function == "ctc"){
-    	stats = new NnetCtcStats;
+    	stats = new NnetCtcStats(loss_opts);
     	NnetCtcUpdateParallel(&opts, model_filename, feature_rspecifier,
     			//targets_rspecifier, &nnet, (NnetCtcStats*)(stats));
     			targets_rspecifier, &nnet, dynamic_cast<NnetCtcStats*>(stats));

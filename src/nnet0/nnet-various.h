@@ -232,6 +232,10 @@ class SubSample : public Component {
     return skip_frames_;
   }
 
+  void SetSubSampleRate(int skip_frames) {
+    skip_frames_ = skip_frames;
+  }
+
   void SetStream(int nstream) {
     reset_ = nstream_ == nstream ? false : true;
     nstream_ = nstream;

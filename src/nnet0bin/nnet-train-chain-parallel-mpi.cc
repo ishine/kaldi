@@ -61,7 +61,10 @@ int main(int argc, char *argv[]) {
 
     parallel_opts.Register(&po);
 
-    NnetChainUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
+
+    NnetChainUpdateOptions opts(&trn_opts, loss_opts, &rnd_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);

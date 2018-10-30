@@ -134,8 +134,8 @@ public:
 	    int32 out_dim = nnet.OutputDim();
 	    Matrix<BaseFloat> feat, nnet_out_host;
 	    if (batch_size * num_stream > 0) {
-	    		feat.Resize(out_skip * batch_size * num_stream, feat_dim, kSetZero);
-	    		nnet_out_host.Resize(batch_size * num_stream, out_dim, kSetZero);
+			feat.Resize(out_skip * batch_size * num_stream, feat_dim, kSetZero);
+			nnet_out_host.Resize(batch_size * num_stream, out_dim, kSetZero);
 	    }
 
 
@@ -291,6 +291,12 @@ public:
 			Matrix<BaseFloat> &mat = example->input_frames;
 
             int len = mat.NumRows(), cur = 0;
+            if (opts->skip_frames > len) {
+                skip_frames = len;
+                out_skip = opts->skip_inner ? skip_frames : 1;
+                new_utt_flags.resize(1);
+                new_utt_flags[0] = skip_frames;
+            }
 			if (time_shift > 0 || skip_frames > 1) {
 				len = mat.NumRows()/skip_frames, cur = 0;
 				len += mat.NumRows()%skip_frames > 0 ? 1 : 0;
@@ -313,6 +319,9 @@ public:
 			flags.Set(1.0);
 			nnet.SetFlags(flags);
 
+			// subsample forward
+			nnet.ResetSubSample(1, skip_frames);
+			nnet.SetSeqLengths(new_utt_flags);
 			// fwd-pass, feature transform,
 			nnet_transf.Feedforward(cufeat, &feats_transf);
 

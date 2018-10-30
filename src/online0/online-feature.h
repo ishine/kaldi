@@ -143,6 +143,76 @@ typedef OnlineStreamGenericBaseFeature<PlpComputer> OnlineStreamPlp;
 typedef OnlineStreamGenericBaseFeature<FbankComputer> OnlineStreamFbank;
 
 
+struct RawFeaturesOptions {
+  int32 feat_dim;
+
+  RawFeaturesOptions():feat_dim(40){ }
+  void Check() {
+		KALDI_ASSERT(feat_dim > 0);
+  }
+  void Register(OptionsItf *opts) {
+		opts->Register("feat-dim", &feat_dim, "raw feature frame dim");
+  }
+};
+
+class OnlineStreamRawFeature: public OnlineStreamBaseFeature {
+ public:
+  //
+  // First, functions that are present in the interface:
+  //
+  virtual int32 Dim() const { return opts_.feat_dim;}
+
+  virtual bool IsLastFrame(int32 frame) const {
+    return (frame == raw_feature_.size() - 1);
+  }
+
+  virtual BaseFloat FrameShiftInSeconds() const {
+    return raw_feature_.size()/100.0f;
+  }
+
+  virtual int32 NumFramesReady() const {
+	  return raw_feature_.size();
+  }
+
+  virtual void GetFrame(int32 frame, VectorBase<BaseFloat> *feat);
+
+  virtual void Reset() {
+	  raw_feature_.resize(0);
+	  input_finished_ = false;
+  }
+
+  // This would be called from the application, when you get
+  // more wave data.  Note: the sampling_rate is only provided so
+  // the code can assert that it matches the sampling rate
+  // expected in the options.
+  virtual void AcceptWaveform(BaseFloat sampling_rate,
+                              const VectorBase<BaseFloat> &waveform);
+
+
+  // InputFinished() tells the class you won't be providing any
+  // more waveform.  This will help flush out the last frame or two
+  // of features, in the case where snip-edges == false; it also
+  // affects the return value of IsLastFrame().
+  virtual void InputFinished() {
+	  input_finished_ = true;
+  }
+
+  //
+  // Next, functions that are not in the interface.
+  //
+  OnlineStreamRawFeature(const RawFeaturesOptions &opts);
+
+ private:
+  RawFeaturesOptions opts_;
+
+  // raw_feature_ is the Mfcc or Plp or Fbank features that we have already computed.
+  std::vector<Vector<BaseFloat> > raw_feature_;
+
+  // True if the user has called "InputFinished()"
+  bool input_finished_;
+};
+
+
 class OnlineStreamDeltaFeature: public OnlineStreamFeatureInterface {
  public:
   //

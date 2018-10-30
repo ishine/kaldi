@@ -27,6 +27,9 @@
 
 #include <sstream>
 #include <iterator>
+#include <algorithm>
+#include <iomanip>
+
 #include <mpi.h>
 
 namespace kaldi {
@@ -37,29 +40,31 @@ namespace nnet0 {
 
 /**
  * Helper function of Xent::Eval,
- * calculates number of matching elemente in 'v1', 'v2' weighted by 'weights'.
+ * calculates number of matching elemente in 'hyp', 'ref' weighted by 'weights'.
  */
 template <typename T>
-inline void CountCorrectFramesWeighted(const CuArray<T> &v1, 
-                                       const CuArray<T> &v2, 
-                                       const CuVectorBase<BaseFloat> &weights, 
-                                       double *correct) {
-  KALDI_ASSERT(v1.Dim() == v2.Dim());
-  KALDI_ASSERT(v1.Dim() == weights.Dim());
-  int32 dim = v1.Dim();
+inline double CountCorrectFramesWeighted(const CuArray<T> &hyp,
+                                       const CuArray<T> &ref,
+                                       const CuVectorBase<BaseFloat> &weights,
+                                       Vector<double> *correct) {
+  KALDI_ASSERT(hyp.Dim() == ref.Dim());
+  KALDI_ASSERT(hyp.Dim() == weights.Dim());
+  int32 dim = hyp.Dim();
   // Get GPU data to host,
-  std::vector<T> v1_h(dim), v2_h(dim);
-  v1.CopyToVec(&v1_h);
-  v2.CopyToVec(&v2_h);
+  std::vector<T> hyp_h(dim), ref_h(dim);
+  hyp.CopyToVec(&hyp_h);
+  ref.CopyToVec(&ref_h);
   Vector<BaseFloat> w(dim);
   weights.CopyToVec(&w);
-  // Get correct frame count (weighted),
-  double corr = 0.0;
-  for (int32 i=0; i<dim; i++) {
-   corr += w(i) * (v1_h[i] == v2_h[i] ? 1.0 : 0.0);
+  // Accumulate weighted counts of correct frames,
+  double corr = 0.0, cnt;
+  for (int32 i = 0; i < dim; i++) {
+    KALDI_ASSERT(ref_h[i] < correct->Dim());
+    cnt = w(i) * (hyp_h[i] == ref_h[i] ? 1.0 : 0.0);
+    (*correct)(ref_h[i]) += cnt;
+    corr += cnt;
   }
-  // Return,
-  (*correct) = corr;
+  return corr;
 }
 
 
@@ -75,6 +80,19 @@ void Xent::Eval(const VectorBase<BaseFloat> &frame_weights,
   KALDI_ASSERT(KALDI_ISFINITE(frame_weights.Sum()));
   KALDI_ASSERT(KALDI_ISFINITE(net_out.Sum()));
   KALDI_ASSERT(KALDI_ISFINITE(targets.Sum()));
+
+  // buffer initialization,
+  int32 num_classes = targets.NumCols();
+  if (frames_vec_.Dim() == 0) {
+    frames_vec_.Resize(num_classes);
+    xentropy_vec_.Resize(num_classes);
+    entropy_vec_.Resize(num_classes);
+    correct_vec_.Resize(num_classes);
+
+    frames_h_vec_.Resize(num_classes);
+    xentropy_h_vec_.Resize(num_classes);
+    entropy_h_vec_.Resize(num_classes);
+  }
 
   // get frame_weights to GPU,
   frame_weights_ = frame_weights;
@@ -100,11 +118,20 @@ void Xent::Eval(const VectorBase<BaseFloat> &frame_weights,
   diff->AddMat(-1.0, targets);
   diff->MulRowsVec(frame_weights_); // weighting,
 
+  // count frames per class,
+  frames_aux_ = targets;
+  frames_aux_.MulRowsVec(frame_weights_);
+  if (opts_.loss_report_class) {
+	  frames_vec_.AddRowSumMat(1.0, CuMatrix<double>(frames_aux_));
+	  frames_h_vec_.CopyFromVec(frames_vec_);
+  }
+
   // evaluate the frame-level classification,
   double correct; 
   net_out.FindRowMaxId(&max_id_out_); // find max in nn-output
   targets.FindRowMaxId(&max_id_tgt_); // find max in targets
-  CountCorrectFramesWeighted(max_id_out_, max_id_tgt_, frame_weights_, &correct);
+  correct = CountCorrectFramesWeighted(max_id_out_, max_id_tgt_,
+		  	  	  	  	  	  	  	  frame_weights_, &correct_vec_);
 
   // calculate cross_entropy (in GPU),
   xentropy_aux_ = net_out; // y
@@ -112,7 +139,11 @@ void Xent::Eval(const VectorBase<BaseFloat> &frame_weights,
   xentropy_aux_.ApplyLog(); // log(y)
   xentropy_aux_.MulElements(targets); // t*log(y)
   xentropy_aux_.MulRowsVec(frame_weights_); // w*t*log(y) 
-  double cross_entropy = -xentropy_aux_.Sum();
+  double xentropy = -xentropy_aux_.Sum();
+  if (opts_.loss_report_class) {
+	  xentropy_vec_.AddRowSumMat(-1.0, CuMatrix<double>(xentropy_aux_));
+	  xentropy_h_vec_.CopyFromVec(xentropy_vec_);
+  }
   
   // caluculate entropy (in GPU),
   entropy_aux_ = targets; // t
@@ -121,36 +152,53 @@ void Xent::Eval(const VectorBase<BaseFloat> &frame_weights,
   entropy_aux_.MulElements(targets); // t*log(t)
   entropy_aux_.MulRowsVec(frame_weights_); // w*t*log(t) 
   double entropy = -entropy_aux_.Sum();
+  if (opts_.loss_report_class) {
+	  entropy_vec_.AddRowSumMat(-1.0, CuMatrix<double>(entropy_aux_));
+	  entropy_h_vec_.CopyFromVec(entropy_vec_);
+  }
 
-  KALDI_ASSERT(KALDI_ISFINITE(cross_entropy));
+  KALDI_ASSERT(KALDI_ISFINITE(xentropy));
   KALDI_ASSERT(KALDI_ISFINITE(entropy));
 
-  loss_ += cross_entropy;
+  loss_ += xentropy;
   entropy_ += entropy;
   correct_ += correct;
   frames_ += num_frames;
 
   // progressive loss reporting
   {
-    static const int32 progress_step = 3600*100; // 1h
+    //static const int32 progress_step = 3600*100; // 1h
     frames_progress_ += num_frames;
-    loss_progress_ += cross_entropy;
+    xentropy_progress_ += xentropy;
     entropy_progress_ += entropy;
     correct_progress_ += correct;
-    if (frames_progress_ > progress_step) {
-      KALDI_VLOG(1) << "ProgressLoss[last " 
-                    << static_cast<int>(frames_progress_/100/3600) << "h of " 
-                    << static_cast<int>(frames_/100/3600) << "h]: " 
-                    << (loss_progress_-entropy_progress_)/frames_progress_ << " (Xent) "
-                    << exp((loss_progress_-entropy_progress_)/frames_progress_) << " (PPL) "
-					<< correct_progress_*100/frames_progress_ << "% (Facc)";
-      // store
-      loss_vec_.push_back((loss_progress_-entropy_progress_)/frames_progress_);
-      // reset
-      frames_progress_ = 0;
-      loss_progress_ = 0.0;
-      entropy_progress_ = 0.0;
-      correct_progress_ = 0.0;
+    if (frames_progress_ > opts_.loss_report_frames) {
+        // loss value,
+        double progress_value =
+          (xentropy_progress_ - entropy_progress_) / frames_progress_;
+
+		// time-related info (fps is weighted),
+		double time_now = timer_.Elapsed();
+		double fps = frames_progress_ / (time_now - elapsed_seconds_);
+		//double elapsed_minutes = time_now / 60;
+		elapsed_seconds_ = time_now; // store,
+
+		KALDI_VLOG(1) << "ProgressLoss[last "
+					<< static_cast<int>(frames_progress_/100/3600) << "h of "
+					<< static_cast<int>(frames_/100/3600) << "h]: "
+					<< progress_value << " (Xent) "
+					<< exp(progress_value) << " (PPL) "
+					<< correct_progress_*100/frames_progress_ << "% (Facc) "
+					<< fps << " (fps)";
+					//<< std::setprecision(3)
+					//<< ", elapsed " << elapsed_minutes << "min";
+		// store
+		loss_vec_.push_back(progress_value);
+		// reset
+		frames_progress_ = 0;
+		xentropy_progress_ = 0.0;
+		entropy_progress_ = 0.0;
+		correct_progress_ = 0.0;
     }
   }
 }
@@ -197,26 +245,107 @@ void Xent::Eval(const VectorBase<BaseFloat> &frame_weights,
  }
 
 std::string Xent::Report() {
+  double loss_value = (loss_-entropy_)/frames_;
   std::ostringstream oss;
-  oss << "AvgLoss: " << (loss_-entropy_)/frames_ << " (Xent), "
-      << "Perplexity: " << exp((loss_-entropy_)/frames_) << " (PPL), "
+  oss << "AvgLoss: " << loss_value << " (Xent), "
+      << "Perplexity: " << exp(loss_value) << " (PPL), "
       << "[AvgXent " << loss_/frames_ 
       << ", AvgTargetEnt " << entropy_/frames_ 
       << ", frames " << frames_ << "]" << std::endl;
+  /*
   if (loss_vec_.size() > 0) {
      oss << "progress: [";
-     std::copy(loss_vec_.begin(),loss_vec_.end(),std::ostream_iterator<float>(oss," "));
+     std::copy(loss_vec_.begin(),loss_vec_.end(),
+    		 std::ostream_iterator<float>(oss," "));
      oss << "]" << std::endl;
   }
+  */
+
   if (correct_ >= 0.0) {
     oss << "FRAME_ACCURACY >> " << 100.0*correct_/frames_ << "% <<" << std::endl;
   }
-  return oss.str(); 
+  return oss.str() + ReportPerClass(); 
+}
+
+std::string Xent::ReportPerClass() {
+  if (!opts_.loss_report_class)
+    return "";
+
+  std::ostringstream oss;
+  oss << "PER-CLASS PERFORMANCE:" << std::endl;
+  oss << "@@@ Frames per-class:" << frames_h_vec_;
+  // get inverted counts,
+  Vector<double> inv_frames(frames_h_vec_);
+  inv_frames.Add(0.5);  // avoid 0-frames,
+  inv_frames.ApplyPow(-1.0);
+  // loss, kl = xentropy-entropy,
+  Vector<double> loss(xentropy_h_vec_);
+  loss.AddVec(-1.0, entropy_h_vec_);
+  loss.MulElements(inv_frames);
+  oss << "@@@ Loss per-class:" << loss;
+  // frame accuracy (assuming targets are binary),
+  Vector<double> frm_accu(correct_vec_);
+  frm_accu.MulElements(inv_frames);
+  frm_accu.Scale(100.0);
+  oss << "@@@ Frame-accuracy per-class:" << frm_accu;
+  //
+  return oss.str();
+}
+
+/// Merge lost
+void Xent::Add(LossItf *loss)
+{
+	Xent *xent = dynamic_cast<Xent*>(loss);
+	this->frames_ += xent->frames_;
+	this->correct_ += xent->correct_;
+	this->loss_ += xent->loss_;
+	this->entropy_ += xent->entropy_;
+
+	// partial results during training
+	frames_progress_ += xent->frames_progress_;
+	xentropy_progress_ += xent->xentropy_progress_;
+	entropy_progress_+= xent->entropy_progress_;
+
+	for (int i = 0; i < this->loss_vec_.size() && i < xent->loss_vec_.size(); i++)
+	  this->loss_vec_[i] += xent->loss_vec_[i];
+
+	if (opts_.loss_report_class) {
+		int num_classes = xent->frames_h_vec_.Dim();
+		if (frames_h_vec_.Dim() == 0) {
+		    frames_h_vec_.Resize(num_classes);
+		    xentropy_h_vec_.Resize(num_classes);
+		    entropy_h_vec_.Resize(num_classes);
+		    correct_vec_.Resize(num_classes);
+		  }
+
+		this->frames_h_vec_.AddVec(1.0, xent->frames_h_vec_);
+		this->xentropy_h_vec_.AddVec(1.0, xent->xentropy_h_vec_);
+		this->entropy_h_vec_.AddVec(1.0, xent->entropy_h_vec_);
+		this->correct_vec_.AddVec(1.0, xent->correct_vec_);
+	}
+}
+
+void Xent::Merge(int myid, int root)
+{
+
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	void *addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->frames_));
+	MPI_Reduce(addr, (void*)(&this->frames_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->correct_));
+	MPI_Reduce(addr, (void*)(&this->correct_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+
+	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->loss_));
+	MPI_Reduce(addr, (void*)(&this->loss_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->entropy_));
+	MPI_Reduce(addr, (void*)(&this->entropy_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
 }
 
 
 /* CBXent */
-
 void CBXent::SetClassBoundary(const std::vector<int32>& class_boundary)
 {
 		class_boundary_ = class_boundary;
@@ -744,45 +873,6 @@ void Mse::Eval(const VectorBase<BaseFloat> &frame_weights,
 }
 
 
-/// Merge lost
-void Xent::Add(LossItf *loss)
-{
-	Xent *xent = dynamic_cast<Xent*>(loss);
-	this->frames_ += xent->frames_;
-	this->correct_ += xent->correct_;
-	this->loss_ += xent->loss_;
-	this->entropy_ += xent->entropy_;
-
-	// partial results during training
-	frames_progress_ += xent->frames_progress_;
-	loss_progress_ += xent->loss_progress_;
-	entropy_progress_+= xent->entropy_progress_;
-
-	for (int i = 0; i<this->loss_vec_.size() && i < xent->loss_vec_.size(); i++)
-	  this->loss_vec_[i] += xent->loss_vec_[i];
-}
-
-void Xent::Merge(int myid, int root)
-{
-
-	MPI_Barrier(MPI_COMM_WORLD);
-
-	void *addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->frames_));
-	MPI_Reduce(addr, (void*)(&this->frames_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
-
-	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->correct_));
-	MPI_Reduce(addr, (void*)(&this->correct_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
-
-
-	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->loss_));
-	MPI_Reduce(addr, (void*)(&this->loss_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
-
-	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->entropy_));
-	MPI_Reduce(addr, (void*)(&this->entropy_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
-}
-
-
-
 void Mse::Eval(const VectorBase<BaseFloat> &frame_weights,
                const CuMatrixBase<BaseFloat>& net_out, 
                const Posterior& post, 
@@ -856,9 +946,9 @@ void MultiTaskLoss::InitFromString(const std::string& s) {
   for ( ; it != v.end(); ++it) {
     // type,
     if (*it == "xent") {
-      loss_vec_.push_back(new Xent());
+      loss_vec_.push_back(new Xent(opts_));
     } else if (*it == "mse") {
-      loss_vec_.push_back(new Mse());
+      loss_vec_.push_back(new Mse(opts_));
     } else {
       KALDI_ERR << "Unknown objective function code : " << *it;
     }

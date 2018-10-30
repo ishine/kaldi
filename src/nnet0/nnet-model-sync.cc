@@ -165,6 +165,22 @@ std::string NnetParallelUtil::AddSuffix(std::string filename, int idx)
   return buf;
 }
 
+/*
+ * 'ark,o:copy-feats scp:exp/tri_dnn_mmi/scplist/train.JOB.scp ark:- |'
+ */
+
+std::string NnetParallelUtil::ReplaceJobId(std::string filename, int idx, std::string wildcard)
+{
+  std::string job_id = std::to_string(idx);
+  //std::ostringstream oss;
+  //std::cout<< "." << idx << std::endl;
+
+  int pos = filename.find(wildcard), len = wildcard.length();
+  std::string newfn = filename.replace(pos+1, len-1, job_id);
+
+  return newfn;
+}
+
 std::string NnetParallelUtil::FAddSuffix(std::string filename, int idx)
 {
   char buf[1024];

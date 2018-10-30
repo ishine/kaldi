@@ -46,8 +46,8 @@ struct NnetLstmLmUpdateOptions : public NnetLstmUpdateOptions {
 	int32 num_class;
 	BaseFloat var_penalty;
 
-    NnetLstmLmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, parallel_opts), class_boundary(""), num_class(0), var_penalty(0) { }
+    NnetLstmLmUpdateOptions(const NnetTrainOptions *trn_opts, LossOptions *loss_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
+    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), class_boundary(""), num_class(0), var_penalty(0) { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -67,6 +67,8 @@ struct NnetLmStats: NnetStats {
     Xent xent;
 
     NnetLmStats() { }
+    NnetLmStats(LossOptions &loss_opts):
+            xent(loss_opts){}
 
     void MergeStats(NnetUpdateOptions *opts, int root)
     {

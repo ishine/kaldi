@@ -51,7 +51,10 @@ int main(int argc, char *argv[]) {
     NnetParallelOptions parallel_opts;
     parallel_opts.Register(&po);
 
-    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
+
+    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -82,7 +85,7 @@ int main(int argc, char *argv[]) {
 
 
     Nnet nnet;
-    NnetStats stats;
+    NnetStats stats(loss_opts);
 
     Timer time;
     double time_now = 0;

@@ -140,6 +140,8 @@ class Nnet {
   void SetDropoutRetention(BaseFloat r);
   /// Reset streams in LSTM multi-stream training,
   void ResetLstmStreams(const std::vector<int32> &stream_reset_flag, int32 ntruncated_bptt_size = 0);
+  /// Reset subsample component
+  void ResetSubSample(int nstream, int skip_frames);
   /// Update streams initial state in LSTM multi-stream training,
   void UpdateLstmStreamsState(const std::vector<int32> &stream_update_flag);
 

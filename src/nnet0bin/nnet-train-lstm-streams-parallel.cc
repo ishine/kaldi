@@ -1,4 +1,4 @@
-// nnet0/nnet-train-frmshuff-parallel.cc
+// nnet0/nnet-train-lstm-streams-parallel.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -51,7 +51,10 @@ int main(int argc, char *argv[]) {
     NnetParallelOptions parallel_opts;
     parallel_opts.Register(&po);
 
-    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
+
+    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -82,7 +85,7 @@ int main(int argc, char *argv[]) {
 
 
     Nnet nnet;
-    NnetStats stats;
+    NnetStats stats(loss_opts);
 
     Timer time;
     double time_now = 0;

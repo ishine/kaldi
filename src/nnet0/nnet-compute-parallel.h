@@ -59,6 +59,7 @@ struct NnetUpdateOptions {
     std::string sweep_frames_str;
     bool  sweep_loop;
     bool  skip_inner;
+    std::string network_type;
 
 
     int32 length_tolerance;
@@ -67,13 +68,14 @@ struct NnetUpdateOptions {
 
     const NnetTrainOptions *trn_opts;
     const NnetDataRandomizerOptions *rnd_opts;
+    LossOptions *loss_opts;
     const NnetParallelOptions *parallel_opts;
 
-    NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
+    NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
     	: binary(true),crossvalidate(false),randomize(true),use_psgd(false),kld_scale(-1.0),skip_frames(1),sweep_time(1), dump_time(0), targets_delay(0),
-		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),sweep_loop(false), skip_inner(false),
+		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),sweep_loop(false), skip_inner(false),network_type("lstm"),
 		  length_tolerance(5),update_frames(-1),dropout_retention(0.0),
-		  trn_opts(trn_opts),rnd_opts(rnd_opts),parallel_opts(parallel_opts){ }
+		  trn_opts(trn_opts),rnd_opts(rnd_opts),loss_opts(loss_opts),parallel_opts(parallel_opts){ }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -113,6 +115,7 @@ struct NnetUpdateOptions {
 
 	      po->Register("dump-time", &dump_time, "num hours frames between model dumping [ 0 == disabled ]");
 	      po->Register("targets-delay", &targets_delay, "targets label delay input feature");
+	      po->Register("network-type", &network_type, "CTC neural network type, (lstm|fsmn)");
   	  }
 };
 
@@ -126,7 +129,9 @@ struct NnetStats {
     Mse mse;
     MultiTaskLoss multitask;
 
-    NnetStats():num_done(0),num_no_tgt_mat(0),num_other_error(0),total_frames(0){} //{ std::memset(this, 0, sizeof(*this)); }
+    NnetStats(LossOptions &loss_opts):
+    	num_done(0),num_no_tgt_mat(0),num_other_error(0),total_frames(0),
+        xent(loss_opts), mse(loss_opts), multitask(loss_opts) {} //{ std::memset(this, 0, sizeof(*this)); }
 
     virtual ~NnetStats(){}
 

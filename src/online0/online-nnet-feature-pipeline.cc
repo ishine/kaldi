@@ -26,37 +26,22 @@ OnlineNnetFeaturePipelineOptions::OnlineNnetFeaturePipelineOptions(
 		feature_type("fbank"), add_pitch(false),
 		add_cmvn(false), add_deltas(false), splice_feats(false), samp_freq(16000) {
 
-	if (config.feature_type == "mfcc" || config.feature_type == "plp" ||
-	  config.feature_type == "fbank") {
-		feature_type = config.feature_type;
-	} else {
-		KALDI_ERR << "Invalid feature type: " << config.feature_type << ". "
-			  << "Supported feature types: mfcc, plp, fbank.";
-	}
-
-	if (config.mfcc_config != "") {
+	feature_type = config.feature_type;
+	if (config.feature_type == "mfcc" && config.mfcc_config != "") {
 		ReadConfigFromFile(config.mfcc_config, &mfcc_opts);
 		samp_freq = mfcc_opts.frame_opts.samp_freq;
-		if (feature_type != "mfcc")
-			KALDI_WARN << "--mfcc-config option has no effect "
-				 << "since feature type is set to " << feature_type << ".";
-	}  // else use the defaults.
-
-	if (config.plp_config != "") {
+	} else if (config.feature_type == "plp" && config.plp_config != "") {
 		ReadConfigFromFile(config.plp_config, &plp_opts);
 		samp_freq = plp_opts.frame_opts.samp_freq;
-		if (feature_type != "plp")
-			KALDI_WARN << "--plp-config option has no effect "
-				 << "since feature type is set to " << feature_type << ".";
-	}  // else use the defaults.
-
-	if (config.fbank_config != "") {
+	} else if (config.feature_type == "fbank" && config.fbank_config != "") {
 		ReadConfigFromFile(config.fbank_config, &fbank_opts);
 		samp_freq = fbank_opts.frame_opts.samp_freq;
-		if (feature_type != "fbank")
-			KALDI_WARN << "--fbank-config option has no effect "
-				 << "since feature type is set to " << feature_type << ".";
-	}  // else use the defaults.
+	} else if (config.feature_type == "raw" && config.raw_config != "") {
+		ReadConfigFromFile(config.raw_config, &raw_opts);
+	} else {
+		KALDI_ERR << "Invalid feature type: " << config.feature_type << ". "
+					  << "Supported feature types: mfcc, plp, fbank or raw";
+	}
 
     add_cmvn = config.add_cmvn;
 	if (config.cmvn_config != "") {
@@ -93,6 +78,8 @@ OnlineNnetFeaturePipeline::OnlineNnetFeaturePipeline(
     base_feature_ = new OnlineStreamPlp(opts.plp_opts);
   } else if (opts.feature_type == "fbank") {
     base_feature_ = new OnlineStreamFbank(opts.fbank_opts);
+  } else if (opts.feature_type == "raw") {
+	base_feature_ = new OnlineStreamRawFeature(opts.raw_opts);
   } else {
     KALDI_ERR << "Code error: invalid feature type " << opts.feature_type;
   }
@@ -172,6 +159,22 @@ void OnlineNnetFeaturePipeline::AcceptWaveform(
 
 void OnlineNnetFeaturePipeline::InputFinished() {
   base_feature_->InputFinished();
+}
+
+OnlineStreamBaseFeature* OnlineNnetFeaturePipeline::GetBaseFeature() const {
+	return this->base_feature_;
+}
+
+OnlineStreamCmvnFeature* OnlineNnetFeaturePipeline::GetCmvnFeature() const {
+	return this->cmvn_feature_;
+}
+
+OnlineStreamDeltaFeature* OnlineNnetFeaturePipeline::GetDeltaFeature() const {
+	return this->delta_feature_;
+}
+
+OnlineStreamSpliceFeature* OnlineNnetFeaturePipeline::GetSpliceFeature() const {
+	return this->splice_feature_;
 }
 
 } // namespace kaldi

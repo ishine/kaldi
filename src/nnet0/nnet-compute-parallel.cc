@@ -201,9 +201,9 @@ private:
 	    VectorRandomizer weights_randomizer(*rnd_opts);
 	    VectorRandomizer flags_randomizer(*rnd_opts);
 
-	    Xent xent;
-	    Mse mse;
-	    MultiTaskLoss multitask;
+	    Xent xent(*opts->loss_opts);
+	    Mse mse(*opts->loss_opts);
+	    MultiTaskLoss multitask(*opts->loss_opts);
 	    if (0 == objective_function.compare(0, 9, "multitask")) {
 		  // objective_function contains something like :
 		  // 'multitask,xent,2456,1.0,mse,440,0.001'

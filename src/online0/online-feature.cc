@@ -112,6 +112,36 @@ template class OnlineStreamGenericBaseFeature<PlpComputer>;
 template class OnlineStreamGenericBaseFeature<FbankComputer>;
 
 
+OnlineStreamRawFeature::OnlineStreamRawFeature(const RawFeaturesOptions &opts):
+		opts_(opts), input_finished_(false) {
+	raw_feature_.resize(0);
+}
+
+void OnlineStreamRawFeature::AcceptWaveform(BaseFloat sampling_rate,
+		const VectorBase<BaseFloat> &raw_feat) {
+	if (raw_feat.Dim() == 0)
+		return;  // Nothing to do.
+	if (input_finished_)
+		KALDI_ERR << "AcceptWaveform called after InputFinished() was called.";
+
+	int feat_dim = opts_.feat_dim;
+	int nframes = raw_feat.Dim()/feat_dim;
+
+	KALDI_ASSERT(raw_feat.Dim()/feat_dim == nframes);
+
+    Vector<BaseFloat> row(feat_dim);
+	for (int i = 0; i < nframes; i++) {
+        row.CopyFromVec(SubVector<BaseFloat>(raw_feat, i*feat_dim, feat_dim));
+		raw_feature_.push_back(row);
+	}
+}
+
+void OnlineStreamRawFeature::GetFrame(int32 frame,
+		VectorBase<BaseFloat> *feat) {
+	  // 'at' does size checking.
+	feat->CopyFromVec(raw_feature_.at(frame));
+}
+
 int32 OnlineStreamDeltaFeature::Dim() const {
   int32 src_dim = src_->Dim();
   return src_dim * (1 + opts_.order);

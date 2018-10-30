@@ -48,8 +48,8 @@ struct NnetLstmUpdateOptions : public NnetUpdateOptions {
     int32 dump_interval;
     //lstm
 
-    NnetLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, parallel_opts), batch_size(20), num_stream(4), dump_interval(0) { }
+    NnetLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
+    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), batch_size(20), num_stream(4), dump_interval(0) { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -77,7 +77,11 @@ struct NnetLstmStats {
     Xent xent;
     Mse mse;
 
-    NnetLstmStats() { std::memset(this, 0, sizeof(*this)); }
+    NnetLstmStats(LossOptions &loss_opts):
+    		num_done(0),num_no_tgt_mat(0),num_other_error(0),total_frames(0),
+            xent(loss_opts), mse(loss_opts) {
+    	        // std::memset(this, 0, sizeof(*this));
+    }
 
     void MergeStats(NnetLstmUpdateOptions *opts, int root)
     {
@@ -118,6 +122,7 @@ struct NnetLstmStats {
 
         if (opts->objective_function == "xent") {
         	KALDI_LOG << xent.Report();
+        	KALDI_LOG << xent.ReportPerClass();
         } else if (opts->objective_function == "mse") {
         	KALDI_LOG << mse.Report();
         } else {

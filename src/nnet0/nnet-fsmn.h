@@ -1,6 +1,7 @@
 // nnet0/nnet-fsmn.h
 
 // Copyright 2018 Alibaba.Inc (Author: ShiLiang Zhang) 
+// Copyright 2018 Alibaba.Inc (Author: Wei Deng) 
 
 // See ../../COPYING for clarification regarding multiple authors
 //

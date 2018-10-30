@@ -121,6 +121,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		example->utt = utt;
 		lent = utt_len/skip_frames;
 		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
 		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
 		example->input_frames.Resize(feat_lent, input_frames.NumCols());
 		example->targets.resize(lent);
@@ -199,6 +200,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
     	lent = utt_len/skip_frames;
     	lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
     	feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
     	example->input_frames.Resize(feat_lent, input_frames.NumCols());
 
@@ -266,7 +268,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 	// check for temporal length of numerator alignments
 	if ((int32)num_ali.size() != utt_frames){
-	KALDI_WARN << "Utterance " << utt << ": Numerator alignment has wrong length "
+	    KALDI_WARN << "Utterance " << utt << ": Numerator alignment has wrong length "
 			   << num_ali.size() << " vs. "<< utt_frames;
 		model_sync->LockStates();
 		stats->num_other_error++;
@@ -377,8 +379,10 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 		example = new FeatureExample(feature_reader, sweep_frames_reader, opts);
 		example->utt = utt;
 
+        skip_frames = opts->skip_frames > utt_len ? utt_len : skip_frames;
 		lent = utt_len/skip_frames;
 		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
 		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
 		example->input_frames.Resize(feat_lent, input_frames.NumCols());
 

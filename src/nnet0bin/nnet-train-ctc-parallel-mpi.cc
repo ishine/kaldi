@@ -35,7 +35,7 @@
 int main(int argc, char *argv[]) {
   using namespace kaldi;
   using namespace kaldi::nnet0;
-  typedef kaldi::int32 int32;  
+  typedef kaldi::int32 int32;
   
   try {
     const char *usage =
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
         "This version use pdf-posterior as targets, prepared typically by ali-to-post.\n"
         "Usage:  nnet-train-ctc-parallel-mpi [options] <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
         "e.g.: \n"
-        " nnet-train-frmshuff scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
+        " nnet-train-ctc-parallel-mpi scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
 
     ParseOptions po(usage);
 
@@ -52,6 +52,9 @@ int main(int argc, char *argv[]) {
 
     NnetDataRandomizerOptions rnd_opts;
     rnd_opts.Register(&po);
+    
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
 
     NnetParallelOptions parallel_opts;
 
@@ -62,7 +65,7 @@ int main(int argc, char *argv[]) {
 
     parallel_opts.Register(&po);
 
-    NnetCtcUpdateOptions opts(&trn_opts, &rnd_opts, &parallel_opts);
+    NnetCtcUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -84,8 +87,8 @@ int main(int argc, char *argv[]) {
     //mpi
     	NnetParallelUtil util;
 	    std::string scpfile;
-	    feature_rspecifier = util.AddSuffix(feature_rspecifier, parallel_opts.myid);
-	    targets_rspecifier = util.AddSuffix(targets_rspecifier, parallel_opts.myid);
+	    feature_rspecifier = util.ReplaceJobId(feature_rspecifier, parallel_opts.myid);
+	    targets_rspecifier = util.ReplaceJobId(targets_rspecifier, parallel_opts.myid);
 	    scpfile = util.GetFilename(feature_rspecifier);
 	    if (parallel_opts.myid == 0)
 	    	parallel_opts.num_merge = util.NumofCEMerge(scpfile, parallel_opts.merge_size);
@@ -94,7 +97,7 @@ int main(int argc, char *argv[]) {
 		MPI_Bcast((void*)(&parallel_opts.merge_size), 1, MPI_INT, 0, MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.num_merge), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-	    std::string logfn = util.FAddSuffix(parallel_opts.log_file, parallel_opts.myid);
+	    std::string logfn = util.ReplaceJobId(parallel_opts.log_file, parallel_opts.myid);
 
 	    //stderr redirect to logfile
 	    int    fd;
@@ -127,13 +130,13 @@ int main(int argc, char *argv[]) {
     KALDI_LOG << "TRAINING STARTED";
 
 
-    if (opts.objective_function == "xent"){
-    	stats = new NnetStats;
+    if (opts.objective_function == "xent") {
+    	stats = new NnetStats(loss_opts);
     	NnetCEUpdateParallel(&opts, model_filename, feature_rspecifier,
     			targets_rspecifier, &nnet, stats);
     }
-    else if (opts.objective_function == "ctc"){
-    	stats = new NnetCtcStats;
+    else if (opts.objective_function == "ctc") {
+    	stats = new NnetCtcStats(loss_opts);
     	NnetCtcUpdateParallel(&opts, model_filename, feature_rspecifier,
     			//targets_rspecifier, &nnet, (NnetCtcStats*)(stats));
     			targets_rspecifier, &nnet, dynamic_cast<NnetCtcStats*>(stats));
@@ -149,7 +152,6 @@ int main(int argc, char *argv[]) {
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();
 
-
     stats->Print(&opts, time_now);
 
 #if HAVE_CUDA==1
@@ -157,22 +159,21 @@ int main(int argc, char *argv[]) {
 #endif
 
     //restore stderr
-     fflush(stderr);
-     dup2(fd, fileno(stderr));
-     close(fd);
-     clearerr(stderr);
-     fsetpos(stderr, &pos);
+    fflush(stderr);
+    dup2(fd, fileno(stderr));
+    close(fd);
+    clearerr(stderr);
+    fsetpos(stderr, &pos);
 
-     //merge global statistic data
-     stats->MergeStats(&opts, 0);
+    //merge global statistic data
+    stats->MergeStats(&opts, 0);
 
-     if (parallel_opts.myid == 0)
-     {
-         time_now = time.Elapsed();
-         stats->Print(&opts, time_now);
-     }
+    if (parallel_opts.myid == 0) {
+        time_now = time.Elapsed();
+        stats->Print(&opts, time_now);
+    }
 
-     MPI_Finalize();
+    MPI_Finalize();
 
     return 0;
   } catch(const std::exception &e) {

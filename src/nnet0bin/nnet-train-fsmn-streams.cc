@@ -42,10 +42,12 @@ int main(int argc, char *argv[]) {
 
     NnetTrainOptions trn_opts;
     trn_opts.Register(&po);
+
     NnetDataRandomizerOptions rnd_opts;
     rnd_opts.Register(&po);
-    //LossOptions loss_opts;
-    //loss_opts.Register(&po);
+
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
 
     bool binary = true;
     po.Register("binary", &binary, "Write output in binary mode");
@@ -144,13 +146,10 @@ int main(int argc, char *argv[]) {
     VectorRandomizer weights_randomizer(rnd_opts);
     VectorRandomizer flags_randomizer(rnd_opts);
 
-    //Xent xent(loss_opts);
-    //Mse mse(loss_opts);
+    Xent xent(loss_opts);
+    Mse mse(loss_opts);
 
-    //MultiTaskLoss multitask(loss_opts);
-    Xent xent;
-    Mse mse;
-    MultiTaskLoss multitask;
+    MultiTaskLoss multitask(loss_opts);
     if (0 == objective_function.compare(0, 9, "multitask")) {
       // objective_function contains something like :
       // 'multitask,xent,2456,1.0,mse,440,0.001'

@@ -9,13 +9,15 @@ LDLIBS += $(MPICH_LDLIBS)
 
 BINFILES = pid-test online-nnet-ipc-decoder  online-nnet-ipc-forward \
 		   online-nnet-wav-decoder  online-feature-extractor online-decoder-test \
-		   online-fast-decoder online-ivector-extractor-test online-ivector-enroll-test
+		   online-fast-decoder online-ivector-extractor-test online-ivector-enroll-test \
+		   online-xvector-extractor-test online-xvector-score-test
 
 OBJFILES =
 
 TESTFILES =
 
-ADDLIBS = ../online0/kaldi-online0.a ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a\
+ADDLIBS = ../online0/kaldi-online0.a ../ivector/kaldi-ivector.a \
+		  ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a ../nnet3/kaldi-nnet3.a\
           ../cudamatrix/kaldi-cudamatrix.a ../decoder/kaldi-decoder.a \
           ../lat/kaldi-lat.a ../fstext/kaldi-fstext.a ../hmm/kaldi-hmm.a \
           ../feat/kaldi-feat.a ../transform/kaldi-transform.a \
