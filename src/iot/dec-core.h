@@ -151,6 +151,7 @@ class DecCore {
   struct LmTokenList;
 
   typedef WfstStateId ViterbiState;
+  typedef WfstStateId LmState;
 
 /* ----- For standard on-the-fly (LA o LM) composition implementation -----
   typedef uint64 ViterbiState;
@@ -172,49 +173,70 @@ class DecCore {
   }
 */
 
-/* ------------------------------ LmToken ------------------------------ */
-  struct LmToken {
-    WfstStateId state;
-    BaseFloat cost;
-    struct LmToken *next;
+/*------------------------------ Token ------------------------------*/
+  struct Token {
+    BaseFloat total_cost;
+    BaseFloat extra_cost;
+    ForwardLink *links;
+    Token *next;
+    Token *backpointer;
 
-    inline LmToken(WfstStateId state, BaseFloat cost, LmToken *next) 
-     : state(state), cost(cost), next(next)
+    LmTokenList *lm_toks; // co-hypothesis list associate with this token
+
+    inline Token(
+        BaseFloat total_cost,
+        BaseFloat extra_cost,
+        ForwardLink *links,
+        Token *next,
+        Token *backpointer,
+        LmTokenList *lm_toks) :
+      total_cost(total_cost),
+      extra_cost(extra_cost),
+      links(links),
+      next(next),
+      backpointer(backpointer),
+      lm_toks(lm_toks)
     { }
 
-    inline ~LmToken() { }
+    inline ~Token() { }
   };
 
-  inline LmToken* NewLmToken(WfstStateId state, BaseFloat cost, LmToken *next) {
-    LmToken *tok = (LmToken*) lm_token_pool_->MallocElem();
-    new (tok) LmToken(state, cost, next);  // placement new
+  inline Token* NewToken(
+      BaseFloat total_cost,
+      BaseFloat extra_cost,
+      ForwardLink *links,
+      Token *next,
+      Token *backpointer,
+      LmTokenList *lm_toks) {
+    Token *tok = (Token*) token_pool_->MallocElem();
+    // placement new
+    new (tok) Token(total_cost, extra_cost, links, next, backpointer, lm_toks);
     return tok;
   }
 
-  inline void DeleteLmToken(LmToken *tok) {
-    tok->~LmToken();
-    lm_token_pool_->FreeElem(tok);
+  inline void DeleteToken(Token *tok) {
+    // Forward links are not owned by token
+    /*
+    if (tok->lm_toks != NULL) {
+      DeleteLmTokenList(tok->lm_toks);
+    }
+    */
+    tok->~Token();
+    token_pool_->FreeElem(tok);
   }
 
-  struct LmTokenList {
-    LmToken *head;
-    LmToken *best;
+  struct TokenList {
+    Token *toks;
+    bool must_prune_forward_links;
+    bool must_prune_tokens;
 
-    LmTokenList() : 
-      head(NULL),
-      best(NULL)
+    TokenList() :
+      toks(NULL),
+      must_prune_forward_links(true),
+      must_prune_tokens(true)
     { }
   };
 
-  inline void DeleteLmTokenListFromToken(Token *tok) {
-    LmToken *p = tok->lm_toks.head, *next;
-    while (p != NULL) {
-      next = p->next;
-      DeleteLmToken(p);
-      p = next;
-    }
-    tok->lm_toks.best = NULL;
-  }
 
   /*------------------------------ ForwardLinks ------------------------------*/
   struct ForwardLink {
@@ -271,70 +293,99 @@ class DecCore {
     tok->links = NULL;
   }
 
-/*------------------------------ Token ------------------------------*/
-  struct Token {
-    BaseFloat total_cost;
-    BaseFloat extra_cost;
-    ForwardLink *links;
-    Token *next;
-    Token *backpointer;
 
-    // a list of lm hypothesis associate with this token
-    LmTokenList lm_toks;
+/* ------------------------------ LmToken ------------------------------ */
+  struct LmToken {
+    LmState state;
+    BaseFloat cost;
+    struct LmToken *next;
 
-    inline Token(
-        BaseFloat total_cost,
-        BaseFloat extra_cost,
-        ForwardLink *links,
-        Token *next,
-        Token *backpointer) :
-      total_cost(total_cost),
-      extra_cost(extra_cost),
-      links(links),
-      next(next),
-      backpointer(backpointer),
-      lm_toks()
+    inline LmToken(LmState state, BaseFloat cost, LmToken *next)
+     : state(state), cost(cost), next(next)
     { }
 
-    inline ~Token() { }
+    inline ~LmToken() { }
   };
 
-  inline Token* NewToken(
-      BaseFloat total_cost,
-      BaseFloat extra_cost,
-      ForwardLink *links,
-      Token *next,
-      Token *backpointer) {
-    Token *tok = (Token*) token_pool_->MallocElem();
-    // placement new
-    new (tok) Token(total_cost, extra_cost, links, next, backpointer);
+  inline LmToken* NewLmToken(LmState lm_state, BaseFloat cost, LmToken *next) {
+    LmToken *tok = (LmToken*) lm_token_pool_->MallocElem();
+    new (tok) LmToken(lm_state, cost, next);  // placement new
     return tok;
   }
 
-  inline void DeleteToken(Token *tok) {
-    // Forward links are not owned by token
-    DeleteLmTokenListFromToken(tok);
-    tok->~Token();
-    token_pool_->FreeElem(tok);
+  inline void DeleteLmToken(LmToken *tok) {
+    tok->~LmToken();
+    lm_token_pool_->FreeElem(tok);
   }
 
-  struct TokenList {
-    Token *toks;
-    bool must_prune_forward_links;
-    bool must_prune_tokens;
+  struct LmTokenList {
+    LmToken *head;
+    LmToken *best;
 
-    TokenList() :
-      toks(NULL),
-      must_prune_forward_links(true),
-      must_prune_tokens(true)
+    LmTokenList() : 
+      head(NULL),
+      best(NULL)
     { }
   };
+
+  void InsertLmToken(LmTokenList *list, LmState state, BaseFloat cost) {
+    KALDI_ASSERT(list != NULL);
+    if (list->head == NULL) {
+      LmToken *tok = NewLmToken(state, cost, NULL);
+      list->head = tok;
+      list->best = tok;
+      return;
+    }
+
+    if (cost < list->best->cost) {
+      list->head->state = state;
+      list->head->cost = cost;
+    }
+
+    /*
+    bool replaced = false;
+    for (LmToken *t = list->head; t != NULL; t = t->next) {
+      if (t->state == state) {
+        if (t->cost > cost) {
+          t->cost = cost;
+          replaced = true;
+        }
+      }
+    }
+
+    if (!replaced) {
+      LmToken *tok = NewLmToken(state, cost, list->head);
+      list->head = tok;
+    }
+
+    for (LmToken *t = list->head; t != NULL; t=t->next) {
+      if (t->cost < list->best->cost) {
+        list->best = t;
+      }
+    }
+    */
+  }
+
+  inline void DeleteLmTokenList(LmTokenList *lm_toks) {
+    KALDI_ASSERT(lm_toks != NULL);
+    LmToken *p = lm_toks->head, *next;
+    while (p != NULL) {
+      next = p->next;
+      DeleteLmToken(p);
+      p = next;
+    }
+    lm_toks->best = NULL;
+    DELETE(lm_toks);
+  }
+
 
   typedef HashList<ViterbiState, Token*>::Elem Elem;
 
   void PossiblyResizeHash(size_t num_toks);
 
-  inline WfstStateId PropagateLm(WfstStateId lm_state, WfstArc *arc);
+
+  inline void MergeLmTokenList(Token *from, Token *to);
+  inline void PropagateLm(Token *from, WfstArc *arc, Token *to);
 
   // FindOrAddToken either locates a token in hash of token_set_, or if necessary
   // inserts a new, empty token (i.e. with no forward links) for the current
@@ -344,9 +395,7 @@ class DecCore {
   // index plus one, which is used to index into the token_net_ array.
   // Returns the Token pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.
-  inline Token *FindOrAddToken(ViterbiState state, WfstStateId lm_state, int32 t,
-                               BaseFloat total_cost, Token *backpointer,
-                               bool *changed);
+  inline Token *TokenViterbi(Token *tok, int32 t, ViterbiState to_state, bool *changed);
 
   // This function computes the final-costs for tokens active on the final
   // frame.  It outputs to final-costs, if non-NULL, a map from the Token*
@@ -413,7 +462,6 @@ class DecCore {
   BaseFloat ProcessEmitting(DecodableInterface *decodable);
   void ProcessNonemitting(BaseFloat cost_cutoff);
 
-
   // There are various cleanup tasks... the the token_set_ structure contains
   // singly linked lists of Token pointers, where Elem is the list type.
   // It also indexes them in a hash, indexed by state (this hash is only
@@ -475,7 +523,7 @@ class DecCore {
   BaseFloat final_best_cost_;
 
   float timer_;
-  
+
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecCore);
 };
 
