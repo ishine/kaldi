@@ -14,7 +14,7 @@ OBJFILES = tinycthread.o common.o memory-pool.o link.o list.o graph.o \
 
 LIBNAME = kaldi-iot
 
-ADDLIBS = ../ivector/kaldi-ivector.a ../nnet3/kaldi-nnet3.a \
+ADDLIBS = ../online2/kaldi-online2.a ../ivector/kaldi-ivector.a ../nnet3/kaldi-nnet3.a \
           ../chain/kaldi-chain.a ../nnet2/kaldi-nnet2.a \
           ../cudamatrix/kaldi-cudamatrix.a \
           ../lat/kaldi-lat.a ../hmm/kaldi-hmm.a ../feat/kaldi-feat.a \

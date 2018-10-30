@@ -151,7 +151,7 @@ $(EXT_SUBDIRS) : mklibdir ext_depend
 #1)The tools depend on all the libraries
 bin fstbin gmmbin fgmmbin sgmm2bin featbin nnetbin nnet2bin nnet3bin chainbin latbin ivectorbin lmbin kwsbin online2bin rnnlmbin iotbin: \
  base matrix util feat tree gmm transform sgmm2 fstext hmm \
- lm decoder lat cudamatrix nnet nnet2 nnet3 ivector chain kws online2 rnnlm iot
+ lm decoder lat cudamatrix nnet nnet2 nnet3 ivector chain kws online online2 rnnlm iot
 
 #2)The libraries have inter-dependencies
 base: base/.depend.mk
@@ -180,4 +180,4 @@ onlinebin: base matrix util feat tree gmm transform sgmm2 fstext hmm lm decoder 
 online: decoder gmm transform feat matrix util base lat hmm tree
 online2: decoder gmm transform feat matrix util base lat hmm tree ivector cudamatrix nnet2 nnet3 chain
 kws: base util hmm tree matrix lat
-iot: base matrix util feat tree hmm gmm transform fstext cudamatrix nnet2 nnet3 chain ivector 
+iot: base matrix util feat tree hmm gmm transform fstext cudamatrix nnet2 nnet3 chain ivector online2
