@@ -239,16 +239,39 @@ void AddRowSumMatStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des_vec,
 	  for (int32 i = 0; i < size; i++)
 		  KALDI_ASSERT(des_vec[i]->Dim() == src[i]->NumCols());
 
+	  MatrixTransposeType trans = kTrans;
+
 #if HAVE_CUDA == 1
 	  if (CuDevice::Instantiate().Enabled()) {
 	    CuTimer tim;
 	    for (int32 i = 0; i < size; i++) {
-	   			size_t dimBlock = src[i]->NumRows() > CU1DBLOCK ? CU1DBLOCK : src[i]->NumRows();
-	   			size_t dimGrid = src[i]->NumCols();
+            /*
+			size_t dimBlock = src[i]->NumRows() > CU1DBLOCK ? CU1DBLOCK : src[i]->NumRows();
+			size_t dimGrid = src[i]->NumCols();
 
-	   			cuda_col_sum_reduce(dimGrid, dimBlock, alpha, des_vec[i]->Data(), src[i]->Data(), src[i]->Dim(), beta, des_vec[i]->GetLocalCudaStream());
+			cuda_col_sum_reduce(dimGrid, dimBlock, alpha, des_vec[i]->Data(), src[i]->Data(), src[i]->Dim(), beta, des_vec[i]->GetLocalCudaStream());
+            */
+
+	    	if (des_vec[i]->Dim() == 0 || src[i]->NumRows() == 0)
+	    		continue;
+
+	    	CuVector<Real> ones(src[i]->NumRows());
+	    	ones.Set(1.0);
+
+            cublasSetStream(des_vec[i]->GetLocalCublasHandle(), des_vec[i]->GetLocalCudaStream());
+	    	CUBLAS_SAFE_CALL(cublas_gemv(des_vec[i]->GetLocalCublasHandle(),
+						    (trans==kTrans? CUBLAS_OP_N:CUBLAS_OP_T),
+						    src[i]->NumCols(), src[i]->NumRows(), alpha, src[i]->Data(),
+						    src[i]->Stride(), ones.Data(), 1, beta, des_vec[i]->Data(), 1));
 	    }
-	    CU_SAFE_CALL(cudaGetLastError());
+	    //CU_SAFE_CALL(cudaGetLastError());
+	    CU_SAFE_CALL(cudaDeviceSynchronize());
+
+        /*
+        cudaError_t cudaStatus = cudaDeviceSynchronize();
+        if (cudaStatus != cudaSuccess)
+            fprintf(stderr, "!!!! GPU program execution error on cudaDeviceSynchronize : cudaError=%d,(%s)\n", cudaStatus,cudaGetErrorString(cudaStatus));
+        */
 
 	    CuDevice::Instantiate().AccuProfile(__func__, tim);
 	  } else

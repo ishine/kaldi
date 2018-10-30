@@ -216,6 +216,13 @@ class CuMatrixBase {
   void MulRows(const CuMatrixBase<Real> &src,
                const CuArrayBase<MatrixIndexT> &indexes);
 
+  /// Does for each row r, this.Row(r) = alpha * this.Row(r)/src.row(indexes[r]),
+  /// where '*=' is elementwise multiplication.
+  /// If indexes[r] < 0, does not add anything.
+  /// src.NumCols() must equal this.NumCols()
+  void DivRows(const CuMatrixBase<Real> &src,
+               const CuArrayBase<MatrixIndexT> &indexes);
+
 
   /// Does for each row r, this.Row(r) += alpha * src[r],
   /// treating src[r] as the beginning of a region of memory representing
@@ -913,7 +920,7 @@ class CuMatrixBase {
   {
       //return NULL; // cudastream cause memory leaky[unsloved];
 	  if (cuda_stream_ == NULL)
-		  cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamNonBlocking);
+		  cudaStreamCreateWithFlags(&cuda_stream_, cudaStreamDefault); // cudaStreamNonBlocking
 		  //cudaStreamCreate(&cuda_stream_);
 	  return cuda_stream_;
   }
