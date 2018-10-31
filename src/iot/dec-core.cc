@@ -573,31 +573,42 @@ void DecCore::MergeLmTokenList(Token *from, Token *to) {
   BaseFloat la_cost = 0.0f;
 
   la_cost = from->total_cost - from->lm_toks->best->cost;
-  for (LmToken *tok = from->lm_toks->head; tok != NULL; tok = tok->next) {
-    BaseFloat cost = tok->cost + la_cost;
-    InsertLmToken(lm_toks, tok->state, cost);
+  for (LmToken *t = from->lm_toks->head; t != NULL; t = t->next) {
+    BaseFloat cost = t->cost + la_cost;
+    if (cost < to->total_cost + config_.lm_token_beam) {
+      InsertLmToken(lm_toks, t->state, cost);
+    }
   }
 
   la_cost = to->total_cost - to->lm_toks->best->cost;
-  for (LmToken *tok = to->lm_toks->head; tok != NULL; tok = tok->next) {
-    BaseFloat cost = tok->cost + la_cost;
-    InsertLmToken(lm_toks, tok->state, cost);
+  for (LmToken *t = to->lm_toks->head; t != NULL; t = t->next) {
+    BaseFloat cost = t->cost + la_cost;
+    if (cost < to->total_cost + config_.lm_token_beam) {
+      InsertLmToken(lm_toks, t->state, cost);
+    }
   }
 
   to->lm_toks = lm_toks;
-  //to->total_cost = to->lm_toks->best->cost;
 
   // debug
   int n = 0;
-  for (LmToken *tok = lm_toks->head; tok != NULL; tok = tok->next) {
+  for (LmToken *t = lm_toks->head; t != NULL; t = t->next) {
     n++;
-    /*
-    if (n > 1000) {
-      KALDI_VLOG(2) << "lm tok elem > 1000:" << tok->state;
-    }
-    */
   }
-  //KALDI_VLOG(2) << "merged lm toks length:" << n;
+  
+  /*
+  if (n > 100) {
+    KALDI_VLOG(2) << "merged ts length:" << n;
+  }
+  if (n > 100) {
+    printf("LOG ==>[%f] ", lm_toks->best->cost);
+    for (LmToken *t = lm_toks->head; t != NULL; t = t->next) {
+      printf("%d:%f ", t->state, t->cost);
+    }
+    printf("\n");
+  }
+  */
+  
 }
 
 inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState to_state, bool *changed) {
@@ -612,19 +623,22 @@ inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState t
     if (changed) *changed = true;
     return tok;
   } else {
-    Token *old_tok = e_found->val;
-    if (old_tok->total_cost > tok->total_cost) {  // replace old token
-      old_tok->total_cost = tok->total_cost;
-      old_tok->backpointer = tok->backpointer;
+    Token *dst_tok = e_found->val;
+    if (dst_tok->total_cost > tok->total_cost) {  // replace old token
+      std::swap(dst_tok->total_cost, tok->total_cost);
+      std::swap(dst_tok->lm_toks, tok->lm_toks);
+
+      dst_tok->backpointer = tok->backpointer;
+
       if (changed) *changed = true;
     } else {
       if (changed) *changed = false;
     }
     if (lm_fst_ != NULL) {
-      MergeLmTokenList(tok, old_tok);
+      MergeLmTokenList(tok, dst_tok);
     }
     DeleteToken(tok);
-    return old_tok;
+    return dst_tok;
   }
 }
 

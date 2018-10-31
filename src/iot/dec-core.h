@@ -24,6 +24,7 @@ struct DecCoreConfig {
   int32 max_active;
   int32 min_active;
   BaseFloat lattice_beam;
+  BaseFloat lm_token_beam;
   int32 prune_interval;
   bool determinize_lattice; // not inspected by this class... used in
                             // command-line program.
@@ -46,6 +47,7 @@ struct DecCoreConfig {
     max_active(std::numeric_limits<int32>::max()),
     min_active(200),
     lattice_beam(10.0),
+    lm_token_beam(3.0f),
     prune_interval(25),
     determinize_lattice(true),
     beam_delta(0.5),
@@ -63,6 +65,7 @@ struct DecCoreConfig {
     opts->Register("min-active", &min_active, "Decoder minimum #active states.");
     opts->Register("lattice-beam", &lattice_beam, "Lattice generation beam.  Larger->slower, "
                    "and deeper lattices");
+    opts->Register("lm-token-beam", &lm_token_beam, "lm token beam.  Larger->slower");
     opts->Register("prune-interval", &prune_interval, "Interval (in frames) at "
                    "which to prune tokens");
     opts->Register("determinize-lattice", &determinize_lattice, "If true, "
@@ -337,18 +340,21 @@ class DecCore {
       return;
     }
 
+/*
     if (cost < list->best->cost) {
       list->head->state = state;
       list->head->cost = cost;
     }
+    */
 
-    /*
     bool replaced = false;
     for (LmToken *t = list->head; t != NULL; t = t->next) {
       if (t->state == state) {
         if (t->cost > cost) {
           t->cost = cost;
           replaced = true;
+        } else {
+          return;
         }
       }
     }
@@ -358,12 +364,11 @@ class DecCore {
       list->head = tok;
     }
 
-    for (LmToken *t = list->head; t != NULL; t=t->next) {
+    for (LmToken *t = list->head; t != NULL; t = t->next) {
       if (t->cost < list->best->cost) {
         list->best = t;
       }
     }
-    */
   }
 
   inline void DeleteLmTokenList(LmTokenList *lm_toks) {

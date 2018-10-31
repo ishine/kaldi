@@ -203,13 +203,18 @@ int main(int argc, char *argv[]) {
         KALDI_VLOG(1) << "LM" << i+1 << ":" << ext_lm_files[i] << " scale:" << ext_lm_scale[i];
         ext_raw_fst.push_back(fst::CastOrConvertToVectorFst(fst::ReadFstKaldiGeneric(ext_lm_files[i])));
         ApplyProbabilityScale(ext_lm_scale[i], ext_raw_fst[i]);
-        //ext_ngram_lm.push_back(new NgramLmFst<fst::StdArc>(ext_raw_fst[i]));
-        //ext_cache_lm.push_back(new ScaleCacheLmFst<fst::StdArc>(ext_ngram_lm[i], ext_lm_scale[i]));
+        
+        /*
+        ext_ngram_lm.push_back(new NgramLmFst<fst::StdArc>(ext_raw_fst[i]));
+        ext_cache_lm.push_back(new ScaleCacheLmFst<fst::StdArc>(ext_ngram_lm[i], ext_lm_scale[i]));
+        */
       }
+      
       NgramLmFst<fst::StdArc>* fst1 = new NgramLmFst<fst::StdArc>(ext_raw_fst[0]);
       NgramLmFst<fst::StdArc>* fst2 = new NgramLmFst<fst::StdArc>(ext_raw_fst[1]);
       ComposeLmFst<fst::StdArc>* composed_fst = new ComposeLmFst<fst::StdArc>(fst1, fst2);
       ext_cache_lm.push_back(new ScaleCacheLmFst<fst::StdArc>(composed_fst, 1.0));
+      
     }
 
     // create decoder
