@@ -820,6 +820,7 @@ bool CuDevice::Initialize()
 	                  << cudaGetErrorString((cudaError_t)ret);
 	    }
 	  }
+      multi_gpu_ = true;
       //device_id_ = 0;
       return true;
 }
@@ -1134,6 +1135,7 @@ CuDevice::~CuDevice() {
 // define and initialize the static members of the CuDevice object.
 int32 CuDevice::device_id_ = -1;
 bool CuDevice::multi_threaded_ = false;
+bool CuDevice::multi_gpu_ = false;
 unordered_map<std::string, double, StringHasher> CuDevice::profile_map_;
 std::mutex CuDevice::profile_mutex_;
 int64 CuDevice::free_memory_at_startup_;

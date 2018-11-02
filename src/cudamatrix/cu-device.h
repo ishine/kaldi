@@ -107,8 +107,11 @@ class CuDevice {
   // the results of previous allocations to avoid the very large overhead that
   // CUDA's allocation seems to give for some setups.
   inline void* Malloc(size_t size) {
-    return multi_threaded_ ? g_cuda_allocator.MallocLocking(size) :
-        g_cuda_allocator.MallocLocal(size);
+    if (multi_gpu_)
+        return g_cuda_allocator.MallocLocal(size);
+    else
+        return multi_threaded_ ? g_cuda_allocator.MallocLocking(size) :
+        g_cuda_allocator.Malloc(size);
   }
 
   inline void* MallocPitch(size_t row_bytes, size_t num_rows, size_t *pitch) {
@@ -119,17 +122,19 @@ class CuDevice {
       // It is 512 on K40c with CUDA 7.5
       // "% 8" ensures that any 8 adjacent allocations have different pitches
       // if their original pitches are same in the normal mode.
-      return g_cuda_allocator.MallocPitchLocal(
-          row_bytes + 512 * RandInt(0, 4), num_rows,
-          pitch);
+      return multi_gpu_ ? g_cuda_allocator.MallocPitchLocal(row_bytes + 512 * RandInt(0, 4), num_rows, pitch) :
+                g_cuda_allocator.MallocPitch(row_bytes + 512 * RandInt(0, 4), num_rows, pitch);
+
     } else {
-      return g_cuda_allocator.MallocPitchLocal(row_bytes, num_rows, pitch);
+      return multi_gpu_ ? g_cuda_allocator.MallocPitchLocal(row_bytes, num_rows, pitch) :
+                g_cuda_allocator.MallocPitch(row_bytes, num_rows, pitch);
     }
   }
 
   inline void Free(void *ptr) {
-    if (multi_threaded_) g_cuda_allocator.FreeLocking(ptr);
-    else g_cuda_allocator.FreeLocal(ptr);
+    if (multi_gpu_) g_cuda_allocator.FreeLocal(ptr);
+    else if (multi_threaded_) g_cuda_allocator.FreeLocking(ptr);
+    else g_cuda_allocator.Free(ptr);
   }
 
   /// Select a GPU for computation.  You are supposed to call this function just
@@ -282,6 +287,7 @@ class CuDevice {
   // threads that access the GPU device.  It is used to know whether to
   // use locks when accessing the allocator and the profiling-related code.
   static bool multi_threaded_;
+  static bool multi_gpu_;
 
   // The variable profile_map_ will only be used if the verbose level is >= 1;
   // it will accumulate some function-level timing information that is printed
