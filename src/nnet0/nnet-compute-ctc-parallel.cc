@@ -146,6 +146,7 @@ private:
 	    }
 	    else
 	    	CuDevice::Instantiate().SelectGpu();
+	    	//CuDevice::Instantiate().SelectGpuId(opts->use_gpu);
         }
 
 	    //CuDevice::Instantiate().DisableCaching();

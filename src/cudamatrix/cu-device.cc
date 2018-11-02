@@ -612,140 +612,116 @@ void CuDevice::CheckGpuHealth() {
 
 //wd007
 void
-CuDevice::GetBandwidth(int32 gpu_idx, float &d2h, float &h2d)
-{
-	  int memSize = 64*1024*1024;
-	  		float elapsedTimeInMs = 0.0f;
-	  	    float bandwidthInMBs = 0.0f;
-	  	    unsigned char *h_idata = NULL;
-	  	    unsigned char *h_odata = NULL;
-	  	    cudaEvent_t start, stop;
-	  	    bool PINNED = true;
-	  	    int MEMCOPY_ITERATIONS = 5;
+CuDevice::GetBandwidth(int32 gpu_idx, float &d2h, float &h2d) {
+    int memSize = 64*1024*1024;
+    float elapsedTimeInMs = 0.0f;
+    float bandwidthInMBs = 0.0f;
+    unsigned char *h_idata = NULL;
+    unsigned char *h_odata = NULL;
+    cudaEvent_t start, stop;
+    bool PINNED = true;
+    int MEMCOPY_ITERATIONS = 5;
 
-	  	  CU_SAFE_CALL(cudaEventCreate(&start));
-	  	  CU_SAFE_CALL(cudaEventCreate(&stop));
+    CU_SAFE_CALL(cudaEventCreate(&start));
+    CU_SAFE_CALL(cudaEventCreate(&stop));
 
-	  	    //allocate host memory
-	  	    if (PINNED)
-	  	        {
+    //allocate host memory
+    if (PINNED) {
 	  	#if CUDART_VERSION >= 2020
-	  	    	CU_SAFE_CALL(cudaHostAlloc((void **)&h_idata, memSize, cudaHostAllocPortable));
-	  	    	CU_SAFE_CALL(cudaHostAlloc((void **)&h_odata, memSize, cudaHostAllocPortable));
+        CU_SAFE_CALL(cudaHostAlloc((void **)&h_idata, memSize, cudaHostAllocPortable));
+        CU_SAFE_CALL(cudaHostAlloc((void **)&h_odata, memSize, cudaHostAllocPortable));
 	  	#else
-	  	    	CU_SAFE_CALL(cudaMallocHost((void **)&h_idata, memSize)));
-	  	    	CU_SAFE_CALL(cudaMallocHost((void **)&h_odata, memSize)));
-	  	#endif
-	  	        }
-	  	        else
-	  	        {
-	  	                //pageable memory mode - use malloc
-	  	            h_odata = (unsigned char *)malloc(memSize);
+        CU_SAFE_CALL(cudaMallocHost((void **)&h_idata, memSize)));
+        CU_SAFE_CALL(cudaMallocHost((void **)&h_odata, memSize)));
+	  	#endif 
+    } else {
+	         //pageable memory mode - use malloc
+	         h_odata = (unsigned char *)malloc(memSize);
 
-	  	            if (h_odata == 0)
-	  	            {
-	  	            	KALDI_ERR << "Not enough memory available on host to run test!\n";
-	  	                exit(EXIT_FAILURE);
-	  	            }
-	  	         }
+	         if (h_odata == 0) {
+	         	KALDI_ERR << "Not enough memory available on host to run test!\n";
+	             exit(EXIT_FAILURE);
+	         }
+    }
 
-	  	    //initialize the memory
-	  	    for (unsigned int i = 0; i < memSize/sizeof(unsigned char); i++)
-	  	    {
-	  	        h_idata[i] = (unsigned char)(i & 0xff);
-	  	    }
+	//initialize the memory
+	for (unsigned int i = 0; i < memSize/sizeof(unsigned char); i++)
+	    h_idata[i] = (unsigned char)(i & 0xff);
 
-	  	    // allocate device memory
-	  	    unsigned char *d_idata;
-	  	    CU_SAFE_CALL(cudaMalloc((void **) &d_idata, memSize));
+	// allocate device memory
+	unsigned char *d_idata;
+	CU_SAFE_CALL(cudaMalloc((void **) &d_idata, memSize));
 
-	  	    //initialize the device memory
-	  	    CU_SAFE_CALL(cudaMemcpy(d_idata, h_idata, memSize,cudaMemcpyHostToDevice));
+	//initialize the device memory
+	CU_SAFE_CALL(cudaMemcpy(d_idata, h_idata, memSize,cudaMemcpyHostToDevice));
 
-	  	    //copy data from GPU to Host
+	//copy data from GPU to Host
 
-	  	    CU_SAFE_CALL(cudaEventRecord(start, 0));
+	CU_SAFE_CALL(cudaEventRecord(start, 0));
 
-	  	    if (PINNED)
-	  	    {
-	  	        for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
-	  	        {
-	  	        	CU_SAFE_CALL(cudaMemcpyAsync(h_odata, d_idata, memSize,cudaMemcpyDeviceToHost, 0));
-	  	        }
-	  	    }
-	  	    else
-	  	    {
-	  	        for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
-	  	        {
-	  	        	CU_SAFE_CALL(cudaMemcpy(h_odata, d_idata, memSize,cudaMemcpyDeviceToHost));
-	  	        }
-	  	    }
+	if (PINNED) {
+	    for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
+	    	CU_SAFE_CALL(cudaMemcpyAsync(h_odata, d_idata, memSize,cudaMemcpyDeviceToHost, 0));
+	} else {
+	    for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
+	    	CU_SAFE_CALL(cudaMemcpy(h_odata, d_idata, memSize,cudaMemcpyDeviceToHost));
+	}
 
-	  	  CU_SAFE_CALL(cudaEventRecord(stop, 0));
+    CU_SAFE_CALL(cudaEventRecord(stop, 0));
 
-	  	    // make sure GPU has finished copying
-	  	CU_SAFE_CALL(cudaDeviceSynchronize());
-	  	    //get the the total elapsed time in ms
+	    // make sure GPU has finished copying
+	CU_SAFE_CALL(cudaDeviceSynchronize());
+	    //get the the total elapsed time in ms
 
-	  	CU_SAFE_CALL(cudaEventElapsedTime(&elapsedTimeInMs, start, stop));
+	CU_SAFE_CALL(cudaEventElapsedTime(&elapsedTimeInMs, start, stop));
 
 
-	  	//calculate bandwidth in MB/s
-	  	bandwidthInMBs = (1e3f * memSize * (float)MEMCOPY_ITERATIONS) / (elapsedTimeInMs * (float)(1 << 20));
-	  	d2h = bandwidthInMBs;
+	//calculate bandwidth in MB/s
+	bandwidthInMBs = (1e3f * memSize * (float)MEMCOPY_ITERATIONS) / (elapsedTimeInMs * (float)(1 << 20));
+	d2h = bandwidthInMBs;
 
-	  	/////////////////////////////////////////////////////
-	  	//copy data from Host to GPU
-	  	CU_SAFE_CALL(cudaEventRecord(start, 0));
+	/////////////////////////////////////////////////////
+	//copy data from Host to GPU
+	CU_SAFE_CALL(cudaEventRecord(start, 0));
 
-	  		  	    if (PINNED)
-	  		  	    {
-	  		  	        for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
-	  		  	        {
-	  		  	        	CU_SAFE_CALL(cudaMemcpyAsync(d_idata, h_odata, memSize,cudaMemcpyHostToDevice, 0));
-	  		  	        }
-	  		  	    }
-	  		  	    else
-	  		  	    {
-	  		  	        for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
-	  		  	        {
-	  		  	        	CU_SAFE_CALL(cudaMemcpy(d_idata, h_odata, memSize,cudaMemcpyHostToDevice));
-	  		  	        }
-	  		  	    }
+	if (PINNED) {
+	    for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
+	    	CU_SAFE_CALL(cudaMemcpyAsync(d_idata, h_odata, memSize,cudaMemcpyHostToDevice, 0));
+	} else {
+	    for (unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
+	    	CU_SAFE_CALL(cudaMemcpy(d_idata, h_odata, memSize,cudaMemcpyHostToDevice));
+	}
 
-	  		  	  CU_SAFE_CALL(cudaEventRecord(stop, 0));
+	CU_SAFE_CALL(cudaEventRecord(stop, 0));
 
-	  		  	    // make sure GPU has finished copying
-	  		  	CU_SAFE_CALL(cudaDeviceSynchronize());
-	  		  	    //get the the total elapsed time in ms
+	// make sure GPU has finished copying
+	CU_SAFE_CALL(cudaDeviceSynchronize());
+	//get the the total elapsed time in ms
 
-	  		  	CU_SAFE_CALL(cudaEventElapsedTime(&elapsedTimeInMs, start, stop));
+	CU_SAFE_CALL(cudaEventElapsedTime(&elapsedTimeInMs, start, stop));
 
 
-	  		  	//calculate bandwidth in MB/s
-	  	bandwidthInMBs = (1e3f * memSize * (float)MEMCOPY_ITERATIONS) / (elapsedTimeInMs * (float)(1 << 20));
-	  	h2d = bandwidthInMBs;
+	//calculate bandwidth in MB/s
+	bandwidthInMBs = (1e3f * memSize * (float)MEMCOPY_ITERATIONS) / (elapsedTimeInMs * (float)(1 << 20));
+	h2d = bandwidthInMBs;
 
-	  	//clean up memory
-	  	CU_SAFE_CALL(cudaEventDestroy(stop));
-	  	CU_SAFE_CALL(cudaEventDestroy(start));
+	//clean up memory
+	CU_SAFE_CALL(cudaEventDestroy(stop));
+	CU_SAFE_CALL(cudaEventDestroy(start));
 
-	  	    if (PINNED)
-	  	    {
-	  	    	CU_SAFE_CALL(cudaFreeHost(h_idata));
-	  	    	CU_SAFE_CALL(cudaFreeHost(h_odata));
-	  	    }
-	  	    else
-	  	    {
-	  	        free(h_idata);
-	  	        free(h_odata);
-	  	    }
+	if (PINNED) {
+		CU_SAFE_CALL(cudaFreeHost(h_idata));
+		CU_SAFE_CALL(cudaFreeHost(h_odata));
+	}
+	else {
+	    free(h_idata);
+	    free(h_odata);
+	}
 
-	  	  CU_SAFE_CALL(cudaFree(d_idata));
+	CU_SAFE_CALL(cudaFree(d_idata));
 }
 
-bool CuDevice::Initialize()
-{
+bool CuDevice::Initialize() {
 	 // Check that we have at least one gpu
 	  int32 n_gpu = 0;
 	  cudaError_t e;
@@ -825,9 +801,7 @@ bool CuDevice::Initialize()
       return true;
 }
 
-int CuDevice::SelectGpu()
-{
-
+int CuDevice::SelectGpu() {
 	int max_id = 0;
 	// select device if more than one
 	int32 n_gpu = 0;
@@ -852,24 +826,23 @@ int CuDevice::SelectGpu()
 	}
 
 	// select best GPU
-	if (n_gpu > 0)
-	{
-		for (int i = 0; i < gpuinfo_.size(); i++)
-		{
-			if (!gpuinfo_[i].used)
-			{
+	if (n_gpu > 0) {
+		for (int i = 0; i < gpuinfo_.size(); i++) {
+			if (!gpuinfo_[i].used) {
 				max_id = i;
 				break;
 			}
 		}
 		//find GPU with max free memory
-		for (int n = 1; n < gpuinfo_.size(); n++)
-		{
+		for (int n = 1; n < gpuinfo_.size(); n++) {
 			if (!gpuinfo_[n].used && gpuinfo_[n].mem_ratio > gpuinfo_[max_id].mem_ratio)
 				max_id = n;
 		}
 
+		CU_SAFE_CALL(cudaSetDevice(max_id));
+        FinalizeActiveGpu();
 
+        /*
         KALDI_LOG << "Selected device: " << max_id << " (automatically)";
 
         KALDI_LOG << "free: " << gpuinfo_[max_id].mem_free/1024/1024 << "M, "
@@ -879,26 +852,22 @@ int CuDevice::SelectGpu()
                   << "h2d bandwidth: "<< gpuinfo_[max_id].h2d_bandwidth << "MB/s";
 
 		CU_SAFE_CALL(cudaSetDevice(max_id));
-		//initialize the CUBLAS
-		//CU_SAFE_CALL(cublasInit());
-
-		//create the context
-		cudaError_t e;
-		e = cudaThreadSynchronize(); //deprecated, but for legacy not cudaDeviceSynchronize
-		if(e != cudaSuccess) {
-			KALDI_WARN << "Failed to create CUDA context on a GPU.";
-		}
+        device_id_ = max_id;
+        // Initialize CUBLAS.
+        CUBLAS_SAFE_CALL(cublasCreate(&cublas_handle_));
+        CUBLAS_SAFE_CALL(cublasSetStream(cublas_handle_, cudaStreamPerThread));
+        // Initialize the cuSPARSE library
+        CUSPARSE_SAFE_CALL(cusparseCreate(&cusparse_handle_));
+        CUSPARSE_SAFE_CALL(cusparseSetStream(cusparse_handle_, cudaStreamPerThread));
+        */
 	}
 
 	gpuinfo_[max_id].used = true;
-    device_id_ = max_id;
 	return max_id;
 }
 
 
-void
-CuDevice::SelectGpu(int gpu_id)
-{
+void CuDevice::SelectGpu(int gpu_id) {
 
 	int32 n_gpu = 0;
 	cudaGetDeviceCount(&n_gpu);
@@ -907,33 +876,14 @@ CuDevice::SelectGpu(int gpu_id)
               << ", detected " << n_gpu << " CUDA capable cards!";
 	}
 
-
-    KALDI_LOG << "Selected device: " << gpu_id << " (specified)";
-
-    KALDI_LOG << "free: " << gpuinfo_[gpu_id].mem_free/1024/1024 << "M, "
-              << "total: "<< gpuinfo_[gpu_id].mem_total/1024/1024 << "M, "
-              << "ratio: "<< gpuinfo_[gpu_id].mem_ratio << "   "
-    	      << "d2h bandwidth: " << gpuinfo_[gpu_id].d2h_bandwidth << "MB/s, "
-              << "h2d bandwidth: "<< gpuinfo_[gpu_id].h2d_bandwidth << "MB/s";
-
 	CU_SAFE_CALL(cudaSetDevice(gpu_id));
-	//initialize the CUBLAS
-	//CU_SAFE_CALL(cublasInit());
-
-	//create the context
-	cudaError_t e;
-	e = cudaThreadSynchronize(); //deprecated, but for legacy not cudaDeviceSynchronize
-	if(e != cudaSuccess) {
-		KALDI_WARN << "Failed to create CUDA context on a GPU.";
-	}
+    FinalizeActiveGpu();
 
 	gpuinfo_[gpu_id].used = true;
-
 }
 
 void
-CuDevice::SelectPreferGpu(int gpu_id)
-{
+CuDevice::SelectPreferGpu(int gpu_id) {
 
 	int32 n_gpu = 0, select_id = gpu_id;
 	cudaGetDeviceCount(&n_gpu);
@@ -959,50 +909,32 @@ CuDevice::SelectPreferGpu(int gpu_id)
 	}
 
 	gpu_id = select_id;
-    KALDI_LOG << "Selected device: " << gpu_id << " (automatically)";
-
-    KALDI_LOG << "free: " << gpuinfo_[gpu_id].mem_free/1024/1024 << "M, "
-              << "total: "<< gpuinfo_[gpu_id].mem_total/1024/1024 << "M, "
-              << "ratio: "<< gpuinfo_[gpu_id].mem_ratio << "   "
-    	      << "d2h bandwidth: " << gpuinfo_[gpu_id].d2h_bandwidth << "MB/s, "
-              << "h2d bandwidth: "<< gpuinfo_[gpu_id].h2d_bandwidth << "MB/s";
 
 	CU_SAFE_CALL(cudaSetDevice(gpu_id));
-	//initialize the CUBLAS
-	//CU_SAFE_CALL(cublasInit());
-
-	//create the context
-	cudaError_t e;
-	e = cudaThreadSynchronize(); //deprecated, but for legacy not cudaDeviceSynchronize
-	if(e != cudaSuccess) {
-		KALDI_WARN << "Failed to create CUDA context on a GPU.";
-	}
+    FinalizeActiveGpu();
 
 	//gpuinfo_[gpu_id].used = true;
 }
 
-int CuDevice::GetDeviceId()
-{
+int CuDevice::GetDeviceId() {
 	int32 n_gpu;
 	cudaGetDevice(&n_gpu);
 
 	return n_gpu;
 }
 
-int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, int num_threads)
-{
+int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, int num_threads) {
 	int myid, numprocs, len, i, j, max = 0, size, id;
 	char name[256];
 	MPI_Status status;
 	MPI_Request handle;
 
-        int32 n_gpu = 0;
-        cudaGetDeviceCount(&n_gpu);
-        if(n_gpu == 0)
-	{
-		KALDI_WARN << "No CUDA devices found";
-		return -1;
-        }
+    int32 n_gpu = 0;
+    cudaGetDeviceCount(&n_gpu);
+    if(n_gpu == 0) {
+	    KALDI_WARN << "No CUDA devices found";
+	    return -1;
+    }
 
 
 	MPI_Comm_size(MPI_COMM_WORLD,&numprocs);
@@ -1013,21 +945,17 @@ int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, in
 	size = num_threads*numprocs*sizeof(MPIGpuInfo);
 	id = myid+thread_idx*numprocs;
 
-	if (myid == 0)
-	{
+	if (myid == 0) {
 		MPI_Win_create(gpuinfo, size, sizeof(MPIGpuInfo), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
 		//MPI_Win_fence(0, win);
 
 		MPI_Win_lock(MPI_LOCK_EXCLUSIVE, 0, 0, win);
 
 
-		for (i = 0; i < gpuinfo_.size(); i++)
-		{
+		for (i = 0; i < gpuinfo_.size(); i++) {
 			selected = false;
-			for (j = 0; j < num_threads*numprocs; j++)
-			{
-				if (strcmp(name, gpuinfo[j].hostname) == 0 && gpuinfo[j].gpuid == i)
-				{
+			for (j = 0; j < num_threads*numprocs; j++) {
+				if (strcmp(name, gpuinfo[j].hostname) == 0 && gpuinfo[j].gpuid == i) {
 					selected = true;
 					break;
 				}
@@ -1048,9 +976,7 @@ int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, in
 
 		//MPI_Win_fence(0, win);
 
-	}
-	else
-	{
+	} else {
 		MPI_Win_create(NULL, 0, sizeof(MPIGpuInfo), MPI_INFO_NULL, MPI_COMM_WORLD, &win);
 		//MPI_Win_fence(0, win);
 
@@ -1058,13 +984,10 @@ int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, in
 		MPI_Rget(gpuinfo, size, MPI_BYTE, 0, 0, size, MPI_BYTE, win, &handle);
 		MPI_Wait(&handle, &status);
 
-		for (i = 0; i < gpuinfo_.size(); i++)
-		{
+		for (i = 0; i < gpuinfo_.size(); i++) {
 			selected = false;
-			for (j = 0; j < num_threads*numprocs; j++)
-			{
-				if (strcmp(name, gpuinfo[j].hostname) == 0 && gpuinfo[j].gpuid == i)
-				{
+			for (j = 0; j < num_threads*numprocs; j++) {
+				if (strcmp(name, gpuinfo[j].hostname) == 0 && gpuinfo[j].gpuid == i) {
 					selected = true;
 					break;
 				}
@@ -1091,6 +1014,7 @@ int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, in
 	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Bcast((void*)gpuinfo, size, MPI_BYTE, 0, MPI_COMM_WORLD);
 
+    /*
     KALDI_LOG << "Selected device: " << gpuid << " (automatically)";
 
     KALDI_LOG << "free: " << gpuinfo_[gpuid].mem_free/1024/1024 << "M, "
@@ -1098,10 +1022,10 @@ int CuDevice::MPISelectGpu(MPIGpuInfo *gpuinfo, MPI_Win &win, int thread_idx, in
               << "ratio: "<< gpuinfo_[gpuid].mem_ratio << "   "
     	      << "d2h bandwidth: " << gpuinfo_[gpuid].d2h_bandwidth << "MB/s, "
               << "h2d bandwidth: "<< gpuinfo_[gpuid].h2d_bandwidth << "MB/s";
+    */
 
 	CU_SAFE_CALL(cudaSetDevice(gpuid));
-	//initialize the CUBLAS
-	//CU_SAFE_CALL(cublasInit());
+    FinalizeActiveGpu();
 
 	gpuinfo_[gpuid].used = true;
     device_id_ = gpuinfo[id].gpuid;
@@ -1129,8 +1053,8 @@ CuDevice::~CuDevice() {
 
 // Each thread has its own copy of the CuDevice object.
 // Note: this was declared "static".
-// thread_local CuDevice CuDevice::this_thread_device_;
-   CuDevice CuDevice::this_thread_device_;
+thread_local CuDevice CuDevice::this_thread_device_;
+// CuDevice CuDevice::this_thread_device_;
 
 // define and initialize the static members of the CuDevice object.
 int32 CuDevice::device_id_ = -1;
@@ -1141,6 +1065,7 @@ std::mutex CuDevice::profile_mutex_;
 int64 CuDevice::free_memory_at_startup_;
 cudaDeviceProp CuDevice::properties_;
 bool CuDevice::debug_stride_mode_ = false;
+std::vector<GpuInfo> CuDevice::gpuinfo_;
 
 
 void SynchronizeGpu() {

@@ -115,7 +115,9 @@ class CuDevice {
   }
 
   inline void* MallocPitch(size_t row_bytes, size_t num_rows, size_t *pitch) {
-    if (multi_threaded_) {
+    if (multi_gpu_) {
+      return g_cuda_allocator.MallocPitchLocal(row_bytes, num_rows, pitch);
+    } else if (multi_threaded_) {
       return g_cuda_allocator.MallocPitchLocking(row_bytes, num_rows, pitch);
     } else if (debug_stride_mode_) {
       // The pitch bucket size is hardware dependent.
@@ -126,8 +128,7 @@ class CuDevice {
                 g_cuda_allocator.MallocPitch(row_bytes + 512 * RandInt(0, 4), num_rows, pitch);
 
     } else {
-      return multi_gpu_ ? g_cuda_allocator.MallocPitchLocal(row_bytes, num_rows, pitch) :
-                g_cuda_allocator.MallocPitch(row_bytes, num_rows, pitch);
+      return g_cuda_allocator.MallocPitch(row_bytes, num_rows, pitch);
     }
   }
 
@@ -272,8 +273,8 @@ class CuDevice {
   // Each thread has its own CuDevice object, which contains the cublas and
   // cusparse handles.  These are unique to the thread (which is what is
   // recommended by NVidia).
-  // static thread_local CuDevice this_thread_device_;
-  static CuDevice this_thread_device_;
+  static thread_local CuDevice this_thread_device_;
+  // static CuDevice this_thread_device_;
 
   // The GPU device-id that we are using.  This will be initialized to -1, and will
   // be set when the user calls
@@ -307,7 +308,7 @@ class CuDevice {
   // otherwise would be rare).
   static bool debug_stride_mode_;
 
-  std::vector<GpuInfo> gpuinfo_;
+  static std::vector<GpuInfo> gpuinfo_;
 
   // The following member variable is initialized to false; if the user calls
   // Instantiate() in a thread where it is still false, Initialize() will be

@@ -52,7 +52,7 @@ Real VecVec(const CuVectorBase<Real> &a,
   if (CuDevice::Instantiate().Enabled()) {
     CuTimer tim;
     CuVectorBase<Real> c;
-    CUBLAS_SAFE_CALL(cublas_dot(c.GetLocalCublasHandle(), a.Dim(), a.Data(), 1, b.Data(),
+    CUBLAS_SAFE_CALL(cublas_dot(GetCublasHandle(), a.Dim(), a.Data(), 1, b.Data(),
                                 1, &result));
     CuDevice::Instantiate().AccuProfile(__func__, tim);
 } else
@@ -121,8 +121,8 @@ void AddVecStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des,
 		    Real *data = des[i]->Data();
 		    const Real *src_data = src[i]->Data();
 		    //cublasSetStream(des[i]->GetLocalCublasHandle(), des[i]->GetLocalCudaStream());
-		    if (beta != 1.0) cuda_scal(des[i]->GetLocalCublasHandle(), dim, beta, data, 1);
-		    if (alpha != 0.0) cuda_axpy(des[i]->GetLocalCublasHandle(), dim, alpha, src_data, 1, data, 1);
+		    if (beta != 1.0) cuda_scal(GetCublasHandle(), dim, beta, data, 1); // des[i]->GetLocalCublasHandle() 
+		    if (alpha != 0.0) cuda_axpy(GetCublasHandle(), dim, alpha, src_data, 1, data, 1);
 	    }
 	    CU_SAFE_CALL(cudaGetLastError());
 
@@ -258,8 +258,8 @@ void AddRowSumMatStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des_vec,
 	    	CuVector<Real> ones(src[i]->NumRows());
 	    	ones.Set(1.0);
 
-            cublasSetStream(des_vec[i]->GetLocalCublasHandle(), des_vec[i]->GetLocalCudaStream());
-	    	CUBLAS_SAFE_CALL(cublas_gemv(des_vec[i]->GetLocalCublasHandle(),
+            cublasSetStream(GetCublasHandle(), des_vec[i]->GetLocalCudaStream());
+	    	CUBLAS_SAFE_CALL(cublas_gemv(GetCublasHandle(), //des_vec[i]->GetLocalCublasHandle()
 						    (trans==kTrans? CUBLAS_OP_N:CUBLAS_OP_T),
 						    src[i]->NumCols(), src[i]->NumRows(), alpha, src[i]->Data(),
 						    src[i]->Stride(), ones.Data(), 1, beta, des_vec[i]->Data(), 1));
@@ -487,9 +487,9 @@ Real CuVectorBase<Real>::Norm(Real p) {
     KALDI_ASSERT(p == 1.0 || p == 2.0);
     if (dim_ == 0) return 0.0;
     if (p == 1.0) {
-      cublas_asum(GetLocalCublasHandle(), dim_, data_, 1, &ans);
+      cublas_asum(GetCublasHandle(), dim_, data_, 1, &ans);
     } else {
-      cublas_nrm2(GetLocalCublasHandle(), dim_, data_, 1, &ans);
+      cublas_nrm2(GetCublasHandle(), dim_, data_, 1, &ans);
     }
     CuDevice::Instantiate().AccuProfile(__func__, tim);
     if (ans != ans) {
@@ -802,7 +802,7 @@ void CuVectorBase<Real>::AddMatVec(const Real alpha,
 
     // Everything is backwards in CuBlas.  We need to reverse rows, columns,
     // transpose-ness.
-    CUBLAS_SAFE_CALL(cublas_gemv(GetLocalCublasHandle(),
+    CUBLAS_SAFE_CALL(cublas_gemv(GetCublasHandle(),
                                  (trans==kTrans? CUBLAS_OP_N:CUBLAS_OP_T),
                                  M.NumCols(), M.NumRows(), alpha, M.Data(),
                                  M.Stride(), v.Data(), 1, beta, data_, 1));
@@ -829,7 +829,7 @@ void CuVectorBase<Real>::AddSpVec(const Real alpha,
 
     // Note: in our opinion the CuSpMatrix represents a lower-triangular matrix, but
     // in CUBLAS, for some stupid reason, everything is reversed.
-    CUBLAS_SAFE_CALL(cublas_spmv(GetLocalCublasHandle(), CUBLAS_FILL_MODE_UPPER, Dim(),
+    CUBLAS_SAFE_CALL(cublas_spmv(GetCublasHandle(), CUBLAS_FILL_MODE_UPPER, Dim(),
                                  alpha, M.Data(), v.Data(), 1, beta, data_, 1));
 
     CuDevice::Instantiate().AccuProfile(__func__, tim);
@@ -1014,7 +1014,7 @@ void CuVectorBase<Real>::MulTp(const CuTpMatrix<Real> &M, const MatrixTransposeT
   if (CuDevice::Instantiate().Enabled()) {
     if (dim_ == 0) return;
     CuTimer tim;
-    cublas_tpmv(GetLocalCublasHandle(), (trans==kTrans? CUBLAS_OP_N:CUBLAS_OP_T),
+    cublas_tpmv(GetCublasHandle(), (trans==kTrans? CUBLAS_OP_N:CUBLAS_OP_T),
                 M.NumRows(), M.Data(), data_, 1);
     CuDevice::Instantiate().AccuProfile("CuVectorBase::MulTp", tim);
   } else
@@ -1480,7 +1480,7 @@ void CuVectorBase<Real>::CopyDiagFromMat(const CuMatrix<Real> &M) {
   if (CuDevice::Instantiate().Enabled()) {
     KALDI_ASSERT(dim_ == std::min(M.NumRows(), M.NumCols()));
     CuTimer tim;
-    CUBLAS_SAFE_CALL(cublas_copy(GetLocalCublasHandle(), dim_, M.Data(), M.Stride() + 1,
+    CUBLAS_SAFE_CALL(cublas_copy(GetCublasHandle(), dim_, M.Data(), M.Stride() + 1,
                                  data_, 1));
 
     CuDevice::Instantiate().AccuProfile(__func__, tim);
@@ -1524,8 +1524,8 @@ void CuVectorBase<Real>::AddVec(Real alpha, const CuVectorBase<Real> &vec,
     int32 dim = this->dim_;
     Real *data = this->data_;
     const Real *vec_data = vec.data_;
-    if (beta != 1.0) CU_SAFE_CALL(cuda_scal(GetLocalCublasHandle(), dim, beta, data, 1));
-    if (alpha != 0.0) CU_SAFE_CALL(cuda_axpy(GetLocalCublasHandle(), dim, alpha, vec_data, 1, data, 1));
+    if (beta != 1.0) CU_SAFE_CALL(cuda_scal(GetCublasHandle(), dim, beta, data, 1));
+    if (alpha != 0.0) CU_SAFE_CALL(cuda_axpy(GetCublasHandle(), dim, alpha, vec_data, 1, data, 1));
     CuDevice::Instantiate().AccuProfile(__func__, tim);
   } else
   #endif

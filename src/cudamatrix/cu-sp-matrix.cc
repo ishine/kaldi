@@ -115,7 +115,7 @@ void CuSpMatrix<Real>::AddVec2(const Real alpha, const CuVectorBase<Real> &v) {
     dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
     dim3 dimGrid(n_blocks(nr, CU2DBLOCK), n_blocks(nr, CU2DBLOCK));
 
-    CUBLAS_SAFE_CALL(cublas_spr(this->GetLocalCublasHandle(), CUBLAS_FILL_MODE_UPPER, this->num_rows_, alpha, v.Data(),
+    CUBLAS_SAFE_CALL(cublas_spr(GetCublasHandle(), CUBLAS_FILL_MODE_UPPER, this->num_rows_, alpha, v.Data(),
                                 1, this->Data()));
     
     CuDevice::Instantiate().AccuProfile("CuSpMatrix::AddVec2", tim);
@@ -148,7 +148,7 @@ void CuSpMatrix<Real>::AddMat2(const Real alpha, const CuMatrixBase<Real> &M,
     cublasOperation_t trans = (transM == kTrans ? CUBLAS_OP_N : CUBLAS_OP_T);
 
     CuMatrix<Real> tmp_mat(*this);
-    cublas_syrk(this->GetLocalCublasHandle(), CUBLAS_FILL_MODE_UPPER, trans, this_dim, m_other_dim, alpha, M.Data(),
+    cublas_syrk(GetCublasHandle(), CUBLAS_FILL_MODE_UPPER, trans, this_dim, m_other_dim, alpha, M.Data(),
                 M.Stride(), beta, tmp_mat.Data(), tmp_mat.Stride());
     this->CopyFromMat(tmp_mat, kTakeLower);
     
