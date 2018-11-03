@@ -1052,19 +1052,11 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
       WfstArc arc = *a;
       if (arc.ilabel != kWfstEpsilon) {
         BaseFloat ac_cost = (-decodable->LogLikelihood(frame, arc.ilabel)) + cost_offset;
-
         BaseFloat cost = tok->total_cost + arc.weight + ac_cost;
-        
-        Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok, NULL);
-        if (lm_fst_ != NULL) {
-          PropagateLm(tok, &arc, new_tok);
-        }
 
-        if (new_tok->total_cost + adaptive_beam < cutoff_) {
-          cutoff_ = new_tok->total_cost + adaptive_beam;
+        if (cost + adaptive_beam < cutoff_) {
+          cutoff_ = cost + adaptive_beam;
         }
-
-        DeleteToken(new_tok);
       }
     }
   }
@@ -1085,17 +1077,16 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
         if (arc.ilabel != kWfstEpsilon) { // emitting
           BaseFloat ac_cost = (-decodable->LogLikelihood(frame, arc.ilabel)) + cost_offset;
           BaseFloat cost = tok->total_cost + arc.weight + ac_cost;
-          Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok, NULL);
 
-          if (lm_fst_ != NULL) {
-            PropagateLm(tok, &arc, new_tok);
+          if (cost > cutoff_) {
+            continue;
+          } else if (cost + adaptive_beam < cutoff_) {
+            cutoff_ = cost + adaptive_beam;
           }
 
-          if (new_tok->total_cost > cutoff_) {
-            DeleteToken(new_tok);
-            continue;
-          } else if (new_tok->total_cost + adaptive_beam < cutoff_) {
-            cutoff_ = new_tok->total_cost + adaptive_beam;
+          Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok, NULL);
+          if (lm_fst_ != NULL) {
+            PropagateLm(tok, &arc, new_tok);
           }
 
           Token *win_tok = TokenViterbi(new_tok, frame + 1, arc.dst, NULL);
@@ -1143,23 +1134,22 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
     for (int32 j = 0; j < s->num_arcs; j++, a++) {
       WfstArc arc = *a;
       if (arc.ilabel == kWfstEpsilon) {  // non-emitting
-        Token *new_tok = NewToken(tok->total_cost + arc.weight, 0.0, NULL, NULL, tok, NULL);
+        BaseFloat cost = tok->total_cost + arc.weight;
 
-        if (lm_fst_ != NULL) {
-          PropagateLm(tok, &arc, new_tok);
+        if (cost < cutoff) {
+          Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok, NULL);
+
+          if (lm_fst_ != NULL) {
+            PropagateLm(tok, &arc, new_tok);
+          }
+
+          bool changed;
+          Token *win_tok = TokenViterbi(new_tok, cur_time, arc.dst, &changed);
+          tok->links = NewLink(win_tok, arc.ilabel, arc.olabel, arc.weight, 0, tok->links);
+          // "changed" tells us whether the new token has a different
+          // cost from before, or is new [if so, add into queue].
+          if (changed) queue_.push_back(arc.dst);
         }
-
-        if (new_tok->total_cost > cutoff) {
-          DeleteToken(new_tok);
-          continue;
-        }
-
-        bool changed;
-        Token *win_tok = TokenViterbi(new_tok, cur_time, arc.dst, &changed);
-        tok->links = NewLink(win_tok, arc.ilabel, arc.olabel, arc.weight, 0, tok->links);
-        // "changed" tells us whether the new token has a different
-        // cost from before, or is new [if so, add into queue].
-        if (changed) queue_.push_back(arc.dst);
       }
     } // for all arcs
   } // while queue not empty
