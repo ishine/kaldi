@@ -42,6 +42,8 @@ struct DecCoreConfig {
   
   fst::DeterminizeLatticePhonePrunedOptions det_opts;
 
+  bool debug_mode;
+
   DecCoreConfig() : 
     beam(16.0),
     max_active(std::numeric_limits<int32>::max()),
@@ -54,7 +56,8 @@ struct DecCoreConfig {
     hash_ratio(2.0),
     prune_scale(0.1),
     token_pool_realloc(2048),
-    link_pool_realloc(2048)
+    link_pool_realloc(2048),
+    debug_mode(false)
   { }
 
   void Register(OptionsItf *opts) {
@@ -80,6 +83,8 @@ struct DecCoreConfig {
                    "number of tokens per alloc in memory pool");
     opts->Register("link-pool-realloc", &link_pool_realloc,
                    "number of forward-links per alloc in memory pool");
+    opts->Register("debug-mode", &debug_mode,
+                   "debug-mode=true/false");
   }
 
   void Check() const {
@@ -384,11 +389,17 @@ class DecCore {
   }
 
 
+  inline void PreFrame();
+  inline void PostFrame();
+  void PreSession();
+  void PostSession();
+
   typedef HashList<ViterbiState, Token*>::Elem Elem;
 
   void PossiblyResizeHash(size_t num_toks);
 
 
+  inline void PropagateToken(Token *tok, WfstArc *arc, BaseFloat acoustic_score, Token *new_tok);
   inline void MergeLmTokenList(Token *from, Token *to);
   inline void PropagateLm(Token *from, WfstArc *arc, Token *to);
 
@@ -458,12 +469,6 @@ class DecCore {
                       BaseFloat *adaptive_beam, 
                       Elem **best_elem);
 
-  void SessionPreCondition();
-  void SessionPostCondition();
-
-  inline void FramePreCondition();
-  inline void FramePostCondition();
-
   BaseFloat ProcessEmitting(DecodableInterface *decodable);
   void ProcessNonemitting(BaseFloat cost_cutoff);
 
@@ -528,6 +533,7 @@ class DecCore {
   BaseFloat final_best_cost_;
 
   float timer_;
+  BaseFloat cutoff_;
 
   KALDI_DISALLOW_COPY_AND_ASSIGN(DecCore);
 };

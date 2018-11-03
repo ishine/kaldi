@@ -31,8 +31,28 @@
 #include "iot/decoder.h"
 #include "iot/language-model.h"
 
+
+
 namespace kaldi {
 namespace iot {
+void PrintPartialOutput(const std::string &utt,
+                                const fst::SymbolTable *word_syms,
+                                const Lattice &best_path_lat) {
+  LatticeWeight weight;
+  std::vector<int32> alignment;
+  std::vector<int32> words;
+  GetLinearSymbolSequence(best_path_lat, &alignment, &words, &weight);
+  if (word_syms != NULL) {
+    std::cerr << utt << " --> ";
+    for (size_t i = 0; i < words.size(); i++) {
+      std::string s = word_syms->Find(words[i]);
+      if (s == "")
+        KALDI_ERR << "Word-id " << words[i] << " not in symbol table.";
+      std::cerr << s << ' ';
+    }
+    std::cerr << '\n';
+  }
+}
 
 void GetDiagnosticsAndPrintOutput(const std::string &utt,
                                   const fst::SymbolTable *word_syms,
@@ -75,8 +95,8 @@ void GetDiagnosticsAndPrintOutput(const std::string &utt,
   }
 }
 
-}
-}
+} // namespace iot
+} // namespace kaldi
 
 int main(int argc, char *argv[]) {
   try {
@@ -294,9 +314,12 @@ int main(int argc, char *argv[]) {
         }
         decoder.StopSession();
 
+        Lattice lat;
+        decoder.GetBestPath(true, &lat);
+        PrintPartialOutput(utt, word_syms, lat);
+
         CompactLattice clat;
         decoder.GetLattice(true, &clat); // use_final_prob = true
-
         GetDiagnosticsAndPrintOutput(utt, word_syms, clat, &num_frames, &tot_like);
 
         decoding_timer.OutputStats(&timing_stats);
