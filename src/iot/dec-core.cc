@@ -61,7 +61,7 @@ void DecCore::StartSession(const char* session_key) {
   if (lm_fst_ != NULL) {
     LmTokenList *lm_toks = new LmTokenList();
     InsertLmToken(lm_toks, lm_fst_->Start(), 0.0f);
-    start_tok->lm_toks = lm_toks;
+    HookLmTokenList(start_tok, lm_toks, true);
   }
 
   token_net_.resize(1);
@@ -665,7 +665,14 @@ void DecCore::MergeLmTokenList(Token *from, Token *to) {
     }
   }
 
-  to->lm_toks = lm_toks;
+/* TODO
+  if (to->lm_token_list_owner) {
+    DeleteLmTokenList(to->lm_toks);
+    to->lm_token_list_owner = false;
+  }
+  */
+
+  HookLmTokenList(to, lm_toks, true);
 }
 
 inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState to_state, bool *changed) {
@@ -684,6 +691,7 @@ inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState t
     if (dst_tok->total_cost > tok->total_cost) {  // replace old token
       std::swap(dst_tok->total_cost, tok->total_cost);
       std::swap(dst_tok->lm_toks, tok->lm_toks);
+      std::swap(dst_tok->lm_token_list_owner, tok->lm_token_list_owner);
 
       dst_tok->backpointer = tok->backpointer;
 
@@ -987,7 +995,7 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
   KALDI_ASSERT(to->lm_toks == NULL);
 
   if (arc->olabel == kWfstEpsilon) { // not word-end arc
-    to->lm_toks = from->lm_toks;
+    HookLmTokenList(to, from->lm_toks, false); // false: dont take list ownership
     return;
   }
 
@@ -1007,19 +1015,7 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
   }
   arc->weight += (lm_toks->best->cost - to->total_cost); // rescored arc
   to->total_cost = lm_toks->best->cost;
-  to->lm_toks = lm_toks;
-}
-
-
-void DecCore::PropagateToken(Token *tok, WfstArc *arc, BaseFloat ac_score, Token *new_tok) {
-  KALDI_ASSERT(new_tok != NULL && new_tok->lm_toks == NULL);
-
-  new_tok->total_cost = tok->total_cost + arc->weight + ac_score;
-  new_tok->backpointer = tok;
-
-  if (lm_fst_ != NULL) {
-    PropagateLm(tok, arc, new_tok);
-  }
+  HookLmTokenList(to, lm_toks, true);
 }
 
 
@@ -1135,10 +1131,8 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
       WfstArc arc = *a;
       if (arc.ilabel == kWfstEpsilon) {  // non-emitting
         BaseFloat cost = tok->total_cost + arc.weight;
-
         if (cost < cutoff) {
           Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok, NULL);
-
           if (lm_fst_ != NULL) {
             PropagateLm(tok, &arc, new_tok);
           }

@@ -190,6 +190,7 @@ class DecCore {
     Token *backpointer;
 
     LmTokenList *lm_toks; // co-hypothesis list associate with this token
+    bool lm_token_list_owner;
 
     inline Token(
         BaseFloat total_cost,
@@ -203,7 +204,8 @@ class DecCore {
       links(links),
       next(next),
       backpointer(backpointer),
-      lm_toks(lm_toks)
+      lm_toks(lm_toks),
+      lm_token_list_owner(false)
     { }
 
     inline ~Token() { }
@@ -224,11 +226,12 @@ class DecCore {
 
   inline void DeleteToken(Token *tok) {
     // Forward links are not owned by token
-    /*
-    if (tok->lm_toks != NULL) {
+/* TODO
+    if (tok->lm_token_list_owner && tok->lm_toks != NULL) {
       DeleteLmTokenList(tok->lm_toks);
     }
     */
+
     tok->~Token();
     token_pool_->FreeElem(tok);
   }
@@ -345,13 +348,6 @@ class DecCore {
       return;
     }
 
-/*
-    if (cost < list->best->cost) {
-      list->head->state = state;
-      list->head->cost = cost;
-    }
-    */
-
     bool replaced = false;
     for (LmToken *t = list->head; t != NULL; t = t->next) {
       if (t->state == state) {
@@ -388,6 +384,15 @@ class DecCore {
     DELETE(lm_toks);
   }
 
+  void HookLmTokenList(Token *tok, LmTokenList *lm_toks, bool take_ownership) {
+    tok->lm_toks = lm_toks;
+    if (take_ownership) {
+      tok->lm_token_list_owner = true;
+    } else {
+      tok->lm_token_list_owner = false;
+    }
+  }
+
 
   inline void PreFrame();
   inline void PostFrame();
@@ -398,8 +403,6 @@ class DecCore {
 
   void PossiblyResizeHash(size_t num_toks);
 
-
-  inline void PropagateToken(Token *tok, WfstArc *arc, BaseFloat acoustic_score, Token *new_tok);
   inline void MergeLmTokenList(Token *from, Token *to);
   inline void PropagateLm(Token *from, WfstArc *arc, Token *to);
 
