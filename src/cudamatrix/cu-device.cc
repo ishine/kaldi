@@ -425,7 +425,7 @@ bool CuDevice::SelectGpuIdAuto() {
 
 void CuDevice::AccuProfile(const char *function_name,
                            const CuTimer &timer) {
-  if (GetVerboseLevel() >= 1) {
+  if (GetVerboseLevel() >= 2) {
     std::unique_lock<std::mutex> lock(profile_mutex_, std::defer_lock_t());
     if (multi_threaded_)
       lock.lock();

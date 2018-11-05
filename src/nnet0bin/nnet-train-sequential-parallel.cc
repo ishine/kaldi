@@ -116,6 +116,7 @@ int main(int argc, char *argv[]) {
 
     // Initialize GPU
     #if HAVE_CUDA == 1
+        CuDevice::Instantiate().AllowMultithreading();
         CuDevice::Instantiate().Initialize();
         //CuDevice::Instantiate().DisableCaching();
     #endif
