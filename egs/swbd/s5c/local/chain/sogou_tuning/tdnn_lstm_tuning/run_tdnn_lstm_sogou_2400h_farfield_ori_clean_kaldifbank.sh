@@ -8,11 +8,11 @@
 set -e
 
 # configs for 'chain'
-stage=15
+stage=12
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_2400h_farfield_noisyLats_LFR_noLD # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_1c_2400h_farfield_ori_clean_kaldifbank_LFR_noLD # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -61,7 +61,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_2400h_farfield
+train_set=train_sogou_fbank_2400h_farfield_ori_clean
 ali_dir=exp/tri3b_ali
 treedir=exp/chain/tri5_7000houres_tree$suffix
 lang=data/lang_chain_2y
@@ -199,7 +199,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_2400h_farfield_lats \
+    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_farfield_ori_clean_lats \
     --dir $dir  || exit 1;
 fi
 <<!
@@ -210,6 +210,7 @@ if [ $stage -le 14 ]; then
   utils/mkgraph.sh --self-loop-scale 1.0 data/lang_bigG $dir $dir/graph_bigG
 fi
 !
+exit 1;
 decode_suff=0528
 graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
 if [ $stage -le 15 ]; then
