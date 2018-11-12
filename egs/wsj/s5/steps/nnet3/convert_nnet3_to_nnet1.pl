@@ -11,7 +11,7 @@ if(@ARGV!=2)
 
 ################### Set net config ######################
 $lstm_layers=3;      #lstm layer number
-$lstm_nodes="355 2560 768;768 2560 768;768 2560 768";   # nodes config per layer, separated by semicolons; (each layer:input_dim cell_dim output_dim)
+$lstm_nodes="355 512 160;160 512 160;160 512 160";   # nodes config per layer, separated by semicolons; (each layer:input_dim cell_dim output_dim)
 $output_node=3766;    #the final layer i.e. output layer node number
 
 ################### Net conf end ########################

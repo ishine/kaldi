@@ -10,6 +10,7 @@ if(@ARGV!=2)
 }
 
 ################### Set net config ######################
+#$NumComponents=4;
 $NumComponents=31;
 ################### tdnn-lstm example ###################
 system("cat <<EOF > nnet.proto
@@ -47,12 +48,12 @@ name=output type=NaturalGradientAffineComponent input=512 output=3766
 EOF");
 
 ################### lstm example #######################
-#system("cat <<EOF > nnet.proto
-#name=lstm1 type=Lstm input=355 cell=2560 output=768 discard=0
-#name=lstm2 type=Lstm input=768 cell=2560 output=768 discard=0
-#name=lstm3 type=Lstm input=768 cell=2560 output=768 discard=0
-#name=output type=NaturalGradientAffineComponent input=768 output=3766
-#EOF");
+system("cat <<EOF > nnet.proto
+name=lstm1 type=Lstm input=355 cell=2560 output=768 discard=0
+name=lstm2 type=Lstm input=768 cell=2560 output=768 discard=0
+name=lstm3 type=Lstm input=768 cell=2560 output=768 discard=0
+name=output type=NaturalGradientAffineComponent input=768 output=3766
+EOF");
 ################### Net conf end ########################
 $model_in=$ARGV[0];
 $model_out=$ARGV[1];

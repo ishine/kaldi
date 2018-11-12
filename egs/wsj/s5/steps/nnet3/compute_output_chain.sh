@@ -8,9 +8,9 @@
 
 # Begin configuration section.
 stage=1
-nj=10 # number of jobs.  
+nj=1 # number of jobs.  
 cmd=run.pl
-use_gpu=false
+use_gpu=true
 frames_per_chunk=150
 iter=final
 extra_left_context=49
