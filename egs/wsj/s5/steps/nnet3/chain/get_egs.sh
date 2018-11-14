@@ -185,6 +185,8 @@ fi
 ## Set up features.
 echo "$0: feature type is raw"
 feats="ark,s,cs:utils/filter_scp.pl --exclude $dir/valid_uttlist $sdata/JOB/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:- ark:- |"
+teacher_data=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/train_sogou_fbank_2400h_farfield_ori_clean/split120
+teacher_feats="ark,s,cs:utils/filter_scp.pl --exclude $dir/valid_uttlist $teacher_data/JOB/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$teacher_data/JOB/utt2spk scp:$teacher_data/JOB/cmvn.scp scp:- ark:- |"
 valid_feats="ark,s,cs:utils/filter_scp.pl $dir/valid_uttlist $data/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$data/utt2spk scp:$data/cmvn.scp scp:- ark:- |"
 train_subset_feats="ark,s,cs:utils/filter_scp.pl $dir/train_subset_uttlist $data/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$data/utt2spk scp:$data/cmvn.scp scp:- ark:- |"
 echo $cmvn_opts >$dir/cmvn_opts # caution: the top-level nnet training script should copy this to its own dir now.
@@ -293,6 +295,13 @@ if [ ! -z $lattice_prune_beam ]; then
     lats_rspecifier="$lats_rspecifier lattice-prune --acoustic-scale=$acwt --beam=$lattice_prune_beam ark:- ark:- |"
   fi
 fi
+
+alidir=data/train_sogou_fbank_500h_ali
+ali_rspecifier="ark:gunzip -c $alidir/ali.JOB.gz | ali-to-pdf $alidir/final.mdl ark:- ark:- | ali-to-post ark:- ark:- |"
+num_pdfs=$(tree-info --print-args=false $alidir/tree | grep num-pdfs | awk '{print $2}')
+
+#teacher_opts="--teacher-feats=\"$teacher_feats\""
+#ali_opts="--posteriors=\"$ali_rspecifier\""
 
 normalization_fst_scale=1.0
 
@@ -407,7 +416,7 @@ if [ $stage -le 4 ]; then
       $chaindir/tree $chaindir/0.trans_mdl ark:- ark:- \| \
     nnet3-chain-get-egs $ivector_opts --srand=\$[JOB+$srand] $egs_opts \
       --num-frames-overlap=$frames_overlap_per_eg $trans_mdl_opt \
-     "$feats" ark,s,cs:- ark:- \| \
+      --teacher-feats="$teacher_feats" "$feats" ark,s,cs:- ark:- \| \
     nnet3-chain-copy-egs --random=true --srand=\$[JOB+$srand] ark:- $egs_list || exit 1;
 fi
 
