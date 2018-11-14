@@ -43,7 +43,7 @@ extra_right_context=0
 frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=exp/chain/lstm_6j_1024_256_sogoufeat_500h_TS_ld5_sp/egs
+common_egs_dir=
 
 affix=
 # End configuration section.

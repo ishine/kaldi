@@ -185,7 +185,8 @@ fi
 ## Set up features.
 echo "$0: feature type is raw"
 feats="ark,s,cs:utils/filter_scp.pl --exclude $dir/valid_uttlist $sdata/JOB/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:- ark:- |"
-teacher_data=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/train_sogou_fbank_2400h_farfield_ori_clean/split120
+#teacher_data=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/train_sogou_fbank_2400h_farfield_ori_clean/split120
+teacher_data=data/train_sogou_fbank_500h/split30
 teacher_feats="ark,s,cs:utils/filter_scp.pl --exclude $dir/valid_uttlist $teacher_data/JOB/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$teacher_data/JOB/utt2spk scp:$teacher_data/JOB/cmvn.scp scp:- ark:- |"
 valid_feats="ark,s,cs:utils/filter_scp.pl $dir/valid_uttlist $data/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$data/utt2spk scp:$data/cmvn.scp scp:- ark:- |"
 train_subset_feats="ark,s,cs:utils/filter_scp.pl $dir/train_subset_uttlist $data/feats.scp | apply-cmvn $cmvn_opts --utt2spk=ark:$data/utt2spk scp:$data/cmvn.scp scp:- ark:- |"
@@ -296,9 +297,9 @@ if [ ! -z $lattice_prune_beam ]; then
   fi
 fi
 
-alidir=data/train_sogou_fbank_500h_ali
-ali_rspecifier="ark:gunzip -c $alidir/ali.JOB.gz | ali-to-pdf $alidir/final.mdl ark:- ark:- | ali-to-post ark:- ark:- |"
-num_pdfs=$(tree-info --print-args=false $alidir/tree | grep num-pdfs | awk '{print $2}')
+##alidir=data/train_sogou_fbank_500h_ali
+##ali_rspecifier="ark:gunzip -c $alidir/ali.JOB.gz | ali-to-pdf $alidir/final.mdl ark:- ark:- | ali-to-post ark:- ark:- |"
+##num_pdfs=$(tree-info --print-args=false $alidir/tree | grep num-pdfs | awk '{print $2}')
 
 #teacher_opts="--teacher-feats=\"$teacher_feats\""
 #ali_opts="--posteriors=\"$ali_rspecifier\""
