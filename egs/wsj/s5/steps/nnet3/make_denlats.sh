@@ -13,6 +13,7 @@
 # Begin configuration section.
 nj=4
 cmd=run.pl
+use_gpu=true
 sub_split=1
 beam=13.0
 frames_per_chunk=50
@@ -33,6 +34,7 @@ extra_left_context=0
 extra_right_context=0
 extra_left_context_initial=-1
 extra_right_context_final=-1
+
 # End configuration section.
 
 
@@ -41,11 +43,13 @@ echo "$0 $@"  # Print the command line for logging
 [ -f ./path.sh ] && . ./path.sh; # source the path.
 . parse_options.sh || exit 1;
 
-num_threads=1 # Fixed to 1 for now
+#num_threads=1 # Fixed to 1 for now
 
 if [ $# != 4 ]; then
   echo "Usage: steps/nnet3/make_denlats.sh [options] <data-dir> <lang-dir> <src-dir> <exp-dir>"
   echo "  e.g.: steps/nnet3/make_denlats.sh data/train data/lang exp/nnet4 exp/nnet4_denlats"
+  echo "Works for (delta|lda) features, and (with --transform-dir option) such features"
+  echo " plus transforms."
   echo ""
   echo "Main options (for others, see top of script file)"
   echo "  --config <config-file>                           # config containing options"
@@ -54,6 +58,7 @@ if [ $# != 4 ]; then
   echo "  --sub-split <n-split>                            # e.g. 40; use this for "
   echo "                           # large databases so your jobs will be smaller and"
   echo "                           # will (individually) finish reasonably soon."
+  echo "  --transform-dir <transform-dir>   # directory to find fMLLR transforms."
   echo "  --num-threads  <n>                # number of threads per decoding job"
   exit 1;
 fi
@@ -63,6 +68,13 @@ lang=$2
 srcdir=$3
 dir=$4
 
+gpu_opt="--use-gpu=no"
+gpu_queue_opt=
+
+if $use_gpu; then
+  gpu_queue_opt="--gpu 1"
+  gpu_opt="--use-gpu=yes"
+fi
 
 extra_files=
 [ ! -z "$online_ivector_dir" ] && \
@@ -111,6 +123,7 @@ echo "$0: feature type is raw"
 
 feats="ark,s,cs:apply-cmvn $cmvn_opts --utt2spk=ark:$sdata/JOB/utt2spk scp:$sdata/JOB/cmvn.scp scp:$sdata/JOB/feats.scp ark:- |"
 
+
 # if this job is interrupted by the user, we want any background jobs to be
 # killed too.
 cleanup() {
@@ -136,22 +149,43 @@ if $determinize; then
 fi
 
 if [ $sub_split -eq 1 ]; then
-  $cmd --num-threads $num_threads JOB=1:$nj $dir/log/decode_den.JOB.log \
-    nnet3-latgen-faster$thread_string $ivector_opts $frame_subsampling_opt \
-    --frames-per-chunk=$frames_per_chunk \
-    --extra-left-context=$extra_left_context \
-    --extra-right-context=$extra_right_context \
-    --extra-left-context-initial=$extra_left_context_initial \
-    --extra-right-context-final=$extra_right_context_final \
-    --minimize=false --determinize-lattice=false \
-    --word-determinize=false --phone-determinize=false \
-    --max-active=$max_active --min-active=$min_active --beam=$beam \
-    --lattice-beam=$lattice_beam --acoustic-scale=$acwt --allow-partial=false \
-    --max-mem=$max_mem --word-symbol-table=$lang/words.txt $srcdir/final.mdl  \
-    $dir/dengraph/HCLG.fst "$feats" \
-    "ark:|$lattice_determinize_cmd gzip -c >$dir/lat.JOB.gz" || exit 1
-else
+  if $use_gpu; then
+    echo "not in sub_split";
+    nnet_forward_compute="nnet3-compute $gpu_opt $ivector_opts $frame_subsampling_opt \
+      --frames-per-chunk=$frames_per_chunk \
+      --extra-left-context=$extra_left_context \
+      --extra-right-context=$extra_right_context \
+      --extra-left-context-initial=$extra_left_context_initial \
+      --extra-right-context-final=$extra_right_context_final \
+      $srcdir/final.mdl \"$feats\" ark:-"
 
+    $cmd $gpu_queue_opt --num-threads $num_threads JOB=1:$nj $dir/log/decode_den.JOB.log \
+      $nnet_forward_compute \| \
+      latgen-faster-mapped$thread_string --minimize=false --determinize-lattice=false \
+      --word-determinize=false --phone-determinize=false \
+      --max-active=$max_active --min-active=$min_active --beam=$beam \
+      --lattice-beam=$lattice_beam --acoustic-scale=$acwt --allow-partial=false \
+      --max-mem=$max_mem --word-symbol-table=$lang/words.txt $srcdir/final.mdl  \
+      $dir/dengraph/HCLG.fst ark:- \
+      "ark:|$lattice_determinize_cmd gzip -c >$dir/lat.JOB.gz" || exit 1
+  else
+    $cmd --num-threads $num_threads JOB=1:$nj $dir/log/decode_den.JOB.log \
+      nnet3-latgen-faster$thread_string $ivector_opts $frame_subsampling_opt \
+      --frames-per-chunk=$frames_per_chunk \
+      --extra-left-context=$extra_left_context \
+      --extra-right-context=$extra_right_context \
+      --extra-left-context-initial=$extra_left_context_initial \
+      --extra-right-context-final=$extra_right_context_final \
+      --minimize=false --determinize-lattice=false \
+      --word-determinize=false --phone-determinize=false \
+      --max-active=$max_active --min-active=$min_active --beam=$beam \
+      --lattice-beam=$lattice_beam --acoustic-scale=$acwt --allow-partial=false \
+      --max-mem=$max_mem --word-symbol-table=$lang/words.txt $srcdir/final.mdl  \
+      $dir/dengraph/HCLG.fst "$feats" \
+      "ark:|$lattice_determinize_cmd gzip -c >$dir/lat.JOB.gz" || exit 1
+  fi
+else
+  echo "go in right branch";
   # each job from 1 to $nj is split into multiple pieces (sub-split), and we aim
   # to have at most two jobs running at each time.  The idea is that if we have stragglers
   # from one job, we can be processing another one at the same time.
@@ -169,8 +203,29 @@ else
       split_data.sh --per-utt $sdata/$n $sub_split || exit 1;
       mkdir -p $dir/log/$n
       mkdir -p $dir/part
-      feats_subset=`echo $feats | sed s:JOB/:$n/split${sub_split}utt/JOB/:g`
+      feats_subset=`echo $feats | sed "s/trans.JOB/trans.$n/g" | sed s:JOB/:$n/split${sub_split}utt/JOB/:g`
 
+      if $use_gpu; then
+        echo "now in posization";
+        nnet_forward_compute="nnet3-compute $gpu_opt $ivector_opts $frame_subsampling_opt \
+          --frames-per-chunk=$frames_per_chunk \
+          --extra-left-context=$extra_left_context \
+          --extra-right-context=$extra_right_context \
+          --extra-left-context-initial=$extra_left_context_initial \
+          --extra-right-context-final=$extra_right_context_final \
+          $srcdir/final.mdl \"$feats_subset\" ark:-"
+
+        $cmd --num-threads $num_threads JOB=1:$sub_split $dir/log/$n/decode_den.JOB.log \
+          $nnet_forward_compute \| \
+          latgen-faster-mapped$thread_string --minimize=false --determinize-lattice=false \
+          --word-determinize=false --phone-determinize=false \
+          --max-active=$max_active --min-active=$min_active --beam=$beam \
+          --lattice-beam=$lattice_beam --acoustic-scale=$acwt --allow-partial=false \
+          --max-mem=$max_mem --word-symbol-table=$lang/words.txt $srcdir/final.mdl  \
+          $dir/dengraph/HCLG.fst ark:- \
+          "ark:|$lattice_determinize_cmd gzip -c >$dir/lat.$n.JOB.gz" || touch $dir/.error & 
+      this_pid=$!
+      else
       $cmd --num-threads $num_threads JOB=1:$sub_split $dir/log/$n/decode_den.JOB.log \
         nnet3-latgen-faster$thread_string $ivector_opts $frame_subsampling_opt \
         --frames-per-chunk=$frames_per_chunk \
@@ -186,6 +241,7 @@ else
         $dir/dengraph/HCLG.fst "$feats_subset" \
         "ark:|$lattice_determinize_cmd gzip -c >$dir/lat.$n.JOB.gz" || touch $dir/.error &
       this_pid=$!
+      fi
     fi
     if [ ! -z "$prev_pid" ]; then  # Wait for the previous job; merge the previous set of lattices.
       wait $prev_pid

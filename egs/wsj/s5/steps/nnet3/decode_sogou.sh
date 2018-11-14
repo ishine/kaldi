@@ -8,7 +8,7 @@
 # --transform-dir option.
 
 # Begin configuration section.
-stage=1
+stage=0
 transform_dir=    # dir to find fMLLR transforms.
 nj=4 # number of decoding jobs.  If --transform-dir set, must match that number!
 acwt=0.1  # Just a default value, used for adaptation and beam-pruning..
@@ -22,7 +22,7 @@ min_active=200
 ivector_scale=1.0
 lattice_beam=8.0 # Beam we use in lattice generation.
 iter=final
-num_threads=1 # if >1, will use gmm-latgen-faster-parallel
+num_threads=4 # if >1, will use gmm-latgen-faster-parallel
 scoring_opts=
 skip_diagnostics=false
 skip_scoring=false
@@ -32,6 +32,7 @@ extra_left_context_initial=-1
 extra_right_context_final=-1
 online_ivector_dir=
 minimize=false
+use_gpu=true
 # End configuration section.
 
 echo "$0 $@"  # Print the command line for logging
@@ -63,6 +64,13 @@ dir=$3
 srcdir=`dirname $dir`; # Assume model directory one level up from decoding directory.
 model=$srcdir/$iter.mdl
 
+
+gpu_opt="--use-gpu=no"
+gpu_queue_opt=
+if $use_gpu; then
+  gpu_queue_opt="--gpu 1"
+  gpu_opt="--use-gpu=yes"
+fi
 
 extra_files=
 if [ ! -z "$online_ivector_dir" ]; then
@@ -133,17 +141,36 @@ if [ -f $srcdir/frame_subsampling_factor ]; then
 fi
 
 if [ $stage -le 1 ]; then
-  $cmd --num-threads $num_threads JOB=1:$nj $dir/log/decode.JOB.log \
-    nnet3-latgen-faster$thread_string $ivector_opts $frame_subsampling_opt \
-     --frames-per-chunk=$frames_per_chunk \
-     --extra-left-context=$extra_left_context \
-     --extra-right-context=$extra_right_context \
-     --extra-left-context-initial=$extra_left_context_initial \
-     --extra-right-context-final=$extra_right_context_final \
-     --minimize=$minimize --max-active=$max_active --min-active=$min_active --beam=$beam \
-     --lattice-beam=$lattice_beam --acoustic-scale=$acwt --allow-partial=true \
-     --word-symbol-table=$graphdir/words.txt "$model" \
-     $graphdir/HCLG.fst "$feats" "$lat_wspecifier" || exit 1;
+  if $use_gpu; then
+    nnet_forward_compute="nnet3-compute $gpu_opt $ivector_opts $frame_subsampling_opt \
+      --frames-per-chunk=$frames_per_chunk \
+      --extra-left-context=$extra_left_context \
+      --extra-right-context=$extra_right_context \
+      --extra-left-context-initial=$extra_left_context_initial \
+      --extra-right-context-final=$extra_right_context_final \
+      $model \"$feats\" ark:-"
+
+    $cmd $gpu_queue_opt --num-threads $num_threads JOB=1:$nj $dir/log/decode.JOB.log \
+      $nnet_forward_compute \| \
+      latgen-faster-mapped$thread_string --minimize=$minimize \
+      --max-active=$max_active --min-active=$min_active --beam=$beam \
+      --lattice-beam=$lattice_beam --acoustic-scale=$acwt --allow-partial=true \
+      --word-symbol-table=$graphdir/words.txt $model  \
+      $graphdir/HCLG.fst ark:- \
+      "$lat_wspecifier" || exit 1
+  else
+    $cmd --num-threads $num_threads JOB=1:$nj $dir/log/decode.JOB.log \
+      nnet3-latgen-faster$thread_string $ivector_opts $frame_subsampling_opt \
+       --frames-per-chunk=$frames_per_chunk \
+       --extra-left-context=$extra_left_context \
+       --extra-right-context=$extra_right_context \
+       --extra-left-context-initial=$extra_left_context_initial \
+       --extra-right-context-final=$extra_right_context_final \
+       --minimize=$minimize --max-active=$max_active --min-active=$min_active --beam=$beam \
+       --lattice-beam=$lattice_beam --acoustic-scale=$acwt --allow-partial=true \
+       --word-symbol-table=$graphdir/words.txt "$model" \
+       $graphdir/HCLG.fst "$feats" "$lat_wspecifier" || exit 1;
+  fi
 fi
 
 
