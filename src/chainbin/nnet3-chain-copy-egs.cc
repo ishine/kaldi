@@ -346,6 +346,7 @@ int main(int argc, char *argv[]) {
     std::vector<std::string> exclude_names;  // names we never shift times of;
                                             // not configurable for now.
     exclude_names.push_back(std::string("ivector"));
+	exclude_names.push_back(std::string("output-post"));
 
     int64 num_read = 0, num_written = 0, num_err = 0;
     for (; !example_reader.Done(); example_reader.Next(), num_read++) {

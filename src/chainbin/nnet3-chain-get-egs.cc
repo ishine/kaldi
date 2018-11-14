@@ -86,12 +86,16 @@ namespace nnet3 {
 
 **/
 
+//modified for T-S training
 static bool ProcessFile(const TransitionModel *trans_mdl,
                         const fst::StdVectorFst &normalization_fst,
+						const GeneralMatrix *t_feats,
                         const GeneralMatrix &feats,
                         const MatrixBase<BaseFloat> *ivector_feats,
                         int32 ivector_period,
                         const chain::Supervision &supervision,
+						const Posterior &pdf_post,
+						int32 num_pdfs,
                         const VectorBase<BaseFloat> *deriv_weights,
                         int32 supervision_length_tolerance,
                         const std::string &utt_id,
@@ -115,6 +119,11 @@ static bool ProcessFile(const TransitionModel *trans_mdl,
   if (!utt_splitter->LengthsMatch(utt_id, num_input_frames, num_output_frames,
                                   supervision_length_tolerance))
     return false;  // LengthsMatch() will have printed a warning.
+
+  if (num_pdfs != -1 && !utt_splitter->LengthsMatch(utt_id, num_input_frames, 
+	                                                  static_cast<int32>(pdf_post.size()),
+								                      supervision_length_tolerance))
+	return false;
 
   // It can happen if people mess with the feature frame-width options, that
   // there can be small mismatches in length between the supervisions (derived
@@ -195,7 +204,21 @@ static bool ProcessFile(const TransitionModel *trans_mdl,
       nnet_chain_eg.outputs[0].Swap(&nnet_supervision);
     }
 
-    nnet_chain_eg.inputs.resize(ivector_feats != NULL ? 2 : 1);
+//    nnet_chain_eg.inputs.resize(ivector_feats != NULL ? 2 : 1);  modif for T-S training
+/*
+	if (ivector_feats == NULL && t_feats == NULL)
+	{
+	  nnet_chain_eg.inputs.resize(1);
+	}else if (ivector_feats !=NULL && t_feats == NULL) {
+	  nnet_chain_eg.inputs.resize(2);
+	}else if (ivector_feats == NULL && t_feats != NULL) {
+	  nnet_chain_eg.inputs.resize(2);
+	}else {
+	  nnet_chain_eg.inputs.resize(3);
+	}
+*/
+	//end T-S
+	nnet_chain_eg.inputs.reserve(4);     // s-input, ivector, t-input, pdf-post, add by wangzhichao
 
     int32 tot_input_frames = chunk.left_context + chunk.num_frames +
         chunk.right_context,
@@ -205,8 +228,10 @@ static bool ProcessFile(const TransitionModel *trans_mdl,
     ExtractRowRangeWithPadding(feats, start_frame, tot_input_frames,
                                &input_frames);
 
+
     NnetIo input_io("input", -chunk.left_context, input_frames);
-    nnet_chain_eg.inputs[0].Swap(&input_io);
+//    nnet_chain_eg.inputs[0].Swap(&input_io);
+	nnet_chain_eg.inputs.push_back(input_io);
 
     if (ivector_feats != NULL) {
       // if applicable, add the iVector feature.
@@ -221,8 +246,40 @@ static bool ProcessFile(const TransitionModel *trans_mdl,
       Matrix<BaseFloat> ivector(1, ivector_feats->NumCols());
       ivector.Row(0).CopyFromVec(ivector_feats->Row(ivector_frame_subsampled));
       NnetIo ivector_io("ivector", 0, ivector);
-      nnet_chain_eg.inputs[1].Swap(&ivector_io);
+//      nnet_chain_eg.inputs[1].Swap(&ivector_io);
+	  nnet_chain_eg.inputs.push_back(ivector_io);
     }
+
+	//add for T-S training 
+	if (t_feats != NULL) {
+	  GeneralMatrix t_input_frames;
+	  ExtractRowRangeWithPadding(*t_feats, start_frame, tot_input_frames,
+                               &t_input_frames);
+	  NnetIo teacher_input_io("input-teacher", -chunk.left_context, t_input_frames);
+//	  size_t cur_size = nnet_chain_eg.inputs.size();
+	  nnet_chain_eg.inputs.push_back(teacher_input_io);
+	}
+
+	if (num_pdfs != -1) {
+	    Posterior labels(num_frames_subsampled);
+
+    // TODO: it may be that using these weights is not actually helpful (with
+    // chain training, it was not), and that setting them all to 1 is better.
+    // We could add a boolean option to this program to control that; but I
+    // don't want to add such an option if experiments show that it is not
+    // helpful.
+      for (int32 i = 0; i < num_frames_subsampled; i++) {
+        int32 t = i + start_frame_subsampled;
+        if (t < pdf_post.size())
+          labels[i] = pdf_post[t];
+        for (std::vector<std::pair<int32, BaseFloat> >::iterator
+               iter = labels[i].begin(); iter != labels[i].end(); ++iter)
+          iter->second *= chunk.output_weights[i];
+      }
+	  NnetIo output_post_io("output-post", num_pdfs, 0, labels, frame_subsampling_factor);
+		nnet_chain_eg.inputs.push_back(output_post_io);
+	}
+	//end T-S
 
     if (compress)
       nnet_chain_eg.Compress();
@@ -255,8 +312,8 @@ int main(int argc, char *argv[]) {
         "ready for training; in that case they should later be processed\n"
         "with nnet3-chain-normalize-egs\n"
         "\n"
-        "Usage:  nnet3-chain-get-egs [options] [<normalization-fst>] <features-rspecifier> "
-        "<chain-supervision-rspecifier> <egs-wspecifier>\n"
+		"Usage:  nnet3-chain-get-egs [options] [<normalization-fst>]\n" 
+		"<features-rspecifier> <chain-supervision-rspecifier> <egs-wspecifier>\n"
         "\n"
         "An example [where $feats expands to the actual features]:\n"
         "chain-get-supervision [args] | \\\n"
@@ -266,7 +323,7 @@ int main(int argc, char *argv[]) {
         "chain-get-supervision.\n";
 
     bool compress = true;
-    int32 length_tolerance = 100, online_ivector_period = 1,
+    int32 num_pdfs = -1, length_tolerance = 100, online_ivector_period = 1,
           supervision_length_tolerance = 1;
 
     ExampleGenerationConfig eg_config;  // controls num-frames,
@@ -276,7 +333,10 @@ int main(int argc, char *argv[]) {
     int32 srand_seed = 0;
     std::string online_ivector_rspecifier,
         deriv_weights_rspecifier,
-        trans_mdl_rxfilename;
+        trans_mdl_rxfilename,
+	    teacher_feats_rspecifier,
+		pdf_post_rspecifier;
+
 
     ParseOptions po(usage);
     po.Register("compress", &compress, "If true, write egs with input features "
@@ -311,6 +371,12 @@ int main(int argc, char *argv[]) {
                 "Filename of transition model to read; should only be supplied "
                 "if you want 'unconstrained' egs, and if you supplied "
                 "--convert-to-pdfs=false to chain-get-supervision.");
+	po.Register("teacher-feats", &teacher_feats_rspecifier, "Rspecifier of "
+	            "teacher features, as a matrix.(For teacher-student training)");
+	po.Register("posteriors", &pdf_post_rspecifier, "Rspecifier of pdf_post, "
+	            "should be supplied for teacher-student training.");
+	po.Register("num-pdfs", &num_pdfs, "Number of pdfs in the acoustic "
+                "model, should be supplied together with posteriors." );
 
     eg_config.Register(&po);
 
@@ -329,6 +395,8 @@ int main(int argc, char *argv[]) {
         supervision_rspecifier,
         examples_wspecifier;
 
+    // add for T-S trainging (the following code should be modified later)   --wangzhichao
+
     if (po.NumArgs() == 3) {
       feature_rspecifier = po.GetArg(1);
       supervision_rspecifier = po.GetArg(2);
@@ -343,7 +411,6 @@ int main(int argc, char *argv[]) {
 
     eg_config.ComputeDerived();
     UtteranceSplitter utt_splitter(eg_config);
-
 
     const TransitionModel *trans_mdl_ptr = NULL;
     TransitionModel trans_mdl;
@@ -368,6 +435,14 @@ int main(int argc, char *argv[]) {
 
     // Read as GeneralMatrix so we don't need to un-compress and re-compress
     // when selecting parts of matrices.
+	RandomAccessGeneralMatrixReader t_feat_reader;
+	if (!teacher_feats_rspecifier.empty()) {
+	  t_feat_reader.Open(teacher_feats_rspecifier);
+	}
+	RandomAccessPosteriorReader pdf_post_reader;
+	if(!pdf_post_rspecifier.empty()) {
+	  pdf_post_reader.Open(pdf_post_rspecifier);
+	}
     SequentialGeneralMatrixReader feat_reader(feature_rspecifier);
     chain::RandomAccessSupervisionReader supervision_reader(
         supervision_rspecifier);
@@ -383,7 +458,7 @@ int main(int argc, char *argv[]) {
       std::string key = feat_reader.Key();
       const GeneralMatrix &feats = feat_reader.Value();
       if (!supervision_reader.HasKey(key)) {
-        KALDI_WARN << "No pdf-level posterior for key " << key;
+        KALDI_WARN << "No superivision for key " << key;
         num_err++;
       } else {
         const chain::Supervision &supervision = supervision_reader.Value(key);
@@ -409,6 +484,37 @@ int main(int argc, char *argv[]) {
           num_err++;
           continue;
         }
+		// add for T-S training
+		const GeneralMatrix *t_feats = NULL;
+		if (!teacher_feats_rspecifier.empty()) {
+		  if (!t_feat_reader.HasKey(key)) {
+			KALDI_WARN << "No T-feature for utterance " << key;
+			num_err++;
+			continue;
+		  }else {
+			t_feats = &(t_feat_reader.Value(key));
+		  }
+		}
+		// pdf_post is used for CE-regularization in T-S training
+		const Posterior *pdf_post = NULL;
+		if (!pdf_post_rspecifier.empty()) {
+		  if (!pdf_post_reader.HasKey(key)) {
+		    KALDI_WARN << "No pdf-level posterior for key " << key;
+            num_err++;
+			continue;
+		  }else {
+			pdf_post = &(pdf_post_reader.Value(key));
+		  }
+		}
+		if (t_feats != NULL && (abs(t_feats->NumRows() - feats.NumRows()) > length_tolerance
+		  || t_feats->NumRows() == 0)) {
+			KALDI_WARN << "Length difference between feats " << feats.NumRows()
+			           << "and t_feats " << t_feats->NumRows()
+					   << "exceeds tolerance " << length_tolerance;
+			num_err++;
+			continue;
+		}
+		// end T-S
 
         const Vector<BaseFloat> *deriv_weights = NULL;
         if (!deriv_weights_rspecifier.empty()) {
@@ -423,9 +529,11 @@ int main(int argc, char *argv[]) {
           }
         }
 
-        if (!ProcessFile(trans_mdl_ptr, normalization_fst, feats,
+		//function ProcessFile is modified for T-S training (add t_feats)
+        if (!ProcessFile(trans_mdl_ptr, normalization_fst, t_feats, feats,
                          online_ivector_feats, online_ivector_period,
-                         supervision, deriv_weights, supervision_length_tolerance,
+                         supervision, *pdf_post, num_pdfs, deriv_weights, 
+						 supervision_length_tolerance,
                          key, compress,
                          &utt_splitter, &example_writer))
           num_err++;

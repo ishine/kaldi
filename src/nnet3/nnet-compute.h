@@ -103,6 +103,11 @@ class NnetComputer {
   void AcceptInputs(const Nnet &nnet,
                     const std::vector<NnetIo> &io);
 
+  // This function is as AcceptInputs, but used for T-S training;
+  void AcceptTSInputs(const Nnet &nnet, 
+	                  const std::vector<NnetIo> &io,
+					  bool is_teacher);
+
 
   /// This does either the forward or backward computation, depending
   /// when it is called (in a typical computation, the first time you call

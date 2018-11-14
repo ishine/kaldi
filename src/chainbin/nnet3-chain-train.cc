@@ -37,9 +37,9 @@ int main(int argc, char *argv[]) {
         "the input pipeline.  This training program is single-threaded (best to\n"
         "use it with a GPU).\n"
         "\n"
-        "Usage:  nnet3-chain-train [options] <raw-nnet-in> <denominator-fst-in> <chain-training-examples-in> <raw-nnet-out>\n"
+		"Usage:  nnet3-chain-train [options] [<teacher-raw-nnet-in>] <raw-nnet-in> <denominator-fst-in> <chain-training-examples-in> <raw-nnet-out>\n"
         "\n"
-        "nnet3-chain-train 1.raw den.fst 'ark:nnet3-merge-egs 1.cegs ark:-|' 2.raw\n";
+        "nnet3-chain-train [teacher.raw] 1.raw den.fst 'ark:nnet3-merge-egs 1.cegs ark:-|' 2.raw\n";
 
     int32 srand_seed = 0;
     bool binary_write = true;
@@ -59,7 +59,8 @@ int main(int argc, char *argv[]) {
 
     srand(srand_seed);
 
-    if (po.NumArgs() != 4) {
+	// modify for T-S training
+	if (po.NumArgs() < 4 || po.NumArgs() > 5) {
       po.PrintUsage();
       exit(1);
     }
@@ -68,13 +69,31 @@ int main(int argc, char *argv[]) {
     CuDevice::Instantiate().SelectGpuId(use_gpu);
 #endif
 
-    std::string nnet_rxfilename = po.GetArg(1),
-        den_fst_rxfilename = po.GetArg(2),
-        examples_rspecifier = po.GetArg(3),
-        nnet_wxfilename = po.GetArg(4);
+	std::string teacher_nnet_rxfilename,
+	    nnet_rxfilename,
+        den_fst_rxfilename,
+        examples_rspecifier,
+        nnet_wxfilename;
 
-    Nnet nnet;
+	if (po.NumArgs() == 4) {
+	  nnet_rxfilename = po.GetArg(1),
+      den_fst_rxfilename = po.GetArg(2),
+      examples_rspecifier = po.GetArg(3),
+      nnet_wxfilename = po.GetArg(4);  
+	} else {
+	  teacher_nnet_rxfilename = po.GetArg(1);
+	  KALDI_ASSERT(!teacher_nnet_rxfilename.empty());
+	  nnet_rxfilename = po.GetArg(2),
+      den_fst_rxfilename = po.GetArg(3),
+      examples_rspecifier = po.GetArg(4),
+      nnet_wxfilename = po.GetArg(5);
+	}
+	//end T-S
+
+    Nnet nnet, t_nnet;
     ReadKaldiObject(nnet_rxfilename, &nnet);
+	if (!teacher_nnet_rxfilename.empty())
+	  ReadKaldiObject(teacher_nnet_rxfilename, &t_nnet);  // read T-S nnet
 
     bool ok;
 
@@ -82,13 +101,16 @@ int main(int argc, char *argv[]) {
       fst::StdVectorFst den_fst;
       ReadFstKaldi(den_fst_rxfilename, &den_fst);
 
-      NnetChainTrainer trainer(opts, den_fst, &nnet);
+	  NnetChainTrainer trainer(opts, den_fst, &nnet, &t_nnet);  //add t_nnet for T-S 
 
       SequentialNnetChainExampleReader example_reader(examples_rspecifier);
 
-      for (; !example_reader.Done(); example_reader.Next())
-        trainer.Train(example_reader.Value());
-
+	  for (; !example_reader.Done(); example_reader.Next()) {
+		if (teacher_nnet_rxfilename.empty())
+		  trainer.Train(example_reader.Value());
+		else
+		  trainer.TrainTS(example_reader.Value());         // for T-S training
+	  }
       ok = trainer.PrintTotalStats();
     }
 
