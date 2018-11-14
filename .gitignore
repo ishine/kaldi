@@ -82,6 +82,7 @@ GSYMS
 /egs/*/s*/kaldi_files
 
 # /tools/
+/tools/pocolm/
 /tools/ATLAS/
 /tools/atlas3.8.3.tar.gz
 /tools/irstlm/
