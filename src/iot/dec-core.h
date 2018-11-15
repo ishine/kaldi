@@ -335,7 +335,7 @@ class DecCore {
     { }
   };
 
-  void AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost) {
+  inline void AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost) {
     if (list->head == NULL) {
       RescoreToken *tok = NewRescoreToken(state, cost, NULL);
       list->head = tok;
@@ -382,7 +382,7 @@ class DecCore {
 
   inline void GcRescoreTokenList(Token* tok) {
     KALDI_ASSERT(tok->rtoks != NULL);
-    if (tok->rtoks->rc-- == 0) {
+    if (--(tok->rtoks->rc) == 0) {
       DeleteRescoreTokenList(tok);
     }
   }

@@ -663,9 +663,7 @@ void DecCore::MergeRescoreTokenList(Token *from, Token *to) {
       AddRescoreToken(rtoks, t->state, cost);
     }
   }
-
   GcRescoreTokenList(to);
-
   HookRescoreTokenList(to, rtoks);
 }
 
@@ -684,10 +682,10 @@ inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState s
     Token *dst_tok = e_found->val;
     if (dst_tok->total_cost > tok->total_cost) {  // replace old token
       std::swap(dst_tok->total_cost, tok->total_cost);
-      std::swap(dst_tok->backpointer, tok->backpointer);
-      std::swap(dst_tok->links, tok->links);
-
       std::swap(dst_tok->extra_cost, tok->extra_cost);
+      std::swap(dst_tok->links, tok->links);
+      std::swap(dst_tok->backpointer, tok->backpointer);
+
       if (lm_fst_ != NULL) {
         std::swap(dst_tok->rtoks, tok->rtoks);
       }
