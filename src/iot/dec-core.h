@@ -155,8 +155,9 @@ class DecCore {
   struct Token;
   struct TokenList;
   struct ForwardLink;
-  struct LmToken;
-  struct LmTokenList;
+
+  struct RescoreToken;
+  struct RescoreTokenList;
 
   typedef WfstStateId ViterbiState;
   typedef WfstStateId LmState;
@@ -189,23 +190,20 @@ class DecCore {
     Token *next;
     Token *backpointer;
 
-    LmTokenList *lm_toks; // co-hypothesis list associate with this token
-    bool lm_token_list_owner;
+    RescoreTokenList *rtoks; // rescore token list(co-hypotheses) associate with this token
 
     inline Token(
         BaseFloat total_cost,
         BaseFloat extra_cost,
         ForwardLink *links,
         Token *next,
-        Token *backpointer,
-        LmTokenList *lm_toks) :
+        Token *backpointer) :
       total_cost(total_cost),
       extra_cost(extra_cost),
       links(links),
       next(next),
       backpointer(backpointer),
-      lm_toks(lm_toks),
-      lm_token_list_owner(false)
+      rtoks(NULL)
     { }
 
     inline ~Token() { }
@@ -216,22 +214,18 @@ class DecCore {
       BaseFloat extra_cost,
       ForwardLink *links,
       Token *next,
-      Token *backpointer,
-      LmTokenList *lm_toks) {
+      Token *backpointer) {
     Token *tok = (Token*) token_pool_->MallocElem();
     // placement new
-    new (tok) Token(total_cost, extra_cost, links, next, backpointer, lm_toks);
+    new (tok) Token(total_cost, extra_cost, links, next, backpointer);
     return tok;
   }
 
   inline void DeleteToken(Token *tok) {
     // Forward links are not owned by token
-/* TODO
-    if (tok->lm_token_list_owner && tok->lm_toks != NULL) {
-      DeleteLmTokenList(tok->lm_toks);
+    if (lm_fst_ != NULL && tok->rtoks != NULL) {
+      GcRescoreTokenList(tok);
     }
-    */
-
     tok->~Token();
     token_pool_->FreeElem(tok);
   }
@@ -305,51 +299,52 @@ class DecCore {
   }
 
 
-/* ------------------------------ LmToken ------------------------------ */
-  struct LmToken {
+/* ------------------------------ RescoreToken ------------------------------ */
+  struct RescoreToken {
     LmState state;
     BaseFloat cost;
-    struct LmToken *next;
+    struct RescoreToken *next;
 
-    inline LmToken(LmState state, BaseFloat cost, LmToken *next)
+    inline RescoreToken(LmState state, BaseFloat cost, RescoreToken *next)
      : state(state), cost(cost), next(next)
     { }
 
-    inline ~LmToken() { }
+    inline ~RescoreToken() { }
   };
 
-  inline LmToken* NewLmToken(LmState lm_state, BaseFloat cost, LmToken *next) {
-    LmToken *tok = (LmToken*) lm_token_pool_->MallocElem();
-    new (tok) LmToken(lm_state, cost, next);  // placement new
+  inline RescoreToken* NewRescoreToken(LmState lm_state, BaseFloat cost, RescoreToken *next) {
+    RescoreToken *tok = (RescoreToken*) lm_token_pool_->MallocElem();
+    new (tok) RescoreToken(lm_state, cost, next);  // placement new
     return tok;
   }
 
-  inline void DeleteLmToken(LmToken *tok) {
-    tok->~LmToken();
+  inline void DeleteRescoreToken(RescoreToken *tok) {
+    tok->~RescoreToken();
     lm_token_pool_->FreeElem(tok);
   }
 
-  struct LmTokenList {
-    LmToken *head;
-    LmToken *best;
+  struct RescoreTokenList {
+    RescoreToken *head;
+    RescoreToken *best;
+    int32 rc;
 
-    LmTokenList() : 
+    RescoreTokenList() : 
       head(NULL),
-      best(NULL)
+      best(NULL),
+      rc(0)
     { }
   };
 
-  void InsertLmToken(LmTokenList *list, LmState state, BaseFloat cost) {
-    KALDI_ASSERT(list != NULL);
+  void AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost) {
     if (list->head == NULL) {
-      LmToken *tok = NewLmToken(state, cost, NULL);
+      RescoreToken *tok = NewRescoreToken(state, cost, NULL);
       list->head = tok;
       list->best = tok;
       return;
     }
 
     bool replaced = false;
-    for (LmToken *t = list->head; t != NULL; t = t->next) {
+    for (RescoreToken *t = list->head; t != NULL; t = t->next) {
       if (t->state == state) {
         if (t->cost > cost) {
           t->cost = cost;
@@ -361,38 +356,42 @@ class DecCore {
     }
 
     if (!replaced) {
-      LmToken *tok = NewLmToken(state, cost, list->head);
+      RescoreToken *tok = NewRescoreToken(state, cost, list->head);
       list->head = tok;
     }
 
-    for (LmToken *t = list->head; t != NULL; t = t->next) {
+    for (RescoreToken *t = list->head; t != NULL; t = t->next) {
       if (t->cost < list->best->cost) {
         list->best = t;
       }
     }
   }
 
-  inline void DeleteLmTokenList(LmTokenList *lm_toks) {
-    KALDI_ASSERT(lm_toks != NULL);
-    LmToken *p = lm_toks->head, *next;
+  inline void DeleteRescoreTokenList(Token* tok) {
+    KALDI_ASSERT(tok->rtoks != NULL);
+    RescoreToken *p = tok->rtoks->head, *next;
     while (p != NULL) {
       next = p->next;
-      DeleteLmToken(p);
+      DeleteRescoreToken(p);
       p = next;
     }
-    lm_toks->best = NULL;
-    DELETE(lm_toks);
+    tok->rtoks->head = NULL;
+    tok->rtoks->best = NULL;
+    DELETE(tok->rtoks);
   }
 
-  void HookLmTokenList(Token *tok, LmTokenList *lm_toks, bool take_ownership) {
-    tok->lm_toks = lm_toks;
-    if (take_ownership) {
-      tok->lm_token_list_owner = true;
-    } else {
-      tok->lm_token_list_owner = false;
+  inline void GcRescoreTokenList(Token* tok) {
+    KALDI_ASSERT(tok->rtoks != NULL);
+    if (tok->rtoks->rc-- == 0) {
+      DeleteRescoreTokenList(tok);
     }
   }
 
+  // this should be the only way to setup rescore token list to a token
+  void HookRescoreTokenList(Token *tok, RescoreTokenList *rtoks) {
+    tok->rtoks = rtoks;
+    rtoks->rc++;
+  }
 
   inline void PreFrame();
   inline void PostFrame();
@@ -403,7 +402,7 @@ class DecCore {
 
   void PossiblyResizeHash(size_t num_toks);
 
-  inline void MergeLmTokenList(Token *from, Token *to);
+  inline void MergeRescoreTokenList(Token *from, Token *to);
   inline void PropagateLm(Token *from, WfstArc *arc, Token *to);
 
   // FindOrAddToken either locates a token in hash of token_set_, or if necessary

@@ -18,7 +18,7 @@ DecCore::DecCore(Wfst *fst,
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
-  lm_token_pool_ = new MemoryPool(sizeof(LmToken), config_.token_pool_realloc);
+  lm_token_pool_ = new MemoryPool(sizeof(RescoreToken), config_.token_pool_realloc);
 
   timer_ = 0.0f;
 }
@@ -31,8 +31,6 @@ DecCore::~DecCore() {
   DELETE(token_pool_);
   DELETE(link_pool_);
   DELETE(lm_token_pool_);
-
-  KALDI_VLOG(2) << "lm rescore time:" << timer_;
 }
 
 void DecCore::AddExtLM(LmFst<fst::StdArc> *lm_fst) {
@@ -55,13 +53,13 @@ void DecCore::StartSession(const char* session_key) {
   session_key_ = session_key;
 
   WfstStateId start_state = fst_->Start();
-  Token *start_tok = NewToken(0.0, 0.0, NULL, NULL, NULL, NULL);
+  Token *start_tok = NewToken(0.0, 0.0, NULL, NULL, NULL);
   num_toks_++;
 
   if (lm_fst_ != NULL) {
-    LmTokenList *lm_toks = new LmTokenList();
-    InsertLmToken(lm_toks, lm_fst_->Start(), 0.0f);
-    HookLmTokenList(start_tok, lm_toks, true);
+    RescoreTokenList *rtoks = new RescoreTokenList();
+    AddRescoreToken(rtoks, lm_fst_->Start(), 0.0f);
+    HookRescoreTokenList(start_tok, rtoks);
   }
 
   token_net_.resize(1);
@@ -150,7 +148,7 @@ void DecCore::PostFrame() {
     ntok++;
     if (lm_fst_ != NULL) {
       int this_cohyp_len = 0;
-      for (LmToken *t = tok->lm_toks->head; t != NULL; t = t->next) {
+      for (RescoreToken *t = tok->rtoks->head; t != NULL; t = t->next) {
         this_cohyp_len++;
         nlmtok++;
       }
@@ -261,23 +259,23 @@ void DecCore::ComputeFinalCosts(
     if (lm_fst_ != NULL) {
 
       // downward sync
-      BaseFloat la_cost = tok->total_cost - tok->lm_toks->best->cost;
-      for (LmToken* t = tok->lm_toks->head; t != NULL; t = t->next) {
+      BaseFloat la_cost = tok->total_cost - tok->rtoks->best->cost;
+      for (RescoreToken* t = tok->rtoks->head; t != NULL; t = t->next) {
         t->cost = t->cost + la_cost;
       }
 
       // get best
-      tok->lm_toks->best = tok->lm_toks->head;
-      for (LmToken* t = tok->lm_toks->head; t != NULL; t = t->next) {
-        if (t->cost + lm_fst_->Final(t->state).Value() < tok->lm_toks->best->cost + lm_fst_->Final(tok->lm_toks->best->state).Value()) {
-          tok->lm_toks->best = t;
+      tok->rtoks->best = tok->rtoks->head;
+      for (RescoreToken* t = tok->rtoks->head; t != NULL; t = t->next) {
+        if (t->cost + lm_fst_->Final(t->state).Value() < tok->rtoks->best->cost + lm_fst_->Final(tok->rtoks->best->state).Value()) {
+          tok->rtoks->best = t;
         }
       }
       
       // upward sync
-      BaseFloat rescore_diff = tok->lm_toks->best->cost - tok->total_cost;
+      BaseFloat rescore_diff = tok->rtoks->best->cost - tok->total_cost;
       //KALDI_VLOG(2) << "rescore_diff" << rescore_diff ;
-      tok->total_cost = tok->lm_toks->best->cost;
+      tok->total_cost = tok->rtoks->best->cost;
 
       for (ForwardLink *l = tok->backpointer->links; l != NULL; l = l->next) {
         if (l->dst_tok == tok) {
@@ -289,7 +287,7 @@ void DecCore::ComputeFinalCosts(
     //</jiayu>
     */
     
-    BaseFloat lm_final_cost = (lm_fst_ == NULL) ? 0.0f : lm_fst_->Final(tok->lm_toks->best->state).Value();
+    BaseFloat lm_final_cost = (lm_fst_ == NULL) ? 0.0f : lm_fst_->Final(tok->rtoks->best->state).Value();
     BaseFloat final_cost = la_final_cost + lm_final_cost;
     
     BaseFloat cost = tok->total_cost,
@@ -638,70 +636,69 @@ void DecCore::PossiblyResizeHash(size_t num_toks) {
   }
 }
 
-void DecCore::MergeLmTokenList(Token *from, Token *to) {
+void DecCore::MergeRescoreTokenList(Token *from, Token *to) {
   KALDI_ASSERT(lm_fst_ != NULL);
   KALDI_ASSERT(from != NULL && to != NULL);
-  KALDI_ASSERT(from->lm_toks != NULL && to->lm_toks != NULL);
+  KALDI_ASSERT(from->rtoks != NULL && to->rtoks != NULL);
+  KALDI_ASSERT(to->links == NULL || (to->links->next == NULL && to->links->ilabel == kWfstEpsilon));
   
-  if (from->lm_toks == to->lm_toks) return;
+  if (from->rtoks == to->rtoks) return;
 
-  LmTokenList *lm_toks = new LmTokenList();
+  RescoreTokenList *rtoks = new RescoreTokenList();
 
   BaseFloat la_cost = 0.0f;
 
-  la_cost = from->total_cost - from->lm_toks->best->cost;
-  for (LmToken *t = from->lm_toks->head; t != NULL; t = t->next) {
+  la_cost = from->total_cost - from->rtoks->best->cost;
+  for (RescoreToken *t = from->rtoks->head; t != NULL; t = t->next) {
     BaseFloat cost = t->cost + la_cost;
     if (cost <= to->total_cost + config_.lm_token_beam) {
-      InsertLmToken(lm_toks, t->state, cost);
+      AddRescoreToken(rtoks, t->state, cost);
     }
   }
 
-  la_cost = to->total_cost - to->lm_toks->best->cost;
-  for (LmToken *t = to->lm_toks->head; t != NULL; t = t->next) {
+  la_cost = to->total_cost - to->rtoks->best->cost;
+  for (RescoreToken *t = to->rtoks->head; t != NULL; t = t->next) {
     BaseFloat cost = t->cost + la_cost;
     if (cost <= to->total_cost + config_.lm_token_beam) {
-      InsertLmToken(lm_toks, t->state, cost);
+      AddRescoreToken(rtoks, t->state, cost);
     }
   }
 
-/* TODO
-  if (to->lm_token_list_owner) {
-    DeleteLmTokenList(to->lm_toks);
-    to->lm_token_list_owner = false;
-  }
-  */
+  GcRescoreTokenList(to);
 
-  HookLmTokenList(to, lm_toks, true);
+  HookRescoreTokenList(to, rtoks);
 }
 
-inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState to_state, bool *changed) {
+inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState s, bool *changed) {
   KALDI_ASSERT(t < token_net_.size());
   Token *&toks = token_net_[t].toks;
-  Elem *e_found = token_set_.Find(to_state);
+  Elem *e_found = token_set_.Find(s);
   if (e_found == NULL) {
     tok->next = toks;
     toks = tok;
     num_toks_++;
-    token_set_.Insert(to_state, tok);
+    token_set_.Insert(s, tok);
     if (changed) *changed = true;
     return tok;
   } else {
     Token *dst_tok = e_found->val;
     if (dst_tok->total_cost > tok->total_cost) {  // replace old token
       std::swap(dst_tok->total_cost, tok->total_cost);
-      std::swap(dst_tok->lm_toks, tok->lm_toks);
-      std::swap(dst_tok->lm_token_list_owner, tok->lm_token_list_owner);
+      std::swap(dst_tok->backpointer, tok->backpointer);
+      std::swap(dst_tok->links, tok->links);
 
-      dst_tok->backpointer = tok->backpointer;
-
+      std::swap(dst_tok->extra_cost, tok->extra_cost);
+      if (lm_fst_ != NULL) {
+        std::swap(dst_tok->rtoks, tok->rtoks);
+      }
       if (changed) *changed = true;
     } else {
       if (changed) *changed = false;
     }
     if (lm_fst_ != NULL) {
-      MergeLmTokenList(tok, dst_tok);
+      MergeRescoreTokenList(tok, dst_tok);
     }
+
     DeleteToken(tok);
     return dst_tok;
   }
@@ -991,18 +988,18 @@ BaseFloat DecCore::GetCutoff(Elem *list_head,
 
 void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
   KALDI_ASSERT(lm_fst_ != NULL);
-  KALDI_ASSERT(from->lm_toks != NULL && from->lm_toks->head != NULL);
-  KALDI_ASSERT(to->lm_toks == NULL);
+  KALDI_ASSERT(from->rtoks != NULL && from->rtoks->head != NULL);
+  KALDI_ASSERT(to->rtoks == NULL);
 
   if (arc->olabel == kWfstEpsilon) { // not word-end arc
-    HookLmTokenList(to, from->lm_toks, false); // false: dont take list ownership
+    HookRescoreTokenList(to, from->rtoks);
     return;
   }
 
-  LmTokenList *lm_toks = new LmTokenList();
+  RescoreTokenList *rtoks = new RescoreTokenList();
 
-  BaseFloat la_cost = to->total_cost - from->lm_toks->best->cost;
-  for (LmToken *lm_tok = from->lm_toks->head; lm_tok != NULL; lm_tok = lm_tok->next) {
+  BaseFloat la_cost = to->total_cost - from->rtoks->best->cost;
+  for (RescoreToken *lm_tok = from->rtoks->head; lm_tok != NULL; lm_tok = lm_tok->next) {
     Arc lm_arc;
     bool ans = lm_fst_->GetArc(lm_tok->state, arc->olabel, &lm_arc);
     if (!ans) {
@@ -1010,12 +1007,12 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
                     "if a statistical language model);";
       exit(0);
     } else {
-      InsertLmToken(lm_toks, lm_arc.nextstate, lm_tok->cost + la_cost + lm_arc.weight.Value());
+      AddRescoreToken(rtoks, lm_arc.nextstate, lm_tok->cost + la_cost + lm_arc.weight.Value());
     }
   }
-  arc->weight += (lm_toks->best->cost - to->total_cost); // rescored arc
-  to->total_cost = lm_toks->best->cost;
-  HookLmTokenList(to, lm_toks, true);
+  arc->weight += (rtoks->best->cost - to->total_cost); // rescored arc
+  to->total_cost = rtoks->best->cost;
+  HookRescoreTokenList(to, rtoks);
 }
 
 
@@ -1080,7 +1077,7 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
             cutoff_ = cost + adaptive_beam;
           }
 
-          Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok, NULL);
+          Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok);
           if (lm_fst_ != NULL) {
             PropagateLm(tok, &arc, new_tok);
           }
@@ -1132,7 +1129,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
       if (arc.ilabel == kWfstEpsilon) {  // non-emitting
         BaseFloat cost = tok->total_cost + arc.weight;
         if (cost < cutoff) {
-          Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok, NULL);
+          Token *new_tok = NewToken(cost, 0.0, NULL, NULL, tok);
           if (lm_fst_ != NULL) {
             PropagateLm(tok, &arc, new_tok);
           }
