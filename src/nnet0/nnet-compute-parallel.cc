@@ -324,11 +324,11 @@ private:
 				nnet.Propagate(nnet_in, &nnet_out);
 
 				CuMatrix<BaseFloat> tgt_mat;
-			    if (this->kld_scale > 0)
-			    {
+			    if (this->kld_scale > 0) {
+				    si_nnet.SetFlags(flags);
 			      	si_nnet.Propagate(nnet_in, &si_nnet_out);
 			      	//p_si_nnet_out = &si_nnet_out;
-						  // convert posterior to matrix,
+			        // convert posterior to matrix,
 					PosteriorToMatrix(nnet_tgt, nnet.OutputDim(), &tgt_mat);
 					tgt_mat.Scale(1-this->kld_scale);
 					tgt_mat.AddMat(this->kld_scale, si_nnet_out);
