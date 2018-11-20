@@ -621,6 +621,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 		    SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
 		    RandomAccessInt32VectorReader targets_reader(targets_rspecifier);
+		    RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
@@ -648,7 +649,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    		idx = (idx+1)%nframes;
 	    	}
 
-	    	example = new CTCNnetExample(&feature_reader, &targets_reader,
+	    	example = new CTCNnetExample(&feature_reader, &si_feature_reader, &targets_reader,
 	    			&model_sync, stats, opts);
             example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
@@ -684,6 +685,7 @@ void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 	  {
 
 		    SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
+			RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 		    RandomAccessBaseFloatVectorReader weights_reader;
 			RandomAccessPosteriorReader targets_reader(targets_rspecifier);
 
@@ -714,7 +716,7 @@ void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    		idx = (idx+1)%nframes;
 	    	}
 
-	    	example = new DNNNnetExample(&feature_reader, &targets_reader,
+	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, &targets_reader,
 	    			&weights_reader, &model_sync, stats, opts);
             example->SetSweepFrames(loop_frames);
 	    	if (example->PrepareData(examples)) {

@@ -46,6 +46,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 	// get feature / target pair
 	input_frames = feature_reader->Value();
+	if (use_kld) si_input_frames = si_feature_reader->Value(utt);
 	targets = targets_reader->Value(utt);
 	// get per-frame weights
 	if (opts->frame_weights != "") {
@@ -90,20 +91,17 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 	examples.resize(1);
 
-	if (sweep_time>skip_frames)
-	{
+	if (sweep_time>skip_frames) {
 		KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
 		sweep_time = skip_frames;
 	}
 
-	if (skip_frames <= 1)
-	{
+	if (skip_frames <= 1) {
 		examples[0] = this;
 		return true;
 	}
 
-	if (sweep_time == skip_frames)
-	{
+	if (sweep_time == skip_frames) {
 		this->sweep_frames.resize(sweep_time);
 		for (int i = 0; i < sweep_time; i++)
 			sweep_frames[i] = i;
@@ -124,12 +122,14 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
 		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
 		example->input_frames.Resize(feat_lent, input_frames.NumCols());
+		if (use_kld) example->si_input_frames.Resize(feat_lent, input_frames.NumCols());
 		example->targets.resize(lent);
 		example->frames_weights.Resize(lent);
 
 		cur = sweep_frames[i];
 		for (int j = 0; j < feat_lent; j++) {
 			example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+			if (use_kld) example->si_input_frames.Row(j).CopyFromVec(si_input_frames.Row(cur));
 			cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
 			if (cur >= utt_len) cur = utt_len-1;
 		}
@@ -162,6 +162,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     // get feature / target pair
     input_frames = feature_reader->Value();
     targets = targets_reader->Value(utt);
+    if (use_kld) si_input_frames = si_feature_reader->Value(utt);
 
     examples.resize(1);
 
@@ -169,20 +170,17 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     int32 skip_frames = opts->skip_frames;
     int32 sweep_time = opts->sweep_time;
 
-    if (sweep_time>skip_frames)
-    {
+    if (sweep_time>skip_frames) {
     	KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
     	sweep_time = skip_frames;
     }
 
-    if (skip_frames <= 1)
-    {
+    if (skip_frames <= 1) {
     	examples[0] = this;
     	return true;
     }
 
-    if (sweep_time == skip_frames)
-    {
+    if (sweep_time == skip_frames) {
     	this->sweep_frames.resize(sweep_time);
     	for (int i = 0; i < sweep_time; i++)
     		sweep_frames[i] = i;
@@ -203,10 +201,12 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
     	feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
     	example->input_frames.Resize(feat_lent, input_frames.NumCols());
+    	if (use_kld) example->si_input_frames.Resize(feat_lent, input_frames.NumCols());
 
     	cur = sweep_frames[i];
     	for (int j = 0; j < feat_lent; j++) {
     		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+    		if (use_kld) example->si_input_frames.Row(j).CopyFromVec(si_input_frames.Row(cur));
     		cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
     		if (cur >= utt_len) cur = utt_len-1;
     	}
@@ -228,6 +228,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		model_sync->UnlockStates();
 		return false;
 	}
+
 	if (!num_ali_reader->HasKey(utt)) {
 		KALDI_WARN << "Utterance " << utt << ": found no reference alignment.";
 		model_sync->LockStates();
@@ -253,6 +254,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 	// 1) get the features, numerator alignment
 	input_frames = feature_reader->Value();
+	if (use_kld) si_input_frames = si_feature_reader->Value(utt);
 	num_ali = num_ali_reader->Value(utt);
 	int32 skip_frames = opts->skip_frames;
 	//int32 utt_frames = (input_frames.NumRows()+skip_frames-1)/skip_frames; //
@@ -339,10 +341,12 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
 		feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
 		example->input_frames.Resize(feat_lent, input_frames.NumCols());
+		if (use_kld) example->si_input_frames.Resize(feat_lent, input_frames.NumCols());
 
 		cur = sweep_frames[i];
 		for (int j = 0; j < feat_lent; j++) {
 			example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+			if (use_kld) example->si_input_frames.Row(j).CopyFromVec(si_input_frames.Row(cur));
 			cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
 			if (cur >= utt_len) cur = utt_len-1;
 		}

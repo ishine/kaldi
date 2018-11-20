@@ -105,7 +105,7 @@ public:
 
 	// compute xvector score
 	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector
-	BaseFloat GetXvectorScore(const VectorBase<BaseFloat> &train_xvec, int num_utts,
+	BaseFloat GetScore(const VectorBase<BaseFloat> &train_xvec, int num_utts,
 			const VectorBase<BaseFloat> &test_xvec, int type = 2);
 
 	// compute enroll xvector for a speaker

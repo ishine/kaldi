@@ -89,6 +89,7 @@ class Convolutional2DComponentFast : public UpdatableComponent {
     // define options
     BaseFloat bias_mean = -2.0, bias_range = 2.0, param_stddev = 0.1, param_range = 0.0;
     BaseFloat learn_rate_coef = 1.0, bias_learn_rate_coef = 1.0;
+    int xavier_flag = 0;
     // parse config
     std::string token;
     while (!is.eof()) {
@@ -108,6 +109,7 @@ class Convolutional2DComponentFast : public UpdatableComponent {
       else if (token == "<ConnectFmap>") ReadBasicType(is, false, &connect_fmap_);
       else if (token == "<LearnRateCoef>") ReadBasicType(is, false, &learn_rate_coef);
       else if (token == "<BiasLearnRateCoef>") ReadBasicType(is, false, &bias_learn_rate_coef);
+      else if (token == "<Xavier>") ReadBasicType(is, false, &xavier_flag);
       else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
                      << " (ParamStddev|BiasMean|BiasRange|FmapXLen|FmapYLen|FiltXLen|FiltYLen|FiltXStep|FiltYStep|ConnectFmap|LearnRateCoef|BiasLearnRateCoef)";
       is >> std::ws;  // eat-up whitespace
@@ -140,15 +142,24 @@ class Convolutional2DComponentFast : public UpdatableComponent {
     //  
     // Initialize trainable parameters,
     //  
-    // Gaussian with given std_dev (mean = 0),
-    filters_.Resize(num_filters, num_input_fmaps*filt_x_len_*filt_y_len_);
-    if (param_range == 0.0)
-        RandGauss(0.0, param_stddev, &filters_);
-    else
-        RandUniform(0.0, param_range, &filters_);
-    // Uniform,
-    bias_.Resize(num_filters);
-    RandUniform(bias_mean, bias_range, &bias_);
+    // if Xavier_flag=1, use the “Xavier” initialization
+	if(xavier_flag){
+		float range = sqrt(6)/sqrt(OutputDim() + InputDim());
+		filters_.Resize(num_filters, num_input_fmaps*filt_x_len_*filt_y_len_);
+		RandUniform(0.0, range, &filters_);
+
+		bias_.Resize(num_filters, kSetZero);
+	} else {
+		// Gaussian with given std_dev (mean = 0),
+		filters_.Resize(num_filters, num_input_fmaps*filt_x_len_*filt_y_len_);
+		if (param_range == 0.0)
+			RandGauss(0.0, param_stddev, &filters_);
+		else
+			RandUniform(0.0, param_range, &filters_);
+		// Uniform,
+		bias_.Resize(num_filters);
+		RandUniform(bias_mean, bias_range, &bias_);
+	}
 
     //
     learn_rate_coef_ = learn_rate_coef;

@@ -1136,6 +1136,7 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 	  {
 
 	    	SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
+	    	RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 	    	RandomAccessLatticeReader den_lat_reader(den_lat_rspecifier);
 	    	RandomAccessInt32VectorReader num_ali_reader(num_ali_rspecifier);
 	    	RandomAccessInt32VectorReader sweep_frames_reader(sweep_frames_rspecifier);
@@ -1166,7 +1167,7 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 				idx = (idx+1)%nframes;
 			}
 
-			example = new SequentialNnetExample(&feature_reader, &den_lat_reader,
+			example = new SequentialNnetExample(&feature_reader, &si_feature_reader, &den_lat_reader,
 					&num_ali_reader, &sweep_frames_reader, &model_sync, stats, opts);
 			example->SetSweepFrames(loop_frames, opts->skip_inner);
 			if (example->PrepareData(examples)) {
