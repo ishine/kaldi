@@ -54,16 +54,15 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     BaseFloat l2_regularize;
     BaseFloat clip_loss;
     std::string ctc_imp;
-    std::string network_type;
 
 
     NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
     	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
-          clip_loss(1.0), ctc_imp("eesen"), network_type("lstm") { }
+          clip_loss(1.0), ctc_imp("eesen") { }
 
   	  void Register(OptionsItf *po)
   	  {
-  	  	NnetUpdateOptions::Register(po);
+  	  	    NnetUpdateOptions::Register(po);
 
 	      	po->Register("num-stream", &num_stream, "---CTC--- BPTT multi-stream training");
 	      	po->Register("max-frames", &max_frames, "Max number of frames to be processed");
@@ -75,7 +74,6 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
 	        po->Register("clip-loss", &clip_loss, "clip ctc loss, applied to the diff of the output "
 	                       "of the neural net.");
 	        po->Register("ctc-imp", &ctc_imp, "CTC objective function implementation, (eesen|warp)");
-	        po->Register("network-type", &network_type, "CTC neural network type, (lstm|fsmn)");
   	  }
 };
 
