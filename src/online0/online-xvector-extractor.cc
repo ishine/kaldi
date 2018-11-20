@@ -252,7 +252,7 @@ Xvector* OnlineXvectorExtractor::GetCurrentXvector(int type) {
 	return &xvector_;
 }
 
-BaseFloat OnlineXvectorExtractor::GetXvectorScore(const VectorBase<BaseFloat> &train_xvec, int num_utts,
+BaseFloat OnlineXvectorExtractor::GetScore(const VectorBase<BaseFloat> &train_xvec, int num_utts,
 		const VectorBase<BaseFloat> &test_xvec, int type) {
 	KALDI_ASSERT(train_xvec.Dim() == test_xvec.Dim());
 

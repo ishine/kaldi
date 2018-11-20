@@ -534,6 +534,7 @@ void NnetLstmUpdateParallel(const NnetLstmUpdateOptions *opts,
 	  {
 
 		    SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
+	    	RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 		    RandomAccessPosteriorReader targets_reader(targets_rspecifier);
 		    RandomAccessBaseFloatVectorReader weights_reader;
 		    if (opts->frame_weights != "") {
@@ -548,7 +549,7 @@ void NnetLstmUpdateParallel(const NnetLstmUpdateOptions *opts,
 	    NnetExample *example;
 	    std::vector<NnetExample*> examples;
 	    for (; !feature_reader.Done(); feature_reader.Next()) {
-	    	example = new DNNNnetExample(&feature_reader, &targets_reader, &weights_reader, &model_sync, stats, opts);
+	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, &targets_reader, &weights_reader, &model_sync, stats, opts);
 	    	if (example->PrepareData(examples))
 	    	{
 	    		for (int i = 0; i < examples.size(); i++)

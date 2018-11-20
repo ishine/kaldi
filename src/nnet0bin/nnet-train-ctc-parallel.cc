@@ -78,13 +78,12 @@ int main(int argc, char *argv[]) {
     using namespace kaldi::nnet0;
     typedef kaldi::int32 int32;
 
-    //Select the GPU
+// Initialize GPU
 #if HAVE_CUDA==1
     if (opts.use_gpu == "yes") {
         CuDevice::Instantiate().AllowMultithreading();
         CuDevice::Instantiate().Initialize();
     }
-    //CuDevice::Instantiate().DisableCaching();
 #endif
 
 

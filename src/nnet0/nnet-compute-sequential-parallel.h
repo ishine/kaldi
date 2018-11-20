@@ -55,6 +55,7 @@ struct NnetSequentialUpdateOptions {
                                   // for MPE/SMBR only.
   std::string sweep_frames_str;
   std::string sweep_frames_filename;
+  std::string si_feature_rspecifier;
 
   int32 update_frames;
   int32 max_frames; // Allow segments maximum of one minute by default
@@ -133,6 +134,7 @@ struct NnetSequentialUpdateOptions {
       po->Register("use-psgd",&use_psgd, "use preconditional sgd instead of sgd, it always true while training with multi-machine");
 
       po->Register("si-model",&si_model_filename, "kld speaker independent model filename");
+      po->Register("si-feature",&si_feature_rspecifier, "kld speaker independent feature rspecifier");
 
       //<jiayu>
       po->Register("targets-delay", &targets_delay, "---LSTM--- BPTT targets delay");

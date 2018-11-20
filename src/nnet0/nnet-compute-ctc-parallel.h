@@ -60,9 +60,8 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
           clip_loss(1.0), ctc_imp("eesen") { }
 
-  	  void Register(OptionsItf *po)
-  	  {
-  	  	    NnetUpdateOptions::Register(po);
+  	  void Register(OptionsItf *po) {
+  		  	NnetUpdateOptions::Register(po);
 
 	      	po->Register("num-stream", &num_stream, "---CTC--- BPTT multi-stream training");
 	      	po->Register("max-frames", &max_frames, "Max number of frames to be processed");
@@ -84,8 +83,7 @@ struct NnetCtcStats: NnetStats {
 
     NnetCtcStats(LossOptions &loss_opts): NnetStats(loss_opts) { }
 
-    void MergeStats(NnetUpdateOptions *opts, int root)
-    {
+    void MergeStats(NnetUpdateOptions *opts, int root) {
         int myid = opts->parallel_opts->myid;
         MPI_Barrier(MPI_COMM_WORLD);
 
@@ -106,15 +104,13 @@ struct NnetCtcStats: NnetStats {
         }
         else if (opts->objective_function == "ctc") {
         		ctc.Merge(myid, 0);
-        }
-        else {
+        } else {
         		KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
 
     }
 
-    void Print(NnetUpdateOptions *opts, double time_now)
-    {
+    void Print(NnetUpdateOptions *opts, double time_now) {
         KALDI_LOG << "Done " << num_done << " files, " << num_no_tgt_mat
                   << " with no tgt_mats, " << num_other_error
                   << " with other errors. "

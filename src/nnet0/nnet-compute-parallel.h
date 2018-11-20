@@ -56,6 +56,7 @@ struct NnetUpdateOptions {
     std::string frame_weights;
     std::string use_gpu;
     std::string si_model_filename;
+    std::string si_feature_rspecifier;
     std::string sweep_frames_str;
     bool  sweep_loop;
     bool  skip_inner;
@@ -98,6 +99,7 @@ struct NnetUpdateOptions {
 	      po->Register("dropout-retention", &dropout_retention, "number between 0..1, saying how many neurons to preserve (0.0 will keep original value");
 
 	      po->Register("si-model",&si_model_filename, "kld speaker independent model filename");
+	      po->Register("si-feature",&si_feature_rspecifier, "kld speaker independent feature rspecifier");
 
 	      po->Register("kld-scale", &kld_scale, "KLD regularization weight to the original training criterion");
 
