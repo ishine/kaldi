@@ -164,10 +164,9 @@ struct FeatureExample: NnetExample
 	const NnetForwardOptions *opts;
 
 	FeatureExample(SequentialBaseFloatMatrixReader *feature_reader,
-					RandomAccessBaseFloatMatrixReader *si_feature_reader,
 					RandomAccessInt32VectorReader *sweep_frames_reader,
 					const NnetForwardOptions *opts)
-			:NnetExample(feature_reader, si_feature_reader),
+			:NnetExample(feature_reader, NULL),
 			 sweep_frames_reader(sweep_frames_reader), opts(opts) {
 
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))

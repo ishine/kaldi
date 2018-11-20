@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 				num_train_examples = 1;
 			}
 
-			BaseFloat score = extractor.GetXvectorScore(*train_xvectors[key1], num_train_examples, *test_xvectors[key2]);
+			BaseFloat score = extractor.GetScore(*train_xvectors[key1], num_train_examples, *test_xvectors[key2]);
 			sum += score;
 			sumsq += score * score;
 			num_trials_done++;

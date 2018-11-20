@@ -92,7 +92,7 @@ float GetXvectorScore(void *lp_extractor, float *enroll, float *eval,
 	OnlineXvectorExtractor *extractor = (OnlineXvectorExtractor *)lp_extractor;
 	SubVector<BaseFloat> vec1(enroll, size);
 	SubVector<BaseFloat> vec2(eval, size);
-	return extractor->GetXvectorScore(vec1, enroll_num, vec2, type);
+	return extractor->GetScore(vec1, enroll_num, vec2, type);
 }
 
 int GetEnrollSpeakerXvector(void *lp_extractor, float *spk_ivec, float *ivecs,

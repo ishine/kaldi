@@ -115,7 +115,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	bool ali_skip = (utt_len+skip_frames-1)/skip_frames == targets.size() ? false : true;
 
 	for (int i = 0; i < sweep_frames.size(); i++) {
-		example = new DNNNnetExample(feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
+		example = new DNNNnetExample(feature_reader, si_feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
 		example->utt = utt;
 		lent = utt_len/skip_frames;
 		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
@@ -192,7 +192,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
     for (int i = 0; i < sweep_frames.size(); i++) {
-    	example = new CTCNnetExample(feature_reader, targets_reader, model_sync, stats, opts);
+    	example = new CTCNnetExample(feature_reader, si_feature_reader, targets_reader, model_sync, stats, opts);
     	example->utt = utt;
     	example->targets = targets;
 
@@ -329,7 +329,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
 	for (int i = 0; i < 1; i++) {
-		example = new SequentialNnetExample(feature_reader,
+		example = new SequentialNnetExample(feature_reader, si_feature_reader,
 				den_lat_reader, num_ali_reader, sweep_frames_reader, model_sync, stats, opts);
 		example->utt = utt;
 		example->den_lat = den_lat;
