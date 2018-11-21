@@ -270,7 +270,7 @@ class DecCore {
     inline ~ForwardLink() { }
   };
 
-  inline ForwardLink* NewLink(
+  inline ForwardLink* NewForwardLink(
       Token *dst_tok,
       Label ilabel,
       Label olabel,
@@ -283,7 +283,7 @@ class DecCore {
     return link;
   }
 
-  inline void DeleteLink(ForwardLink *link) {
+  inline void DeleteForwardLink(ForwardLink *link) {
     link->~ForwardLink();
     link_pool_->FreeElem(link);
   }
@@ -292,7 +292,7 @@ class DecCore {
     ForwardLink *l = tok->links, *next = NULL;
     while (l != NULL) {
       next = l->next;
-      DeleteLink(l);
+      DeleteForwardLink(l);
       l = next;
     }
     tok->links = NULL;
