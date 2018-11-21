@@ -183,21 +183,19 @@ void DecCore::PreSession() {
 
 
 void DecCore::PostSession() {
-  if (!config_.debug_mode) {
-    return;
+  if (config_.debug_mode) {
+    Lattice lat;
+    GetBestPath(&lat, true);
+    LatticeWeight weight;
+    std::vector<int32> alignment;
+    std::vector<int32> words;
+    GetLinearSymbolSequence(lat, &alignment, &words, &weight);
+    for (int t = 0; t != alignment.size(); t++) {
+      fprintf(stderr, "--> %5d,  tid:%6d,  pid:%6d\n", t, alignment[t], trans_model_.TransitionIdToPhone(alignment[t]));
+    }
+    fflush(stderr);
+    std::cerr << "--> weight:" << weight << "\n";
   }
-  Lattice lat;
-  GetBestPath(&lat, true);
-  LatticeWeight weight;
-  std::vector<int32> alignment;
-  std::vector<int32> words;
-  GetLinearSymbolSequence(lat, &alignment, &words, &weight);
-  for (int t = 0; t != alignment.size(); t++) {
-    fprintf(stderr, "--> %5d  %6d\n", t, alignment[t]);
-    //std::cerr << " t:" << t << " tid:" << alignment[t] << "\n";
-  }
-  fflush(stderr);
-  std::cerr << "--> weight:" << weight << "\n";
 }
 
 
@@ -368,6 +366,11 @@ DecCore::BestPathIterator DecCore::BestPathEnd(
   }
   if (final_cost_out)
     *final_cost_out = best_final_cost;
+
+  //jiayu
+  KALDI_VLOG(2) << "best tok total cost:" << best_tok->total_cost;
+  KALDI_VLOG(2) << "best final cost:" << best_final_cost;
+
   return BestPathIterator(best_tok, NumFramesDecoded() - 1);
 }
 
@@ -416,12 +419,26 @@ bool DecCore::GetBestPath(Lattice *olat, bool use_final_probs) const {
     return false;  // would have printed warning.
   StateId state = olat->AddState();
   olat->SetFinal(state, LatticeWeight(final_graph_cost, 0.0));
+
+  LatticeWeight tot_weight;
+  if (config_.debug_mode) {
+    //tot_weight = LatticeWeight(final_graph_cost, 0.0);
+    fprintf(stderr, "--> final:%f, %f\n", LatticeWeight(final_graph_cost, 0.0).Value1(), LatticeWeight(final_graph_cost, 0.0).Value2());
+  }
+
   while (!iter.Done()) {
     LatticeArc arc;
     iter = TraceBackBestPath(iter, &arc);
     arc.nextstate = state;
     StateId new_state = olat->AddState();
     olat->AddArc(new_state, arc);
+
+    if (config_.debug_mode) {
+      tot_weight = Times(tot_weight, arc.weight);
+      fprintf(stderr, "--> t:%6d, i:%6d, o:%6d, gc:%6.1f, ac:%6.1f, tot_gc:%6.1f, tot_ac:%6.1f\n", 
+        iter.frame, arc.ilabel, arc.olabel, arc.weight.Value1(), arc.weight.Value2(), tot_weight.Value1(), tot_weight.Value2());
+    }
+
     state = new_state;
   }
   olat->SetStart(state);
@@ -693,10 +710,23 @@ inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState s
     } else {
       if (changed) *changed = false;
     }
+
     if (lm_fst_ != NULL) {
       MergeRescoreTokenList(tok, dst_tok);
     }
 
+/*
+    std::vector<Token*> q;
+    q.push_back(tok);
+    while (q.size() != 0) {
+      Token *t = q.back();
+      q.pop_back();
+      for (ForwardLink *l = t->links; l != NULL; l = l->next) {
+        l->dst_tok->total_cost = 1000; //std::numeric_limits<BaseFloat>::infinity();
+        q.push_back(l->dst_tok);
+      }
+    }
+    */
     DeleteToken(tok);
     return dst_tok;
   }
@@ -741,7 +771,7 @@ void DecCore::PruneForwardLinks(int32 t,
           ForwardLink *next_link = link->next;
           if (prev_link != NULL) prev_link->next = next_link;
           else tok->links = next_link;
-          DeleteLink(link);
+          DeleteForwardLink(link);
           link = next_link;  // advance link but leave prev_link the same.
           *links_pruned = true;
         } else {   // keep the link and update the tok_extra_cost if needed.
@@ -829,7 +859,7 @@ void DecCore::PruneForwardLinksFinal() {
           ForwardLink *next_link = link->next;
           if (prev_link != NULL) prev_link->next = next_link;
           else tok->links = next_link;
-          DeleteLink(link);
+          DeleteForwardLink(link);
           link = next_link; // advance link but leave prev_link the same.
         } else { // keep the link and update the tok_extra_cost if needed.
           if (link_extra_cost < 0.0) { // this is just a precaution.
@@ -1081,7 +1111,7 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
           }
 
           Token *win_tok = TokenViterbi(new_tok, frame + 1, arc.dst, NULL);
-          tok->links = NewLink(win_tok, arc.ilabel, arc.olabel, arc.weight, ac_cost, tok->links);
+          tok->links = NewForwardLink(win_tok, arc.ilabel, arc.olabel, arc.weight, ac_cost, tok->links);
         }
       } // for all arcs
     }
@@ -1134,7 +1164,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
 
           bool changed;
           Token *win_tok = TokenViterbi(new_tok, cur_time, arc.dst, &changed);
-          tok->links = NewLink(win_tok, arc.ilabel, arc.olabel, arc.weight, 0, tok->links);
+          tok->links = NewForwardLink(win_tok, arc.ilabel, arc.olabel, arc.weight, 0, tok->links);
           // "changed" tells us whether the new token has a different
           // cost from before, or is new [if so, add into queue].
           if (changed) queue_.push_back(arc.dst);
