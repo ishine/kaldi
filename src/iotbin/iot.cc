@@ -43,7 +43,7 @@ void PrintPartialOutput(const std::string &utt,
   std::vector<int32> words;
   GetLinearSymbolSequence(best_path_lat, &alignment, &words, &weight);
   if (word_syms != NULL) {
-    std::cerr << utt << " --> ";
+    std::cerr << "[D] " << utt << " ";
     for (size_t i = 0; i < words.size(); i++) {
       std::string s = word_syms->Find(words[i]);
       if (s == "")

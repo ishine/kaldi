@@ -42,6 +42,7 @@ struct DecCoreConfig {
   
   fst::DeterminizeLatticePhonePrunedOptions det_opts;
 
+  bool use_cost_offset;
   bool debug_mode;
 
   DecCoreConfig() : 
@@ -57,6 +58,7 @@ struct DecCoreConfig {
     prune_scale(0.1),
     token_pool_realloc(2048),
     link_pool_realloc(2048),
+    use_cost_offset(true),
     debug_mode(false)
   { }
 
@@ -83,8 +85,10 @@ struct DecCoreConfig {
                    "number of tokens per alloc in memory pool");
     opts->Register("link-pool-realloc", &link_pool_realloc,
                    "number of forward-links per alloc in memory pool");
+    opts->Register("use-cost-offset", &use_cost_offset,
+                   "use-cost-offset=true/false, default=true");
     opts->Register("debug-mode", &debug_mode,
-                   "debug-mode=true/false");
+                   "debug-mode=true/false, default=false");
   }
 
   void Check() const {
@@ -145,6 +149,8 @@ class DecCore {
   BestPathIterator TraceBackBestPath(BestPathIterator iter, LatticeArc *arc) const;
   bool GetBestPath(Lattice *ofst, bool use_final_probs = true) const;
   bool TestGetBestPath(bool use_final_probs = true) const;
+
+  void PrintAlignmentDetail(Lattice &lat);
 
   bool GetRawLattice(Lattice *ofst, bool use_final_probs = true) const;
   bool GetRawLatticePruned(Lattice *ofst, bool use_final_probs, BaseFloat beam) const;
@@ -335,36 +341,12 @@ class DecCore {
     { }
   };
 
-  inline void AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost) {
-    if (list->head == NULL) {
-      RescoreToken *tok = NewRescoreToken(state, cost, NULL);
-      list->head = tok;
-      list->best = tok;
-      return;
+  inline void GcRescoreTokenList(Token* tok) {
+    KALDI_ASSERT(tok->rtoks != NULL);
+    if (--(tok->rtoks->rc) == 0) {
+      DeleteRescoreTokenList(tok);
     }
-
-    bool replaced = false;
-    for (RescoreToken *t = list->head; t != NULL; t = t->next) {
-      if (t->state == state) {
-        if (t->cost > cost) {
-          t->cost = cost;
-          replaced = true;
-        } else {
-          return;
-        }
-      }
-    }
-
-    if (!replaced) {
-      RescoreToken *tok = NewRescoreToken(state, cost, list->head);
-      list->head = tok;
-    }
-
-    for (RescoreToken *t = list->head; t != NULL; t = t->next) {
-      if (t->cost < list->best->cost) {
-        list->best = t;
-      }
-    }
+    tok->rtoks = NULL;
   }
 
   inline void DeleteRescoreTokenList(Token* tok) {
@@ -380,19 +362,13 @@ class DecCore {
     DELETE(tok->rtoks);
   }
 
-  inline void GcRescoreTokenList(Token* tok) {
-    KALDI_ASSERT(tok->rtoks != NULL);
-    if (--(tok->rtoks->rc) == 0) {
-      DeleteRescoreTokenList(tok);
-    }
-  }
-
+  inline void AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost);
   // this should be the only way to setup rescore token list to a token
-  void HookRescoreTokenList(Token *tok, RescoreTokenList *rtoks) {
-    tok->rtoks = rtoks;
-    rtoks->rc++;
-  }
+  inline void HookRescoreTokenList(Token *tok, RescoreTokenList *rtoks);
+  inline void MergeRescoreTokenList(Token *from, Token *to);
 
+
+/* ------------------------------ diagnostic ------------------------------ */
   inline void PreFrame();
   inline void PostFrame();
   void PreSession();
@@ -402,7 +378,6 @@ class DecCore {
 
   void PossiblyResizeHash(size_t num_toks);
 
-  inline void MergeRescoreTokenList(Token *from, Token *to);
   inline void PropagateLm(Token *from, WfstArc *arc, Token *to);
 
   // FindOrAddToken either locates a token in hash of token_set_, or if necessary

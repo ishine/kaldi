@@ -156,7 +156,7 @@ void DecCore::PostFrame() {
     }
   }
 
-  fprintf(stderr, "--> t:%-5d, n:%-5d, m:%-5d, max_m:%-5d, offset:%-7.4f, cutoff:%-7.4f\n",
+  fprintf(stderr, "[D] t:%-5d, n:%-5d, m:%-5d, max_m:%-5d, offset:%-7.4f, cutoff:%-7.4f\n",
     NumFramesDecoded(),
     ntok,
     nlmtok,
@@ -164,16 +164,6 @@ void DecCore::PostFrame() {
     cost_offsets_.back(),
     cutoff_);
   fflush(stderr);
-
-  /*
-  std::cerr << " t:" << NumFramesDecoded()
-            << " ntok:" << ntok
-            << " ncohyp:" << nlmtok
-            << " cost_offset:" << cost_offsets_.back()
-            << " cutoff:" << cutoff_
-            << " max_cohyp_len:" << max_cohyp_len
-            << "\n";
-  */
 }
 
 
@@ -186,16 +176,66 @@ void DecCore::PostSession() {
   if (config_.debug_mode) {
     Lattice lat;
     GetBestPath(&lat, true);
-    LatticeWeight weight;
-    std::vector<int32> alignment;
-    std::vector<int32> words;
-    GetLinearSymbolSequence(lat, &alignment, &words, &weight);
-    for (int t = 0; t != alignment.size(); t++) {
-      fprintf(stderr, "--> %5d,  tid:%6d,  pid:%6d\n", t, alignment[t], trans_model_.TransitionIdToPhone(alignment[t]));
-    }
-    fflush(stderr);
-    std::cerr << "--> weight:" << weight << "\n";
+    PrintAlignmentDetail(lat);
   }
+}
+
+void DecCore::PrintAlignmentDetail(Lattice &lat) {
+    std::cerr << "[D] ========== Alignment Detail ==========\n";
+    std::vector<LatticeArc> alignment_arcs;
+
+    LatticeWeight tot_weight = LatticeWeight::One();
+
+    StateId cur_state = lat.Start();
+    if (cur_state == fst::kNoStateId) {  // empty sequence.
+      alignment_arcs.clear();
+      tot_weight= LatticeWeight::Zero();
+      return;
+    }
+
+    LatticeWeight final_weight = LatticeWeight::Zero();
+    while (1) {
+      LatticeWeight w = lat.Final(cur_state);
+
+      if (w != LatticeWeight::Zero()) {  // is final..
+        KALDI_ASSERT(lat.NumArcs(cur_state) == 0);
+        final_weight = w;
+        break;
+      } else {
+        KALDI_ASSERT(lat.NumArcs(cur_state) == 1);
+
+        fst::ArcIterator<Lattice> iter(lat, cur_state);  // get the only arc.
+        const LatticeArc &arc = iter.Value();
+
+        alignment_arcs.push_back(arc);
+
+        cur_state = arc.nextstate;
+      }
+    }
+
+    int t = 0;
+    for (int k = 0; k != alignment_arcs.size(); k++) {
+      LatticeArc arc = alignment_arcs[k];
+      tot_weight = Times(arc.weight, tot_weight);
+      if (arc.ilabel != kWfstEpsilon) {
+        t++;
+      }
+      fprintf(stderr, "[D] t:%6d, i:%6d, o:%7d, g:%6.1f, am:%6.1f, tot_g:%6.1f, tot_am:%6.1f\n", 
+        t, arc.ilabel, arc.olabel, arc.weight.Value1(), arc.weight.Value2(), tot_weight.Value1(), tot_weight.Value2());
+    }
+
+    LatticeWeight tot_weight_with_final = Times(tot_weight, final_weight);
+
+    std::cerr << "[D] total_cost " << tot_weight 
+              << " = " << tot_weight.Value1() + tot_weight.Value2() << "\n";
+
+    std::cerr << "[D] final_weight " << final_weight << "\n";
+
+    std::cerr << "[D] total_cost_with_final " << tot_weight_with_final 
+              << " = " << tot_weight_with_final.Value1() + tot_weight_with_final.Value2() << "\n";
+
+    std::cerr << "[D] ========== Alignment Detail End ==========\n";
+    fflush(stderr);
 }
 
 
@@ -367,9 +407,8 @@ DecCore::BestPathIterator DecCore::BestPathEnd(
   if (final_cost_out)
     *final_cost_out = best_final_cost;
 
-  //jiayu
-  KALDI_VLOG(2) << "best tok total cost:" << best_tok->total_cost;
-  KALDI_VLOG(2) << "best final cost:" << best_final_cost;
+  KALDI_VLOG(2) << "best token cost with final " << best_cost;
+  KALDI_VLOG(2) << "best token final " << best_final_cost;
 
   return BestPathIterator(best_tok, NumFramesDecoded() - 1);
 }
@@ -420,25 +459,12 @@ bool DecCore::GetBestPath(Lattice *olat, bool use_final_probs) const {
   StateId state = olat->AddState();
   olat->SetFinal(state, LatticeWeight(final_graph_cost, 0.0));
 
-  LatticeWeight tot_weight;
-  if (config_.debug_mode) {
-    //tot_weight = LatticeWeight(final_graph_cost, 0.0);
-    fprintf(stderr, "--> final:%f, %f\n", LatticeWeight(final_graph_cost, 0.0).Value1(), LatticeWeight(final_graph_cost, 0.0).Value2());
-  }
-
   while (!iter.Done()) {
     LatticeArc arc;
     iter = TraceBackBestPath(iter, &arc);
     arc.nextstate = state;
     StateId new_state = olat->AddState();
     olat->AddArc(new_state, arc);
-
-    if (config_.debug_mode) {
-      tot_weight = Times(tot_weight, arc.weight);
-      fprintf(stderr, "--> t:%6d, i:%6d, o:%6d, gc:%6.1f, ac:%6.1f, tot_gc:%6.1f, tot_ac:%6.1f\n", 
-        iter.frame, arc.ilabel, arc.olabel, arc.weight.Value1(), arc.weight.Value2(), tot_weight.Value1(), tot_weight.Value2());
-    }
-
     state = new_state;
   }
   olat->SetStart(state);
@@ -650,85 +676,6 @@ void DecCore::PossiblyResizeHash(size_t num_toks) {
                                       * config_.hash_ratio);
   if (new_size > token_set_.Size()) {
     token_set_.SetSize(new_size);
-  }
-}
-
-void DecCore::MergeRescoreTokenList(Token *from, Token *to) {
-  KALDI_ASSERT(lm_fst_ != NULL);
-  KALDI_ASSERT(from != NULL && to != NULL);
-  KALDI_ASSERT(from->rtoks != NULL && to->rtoks != NULL);
-  KALDI_ASSERT(to->links == NULL || (to->links->next == NULL && to->links->ilabel == kWfstEpsilon));
-  
-  if (from->rtoks == to->rtoks) return;
-
-  RescoreTokenList *rtoks = new RescoreTokenList();
-
-  BaseFloat la_cost = 0.0f;
-
-  la_cost = from->total_cost - from->rtoks->best->cost;
-  for (RescoreToken *t = from->rtoks->head; t != NULL; t = t->next) {
-    BaseFloat cost = t->cost + la_cost;
-    if (cost <= to->total_cost + config_.lm_token_beam) {
-      AddRescoreToken(rtoks, t->state, cost);
-    }
-  }
-
-  la_cost = to->total_cost - to->rtoks->best->cost;
-  for (RescoreToken *t = to->rtoks->head; t != NULL; t = t->next) {
-    BaseFloat cost = t->cost + la_cost;
-    if (cost <= to->total_cost + config_.lm_token_beam) {
-      AddRescoreToken(rtoks, t->state, cost);
-    }
-  }
-  GcRescoreTokenList(to);
-  HookRescoreTokenList(to, rtoks);
-}
-
-inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState s, bool *changed) {
-  KALDI_ASSERT(t < token_net_.size());
-  Token *&toks = token_net_[t].toks;
-  Elem *e_found = token_set_.Find(s);
-  if (e_found == NULL) {
-    tok->next = toks;
-    toks = tok;
-    num_toks_++;
-    token_set_.Insert(s, tok);
-    if (changed) *changed = true;
-    return tok;
-  } else {
-    Token *dst_tok = e_found->val;
-    if (dst_tok->total_cost > tok->total_cost) {  // replace old token
-      std::swap(dst_tok->total_cost, tok->total_cost);
-      std::swap(dst_tok->extra_cost, tok->extra_cost);
-      std::swap(dst_tok->links, tok->links);
-      std::swap(dst_tok->backpointer, tok->backpointer);
-
-      if (lm_fst_ != NULL) {
-        std::swap(dst_tok->rtoks, tok->rtoks);
-      }
-      if (changed) *changed = true;
-    } else {
-      if (changed) *changed = false;
-    }
-
-    if (lm_fst_ != NULL) {
-      MergeRescoreTokenList(tok, dst_tok);
-    }
-
-/*
-    std::vector<Token*> q;
-    q.push_back(tok);
-    while (q.size() != 0) {
-      Token *t = q.back();
-      q.pop_back();
-      for (ForwardLink *l = t->links; l != NULL; l = l->next) {
-        l->dst_tok->total_cost = 1000; //std::numeric_limits<BaseFloat>::infinity();
-        q.push_back(l->dst_tok);
-      }
-    }
-    */
-    DeleteToken(tok);
-    return dst_tok;
   }
 }
 
@@ -1014,6 +961,81 @@ BaseFloat DecCore::GetCutoff(Elem *list_head,
 }
 
 
+void DecCore::AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost) {
+  if (list->head == NULL) {
+    RescoreToken *tok = NewRescoreToken(state, cost, NULL);
+    list->head = tok;
+    list->best = tok;
+    return;
+  }
+
+  bool replaced = false;
+  for (RescoreToken *t = list->head; t != NULL; t = t->next) {
+    if (t->state == state) {
+      if (t->cost > cost) {
+        t->cost = cost;
+        replaced = true;
+      } else {
+        return;
+      }
+    }
+  }
+
+  if (!replaced) {
+    RescoreToken *tok = NewRescoreToken(state, cost, list->head);
+    list->head = tok;
+  }
+
+  for (RescoreToken *t = list->head; t != NULL; t = t->next) {
+    if (t->cost < list->best->cost) {
+      list->best = t;
+    }
+  }
+}
+
+
+void DecCore::HookRescoreTokenList(Token *tok, RescoreTokenList *rtoks) {
+  KALDI_ASSERT(tok->rtoks == NULL);
+  tok->rtoks = rtoks;
+  rtoks->rc++;
+}
+
+
+void DecCore::MergeRescoreTokenList(Token *from, Token *to) {
+  KALDI_ASSERT(lm_fst_ != NULL);
+  KALDI_ASSERT(from != NULL && to != NULL);
+  KALDI_ASSERT(from->rtoks != NULL && to->rtoks != NULL);
+  KALDI_ASSERT(to->links == NULL || (to->links->next == NULL && to->links->ilabel == kWfstEpsilon));
+  
+  //if (from->rtoks == to->rtoks) return;
+
+  RescoreTokenList *rtoks = new RescoreTokenList();
+
+  BaseFloat la_cost = 0.0f;
+
+  la_cost = from->total_cost - from->rtoks->best->cost;
+  for (RescoreToken *t = from->rtoks->head; t != NULL; t = t->next) {
+    BaseFloat cost = t->cost + la_cost;
+    if (cost <= to->total_cost + config_.lm_token_beam) {
+      AddRescoreToken(rtoks, t->state, cost);
+    }
+  }
+
+  la_cost = to->total_cost - to->rtoks->best->cost;
+  for (RescoreToken *t = to->rtoks->head; t != NULL; t = t->next) {
+    BaseFloat cost = t->cost + la_cost;
+    if (cost <= to->total_cost + config_.lm_token_beam) {
+      AddRescoreToken(rtoks, t->state, cost);
+    }
+  }
+  GcRescoreTokenList(to);
+  HookRescoreTokenList(to, rtoks);
+
+  BaseFloat x = to->total_cost - rtoks->best->cost;
+  KALDI_ASSERT(x < 0.0001 && x > -0.0001);
+}
+
+
 void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
   KALDI_ASSERT(lm_fst_ != NULL);
   KALDI_ASSERT(from->rtoks != NULL && from->rtoks->head != NULL);
@@ -1044,6 +1066,59 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
 }
 
 
+inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState s, bool *changed) {
+  KALDI_ASSERT(t < token_net_.size());
+  Token *&toks = token_net_[t].toks;
+  Elem *e_found = token_set_.Find(s);
+  if (e_found == NULL) {
+    tok->next = toks;
+    toks = tok;
+    num_toks_++;
+    token_set_.Insert(s, tok);
+    if (changed) *changed = true;
+    return tok;
+  } else {
+    Token *dst_tok = e_found->val;
+    if (dst_tok->total_cost > tok->total_cost) {  // replace old token
+      std::swap(dst_tok->total_cost, tok->total_cost);
+      std::swap(dst_tok->extra_cost, tok->extra_cost);
+      std::swap(dst_tok->links, tok->links);
+      std::swap(dst_tok->backpointer, tok->backpointer);
+
+      if (lm_fst_ != NULL) {
+        std::swap(dst_tok->rtoks, tok->rtoks);
+      }
+      if (changed) *changed = true;
+    } else {
+      if (changed) *changed = false;
+    }
+
+    if (lm_fst_ != NULL) {
+      MergeRescoreTokenList(tok, dst_tok);
+      if (changed) *changed = true;
+    }
+
+/*
+    std::vector<Token*> q;
+    q.push_back(tok);
+    while (q.size() != 0) {
+      Token *t = q.back();
+      q.pop_back();
+      for (ForwardLink *l = t->links; l != NULL; l = l->next) {
+        if (l->dst_tok->backpointer == t) {
+          l->dst_tok->total_cost = 30000; //std::numeric_limits<BaseFloat>::infinity();
+          q.push_back(l->dst_tok);
+        }
+      }
+    }
+*/
+
+    DeleteToken(tok);
+    return dst_tok;
+  }
+}
+
+
 BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   KALDI_ASSERT(token_net_.size() > 0);
   int32 frame = token_net_.size() - 1; // zero-based, to get likelihoods from the decodable object.
@@ -1064,7 +1139,9 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
     ViterbiState state = best_elem->key;
     Token *tok = best_elem->val;
 
-    cost_offset = -tok->total_cost;
+    if (config_.use_cost_offset) {
+      cost_offset = -tok->total_cost;
+    }
 
     const WfstState *s = fst_->State(state);
     const WfstArc   *a = fst_->Arc(s->arc_base);
@@ -1146,6 +1223,11 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
       continue;
     }
 
+/*
+    for (ForwardLink *l = tok->links; l != NULL; l = l->next) {
+      l->dst_tok->total_cost = 100;
+    }
+    */
     DeleteLinksFromToken(tok);
     tok->links = NULL;
 
