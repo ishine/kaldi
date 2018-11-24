@@ -319,14 +319,14 @@ class DecCore {
   };
 
   inline RescoreToken* NewRescoreToken(LmState lm_state, BaseFloat cost, RescoreToken *next) {
-    RescoreToken *tok = (RescoreToken*) lm_token_pool_->MallocElem();
+    RescoreToken *tok = (RescoreToken*) rescore_token_pool_->MallocElem();
     new (tok) RescoreToken(lm_state, cost, next);  // placement new
     return tok;
   }
 
   inline void DeleteRescoreToken(RescoreToken *tok) {
     tok->~RescoreToken();
-    lm_token_pool_->FreeElem(tok);
+    rescore_token_pool_->FreeElem(tok);
   }
 
   struct RescoreTokenList {
@@ -476,7 +476,7 @@ class DecCore {
 
   MemoryPool *token_pool_;
   MemoryPool *link_pool_;
-  MemoryPool *lm_token_pool_;
+  MemoryPool *rescore_token_pool_;
 
   HashList<ViterbiState, Token*> token_hash_;
   std::vector<TokenList> token_net_;

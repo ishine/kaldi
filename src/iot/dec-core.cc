@@ -18,7 +18,7 @@ DecCore::DecCore(Wfst *fst,
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
-  lm_token_pool_ = new MemoryPool(sizeof(RescoreToken), config_.token_pool_realloc);
+  rescore_token_pool_ = new MemoryPool(sizeof(RescoreToken), config_.token_pool_realloc);
 
   timer_ = 0.0f;
 }
@@ -30,7 +30,7 @@ DecCore::~DecCore() {
 
   DELETE(token_pool_);
   DELETE(link_pool_);
-  DELETE(lm_token_pool_);
+  DELETE(rescore_token_pool_);
 }
 
 void DecCore::AddExtLM(LmFst<fst::StdArc> *lm_fst) {
