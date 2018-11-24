@@ -12,7 +12,7 @@ DecCore::DecCore(Wfst *fst,
     config_(config)
 {
   config_.Check();
-  token_set_.SetSize(1000);
+  token_hash_.SetSize(1000);
   num_toks_ = 0; 
   session_key_ = NULL;
 
@@ -24,7 +24,7 @@ DecCore::DecCore(Wfst *fst,
 }
 
 DecCore::~DecCore() {
-  DeleteElems(token_set_.Clear());
+  DeleteElems(token_hash_.Clear());
   ClearTokenNet();
   session_key_ = NULL;
 
@@ -40,7 +40,7 @@ void DecCore::AddExtLM(LmFst<fst::StdArc> *lm_fst) {
 
 void DecCore::StartSession(const char* session_key) {
   // clean up last session
-  DeleteElems(token_set_.Clear());
+  DeleteElems(token_hash_.Clear());
   cost_offsets_.clear();
   ClearTokenNet();
   warned_ = false;
@@ -64,7 +64,7 @@ void DecCore::StartSession(const char* session_key) {
 
   token_net_.resize(1);
   token_net_[0].toks = start_tok;
-  token_set_.Insert(start_state, start_tok);
+  token_hash_.Insert(start_state, start_tok);
 
   ProcessNonemitting(config_.beam);
 
@@ -285,7 +285,7 @@ void DecCore::ComputeFinalCosts(
   BaseFloat best_cost = infinity,
             best_cost_with_final = infinity;
 
-  const Elem *e = token_set_.GetList();
+  const Elem *e = token_hash_.GetList();
   while (e != NULL) {
     ViterbiState state = e->key;
     Token *tok = e->val;
@@ -327,7 +327,7 @@ void DecCore::ComputeFinalCosts(
     
     BaseFloat lm_final_cost = (lm_fst_ == NULL) ? 0.0f : lm_fst_->Final(tok->rtoks->best->state).Value();
     BaseFloat final_cost = la_final_cost + lm_final_cost;
-    
+ 
     BaseFloat cost = tok->total_cost,
               cost_with_final = cost + final_cost;
     best_cost = std::min(cost, best_cost);
@@ -674,8 +674,8 @@ bool DecCore::GetRawLatticePruned(
 void DecCore::PossiblyResizeHash(size_t num_toks) {
   size_t new_size = static_cast<size_t>(static_cast<BaseFloat>(num_toks)
                                       * config_.hash_ratio);
-  if (new_size > token_set_.Size()) {
-    token_set_.SetSize(new_size);
+  if (new_size > token_hash_.Size()) {
+    token_hash_.SetSize(new_size);
   }
 }
 
@@ -764,9 +764,9 @@ void DecCore::PruneForwardLinksFinal() {
   decoding_finalized_ = true;
   // We call DeleteElems() as a nicety, not because it's really necessary;
   // otherwise there would be a time, after calling PruneTokenList() on the
-  // final frame, when token_set_.GetList() or token_set_.Clear() would contain pointers
+  // final frame, when token_hash_.GetList() or token_hash_.Clear() would contain pointers
   // to nonexistent tokens.
-  DeleteElems(token_set_.Clear());
+  DeleteElems(token_hash_.Clear());
 
   // Now go through tokens on this frame, pruning forward links...  may have to
   // iterate a few times until there is no more change, because the list is not
@@ -1069,12 +1069,12 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
 inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState s, bool *changed) {
   KALDI_ASSERT(t < token_net_.size());
   Token *&toks = token_net_[t].toks;
-  Elem *e_found = token_set_.Find(s);
+  Elem *e_found = token_hash_.Find(s);
   if (e_found == NULL) {
     tok->next = toks;
     toks = tok;
     num_toks_++;
-    token_set_.Insert(s, tok);
+    token_hash_.Insert(s, tok);
     if (changed) *changed = true;
     return tok;
   } else {
@@ -1124,7 +1124,7 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
   int32 frame = token_net_.size() - 1; // zero-based, to get likelihoods from the decodable object.
   token_net_.resize(token_net_.size() + 1);
 
-  Elem *prev_toks = token_set_.Clear(); // transfer elems from hash to list
+  Elem *prev_toks = token_hash_.Clear(); // transfer elems from hash to list
   Elem *best_elem = NULL;
   BaseFloat adaptive_beam;
   size_t tok_cnt;
@@ -1193,7 +1193,7 @@ BaseFloat DecCore::ProcessEmitting(DecodableInterface *decodable) {
       } // for all arcs
     }
     e_tail = e->tail;
-    token_set_.Delete(e);
+    token_hash_.Delete(e);
   } // for all active token
   return cutoff_;
 }
@@ -1204,7 +1204,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
   int32 cur_time = static_cast<int32>(token_net_.size()) - 1;
 
   KALDI_ASSERT(queue_.empty());
-  for (const Elem *e = token_set_.GetList(); e != NULL;  e = e->tail) {
+  for (const Elem *e = token_hash_.GetList(); e != NULL;  e = e->tail) {
     queue_.push_back(e->key);
   }
   if (queue_.empty()) {
@@ -1217,7 +1217,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
   while (!queue_.empty()) {
     ViterbiState state = queue_.back();
     queue_.pop_back();
-    Token *tok = token_set_.Find(state)->val;
+    Token *tok = token_hash_.Find(state)->val;
 
     if (tok->total_cost > cutoff) {
       continue;
@@ -1260,7 +1260,7 @@ void DecCore::ProcessNonemitting(BaseFloat cutoff) {
 void DecCore::DeleteElems(Elem *list) {
   for (Elem *e = list, *e_tail; e != NULL; e = e_tail) {
     e_tail = e->tail;
-    token_set_.Delete(e);
+    token_hash_.Delete(e);
   }
 }
 
