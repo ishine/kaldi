@@ -52,15 +52,15 @@ size_t Tokenize(char *s, const char *delims, std::vector<char *> &tokens);
 // ReadToken reads a token from a file,
 // token memory is pre-allocated,
 // length of token is returned
-size_t ReadFileToken(FILE *fp, char *delims, char *token);
+size_t FileReadToken(FILE *fp, char *delims, char *token);
 
 // PeekToken is the same as ReadToken, 
 // except it doesn't consume the file stream
-size_t PeekFileToken(FILE *fp, char *delims, char *token);
+size_t FilePeekToken(FILE *fp, char *delims, char *token);
 
 // ExpectToken consume a token from the file stream,
 // and abort if it is different from expected token
-void ExpectFileToken(FILE *fp, char *delims, char *token);
+void FileExpectToken(FILE *fp, char *delims, char *token);
 
 } // namespace iot
 } // namespace kaldi

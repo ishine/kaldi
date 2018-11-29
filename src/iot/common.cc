@@ -12,7 +12,7 @@ size_t Tokenize(char *s, const char *delims, std::vector<char *> &tokens) {
 }
 
 
-size_t ReadFileToken(FILE *fp, char *delims, char *token)
+size_t FileReadToken(FILE *fp, char *delims, char *token)
 {
     size_t len = 0;
     int ch;
@@ -28,22 +28,22 @@ size_t ReadFileToken(FILE *fp, char *delims, char *token)
 }
 
 
-size_t PeekFileToken(FILE *fp, char *delims, char *token)
+size_t FilePeekToken(FILE *fp, char *delims, char *token)
 {
     size_t len;
     fpos_t pos;
     fgetpos(fp, &pos);
-    len = ReadFileToken(fp, delims, token);
+    len = FileReadToken(fp, delims, token);
     fsetpos(fp, &pos);
     return len;
 }
 
 
-void ExpectFileToken(FILE *fp, char *delims, char *expect)
+void FileExpectToken(FILE *fp, char *delims, char *expect)
 {
     char tok[256];
     int n = 0;
-    n = ReadFileToken(fp, delims, tok);
+    n = FileReadToken(fp, delims, tok);
     assert(n < 256);
     assert(strcmp(tok, expect) == 0);
 }

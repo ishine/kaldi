@@ -50,7 +50,7 @@ void BaseLexicon::LoadFromFile(FILE *lexicon_stream, PhoneSet *phone_set) {
   LexPron  *pron = &prons_[0];
   LexPhone *phone = &phones_[0];
 
-  PeekFileToken(lexicon_stream, " \t\n", cur_word);
+  FilePeekToken(lexicon_stream, " \t\n", cur_word);
   word->str_ = strdup(cur_word);
   word->prons_ = pron;
   word->num_prons_ = 0;
