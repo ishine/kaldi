@@ -369,10 +369,10 @@ class DecCore {
 
 
 /* ------------------------------ diagnostic ------------------------------ */
-  inline void PreFrame();
-  inline void PostFrame();
-  void PreSession();
-  void PostSession();
+  inline void BeforeFrame();
+  inline void AfterFrame();
+  void BeforeSession();
+  void AfterSession();
 
   typedef HashList<ViterbiState, Token*>::Elem Elem;
 
@@ -472,19 +472,28 @@ class DecCore {
 
   void ClearTokenNet();
 
-  const char * session_key_; // no ownership
+  const char* session_key_; // no ownership
 
+  // memory pools
   MemoryPool *token_pool_;
   MemoryPool *link_pool_;
   MemoryPool *rescore_token_pool_;
 
+  // token_hash_ (hash table) stores active tokens for current frames
+  // used for viterbi quick lookup, viterbi space state-index is used as hash key
   HashList<ViterbiState, Token*> token_hash_;
+
+  // invariant:
+  //     for frame index f ~ [0, NumFrames), time index t ~ [0, T]
+  //     [t] --(processing frame f)--> [t+1], then t == f
+  // token_net_[t] stores a list of tokens survived at time t
+  // token_net_[0:T] records entire survived network (can be converted to lattice)
   std::vector<TokenList> token_net_;
 
   std::vector<ViterbiState> queue_;
   std::vector<BaseFloat> tmp_array_;
 
-  Wfst *fst_;  // no ownership
+  Wfst *fst_;  // look-ahead fst, no ownership
   std::vector<LmFst<fst::StdArc>*> ext_lm_;  // no ownership
   LmFst<fst::StdArc> *lm_fst_;
 

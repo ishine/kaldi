@@ -68,7 +68,7 @@ void DecCore::StartSession(const char* session_key) {
 
   ProcessNonemitting(config_.beam);
 
-  PreSession();
+  BeforeSession();
 }
 
 // Returns true if any kind of traceback is available (not necessarily from
@@ -80,10 +80,10 @@ bool DecCore::Decode(DecodableInterface *decodable) {
     if (NumFramesDecoded() % config_.prune_interval == 0) {
       PruneTokenNet(config_.lattice_beam * config_.prune_scale);
     }
-    PreFrame();
+    BeforeFrame();
     BaseFloat cost_cutoff = ProcessEmitting(decodable);
     ProcessNonemitting(cost_cutoff);
-    PostFrame();
+    AfterFrame();
   }
   StopSession();
   return !token_net_.empty() && token_net_.back().toks != NULL;
@@ -105,10 +105,10 @@ void DecCore::AdvanceDecoding(DecodableInterface *decodable, int32 max_num_frame
     if (NumFramesDecoded() % config_.prune_interval == 0) {
       PruneTokenNet(config_.lattice_beam * config_.prune_scale);
     }
-    PreFrame();
+    BeforeFrame();
     BaseFloat cost_cutoff = ProcessEmitting(decodable);
     ProcessNonemitting(cost_cutoff);
-    PostFrame();
+    AfterFrame();
   }
 }
 
@@ -130,49 +130,44 @@ void DecCore::StopSession() {
   PruneTokenList(0);
   KALDI_VLOG(2) << "pruned tokens from " << num_toks_begin << " to " << num_toks_;
 
-  PostSession();
+  AfterSession();
 }
 
 
-void DecCore::PreFrame() {
+void DecCore::BeforeFrame() {
 
 }
 
 
-void DecCore::PostFrame() {
+void DecCore::AfterFrame() {
   if (!config_.debug_mode) {
     return;
   }
-  int ntok = 0, nlmtok = 0, max_cohyp_len = 0;
+  int n_tok = 0, m_rtoks = 0, max_rtok_set_size = 0;
   for (Token *tok = token_net_.back().toks; tok != NULL; tok = tok->next) {
-    ntok++;
+    n_tok++;
     if (lm_fst_ != NULL) {
-      int this_cohyp_len = 0;
+      int rtok_set_size = 0;
       for (RescoreToken *t = tok->rtoks->head; t != NULL; t = t->next) {
-        this_cohyp_len++;
-        nlmtok++;
+        rtok_set_size++;
+        m_rtoks++;
       }
-      max_cohyp_len = std::max(this_cohyp_len, max_cohyp_len);
+      max_rtok_set_size = std::max(rtok_set_size, max_rtok_set_size);
     }
   }
 
   fprintf(stderr, "[D] t:%-5d, n:%-5d, m:%-5d, max_m:%-5d, offset:%-7.4f, cutoff:%-7.4f\n",
-    NumFramesDecoded(),
-    ntok,
-    nlmtok,
-    max_cohyp_len,
-    cost_offsets_.back(),
-    cutoff_);
+    NumFramesDecoded(), n_tok, m_rtoks, max_rtok_set_size, cost_offsets_.back(), cutoff_);
   fflush(stderr);
 }
 
 
-void DecCore::PreSession() {
+void DecCore::BeforeSession() {
 
 }
 
 
-void DecCore::PostSession() {
+void DecCore::AfterSession() {
   if (config_.debug_mode) {
     Lattice lat;
     GetBestPath(&lat, true);
