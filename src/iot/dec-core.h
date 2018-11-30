@@ -24,7 +24,7 @@ struct DecCoreConfig {
   int32 max_active;
   int32 min_active;
   BaseFloat lattice_beam;
-  BaseFloat lm_token_beam;
+  BaseFloat rescore_token_set_beam;
   int32 prune_interval;
   bool determinize_lattice; // not inspected by this class... used in
                             // command-line program.
@@ -50,7 +50,7 @@ struct DecCoreConfig {
     max_active(std::numeric_limits<int32>::max()),
     min_active(200),
     lattice_beam(10.0),
-    lm_token_beam(3.0f),
+    rescore_token_set_beam(3.0f),
     prune_interval(25),
     determinize_lattice(true),
     beam_delta(0.5),
@@ -70,7 +70,7 @@ struct DecCoreConfig {
     opts->Register("min-active", &min_active, "Decoder minimum #active states.");
     opts->Register("lattice-beam", &lattice_beam, "Lattice generation beam.  Larger->slower, "
                    "and deeper lattices");
-    opts->Register("lm-token-beam", &lm_token_beam, "lm token beam.  Larger->slower");
+    opts->Register("rescore-token-set-beam", &rescore_token_set_beam, "rescore token set beam.  Larger->slower");
     opts->Register("prune-interval", &prune_interval, "Interval (in frames) at "
                    "which to prune tokens");
     opts->Register("determinize-lattice", &determinize_lattice, "If true, "
@@ -163,7 +163,7 @@ class DecCore {
   struct ForwardLink;
 
   struct RescoreToken;
-  struct RescoreTokenList;
+  struct RescoreTokenSet;
 
   typedef WfstStateId ViterbiState;
   typedef WfstStateId LmState;
@@ -196,7 +196,7 @@ class DecCore {
     Token *next;
     Token *backpointer;
 
-    RescoreTokenList *rtoks; // rescore token list(co-hypotheses) associate with this token
+    RescoreTokenSet *rtoks; // rescore token list(co-hypotheses) associate with this token
 
     inline Token(
         BaseFloat total_cost,
@@ -230,7 +230,7 @@ class DecCore {
   inline void DeleteToken(Token *tok) {
     // Forward links are not owned by token
     if (lm_fst_ != NULL && tok->rtoks != NULL) {
-      GcRescoreTokenList(tok);
+      GcRescoreTokenSet(tok);
     }
     tok->~Token();
     token_pool_->FreeElem(tok);
@@ -329,27 +329,27 @@ class DecCore {
     rescore_token_pool_->FreeElem(tok);
   }
 
-  struct RescoreTokenList {
+  struct RescoreTokenSet {
     RescoreToken *head;
     RescoreToken *best;
     int32 rc;
 
-    RescoreTokenList() : 
+    RescoreTokenSet() : 
       head(NULL),
       best(NULL),
       rc(0)
     { }
   };
 
-  inline void GcRescoreTokenList(Token* tok) {
+  inline void GcRescoreTokenSet(Token* tok) {
     KALDI_ASSERT(tok->rtoks != NULL);
     if (--(tok->rtoks->rc) == 0) {
-      DeleteRescoreTokenList(tok);
+      DeleteRescoreTokenSet(tok);
     }
     tok->rtoks = NULL;
   }
 
-  inline void DeleteRescoreTokenList(Token* tok) {
+  inline void DeleteRescoreTokenSet(Token* tok) {
     KALDI_ASSERT(tok->rtoks != NULL);
     RescoreToken *p = tok->rtoks->head, *next;
     while (p != NULL) {
@@ -362,10 +362,10 @@ class DecCore {
     DELETE(tok->rtoks);
   }
 
-  inline void AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost);
+  inline void AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat cost);
   // this should be the only way to setup rescore token list to a token
-  inline void HookRescoreTokenList(Token *tok, RescoreTokenList *rtoks);
-  inline void MergeRescoreTokenList(Token *from, Token *to);
+  inline void HookRescoreTokenSet(Token *tok, RescoreTokenSet *rtoks);
+  inline void MergeRescoreTokenSet(Token *from, Token *to);
 
 
 /* ------------------------------ diagnostic ------------------------------ */
@@ -479,7 +479,7 @@ class DecCore {
   MemoryPool *link_pool_;
   MemoryPool *rescore_token_pool_;
 
-  // token_hash_ (hash table) stores active tokens for current frames
+  // token_hash_ stores active tokens for current frames
   // used for viterbi quick lookup, viterbi space state-index is used as hash key
   HashList<ViterbiState, Token*> token_hash_;
 
@@ -487,7 +487,7 @@ class DecCore {
   //     for frame index f ~ [0, NumFrames), time index t ~ [0, T]
   //     [t] --(processing frame f)--> [t+1], then t == f
   // token_net_[t] stores a list of tokens survived at time t
-  // token_net_[0:T] records entire survived network (can be converted to lattice)
+  // token_net_[0:T] records entire survived token network
   std::vector<TokenList> token_net_;
 
   std::vector<ViterbiState> queue_;

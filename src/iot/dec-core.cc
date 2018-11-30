@@ -57,9 +57,9 @@ void DecCore::StartSession(const char* session_key) {
   num_toks_++;
 
   if (lm_fst_ != NULL) {
-    RescoreTokenList *rtoks = new RescoreTokenList();
+    RescoreTokenSet *rtoks = new RescoreTokenSet();
     AddRescoreToken(rtoks, lm_fst_->Start(), 0.0f);
-    HookRescoreTokenList(start_tok, rtoks);
+    HookRescoreTokenSet(start_tok, rtoks);
   }
 
   token_net_.resize(1);
@@ -956,7 +956,7 @@ BaseFloat DecCore::GetCutoff(Elem *list_head,
 }
 
 
-void DecCore::AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat cost) {
+void DecCore::AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat cost) {
   if (list->head == NULL) {
     RescoreToken *tok = NewRescoreToken(state, cost, NULL);
     list->head = tok;
@@ -989,14 +989,14 @@ void DecCore::AddRescoreToken(RescoreTokenList *list, LmState state, BaseFloat c
 }
 
 
-void DecCore::HookRescoreTokenList(Token *tok, RescoreTokenList *rtoks) {
+void DecCore::HookRescoreTokenSet(Token *tok, RescoreTokenSet *rtoks) {
   KALDI_ASSERT(tok->rtoks == NULL);
   tok->rtoks = rtoks;
   rtoks->rc++;
 }
 
 
-void DecCore::MergeRescoreTokenList(Token *from, Token *to) {
+void DecCore::MergeRescoreTokenSet(Token *from, Token *to) {
   KALDI_ASSERT(lm_fst_ != NULL);
   KALDI_ASSERT(from != NULL && to != NULL);
   KALDI_ASSERT(from->rtoks != NULL && to->rtoks != NULL);
@@ -1004,14 +1004,14 @@ void DecCore::MergeRescoreTokenList(Token *from, Token *to) {
   
   //if (from->rtoks == to->rtoks) return;
 
-  RescoreTokenList *rtoks = new RescoreTokenList();
+  RescoreTokenSet *rtoks = new RescoreTokenSet();
 
   BaseFloat la_cost = 0.0f;
 
   la_cost = from->total_cost - from->rtoks->best->cost;
   for (RescoreToken *t = from->rtoks->head; t != NULL; t = t->next) {
     BaseFloat cost = t->cost + la_cost;
-    if (cost <= to->total_cost + config_.lm_token_beam) {
+    if (cost <= to->total_cost + config_.rescore_token_set_beam) {
       AddRescoreToken(rtoks, t->state, cost);
     }
   }
@@ -1019,12 +1019,12 @@ void DecCore::MergeRescoreTokenList(Token *from, Token *to) {
   la_cost = to->total_cost - to->rtoks->best->cost;
   for (RescoreToken *t = to->rtoks->head; t != NULL; t = t->next) {
     BaseFloat cost = t->cost + la_cost;
-    if (cost <= to->total_cost + config_.lm_token_beam) {
+    if (cost <= to->total_cost + config_.rescore_token_set_beam) {
       AddRescoreToken(rtoks, t->state, cost);
     }
   }
-  GcRescoreTokenList(to);
-  HookRescoreTokenList(to, rtoks);
+  GcRescoreTokenSet(to);
+  HookRescoreTokenSet(to, rtoks);
 
   BaseFloat x = to->total_cost - rtoks->best->cost;
   KALDI_ASSERT(x < 0.0001 && x > -0.0001);
@@ -1037,11 +1037,11 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
   KALDI_ASSERT(to->rtoks == NULL);
 
   if (arc->olabel == kWfstEpsilon) { // not word-end arc
-    HookRescoreTokenList(to, from->rtoks);
+    HookRescoreTokenSet(to, from->rtoks);
     return;
   }
 
-  RescoreTokenList *rtoks = new RescoreTokenList();
+  RescoreTokenSet *rtoks = new RescoreTokenSet();
 
   BaseFloat la_cost = to->total_cost - from->rtoks->best->cost;
   for (RescoreToken *lm_tok = from->rtoks->head; lm_tok != NULL; lm_tok = lm_tok->next) {
@@ -1057,7 +1057,7 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
   }
   arc->weight += (rtoks->best->cost - to->total_cost); // rescored arc
   to->total_cost = rtoks->best->cost;
-  HookRescoreTokenList(to, rtoks);
+  HookRescoreTokenSet(to, rtoks);
 }
 
 
@@ -1089,7 +1089,7 @@ inline DecCore::Token *DecCore::TokenViterbi(Token *tok, int32 t, ViterbiState s
     }
 
     if (lm_fst_ != NULL) {
-      MergeRescoreTokenList(tok, dst_tok);
+      MergeRescoreTokenSet(tok, dst_tok);
       if (changed) *changed = true;
     }
 
