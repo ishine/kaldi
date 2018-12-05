@@ -48,7 +48,7 @@ void PrintPartialOutput(const std::string &utt,
       std::string s = word_syms->Find(words[i]);
       if (s == "")
         KALDI_ERR << "Word-id " << words[i] << " not in symbol table.";
-      std::cerr << s << ' ';
+      std::cerr << s << '[' << words[i] << ']' << ' ';
     }
     std::cerr << '\n';
   }

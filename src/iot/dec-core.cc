@@ -58,7 +58,7 @@ void DecCore::StartSession(const char* session_key) {
 
   if (lm_fst_ != NULL) {
     RescoreTokenSet *rtoks = new RescoreTokenSet();
-    AddRescoreToken(rtoks, lm_fst_->Start(), 0.0f);
+    AddRescoreToken(rtoks, lm_fst_->Start(), 0.0f, NULL, kWfstEpsilon);
     HookRescoreTokenSet(start_tok, rtoks);
   }
 
@@ -449,6 +449,22 @@ bool DecCore::GetBestPath(Lattice *olat, bool use_final_probs) const {
   olat->DeleteStates();
   BaseFloat final_graph_cost;
   BestPathIterator iter = BestPathEnd(use_final_probs, &final_graph_cost);
+
+  // jiayu
+  if (lm_fst_ != NULL) {
+    Token *tok = (Token*)iter.tok;
+    fprintf(stderr, "[D] ", session_key_);
+    int i = 0;
+    for (RescoreToken *rtok = tok->rtoks->best; rtok != NULL && i < 300; rtok = rtok->backpointer) {
+      if (rtok->word != kWfstEpsilon) {
+        fprintf(stderr, "%d:%d ", i++, rtok->word);
+      }
+    }
+    fprintf(stderr, "\n");
+    fflush(stderr);
+  }
+  // 
+
   if (iter.Done())
     return false;  // would have printed warning.
   StateId state = olat->AddState();
@@ -463,6 +479,8 @@ bool DecCore::GetBestPath(Lattice *olat, bool use_final_probs) const {
     state = new_state;
   }
   olat->SetStart(state);
+
+
   return true;
 }
 
@@ -956,9 +974,9 @@ BaseFloat DecCore::GetCutoff(Elem *list_head,
 }
 
 
-void DecCore::AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat cost) {
+void DecCore::AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat cost, RescoreToken *backpointer, WfstArcId word) {
   if (list->head == NULL) {
-    RescoreToken *tok = NewRescoreToken(state, cost, NULL);
+    RescoreToken *tok = NewRescoreToken(state, cost, NULL, backpointer, word);
     list->head = tok;
     list->best = tok;
     return;
@@ -969,6 +987,8 @@ void DecCore::AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat co
     if (t->state == state) {
       if (t->cost > cost) {
         t->cost = cost;
+        t->backpointer = backpointer;
+        t->word = word;
         replaced = true;
       } else {
         return;
@@ -977,7 +997,7 @@ void DecCore::AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat co
   }
 
   if (!replaced) {
-    RescoreToken *tok = NewRescoreToken(state, cost, list->head);
+    RescoreToken *tok = NewRescoreToken(state, cost, list->head, backpointer, word);
     list->head = tok;
   }
 
@@ -1012,7 +1032,7 @@ void DecCore::MergeRescoreTokenSet(Token *from, Token *to) {
   for (RescoreToken *t = from->rtoks->head; t != NULL; t = t->next) {
     BaseFloat cost = t->cost + la_cost;
     if (cost <= to->total_cost + config_.rescore_token_set_beam) {
-      AddRescoreToken(rtoks, t->state, cost);
+      AddRescoreToken(rtoks, t->state, cost, t, kWfstEpsilon);
     }
   }
 
@@ -1020,7 +1040,7 @@ void DecCore::MergeRescoreTokenSet(Token *from, Token *to) {
   for (RescoreToken *t = to->rtoks->head; t != NULL; t = t->next) {
     BaseFloat cost = t->cost + la_cost;
     if (cost <= to->total_cost + config_.rescore_token_set_beam) {
-      AddRescoreToken(rtoks, t->state, cost);
+      AddRescoreToken(rtoks, t->state, cost, t, kWfstEpsilon);
     }
   }
   GcRescoreTokenSet(to);
@@ -1052,7 +1072,7 @@ void DecCore::PropagateLm(Token *from, WfstArc *arc, Token *to) {
                     "if a statistical language model);";
       exit(0);
     } else {
-      AddRescoreToken(rtoks, lm_arc.nextstate, lm_tok->cost + la_cost + lm_arc.weight.Value());
+      AddRescoreToken(rtoks, lm_arc.nextstate, lm_tok->cost + la_cost + lm_arc.weight.Value(), lm_tok, arc->olabel);
     }
   }
   arc->weight += (rtoks->best->cost - to->total_cost); // rescored arc

@@ -129,6 +129,7 @@ class DecCore {
   inline int32 NumFramesDecoded() const { return token_net_.size() - 1; }
   
   BaseFloat FinalRelativeCost() const;
+
   bool ReachedFinal() const {
     return FinalRelativeCost() != std::numeric_limits<BaseFloat>::infinity();
   }
@@ -196,7 +197,7 @@ class DecCore {
     Token *next;
     Token *backpointer;
 
-    RescoreTokenSet *rtoks; // rescore token list(co-hypotheses) associate with this token
+    RescoreTokenSet *rtoks; // rescore token set(co-hypotheses) associate with this token
 
     inline Token(
         BaseFloat total_cost,
@@ -309,18 +310,21 @@ class DecCore {
   struct RescoreToken {
     LmState state;
     BaseFloat cost;
-    struct RescoreToken *next;
 
-    inline RescoreToken(LmState state, BaseFloat cost, RescoreToken *next)
-     : state(state), cost(cost), next(next)
+    struct RescoreToken *next;  // next rescore token in the same rescore token set
+    struct RescoreToken *backpointer;
+    WfstArcId word;
+
+    inline RescoreToken(LmState state, BaseFloat cost, RescoreToken *next, RescoreToken *backpointer, WfstArcId word)
+     : state(state), cost(cost), next(next), backpointer(backpointer), word(word)
     { }
 
     inline ~RescoreToken() { }
   };
 
-  inline RescoreToken* NewRescoreToken(LmState lm_state, BaseFloat cost, RescoreToken *next) {
+  inline RescoreToken* NewRescoreToken(LmState state, BaseFloat cost, RescoreToken *next, RescoreToken *backpointer, WfstArcId word) {
     RescoreToken *tok = (RescoreToken*) rescore_token_pool_->MallocElem();
-    new (tok) RescoreToken(lm_state, cost, next);  // placement new
+    new (tok) RescoreToken(state, cost, next, backpointer, word);  // placement new
     return tok;
   }
 
@@ -344,7 +348,8 @@ class DecCore {
   inline void GcRescoreTokenSet(Token* tok) {
     KALDI_ASSERT(tok->rtoks != NULL);
     if (--(tok->rtoks->rc) == 0) {
-      DeleteRescoreTokenSet(tok);
+      //jiayu
+      //DeleteRescoreTokenSet(tok);
     }
     tok->rtoks = NULL;
   }
@@ -362,7 +367,7 @@ class DecCore {
     DELETE(tok->rtoks);
   }
 
-  inline void AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat cost);
+  inline void AddRescoreToken(RescoreTokenSet *list, LmState state, BaseFloat cost, RescoreToken *backpointer, WfstArcId word);
   // this should be the only way to setup rescore token list to a token
   inline void HookRescoreTokenSet(Token *tok, RescoreTokenSet *rtoks);
   inline void MergeRescoreTokenSet(Token *from, Token *to);
