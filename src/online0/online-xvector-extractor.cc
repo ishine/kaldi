@@ -224,15 +224,17 @@ Xvector* OnlineXvectorExtractor::GetCurrentXvector(int type) {
 		// Pad input if the offset is less than the minimum chunk size
 		if (pad_input && offset < min_chunk_size) {
 			Matrix<BaseFloat> padded_features(min_chunk_size, feat_dim);
-			int32 left_context = (min_chunk_size - offset) / 2;
-			int32 right_context = min_chunk_size - offset - left_context;
-			for (int32 i = 0; i < left_context; i++) {
-				padded_features.Row(i).CopyFromVec(sub_features.Row(0));
+			int32 nrepeat = min_chunk_size / num_rows;
+			for (int32 i = 0; i < nrepeat; i++) {
+			  padded_features.Range(min_chunk_size-(i+1)*num_rows, num_rows, 0, feat_dim).CopyFromMat(
+					  feat_out_.Range(0, num_rows, 0, feat_dim));
 			}
-			for (int32 i = 0; i < right_context; i++) {
-				padded_features.Row(min_chunk_size - i - 1).CopyFromVec(sub_features.Row(offset - 1));
-			}
-			padded_features.Range(left_context, offset, 0, feat_dim).CopyFromMat(sub_features);
+
+			int32 left = min_chunk_size % num_rows;
+			if (left > 0)
+			padded_features.Range(0, left, 0, feat_dim).CopyFromMat(
+					feat_out_.Range(num_rows-left, left, 0, feat_dim));
+
 			forward_->Forward(padded_features, &nnet_out_);
 		} else {
 			forward_->Forward(sub_features, &nnet_out_);
