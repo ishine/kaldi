@@ -39,8 +39,9 @@ OnlineNnetFeaturePipelineOptions::OnlineNnetFeaturePipelineOptions(
 	} else if (config.feature_type == "raw" && config.raw_config != "") {
 		ReadConfigFromFile(config.raw_config, &raw_opts);
 	} else {
-		KALDI_ERR << "Invalid feature type: " << config.feature_type << ". "
-					  << "Supported feature types: mfcc, plp, fbank or raw";
+		KALDI_ERR << "Invalid feature type: " << config.feature_type
+				  << " or can not find feature config file. \n"
+				  << "Supported feature types: mfcc, plp, fbank or raw";
 	}
 
     add_cmvn = config.add_cmvn;

@@ -23,7 +23,7 @@ namespace kaldi {
 OnlineXvectorExtractor::OnlineXvectorExtractor(std::string cfg) :
 		xvector_config_(NULL), feature_opts_(NULL),
 		forward_opts_(NULL),
-		feature_pipeline_(NULL), forward_(NULL) {
+		feature_pipeline_(NULL), forward_(NULL), speex_decoder_(NULL) {
 	// main config
 	xvector_config_ = new OnlineXvectorExtractorConfig;
 	ReadConfigFromFile(cfg, xvector_config_);
@@ -36,6 +36,12 @@ OnlineXvectorExtractor::OnlineXvectorExtractor(std::string cfg) :
 	//vad options
 	if (xvector_config_->vad_cfg != "")
 		ReadConfigFromFile(xvector_config_->vad_cfg, &vad_opts_);
+
+	// speex options
+	if (xvector_config_->use_speex) {
+		ReadConfigFromFile(xvector_config_->speex_config, &speex_opts_);
+		speex_decoder_ = new OnlineSpeexDecoder(speex_opts_);
+	}
 
 	// xvector global mean
 	if (xvector_config_->mean_filename != "") {
@@ -62,13 +68,21 @@ void OnlineXvectorExtractor::InitExtractor() {
 }
 
 int OnlineXvectorExtractor::FeedData(void *data, int nbytes, FeatState state) {
-	int size = nbytes/sizeof(float);
+	if (nbytes <= 0) return 0;
 
-	if (size <= 0)
-		return 0;
+	Vector<BaseFloat> wav_buffer;
+	if (xvector_config_->use_speex) {
+		std::vector<char> speex_bits_part(nbytes);
+		memcpy((char*)(speex_bits_part.front()), (char*)data, nbytes);
+		speex_decoder_->AcceptSpeexBits(speex_bits_part);
+		speex_decoder_->GetWaveform(&wav_buffer);
+	} else {
+		int size = nbytes/sizeof(float);
+		if (size <= 0) return 0;
+		wav_buffer.Resize(size, kUndefined);
+		memcpy((char*)(wav_buffer.Data()), (char*)data, nbytes);
+	}
 
-	Vector<BaseFloat> wav_buffer(size, kUndefined);
-	memcpy((char*)(wav_buffer.Data()), (char*)data, nbytes);
 
 	feature_pipeline_->AcceptWaveform(feature_opts_->samp_freq, wav_buffer);
 
@@ -224,6 +238,7 @@ Xvector* OnlineXvectorExtractor::GetCurrentXvector(int type) {
 		// Pad input if the offset is less than the minimum chunk size
 		if (pad_input && offset < min_chunk_size) {
 			Matrix<BaseFloat> padded_features(min_chunk_size, feat_dim);
+
 			int32 nrepeat = min_chunk_size / num_rows;
 			for (int32 i = 0; i < nrepeat; i++) {
 			  padded_features.Range(min_chunk_size-(i+1)*num_rows, num_rows, 0, feat_dim).CopyFromMat(
@@ -308,6 +323,10 @@ int OnlineXvectorExtractor::GetXvectorDim() {
 void OnlineXvectorExtractor::Reset() {
 	feature_pipeline_->Reset();
 	xvector_.clear();
+	if (xvector_config_->use_speex) {
+		delete speex_decoder_;
+		speex_decoder_ = new OnlineSpeexDecoder(speex_opts_);
+	}
 }
 
 void OnlineXvectorExtractor::Destory() {

@@ -23,6 +23,7 @@
 #include "online0/online-nnet3-forward.h"
 #include "ivector/voice-activity-detection.h"
 #include "ivector/plda.h"
+#include "online2/online-speex-wrapper.h"
 
 namespace kaldi {
 
@@ -52,12 +53,15 @@ struct OnlineXvectorExtractorConfig {
     int32 min_chunk_size;
     bool pad_input;
     bool use_post;
+    bool use_speex;
 
 	std::string mean_filename;
 	std::string lda_filename;
 	std::string plda_filename;
+	std::string speex_config;
 
-	OnlineXvectorExtractorConfig():chunk_size(-1),min_chunk_size(100),pad_input(true),use_post(false){ }
+	OnlineXvectorExtractorConfig():chunk_size(-1), min_chunk_size(100), pad_input(true),
+			use_post(false), use_speex(false){ }
 
 	void Register(OptionsItf *opts) {
 		feature_cfg.Register(opts);
@@ -73,10 +77,12 @@ struct OnlineXvectorExtractorConfig {
           "last frames of the input features as required to equal min-chunk-size.");
 		opts->Register("use-post", &use_post, "If true, xvector will be post processed after network output, "
 				"e.g. lda, plda, length normalize.");
+		opts->Register("use-speex", &use_speex, "If true, audio will be pre processed by speex decoder.");
 
 		opts->Register("mean-vec", &mean_filename, "the global mean of xvectors filename");
 		opts->Register("lda-transform", &lda_filename, "Filename of xvector lda transform matrix, e.g. transform.mat");
 		opts->Register("plda", &plda_filename, "PLDA model for computes log-likelihood ratios for trials.");
+		opts->Register("speex-config", &speex_config, "Speex audio decode configure file.");
 	}
 };
 
@@ -130,6 +136,7 @@ private:
 	OnlineNnet3ForwardOptions *forward_opts_;
 	VadEnergyOptions vad_opts_;
 	PldaConfig plda_config_;
+	SpeexOptions speex_opts_;
 
 	// feature pipeline
 	OnlineNnetFeaturePipeline *feature_pipeline_;
@@ -139,6 +146,9 @@ private:
 	Matrix<BaseFloat> lda_transform_;
 	// out-of-domain PLDA model
 	Plda plda_;
+	// speex stream decoder;
+	OnlineSpeexDecoder *speex_decoder_;
+
 	// train xvector mean
 	Vector<BaseFloat> mean_vec_;
 
