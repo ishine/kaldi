@@ -155,7 +155,7 @@ static void *process_header(ogg_packet *op, spx_int32_t enh_enabled, spx_int32_t
    return st;
 }
 
-int SpeexOggDecoder(const void *speex_ogg_bits, int flen, void* &audio_bits)
+int SpeexOggDecoder(const char *speex_ogg_bits, int flen, char* &audio_bits)
 {
 	ogg_int64_t page_granule=0, last_granule=0;
 	ogg_sync_state oy;
@@ -166,14 +166,13 @@ int SpeexOggDecoder(const void *speex_ogg_bits, int flen, void* &audio_bits)
 	SpeexBits bits;
 	SpeexStereoState stereo = SPEEX_STEREO_STATE_INIT;
 
-	int c;
 	short out[MAX_FRAME_SIZE];
 	short output[MAX_FRAME_SIZE];
 	int frame_size=0, granule_frame_size=0;
 	void *st=NULL;
 	int packet_count=0;
 	int stream_init = 0;
-	int quiet = 0;
+	int quiet = 1;
 
 	int skip_samples=0, page_nb_packets;
 
@@ -181,7 +180,6 @@ int SpeexOggDecoder(const void *speex_ogg_bits, int flen, void* &audio_bits)
 	int enh_enabled;
 	int nframes=2;
 	int print_bitrate=0;
-	int close_in=0;
 	int eos=0;
 	int forceMode=-1;
 	int audio_size=0;
@@ -189,7 +187,6 @@ int SpeexOggDecoder(const void *speex_ogg_bits, int flen, void* &audio_bits)
 	int channels=-1;
 	int rate=0;
 	int extra_headers=0;
-	int wav_format=0;
 	int lookahead;
 	int speex_serialno = -1;
 
@@ -269,8 +266,10 @@ int SpeexOggDecoder(const void *speex_ogg_bits, int flen, void* &audio_bits)
 						nframes=1;
 
 				} else if (packet_count==1) {
+                    /*
 					if (!quiet)
 						print_comments((char*)op.packet, op.bytes);
+                    */
 				} else if (packet_count<=1+extra_headers) {
 					/* Ignore extra headers */
 				} else {

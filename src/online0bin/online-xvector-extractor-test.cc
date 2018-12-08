@@ -20,6 +20,7 @@
 #include "base/timer.h"
 #include "feat/wave-reader.h"
 #include "online0/online-xvector-extractor.h"
+#include "online0/speex-ogg-dec.h"
 
 int main(int argc, char *argv[])
 {
@@ -102,15 +103,29 @@ int main(int argc, char *argv[])
 					// get length of file:
 					ogg_reader.seekg(0, std::ios::end);
 					int length = ogg_reader.tellg();
-                    int header_size = 0;
-					ogg_reader.seekg(header_size, std::ios::beg);
-                    // ogg header
-                    length -= header_size;
-					size = length/sizeof(float);
-					audio_data.Resize(1, size);
+					ogg_reader.seekg(0, std::ios::beg);
+
+					std::vector<char> buffer(length);
+					ogg_reader.read((char*)(&buffer.front()), length);
+                    char *pcm_audio = NULL;
+                #ifdef HAVE_SPEEX
+                    length = SpeexOggDecoder(&buffer.front(), length, pcm_audio);
+                #endif
+
+                    if (length <= 0) {
+					    KALDI_WARN << std::string(fn) << " not converted successfully.";
+                        continue;
+                    }
+
+					size = length/sizeof(short);
 					// read data as a block:
-					ogg_reader.read((char*)audio_data.RowData(0), length);
+					audio_data.Resize(1, size);
+					for (int i = 0; i < size; i++)
+						audio_data(0, i) = ((short *)pcm_audio)[i];
 					ogg_reader.close();
+
+                    if (NULL != pcm_audio)
+                        delete pcm_audio;
                 }
 				else
 					KALDI_ERR << "Unsupported input audio format, now only support wav, pcm or ogg.";

@@ -26,7 +26,7 @@ struct SpeexOggDecConfig {
 
 };
 
-int SpeexOggDecoder(const void *speex_ogg_bits, int flen, void* &audio_bits);
+int SpeexOggDecoder(const char *speex_ogg_bits, int flen, char* &audio_bits);
 
 } // namespace kaldi
 

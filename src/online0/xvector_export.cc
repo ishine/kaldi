@@ -49,7 +49,7 @@ int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, i
 
     int num_samples = 0;
     float *audio = nullptr;
-    void *pcm_audio = nullptr;
+    char *pcm_audio = nullptr;
     const void *raw_audio = data;
 
     if (nbytes <= 0)
@@ -57,7 +57,7 @@ int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, i
 
     if (0 == type) { // convert ogg speex to pcm
 #ifdef HAVE_SPEEX
-    	nbytes = SpeexOggDecoder(data, nbytes, pcm_audio);
+    	nbytes = SpeexOggDecoder((char*)data, nbytes, pcm_audio);
     	raw_audio = pcm_audio;
 #endif
     }
