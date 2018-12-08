@@ -20,8 +20,6 @@
 #ifndef KALDI_ONLINE0_IVECTOR_EXPORT_H_
 #define KALDI_ONLINE0_IVECTOR_EXPORT_H_
 
-#include "online0/online-ivector-extractor.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif

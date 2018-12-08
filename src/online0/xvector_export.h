@@ -29,11 +29,11 @@ extern "C" {
 	void  *CreateXvectorExtractor(const char *cfg_path);
 
 	/// lp_extractor: xvector extractor handle
-	/// data: wav or feature data in byte
+	/// data: speex ogg, pcm or feature data in byte
 	/// nbyte: data size in byte
-	/// type:  wav(0); raw feature(1, e.g.fbank, plp, mfcc)
+	/// type:  ogg(0), pcm(1), raw feature(2, e.g.fbank, plp, mfcc)
 	///	state: start(0), append(1), end(2)
-	int  XvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int type = 1, int state = 2);
+	int  XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, int type = 1, int state = 2);
 
 	/// return xvector size
 	int  GetXvectorDim(void *lp_extractor);
