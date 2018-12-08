@@ -19,6 +19,7 @@
 
 
 #include "online0/ivector_export.h"
+#include "online0/online-ivector-extractor.h"
 
 using namespace kaldi;
 

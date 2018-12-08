@@ -20,6 +20,7 @@
 
 #include "online0/xvector_export.h"
 #include "online0/online-xvector-extractor.h"
+#include "online0/speex-ogg-dec.h"
 
 using namespace kaldi;
 
@@ -41,22 +42,32 @@ void *CreateXvectorExtractor(const char *cfg_path) {
 	return (void *)extractor;
 }
 
-int	XvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int type, int state) {
+int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, int type, int state) {
 	OnlineXvectorExtractor *extractor = (OnlineXvectorExtractor *)lp_extractor;
     if (state==FEAT_START)
     	extractor->Reset();
 
-    int num_samples;
+    int num_samples = 0;
     float *audio = nullptr;
+    void *pcm_audio = nullptr;
+    const void *raw_audio = data;
 
     if (nbytes <= 0)
         return nbytes;
 
-    if (0 == type) { // wav data
+    if (0 == type) { // convert ogg speex to pcm
+#ifdef HAVE_SPEEX
+    	nbytes = SpeexOggDecoder(data, nbytes, pcm_audio);
+    	raw_audio = pcm_audio;
+#endif
+    }
+
+    // process
+    if (0 == type || 1 == type) { // pcm data
     	num_samples = nbytes / sizeof(short);
     	audio = new float[num_samples];
     	for (int i = 0; i < num_samples; i++)
-    		audio[i] = ((short *)data)[i];
+    		audio[i] = ((short *)raw_audio)[i];
     } else { // default raw feature(fbank, plp, mfcc...)
     	num_samples = nbytes / sizeof(float);
     	audio = new float[num_samples];
@@ -65,7 +76,11 @@ int	XvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int typ
     }
 
     extractor->FeedData(audio, num_samples*sizeof(float), (kaldi::FeatState)state);
+
     delete [] audio;
+    if (nullptr != pcm_audio)
+    	delete pcm_audio;
+
     return nbytes;
 }
 
