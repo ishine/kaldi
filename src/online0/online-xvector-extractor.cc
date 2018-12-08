@@ -39,7 +39,8 @@ OnlineXvectorExtractor::OnlineXvectorExtractor(std::string cfg) :
 
 	// speex options
 	if (xvector_config_->use_speex) {
-		ReadConfigFromFile(xvector_config_->speex_config, &speex_opts_);
+        if (xvector_config_->speex_cfg != "")
+		    ReadConfigFromFile(xvector_config_->speex_cfg, &speex_opts_);
 		speex_decoder_ = new OnlineSpeexDecoder(speex_opts_);
 	}
 
@@ -73,7 +74,7 @@ int OnlineXvectorExtractor::FeedData(void *data, int nbytes, FeatState state) {
 	Vector<BaseFloat> wav_buffer;
 	if (xvector_config_->use_speex) {
 		std::vector<char> speex_bits_part(nbytes);
-		memcpy((char*)(speex_bits_part.front()), (char*)data, nbytes);
+		memcpy((char*)(&speex_bits_part.front()), (char*)data, nbytes);
 		speex_decoder_->AcceptSpeexBits(speex_bits_part);
 		speex_decoder_->GetWaveform(&wav_buffer);
 	} else {

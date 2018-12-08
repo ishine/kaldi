@@ -48,6 +48,7 @@ struct OnlineXvectorExtractorConfig {
 	std::string forward_cfg;
 	std::string vad_cfg;
 	std::string plda_cfg;
+	std::string speex_cfg;
 
     int32 chunk_size;
     int32 min_chunk_size;
@@ -58,7 +59,6 @@ struct OnlineXvectorExtractorConfig {
 	std::string mean_filename;
 	std::string lda_filename;
 	std::string plda_filename;
-	std::string speex_config;
 
 	OnlineXvectorExtractorConfig():chunk_size(-1), min_chunk_size(100), pad_input(true),
 			use_post(false), use_speex(false){ }
@@ -68,6 +68,8 @@ struct OnlineXvectorExtractorConfig {
 		opts->Register("forward-config", &forward_cfg, "Configuration file for neural network forward");
 		opts->Register("vad-config", &vad_cfg, "Configuration file for voice active detection");
 		opts->Register("plda-config", &plda_cfg, "Configuration file for PLDA(Probabilistic Linear Discriminant Analysis) model");
+		opts->Register("speex-config", &speex_cfg, "Speex audio decode configure file.");
+
 		opts->Register("chunk-size", &chunk_size,
           "If set, extracts xectors from specified chunk-size, and averages.  "
           "If not set, extracts an xvector from all available features.");
@@ -82,7 +84,6 @@ struct OnlineXvectorExtractorConfig {
 		opts->Register("mean-vec", &mean_filename, "the global mean of xvectors filename");
 		opts->Register("lda-transform", &lda_filename, "Filename of xvector lda transform matrix, e.g. transform.mat");
 		opts->Register("plda", &plda_filename, "PLDA model for computes log-likelihood ratios for trials.");
-		opts->Register("speex-config", &speex_config, "Speex audio decode configure file.");
 	}
 };
 

@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 	    po.Register("cfg", &cfg, "xvector config file");
 
         std::string audio_format = "wav";
-        po.Register("audio-format", &audio_format, "input audio format(e.g. wav, pcm)");
+        po.Register("audio-format", &audio_format, "input audio format(e.g. wav, pcm, ogg)");
 
         po.Read(argc, argv);
 
@@ -83,8 +83,7 @@ int main(int argc, char *argv[])
 
 					const WaveData &wave_data = holder.Value();
 					audio_data = wave_data.Data();
-				}
-				else if (audio_format == "pcm") {
+				} else if (audio_format == "pcm") {
 					std::ifstream pcm_reader(fn, std::ios::binary);
 					// get length of file:
 					pcm_reader.seekg(0, std::ios::end);
@@ -98,9 +97,23 @@ int main(int argc, char *argv[])
 					for (int i = 0; i < size; i++)
 						audio_data(0, i) = buffer[i];
 					pcm_reader.close();
-				}
+				} else if (audio_format == "ogg") {
+					std::ifstream ogg_reader(fn, std::ios::binary);
+					// get length of file:
+					ogg_reader.seekg(0, std::ios::end);
+					int length = ogg_reader.tellg();
+                    int header_size = 0;
+					ogg_reader.seekg(header_size, std::ios::beg);
+                    // ogg header
+                    length -= header_size;
+					size = length/sizeof(float);
+					audio_data.Resize(1, size);
+					// read data as a block:
+					ogg_reader.read((char*)audio_data.RowData(0), length);
+					ogg_reader.close();
+                }
 				else
-					KALDI_ERR << "Unsupported input audio format, now only support wav or pcm.";
+					KALDI_ERR << "Unsupported input audio format, now only support wav, pcm or ogg.";
 
 				// get the data for channel zero (if the signal is not mono, we only
 				// take the first channel).
