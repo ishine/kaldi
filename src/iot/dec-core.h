@@ -478,6 +478,7 @@ class DecCore {
   void ClearTokenNet();
 
   const char* session_key_; // no ownership
+  FILE * debug_fstream_;
 
   // memory pools
   MemoryPool *token_pool_;
