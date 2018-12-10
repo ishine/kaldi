@@ -312,11 +312,13 @@ int OnlineXvectorExtractor::GetXvectorDim() {
 	int plda_dim = plda_.Dim();
 
 	int xvec_dim = 0;
-	if (plda_dim > 0)
-		xvec_dim = plda_dim;
-	else if (lda_dim > 0)
-		xvec_dim = lda_dim;
-	else
+
+    if (xvector_config_->use_post) {
+	    if (plda_dim > 0)
+		    xvec_dim = plda_dim;
+	    else if (lda_dim > 0)
+		    xvec_dim = lda_dim;
+    } else
 		xvec_dim = raw_dim;
 	return xvec_dim;
 }
