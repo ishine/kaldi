@@ -42,12 +42,13 @@ void *CreateXvectorExtractor(const char *cfg_path) {
 	return (void *)extractor;
 }
 
-int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, int type, int state) {
+int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, 
+    int cut_time, int type, int state) {
 	OnlineXvectorExtractor *extractor = (OnlineXvectorExtractor *)lp_extractor;
     if (state==FEAT_START)
     	extractor->Reset();
 
-    int num_samples = 0;
+    int num_samples = 0, len = cut_time;
     float *audio = nullptr;
     char *pcm_audio = nullptr;
     const void *raw_audio = data;
@@ -62,8 +63,11 @@ int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, i
 #endif
     }
 
+    len = len < 0 ? 0: len;
+    len = len*extractor->GetAudioFrequency()*2;
     // process
     if (0 == type || 1 == type) { // pcm data
+        nbytes = len < nbytes && len > 0 ? len : nbytes;
     	num_samples = nbytes / sizeof(short);
     	audio = new float[num_samples];
     	for (int i = 0; i < num_samples; i++)

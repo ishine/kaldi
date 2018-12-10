@@ -124,6 +124,7 @@ public:
 	void Reset();
 
 	int GetXvectorDim();
+    int GetAudioFrequency();
 
 private:
 	void Destory();

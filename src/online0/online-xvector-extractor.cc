@@ -323,6 +323,10 @@ int OnlineXvectorExtractor::GetXvectorDim() {
 	return xvec_dim;
 }
 
+int OnlineXvectorExtractor::GetAudioFrequency() {
+    return feature_opts_->samp_freq;    
+}
+
 void OnlineXvectorExtractor::Reset() {
 	feature_pipeline_->Reset();
 	xvector_.clear();
