@@ -15,6 +15,7 @@ DecCore::DecCore(Wfst *fst,
   token_hash_.SetSize(1000);
   num_toks_ = 0; 
   session_key_ = NULL;
+  debug_fstream_ = NULL;
 
   token_pool_ = new MemoryPool(sizeof(Token), config_.token_pool_realloc);
   link_pool_  = new MemoryPool(sizeof(ForwardLink), config_.link_pool_realloc);
@@ -26,7 +27,14 @@ DecCore::DecCore(Wfst *fst,
 DecCore::~DecCore() {
   DeleteElems(token_hash_.Clear());
   ClearTokenNet();
+
   session_key_ = NULL;
+  if (config_.debug_mode) {
+    if (debug_fstream_ != NULL) {
+      fclose(debug_fstream_);
+    }
+  }
+  debug_fstream_ = NULL;
 
   DELETE(token_pool_);
   DELETE(link_pool_);
@@ -47,10 +55,19 @@ void DecCore::StartSession(const char* session_key) {
   num_toks_ = 0;
   decoding_finalized_ = false;
   final_costs_.clear();
-  session_key_ = NULL;
 
   // setup new session
   session_key_ = session_key;
+  if (config_.debug_mode) {
+    if (debug_fstream_ != NULL) {
+      fclose(debug_fstream_);
+    }
+    if (session_key != NULL) {
+      debug_fstream_ = fopen(session_key_, "w+");
+    }
+  } else {
+    debug_fstream_ = NULL;
+  }
 
   WfstStateId start_state = fst_->Start();
   Token *start_tok = NewToken(0.0, 0.0, NULL, NULL, NULL);
@@ -156,9 +173,9 @@ void DecCore::AfterFrame() {
     }
   }
 
-  fprintf(stderr, "[D] t:%-5d, n:%-5d, m:%-5d, max_m:%-5d, offset:%-7.4f, cutoff:%-7.4f\n",
+  fprintf(debug_fstream_, "t:%-5d, n:%-5d, m:%-5d, max_m:%-5d, offset:%-7.4f, cutoff:%-7.4f\n",
     NumFramesDecoded(), n_tok, m_rtoks, max_rtok_set_size, cost_offsets_.back(), cutoff_);
-  fflush(stderr);
+  fflush(debug_fstream_);
 }
 
 
@@ -176,7 +193,8 @@ void DecCore::AfterSession() {
 }
 
 void DecCore::PrintAlignmentDetail(Lattice &lat) {
-    std::cerr << "[D] ========== Alignment Detail ==========\n";
+    KALDI_ASSERT(debug_fstream_ != NULL); // should be in debug mode
+    fprintf(debug_fstream_, "========== Alignment Detail ==========\n");
     std::vector<LatticeArc> alignment_arcs;
 
     LatticeWeight tot_weight = LatticeWeight::One();
@@ -215,22 +233,24 @@ void DecCore::PrintAlignmentDetail(Lattice &lat) {
       if (arc.ilabel != kWfstEpsilon) {
         t++;
       }
-      fprintf(stderr, "[D] t:%6d, i:%6d, o:%7d, g:%6.1f, am:%6.1f, tot_g:%6.1f, tot_am:%6.1f\n", 
+      fprintf(debug_fstream_, "t:%6d, i:%6d, o:%7d, g:%6.1f, am:%6.1f, tot_g:%6.1f, tot_am:%6.1f\n", 
         t, arc.ilabel, arc.olabel, arc.weight.Value1(), arc.weight.Value2(), tot_weight.Value1(), tot_weight.Value2());
     }
 
     LatticeWeight tot_weight_with_final = Times(tot_weight, final_weight);
 
-    std::cerr << "[D] total_cost " << tot_weight 
-              << " = " << tot_weight.Value1() + tot_weight.Value2() << "\n";
+    fprintf(debug_fstream_, "total_cost (%f,%f) = %f\n",
+      tot_weight.Value1(), tot_weight.Value2(),
+      tot_weight.Value1() + tot_weight.Value2());
 
-    std::cerr << "[D] final_weight " << final_weight << "\n";
+    fprintf(debug_fstream_, "final_weight (%f,%f)\n", final_weight.Value1(), final_weight.Value2());
 
-    std::cerr << "[D] total_cost_with_final " << tot_weight_with_final 
-              << " = " << tot_weight_with_final.Value1() + tot_weight_with_final.Value2() << "\n";
+    fprintf(debug_fstream_, "total_cost_with_final (%f,%f) = %f\n",
+      tot_weight_with_final.Value1(), tot_weight_with_final.Value2(),
+      tot_weight_with_final.Value1() + tot_weight_with_final.Value2());
 
-    std::cerr << "[D] ========== Alignment Detail End ==========\n";
-    fflush(stderr);
+    fprintf(debug_fstream_, "========== Alignment Detail End ==========\n");
+    fflush(debug_fstream_);
 }
 
 
@@ -451,17 +471,16 @@ bool DecCore::GetBestPath(Lattice *olat, bool use_final_probs) const {
   BestPathIterator iter = BestPathEnd(use_final_probs, &final_graph_cost);
 
   // jiayu
-  if (lm_fst_ != NULL) {
-    Token *tok = (Token*)iter.tok;
-    fprintf(stderr, "[D] ", session_key_);
-    int i = 0;
-    for (RescoreToken *rtok = tok->rtoks->best; rtok != NULL && i < 300; rtok = rtok->backpointer) {
-      if (rtok->word != kWfstEpsilon) {
-        fprintf(stderr, "%d:%d ", i++, rtok->word);
+  if (config_.debug_mode) {
+    if (lm_fst_ != NULL) {
+      Token *tok = (Token*)iter.tok;
+      int i = 0;
+      for (RescoreToken *rtok = tok->rtoks->best; rtok != NULL; rtok = rtok->backpointer) {
+        fprintf(debug_fstream_, "%d:%d ", i++, rtok->word);
       }
+      fprintf(debug_fstream_, "\n");
+      fflush(debug_fstream_);
     }
-    fprintf(stderr, "\n");
-    fflush(stderr);
   }
   // 
 
