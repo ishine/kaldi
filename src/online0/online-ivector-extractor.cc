@@ -21,7 +21,7 @@
 namespace kaldi {
 
 OnlineIvectorExtractor::OnlineIvectorExtractor(std::string cfg) :
-		feature_opts_(NULL), ivector_config_(NULL), ivector_info_(NULL),
+		extractor_config_(NULL), ivector_info_(NULL), feature_opts_(NULL),
 		base_feature_pipeline_(NULL), ivector_feature_(NULL) {
 
 	// main config
@@ -56,7 +56,7 @@ void OnlineIvectorExtractor::InitExtractor() {
 	ivector_info_ = new OnlineStreamIvectorExtractionInfo(extractor_config_->ivector_config);
 	// ivector feature pipeline
 	ivector_feature_ = new OnlineStreamIvectorFeature(*ivector_info_, base_feature_pipeline_);
-    ivector.clear();
+    ivector_.clear();
 }
 
 int OnlineIvectorExtractor::FeedData(void *data, int nbytes, FeatState state) {
@@ -171,7 +171,7 @@ Ivector* OnlineIvectorExtractor::GetCurrentIvector(int type) {
 	return &ivector_;
 }
 BaseFloat OnlineIvectorExtractor::GetScore(const VectorBase<BaseFloat> &train_ivec, int num_utts,
-		const VectorBase<BaseFloat> &test_ivec, int type = 2) {
+		const VectorBase<BaseFloat> &test_ivec, int type) {
 	KALDI_ASSERT(train_ivec.Dim() == test_ivec.Dim());
 
 	Vector<BaseFloat> train_post, test_post;

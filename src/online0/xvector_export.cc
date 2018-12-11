@@ -43,7 +43,7 @@ void *CreateXvectorExtractor(const char *cfg_path) {
 }
 
 int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, 
-    int cut_time, int type, int state) {
+    float cut_time, int type, int state) {
 	OnlineXvectorExtractor *extractor = (OnlineXvectorExtractor *)lp_extractor;
     if (state==FEAT_START)
     	extractor->Reset();

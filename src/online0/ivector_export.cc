@@ -43,7 +43,7 @@ void *CreateIvectorExtractor(const char *cfg_path) {
 }
 
 int	IvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes,
-    int cut_time, int type, int state) {
+    float cut_time, int type, int state) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
     if (state==FEAT_START)
     	extractor->Reset();

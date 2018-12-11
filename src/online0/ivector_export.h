@@ -34,7 +34,7 @@ extern "C" {
 	/// type:  ogg(0), pcm(1), raw feature(2, e.g.fbank, plp, mfcc)
 	///	state: start(0), append(1), end(2)
 	int IvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes,
-									int cut_time = 6, int type = 1, int state = 2);
+									float cut_time = 6, int type = 1, int state = 2);
 
 	/// return ivector size
 	int	GetIvectorDim(void *lp_extractor);
