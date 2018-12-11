@@ -20,6 +20,7 @@
 
 #include "online0/ivector_export.h"
 #include "online0/online-ivector-extractor.h"
+#include "online0/speex-ogg-dec.h"
 
 using namespace kaldi;
 
@@ -28,22 +29,62 @@ void *CreateIvectorExtractor(const char *cfg_path) {
 	    printf("create decoder, config path: %s.\n", cfg_path);
 	#endif
 	std::string cfg(cfg_path);
-	OnlineIvectorExtractor *extractor = new OnlineIvectorExtractor(cfg);
+	OnlineIvectorExtractor *extractor = nullptr;
+
+	extractor = new OnlineIvectorExtractor(cfg);
+	if (nullptr == extractor) {
+		fprintf(stderr, "create decoder failed, config path: %s\n", cfg_path);
+		printf("%s\n",strerror(errno));
+		return nullptr;
+	}
+
 	extractor->InitExtractor();
 	return (void *)extractor;
 }
 
-int	IvectorExtractorFeedData(void *lp_extractor, void *data, int nbytes, int state) {
+int	IvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes,
+    int cut_time, int type, int state) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
     if (state==FEAT_START)
     	extractor->Reset();
 
-    int num_samples = nbytes / sizeof(short);
-    float *audio = new float[num_samples];
-    for (int i = 0; i < num_samples; i++)
-        audio[i] = ((short *)data)[i];
+    int num_samples = 0, len = cut_time;
+    float *audio = nullptr;
+    char *pcm_audio = nullptr;
+    const void *raw_audio = data;
+
+    if (nbytes <= 0)
+        return nbytes;
+
+    if (0 == type) { // convert ogg speex to pcm
+#ifdef HAVE_SPEEX
+    	nbytes = SpeexOggDecoder((char*)data, nbytes, pcm_audio);
+    	raw_audio = pcm_audio;
+#endif
+    }
+
+    len = len < 0 ? 0: len;
+    len = len*extractor->GetAudioFrequency()*2;
+    // process
+    if (0 == type || 1 == type) { // pcm data
+        nbytes = len < nbytes && len > 0 ? len : nbytes;
+    	num_samples = nbytes / sizeof(short);
+    	audio = new float[num_samples];
+    	for (int i = 0; i < num_samples; i++)
+    		audio[i] = ((short *)raw_audio)[i];
+    } else { // default raw feature(fbank, plp, mfcc...)
+    	num_samples = nbytes / sizeof(float);
+    	audio = new float[num_samples];
+        if (num_samples > 0)
+    	    memcpy(audio, data, num_samples*sizeof(float));
+    }
+
     extractor->FeedData(audio, num_samples*sizeof(float), (kaldi::FeatState)state);
+
     delete [] audio;
+    if (nullptr != pcm_audio)
+    	delete pcm_audio;
+
     return nbytes;
 }
 
@@ -54,17 +95,23 @@ int GetIvectorDim(void *lp_extractor) {
 
 int GetCurrentIvector(void *lp_extractor, float *result, int type) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
+    int dim = 0;
 	Ivector *ivector = extractor->GetCurrentIvector(type);
-	int dim = ivector->ivector_.Dim();
-	memcpy(result, ivector->ivector_.Data(), dim*sizeof(float));
+
+    if (nullptr != ivector) {
+	    dim = ivector->ivector_.Dim();
+        if (dim > 0)
+            memcpy(result, ivector->ivector_.Data(), dim*sizeof(float));
+    }
 	return dim;
 }
 
-float GetIvectorScore(void *lp_extractor, float *ivec1, float *ivec2, int size, int type) {
+float GetIvectorScore(void *lp_extractor, float *enroll, float *eval,
+		int size, int enroll_num, int type) {
 	OnlineIvectorExtractor *extractor = (OnlineIvectorExtractor *)lp_extractor;
-	SubVector<BaseFloat> vec1(ivec1, size);
-	SubVector<BaseFloat> vec2(ivec2, size);
-	return extractor->GetScore(vec1, vec2, type);
+	SubVector<BaseFloat> vec1(enroll, size);
+	SubVector<BaseFloat> vec2(eval, size);
+	return extractor->GetScore(vec1, enroll_num, vec2, type);
 }
 
 int GetEnrollSpeakerIvector(void *lp_extractor, float *spk_ivec, float *ivecs,

@@ -21,6 +21,8 @@
 
 #include "online0/online-ivector-feature.h"
 #include "online0/online-nnet-feature-pipeline.h"
+#include "ivector/voice-activity-detection.h"
+#include "ivector/plda.h"
 
 namespace kaldi {
 
@@ -47,6 +49,32 @@ typedef enum {
 	FEAT_END,
 }FeatState;
 
+struct OnlineIvectorExtractorConfig {
+
+	/// feature pipeline config
+	OnlineStreamIvectorExtractionConfig ivector_config;
+	std::string vad_cfg;
+	std::string plda_cfg;
+
+    bool use_post;
+
+	std::string mean_filename;
+	std::string lda_filename;
+	std::string plda_filename;
+
+	OnlineIvectorExtractorConfig():use_post(false){ }
+
+	void Register(OptionsItf *opts) {
+		ivector_config.Register(opts);
+		opts->Register("vad-config", &vad_cfg, "Configuration file for voice active detection");
+		opts->Register("plda-config", &plda_cfg, "Configuration file for PLDA(Probabilistic Linear Discriminant Analysis) model");
+
+		opts->Register("mean-vec", &mean_filename, "the global mean of xvectors filename");
+		opts->Register("lda-transform", &lda_filename, "Filename of xvector lda transform matrix, e.g. transform.mat");
+		opts->Register("plda", &plda_filename, "PLDA model for computes log-likelihood ratios for trials.");
+	}
+};
+
 class OnlineIvectorExtractor {
 
 public:
@@ -64,8 +92,9 @@ public:
 	Ivector* GetCurrentIvector(int type = 1);
 
 	// compute ivector score
-	// type: 0, raw ivector; 1, lda transformed ivector
-	BaseFloat GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2, int type = 1);
+	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector
+	BaseFloat GetScore(const VectorBase<BaseFloat> &train_ivec, int num_utts,
+			const VectorBase<BaseFloat> &test_ivec, int type = 2);
 
 	// compute enroll ivector for a speaker
 	// type: 0, raw ivector; 1, lda transformed ivector
@@ -75,20 +104,33 @@ public:
 	// Reset Extractor
 	void Reset();
 
-	int GetIvectorDim() { return ivector_feature_->Dim(); }
+	int GetIvectorDim();
+    int GetAudioFrequency();
 
 private:
 	void Destory();
+	int VadProcess(const Matrix<BaseFloat> &vad_feat, const Matrix<BaseFloat> &in, Matrix<BaseFloat> &out);
+	void IvectorPostProcess(const VectorBase<BaseFloat> &in, Vector<BaseFloat> &out, int tpye = 3);
+	void IvectorLengthNormalize(Vector<BaseFloat> &xvector);
 
 	/// feature pipeline config
-	OnlineNnetFeaturePipelineOptions *feature_opts_;
-	OnlineStreamIvectorExtractionConfig *ivector_config_;
+	OnlineIvectorExtractorConfig *extractor_config_;
 	OnlineStreamIvectorExtractionInfo *ivector_info_;
+	OnlineNnetFeaturePipelineOptions *feature_opts_;
+	VadEnergyOptions vad_opts_;
+	PldaConfig plda_config_;
 
 	// feature pipeline
 	OnlineNnetFeaturePipeline *base_feature_pipeline_;
 	OnlineStreamIvectorFeature *ivector_feature_;
-	Ivector ivector;
+	// lda transform
+	Matrix<BaseFloat> lda_transform_;
+	// out-of-domain PLDA model
+	Plda plda_;
+	// train xvector mean
+	Vector<BaseFloat> mean_vec_;
+
+	Ivector ivector_;
 };
 
 }	 // namespace kaldi

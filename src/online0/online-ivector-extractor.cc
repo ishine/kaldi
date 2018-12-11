@@ -25,35 +25,127 @@ OnlineIvectorExtractor::OnlineIvectorExtractor(std::string cfg) :
 		base_feature_pipeline_(NULL), ivector_feature_(NULL) {
 
 	// main config
-	ivector_config_ = new OnlineStreamIvectorExtractionConfig;
-	ReadConfigFromFile(cfg, ivector_config_);
+	extractor_config_ = new OnlineIvectorExtractorConfig;
+	ReadConfigFromFile(cfg, extractor_config_);
+
+	feature_opts_ = new OnlineNnetFeaturePipelineOptions(extractor_config_->ivector_config.base_feature_cfg);
+
+	//vad options
+	if (extractor_config_->vad_cfg != "")
+		ReadConfigFromFile(extractor_config_->vad_cfg, &vad_opts_);
+
+	// ivector global mean
+	if (extractor_config_->mean_filename != "") {
+		ReadKaldiObject(extractor_config_->mean_filename, &mean_vec_);
+		// lda trainsform matrix
+		if (extractor_config_->lda_filename != "")
+			ReadKaldiObject(extractor_config_->lda_filename, &lda_transform_);
+		// plda model
+		if (extractor_config_->plda_filename != "") {
+			ReadKaldiObject(extractor_config_->plda_filename, &plda_);
+			if (extractor_config_->plda_cfg != "")
+				ReadConfigFromFile(extractor_config_->plda_cfg, &plda_config_);
+		}
+	}
 }
 
 void OnlineIvectorExtractor::InitExtractor() {
-	feature_opts_ = new OnlineNnetFeaturePipelineOptions(ivector_config_->base_feature_cfg);
 	// base feature pipeline
 	base_feature_pipeline_ = new OnlineNnetFeaturePipeline(*feature_opts_);
 
-	ivector_info_ = new OnlineStreamIvectorExtractionInfo(*ivector_config_);
+	ivector_info_ = new OnlineStreamIvectorExtractionInfo(extractor_config_->ivector_config);
 	// ivector feature pipeline
 	ivector_feature_ = new OnlineStreamIvectorFeature(*ivector_info_, base_feature_pipeline_);
     ivector.clear();
 }
 
 int OnlineIvectorExtractor::FeedData(void *data, int nbytes, FeatState state) {
+	int size = nbytes/sizeof(float);
 
-	if (nbytes <= 0)
+	if (size <= 0)
 		return 0;
 
-	int size = nbytes/sizeof(float);
-	Vector<BaseFloat> wave_part(size, kSetZero);
-	memcpy((char*)(wave_part.Data()), (char*)data, nbytes);
-	base_feature_pipeline_->AcceptWaveform(ivector_config_->base_feature_cfg.samp_freq, wave_part);
+	Vector<BaseFloat> wav_buffer(size, kSetZero);
+	memcpy((char*)(wav_buffer.Data()), (char*)data, nbytes);
+
+	base_feature_pipeline_->AcceptWaveform(extractor_config_->ivector_config.base_feature_cfg.samp_freq, wav_buffer);
 
 	if (state == FEAT_END)
 		base_feature_pipeline_->InputFinished();
 
-	return 0;
+	return base_feature_pipeline_->NumFramesReady();
+}
+
+int OnlineIvectorExtractor::VadProcess(const Matrix<BaseFloat> &vad_feat,
+		const Matrix<BaseFloat> &in, Matrix<BaseFloat> &out) {
+	Vector<BaseFloat> vad_result(vad_feat.NumRows());
+	ComputeVadEnergy(vad_opts_, vad_feat, &vad_result);
+
+	int dim = 0;
+	for (int i = 0; i < vad_result.Dim(); i++) {
+		if (vad_result(i) != 0)
+			dim++;
+	}
+
+	if (dim == 0) return dim;
+
+	out.Resize(dim, in.NumCols(), kUndefined);
+	int32 index = 0;
+	for (int i = 0; i < in.NumRows(); i++) {
+        if (vad_result(i) != 0.0) {
+          KALDI_ASSERT(vad_result(i) == 1.0); // should be zero or one.
+          out.Row(index).CopyFromVec(in.Row(i));
+          index++;
+        }
+	}
+	KALDI_ASSERT(index == dim);
+	return dim;
+}
+
+// ivector-normalize-length
+void OnlineIvectorExtractor::IvectorLengthNormalize(Vector<BaseFloat> &ivector) {
+	BaseFloat norm = ivector.Norm(2.0);
+	BaseFloat ratio = norm / sqrt(ivector.Dim()); // how much larger it is
+													// than it would be, in
+													// expectation, if normally
+	if (ratio == 0.0) {
+	  KALDI_WARN << "Zero xVector";
+	} else {
+		ivector.Scale(1.0 / ratio);
+	}
+}
+
+// post processing
+void OnlineIvectorExtractor::IvectorPostProcess(const VectorBase<BaseFloat> &in, Vector<BaseFloat> &out, int type) {
+	int transform_rows, transform_cols, vec_dim;
+	Vector<BaseFloat> ivector_raw(in);
+	Vector<BaseFloat> ivector_lda;
+	Vector<BaseFloat>  *final_ivec = &ivector_raw;
+
+	// lda trainsform
+	if (type > 0) {
+		// subtract global mean
+		ivector_raw.AddVec(-1.0, mean_vec_);
+
+		transform_rows = lda_transform_.NumRows();
+		transform_cols = lda_transform_.NumCols();
+		vec_dim = ivector_raw.Dim();
+
+        ivector_lda.Resize(transform_rows, kUndefined);
+		if (transform_cols == vec_dim) {
+			ivector_lda.AddMatVec(1.0, lda_transform_, kNoTrans, ivector_raw, 0.0);
+		} else {
+			KALDI_ASSERT(transform_cols == vec_dim + 1);
+			ivector_lda.CopyColFromMat(lda_transform_, vec_dim);
+			ivector_lda.AddMatVec(1.0, lda_transform_.Range(0, transform_rows, 0, vec_dim), kNoTrans, ivector_raw, 1.0);
+		}
+
+		final_ivec = &ivector_lda;
+	}
+
+	// normalize length
+	IvectorLengthNormalize(*final_ivec);
+    out = *final_ivec;
 }
 
 Ivector* OnlineIvectorExtractor::GetCurrentIvector(int type) {
@@ -61,40 +153,53 @@ Ivector* OnlineIvectorExtractor::GetCurrentIvector(int type) {
 	int num_frame_ready = ivector_feature_->NumFramesReady();
 	int dim = ivector_feature_->Dim();
 
-    if (num_frame_ready > 0) {
-    		Vector<BaseFloat> raw_ivec(dim);
-		ivector_feature_->GetFrame(num_frame_ready-1, &raw_ivec);
-		if (type == 0)
-			ivector.ivector_ = raw_ivec;
-		else if (type == 1)
-			ivector_feature_->LdaTransform(raw_ivec, ivector.ivector_);
+	if (num_frame_ready <= 0)
+		return NULL;
 
-		ivector.num_frames_ = num_frame_ready;
-		ivector.ubm_loglike_perframe_ = ivector_feature_->UbmLogLikePerFrame();
-		ivector.objf_impr_perframe_ = ivector_feature_->ObjfImprPerFrame();
-    }
-	return &ivector;
+	Vector<BaseFloat> raw_ivec(dim);
+	ivector_feature_->GetFrame(num_frame_ready-1, &raw_ivec);
+
+	if (extractor_config_->use_post)
+		IvectorPostProcess(raw_ivec, ivector_.ivector_, type);
+	else
+		ivector_.ivector_ = raw_ivec;
+
+	ivector_.num_frames_ = num_frame_ready;
+	ivector_.ubm_loglike_perframe_ = ivector_feature_->UbmLogLikePerFrame();
+	ivector_.objf_impr_perframe_ = ivector_feature_->ObjfImprPerFrame();
+
+	return &ivector_;
 }
+BaseFloat OnlineIvectorExtractor::GetScore(const VectorBase<BaseFloat> &train_ivec, int num_utts,
+		const VectorBase<BaseFloat> &test_ivec, int type = 2) {
+	KALDI_ASSERT(train_ivec.Dim() == test_ivec.Dim());
 
-BaseFloat OnlineIvectorExtractor::GetScore(const VectorBase<BaseFloat> &ivec1, const VectorBase<BaseFloat> &ivec2, int type) {
-	KALDI_ASSERT(ivec1.Dim() == ivec2.Dim());
+	Vector<BaseFloat> train_post, test_post;
 
-	BaseFloat norm, ratio;
-	Vector<BaseFloat> norm_ivec1(ivec1),  norm_ivec2(ivec2);
+	if (!extractor_config_->use_post) {
+		IvectorPostProcess(train_ivec, train_post, type);
+		IvectorPostProcess(test_ivec, test_post, type);
+	} else {
+		train_post = train_ivec;
+		test_post = test_ivec;
+	}
 
-	// raw ivector normalize
-    if (type == 0) {
-	    norm = norm_ivec1.Norm(2.0);
-	    ratio = norm / sqrt(norm_ivec1.Dim());
-	    if (ratio != 0.0) norm_ivec1.Scale(1.0 / ratio);
+	BaseFloat score = 0;
+	if (type < 2) {
+		// dot product
+		score = VecVec(train_post, test_post);
+	} else if(type == 2) {
+		int dim = plda_.Dim();
+		Vector<BaseFloat> transformed_ivec1(dim);
+		Vector<BaseFloat> transformed_ivec2(dim);
+		plda_.TransformIvector(plda_config_, train_post, num_utts, &transformed_ivec1);
+		plda_.TransformIvector(plda_config_, test_post, 1, &transformed_ivec2);
 
-	    norm = norm_ivec2.Norm(2.0);
-	    ratio = norm / sqrt(norm_ivec2.Dim());
-	    if (ratio != 0.0) norm_ivec2.Scale(1.0 / ratio);
-    }
+		Vector<double> train_ivector_dbl(transformed_ivec1), test_ivector_dbl(transformed_ivec2);
+		score = plda_.LogLikelihoodRatio(train_ivector_dbl, num_utts, test_ivector_dbl);
+	}
 
-	// dot product
-	return VecVec(norm_ivec1, norm_ivec2);
+	return score;
 }
 
 void OnlineIvectorExtractor::GetEnrollSpeakerIvector(const std::vector<Vector<BaseFloat> > &ivectors,
@@ -127,10 +232,31 @@ void OnlineIvectorExtractor::GetEnrollSpeakerIvector(const std::vector<Vector<Ba
 	}
 }
 
+int OnlineIvectorExtractor::GetIvectorDim() {
+	int raw_dim = ivector_feature_->Dim();
+	int lda_dim = lda_transform_.NumRows();
+	int plda_dim = plda_.Dim();
+
+	int ivec_dim = 0;
+
+    if (extractor_config_->use_post) {
+	    if (plda_dim > 0)
+	    	ivec_dim = plda_dim;
+	    else if (lda_dim > 0)
+	    	ivec_dim = lda_dim;
+    } else
+    	ivec_dim = raw_dim;
+	return ivec_dim;
+}
+
+int OnlineIvectorExtractor::GetAudioFrequency() {
+    return feature_opts_->samp_freq;
+}
+
 void OnlineIvectorExtractor::Reset() {
 
 	base_feature_pipeline_->Reset();
-	ivector.clear();
+	ivector_.clear();
 
 	if (ivector_feature_ != NULL) {
 		delete ivector_feature_;
@@ -144,7 +270,6 @@ void OnlineIvectorExtractor::Destory() {
 		delete base_feature_pipeline_; base_feature_pipeline_ = NULL;
 		delete ivector_feature_;	  ivector_feature_ = NULL;
 		delete ivector_info_;	ivector_info_= NULL;
-		delete ivector_config_;	ivector_config_ = NULL;
 	}
 }
 
