@@ -21,6 +21,7 @@
 #include "feat/wave-reader.h"
 #include "base/kaldi-common.h"
 #include "online0/online-ivector-extractor.h"
+#include "online0/speex-ogg-dec.h"
 
 int main(int argc, char *argv[])
 {
@@ -46,23 +47,21 @@ int main(int argc, char *argv[])
 	    po.Register("cfg", &cfg, "ivector extractor config file");
 
         std::string audio_format = "wav";
-        po.Register("audio-format", &audio_format, "input audio format(e.g. wav, pcm)");
+        po.Register("audio-format", &audio_format, "input audio format(e.g. wav, pcm, ogg)");
 
         po.Read(argc, argv);
 
-        if (po.NumArgs() < 2) {
+        if (po.NumArgs() != 2) {
         		po.PrintUsage();
         		exit(1);
         }
 
-        std::string wavlist_rspecifier = po.GetArg(1),
-        			    ivectors_wspecifier = po.GetArg(2);
+        std::string wavlist_rspecifier = po.GetArg(1);
+        std::string feats_rspecifier = po.GetArg(1);
+        std::string ivectors_wspecifier = po.GetArg(2);
 
-        BaseFloatVectorWriter ivector_writer(ivectors_wspecifier);
         OnlineIvectorExtractor extractor(cfg);
         extractor.InitExtractor();
-
-	    std::ifstream wavlist_reader(wavlist_rspecifier);
 
 	    BaseFloat total_frames = 0; //samp_freq = 16000;
         size_t size;
@@ -71,7 +70,12 @@ int main(int argc, char *argv[])
         FeatState state;
         char fn[1024];
 
+        BaseFloatVectorWriter ivector_writer(ivectors_wspecifier);
+
         Timer timer;
+        if (audio_format != "raw") {
+        	std::ifstream wavlist_reader(wavlist_rspecifier);
+
 	    while (wavlist_reader.getline(fn, 1024)) {
             if (audio_format == "wav") {
 			    bool binary;
@@ -82,8 +86,7 @@ int main(int argc, char *argv[])
 			    const WaveData &wave_data = holder.Value();
                 audio_data = wave_data.Data();
                 //samp_freq = wave_data.SampFreq();
-            }
-            else if (audio_format == "pcm") {
+            } else if (audio_format == "pcm") {
                 std::ifstream pcm_reader(fn, std::ios::binary);
                 // get length of file:  
                 pcm_reader.seekg(0, std::ios::end);
@@ -97,28 +100,84 @@ int main(int argc, char *argv[])
                 for (int i = 0; i < size; i++)
                     audio_data(0, i) = buffer[i];
                 pcm_reader.close();
-            }
-            else
-                KALDI_ERR << "Unsupported input audio format, now only support wav or pcm.";
+            } else if (audio_format == "ogg") {
+					std::ifstream ogg_reader(fn, std::ios::binary);
+					// get length of file:
+					ogg_reader.seekg(0, std::ios::end);
+					int length = ogg_reader.tellg();
+					ogg_reader.seekg(0, std::ios::beg);
 
-			// one utterance
-			extractor.Reset();
+					std::vector<char> buffer(length);
+					ogg_reader.read((char*)(&buffer.front()), length);
+                    char *pcm_audio = NULL;
+                #ifdef HAVE_SPEEX
+                    length = SpeexOggDecoder(&buffer.front(), length, pcm_audio);
+                #endif
+
+                    if (length <= 0) {
+					    KALDI_WARN << std::string(fn) << " not converted successfully.";
+                        continue;
+                    }
+
+					size = length/sizeof(short);
+					// read data as a block:
+					audio_data.Resize(1, size);
+					for (int i = 0; i < size; i++)
+						audio_data(0, i) = ((short *)pcm_audio)[i];
+					ogg_reader.close();
+
+                    if (NULL != pcm_audio)
+                        delete pcm_audio;
+                } else
+                    KALDI_ERR << "Unsupported input audio format, now only support wav or pcm.";
 
 			// get the data for channel zero (if the signal is not mono, we only
 			// take the first channel).
 			SubVector<BaseFloat> data(audio_data, 0);
+
+			// one utterance
+			extractor.Reset();
+
             state = FEAT_END;
 			extractor.FeedData((void*)data.Data(), data.Dim()*sizeof(float), state);
+			ivector = extractor.GetCurrentIvector(2);
 
-			ivector = extractor.GetCurrentIvector(0);
-			ivector->utt = std::string(fn);
-			KALDI_LOG << "Finish extractor utterance: " << ivector->utt;
-			ivector_writer.Write(ivector->utt, ivector->ivector_);
+				if (NULL == ivector) {
+					KALDI_WARN << std::string(fn) << " extract empty ivector.";
+					continue;
+				}
+			    ivector->utt = std::string(fn);
+			    ivector_writer.Write(ivector->utt, ivector->ivector_);
 
-			total_frames += ivector->num_frames_;
-	    }
+			    total_frames += ivector->num_frames_;
+	        }
+	        wavlist_reader.close();
+        } else {
 
-	    wavlist_reader.close();
+        	SequentialBaseFloatMatrixReader feats_reader(feats_rspecifier);
+        	for (; !feats_reader.Done(); feats_reader.Next()) {
+        		std::string utt = feats_reader.Key();
+        		const Matrix<BaseFloat> &mat = feats_reader.Value();
+        		Matrix<BaseFloat> feat(mat.NumRows(), mat.NumCols(), kUndefined, kStrideEqualNumCols);
+        		feat.CopyFromMat(mat);
+
+				// one utterance
+				extractor.Reset();
+
+				state = FEAT_END;
+				extractor.FeedData((void*)feat.Data(), feat.SizeInBytes(), state);
+				ivector = extractor.GetCurrentIvector(2);
+
+				if (NULL == ivector) {
+					KALDI_WARN << utt << " extract empty ivector.";
+					continue;
+				}
+				ivector->utt = utt;
+				ivector_writer.Write(ivector->utt, ivector->ivector_);
+
+				total_frames += ivector->num_frames_;
+        	}
+        }
 
 	    double elapsed = timer.Elapsed();
 		KALDI_LOG << "Time taken [excluding initialization] "<< elapsed

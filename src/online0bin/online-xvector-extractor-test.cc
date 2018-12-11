@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
 	    ParseOptions po(usage);
 
 	    std::string cfg;
-	    po.Register("cfg", &cfg, "xvector config file");
+	    po.Register("cfg", &cfg, "xvector extractor config file");
 
         std::string audio_format = "wav";
         po.Register("audio-format", &audio_format, "input audio format(e.g. wav, pcm, ogg)");
@@ -126,8 +126,7 @@ int main(int argc, char *argv[])
 
                     if (NULL != pcm_audio)
                         delete pcm_audio;
-                }
-				else
+                } else
 					KALDI_ERR << "Unsupported input audio format, now only support wav, pcm or ogg.";
 
 				// get the data for channel zero (if the signal is not mono, we only
