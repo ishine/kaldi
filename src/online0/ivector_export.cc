@@ -48,7 +48,8 @@ int	IvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes,
     if (state==FEAT_START)
     	extractor->Reset();
 
-    int num_samples = 0, len = cut_time;
+    int num_samples = 0;
+    float len = cut_time;
     float *audio = nullptr;
     char *pcm_audio = nullptr;
     const void *raw_audio = data;

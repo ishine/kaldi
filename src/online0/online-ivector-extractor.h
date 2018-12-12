@@ -69,6 +69,8 @@ struct OnlineIvectorExtractorConfig {
 		opts->Register("vad-config", &vad_cfg, "Configuration file for voice active detection");
 		opts->Register("plda-config", &plda_cfg, "Configuration file for PLDA(Probabilistic Linear Discriminant Analysis) model");
 
+		opts->Register("use-post", &use_post, "If true, ivector will be post processed after network output, "
+				"e.g. lda, plda, length normalize.");
 		opts->Register("mean-vec", &mean_filename, "the global mean of xvectors filename");
 		opts->Register("lda-transform", &lda_filename, "Filename of xvector lda transform matrix, e.g. transform.mat");
 		opts->Register("plda", &plda_filename, "PLDA model for computes log-likelihood ratios for trials.");
