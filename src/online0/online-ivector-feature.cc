@@ -51,12 +51,14 @@ void OnlineStreamIvectorExtractionInfo::Init(
   if (config.diag_ubm_rxfilename == "")
 	  KALDI_ERR << "--diag-ubm option must be set " << note;
   ReadKaldiObject(config.diag_ubm_rxfilename, &diag_ubm);
-  if (config.full_ubm_rxfilename == "")
-	  KALDI_ERR << "--full-ubm option must be set " << note;
-  ReadKaldiObject(config.full_ubm_rxfilename, &full_ubm);
+  if (config.full_ubm_rxfilename != "")
+      ReadKaldiObject(config.full_ubm_rxfilename, &full_ubm);
+  else
+      KALDI_WARN << "full ubm not set, it will use diag ubm default";
   if (config.ivector_extractor_rxfilename == "")
 	  KALDI_ERR << "--ivector-extractor option must be set " << note;
   ReadKaldiObject(config.ivector_extractor_rxfilename, &extractor);
+
   if (config.lda_transform_rxfilename != "") {
 	  ReadKaldiObject(config.lda_transform_rxfilename, &lda_transform);
 	  lda_linear_term = lda_transform.ColRange(0, lda_transform.NumCols()-1);
@@ -70,7 +72,8 @@ void OnlineStreamIvectorExtractionInfo::Init(
 
 void OnlineStreamIvectorExtractionInfo::Check() const {
   KALDI_ASSERT(diag_ubm.Dim() == extractor.FeatDim());
-  KALDI_ASSERT(full_ubm.Dim() == extractor.FeatDim());
+  if (full_ubm.Dim() != 0)
+    KALDI_ASSERT(full_ubm.Dim() == extractor.FeatDim());
   KALDI_ASSERT(ivector_period > 0);
   KALDI_ASSERT(num_gselect > 0);
   KALDI_ASSERT(min_post < 0.5);
@@ -112,16 +115,20 @@ void OnlineStreamIvectorFeature::UpdateStatsForFrame(int32 t) {
   Vector<BaseFloat> feat(feat_dim);  // features given to iVector extractor
   Vector<BaseFloat> log_likes;
 
-  base_feature_->GetFrame(t, &feat);
-
-  std::vector<int32> gselect;
-  info_.diag_ubm.GaussianSelection(feat, info_.num_gselect, &gselect);
-  //info_.diag_ubm.LogLikelihoods(feat, &log_likes);
-  info_.full_ubm.LogLikelihoodsPreselect(feat, gselect, &log_likes);
-
   // "posterior" stores the pruned posteriors for Gaussians in the UBM.
   std::vector<std::pair<int32, BaseFloat> > posterior;
-  tot_ubm_loglike_ += VectorToPosteriorEntry(log_likes, gselect, info_.min_post, &posterior);
+
+  base_feature_->GetFrame(t, &feat);
+
+  if (info_.full_ubm.Dim() == info_.extractor.FeatDim()) {
+    std::vector<int32> gselect;
+    info_.diag_ubm.GaussianSelection(feat, info_.num_gselect, &gselect);
+    info_.full_ubm.LogLikelihoodsPreselect(feat, gselect, &log_likes);
+    tot_ubm_loglike_ += VectorToPosteriorEntry(log_likes, gselect, info_.min_post, &posterior);
+  } else {
+    info_.diag_ubm.LogLikelihoods(feat, &log_likes);
+    tot_ubm_loglike_ += VectorToPosteriorEntry(log_likes, info_.num_gselect, info_.min_post, &posterior);
+  }
 
   for (size_t i = 0; i < posterior.size(); i++)
 	  posterior[i].second *= info_.posterior_scale;
@@ -149,7 +156,6 @@ void OnlineStreamIvectorFeature::UpdateStatsUntilFrame(int32 frame) {
     }
   }
 }
-
 
 void OnlineStreamIvectorFeature::GetFrame(int32 frame, VectorBase<BaseFloat> *feat) {
   int32 frame_to_update_until = (info_.greedy_ivector_extractor ?
