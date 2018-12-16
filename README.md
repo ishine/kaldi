@@ -1,5 +1,18 @@
 [![Build Status](https://travis-ci.org/kaldi-asr/kaldi.svg?branch=master)](https://travis-ci.org/kaldi-asr/kaldi)
 
+# NOTE
+You are located in branch `ktnet1` and this my main development branch. I add some new features to Kaldi (based on 2017.09 Kaldi). These new features mainly are nnet1 related.
+
+# New feature
+- DNN pruning
+- Batch Normalization (BN)
+- Simple Recurrent Unit (SRU)
+- Time-Frequency LSTM (TF-LSTM)
+- Compact Feed-forward Sequential Memory networks (CFSMN)
+- Deep Feed-forward Sequential Memory Networks (DFSMN)
+- RNN frame skipping
+- AISHELL-1 related scripts (DNN/CNN/LSTM)
+
 Kaldi Speech Recognition Toolkit
 ================================
 
