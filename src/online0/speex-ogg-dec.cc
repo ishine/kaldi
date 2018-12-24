@@ -196,6 +196,7 @@ int SpeexOggDecoder(const char *speex_ogg_bits, int flen, char* &audio_bits)
 	int offset = 0;
 
 
+    out_buffer.reserve(flen*10);
 	/*Init Ogg data struct*/
 	ogg_sync_init(&oy);
 	speex_bits_init(&bits);
