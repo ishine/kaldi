@@ -1851,6 +1851,22 @@ inline void cuda_get_r_filter_err(dim3 Gr, dim3 Bl, double *data, const double *
   cudaD_get_r_filter_err(Gr, Bl, data, diff, in, flags, d, r_order, r_stride, lr);
 }
 
+inline void cuda_gen_memory_online(dim3 Gr, dim3 Bl, float *data, const float* in, int start, const float *l_filter, const float* r_filter,
+						const int *l_valid, const int *r_valid, const int *stream_state_flag,
+                      	MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream)
+{
+  cudaF_gen_memory_online(Gr, Bl, data, in, start, l_filter, r_filter, l_valid, r_valid, stream_state_flag,
+		  d_out, d_in, l_order, r_order, l_stride, r_stride, nstream);
+}
+
+inline void cuda_gen_memory_online(dim3 Gr, dim3 Bl, double *data, const double* in, int start, const double *l_filter, const double* r_filter,
+						const int *l_valid, const int *r_valid, const int *stream_state_flag,
+                      	MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream)
+{
+  cudaD_gen_memory_online(Gr, Bl, data, in, start, l_filter, r_filter, l_valid, r_valid, stream_state_flag,
+		  d_out, d_in, l_order, r_order, l_stride, r_stride, nstream);
+}
+
 } // namespace kaldi
 
 #endif // HAVE_CUDA

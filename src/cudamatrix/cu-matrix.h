@@ -869,6 +869,12 @@ class CuMatrixBase {
   void GenMemory(const CuMatrixBase<Real> &in, const CuMatrixBase<Real> &l_filter_, const CuMatrixBase<Real> &r_filter_,
 		CuVectorBase<BaseFloat> &flags_, int l_order_, int r_order_, int l_stride_, int r_stride_);
 
+  void GenMemoryOnline(const CuMatrixBase<Real>& in, int start,
+  									const CuMatrixBase<Real>& l_filter, const CuMatrixBase<Real>& r_filter,
+  									std::vector<int32> &l_valid_frames, std::vector<int32> &r_valid_frames,
+									std::vector<int32> &stream_state_flag,
+  									int l_order, int r_order, int l_stride, int r_stride, int nstream);
+
   // backward operation in memory block
   void MemoryErrBack(const CuMatrixBase<Real> &in, const CuMatrixBase<Real> &l_filter_, const CuMatrixBase<Real> &r_filter_,
 		CuVectorBase<BaseFloat> &flags_, int l_order_, int r_order_, int l_stride_, int r_stride_);

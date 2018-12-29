@@ -72,6 +72,8 @@
 #include "nnet0/nnet-deep-fsmn.h"
 #include "nnet0/nnet-uni-fsmn.h"
 #include "nnet0/nnet-uni-deep-fsmn.h"
+#include "nnet0/nnet-fsmn-streams.h"
+#include "nnet0/nnet-deep-fsmn-streams.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -135,6 +137,8 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kDeepFsmn, "<DeepFsmn>" },
   { Component::kUniFsmn, "<UniFsmn>" },
   { Component::kUniDeepFsmn, "<UniDeepFsmn>" },
+  { Component::kFsmnStreams, "<FsmnStreams>" },
+  { Component::kDeepFsmnStreams, "<DeepFsmnStreams>" },
 };
 
 
@@ -333,6 +337,12 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
     case Component::kUniDeepFsmn:
       ans = new UniDeepFsmn(input_dim, output_dim);
       break;
+    case Component::kFsmnStreams:
+          ans = new FsmnStreams(input_dim, output_dim);
+          break;
+	case Component::kDeepFsmnStreams:
+	  ans = new DeepFsmnStreams(input_dim, output_dim);
+	  break;
     case Component::kUnknown :
     default :
       KALDI_ERR << "Missing type: " << TypeToMarker(comp_type);

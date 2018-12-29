@@ -6857,6 +6857,60 @@ static void _gen_memory(Real* out, const Real* in, const Real *l_filter, const R
 
 template<typename Real>
 __global__
+static void _gen_memory_online(Real* out, const Real* in, int start, const Real *l_filter, const Real *r_filter, 
+						const int32_cuda* l_valid, const int32_cuda* r_valid, const int32_cuda* stream_state_flag,
+						MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream)
+{
+  int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
+  if(i < d_out.cols*d_out.rows)
+  {
+    int batch_size = d_out.rows/nstream, buffer_size = d_in.rows/nstream;
+    int l_his = l_order*l_stride, r_his = r_order*r_stride, stride = d_out.stride;
+    int curt_start, num_valid_frames, l_b, r_b, shift_index;
+  
+    int row = i/d_out.cols;
+    int col = i%d_out.cols;  
+    int s = row/batch_size, r = row%batch_size, c = col;
+    
+    curt_start = stream_state_flag[s]==0 ? start+r_his : start;
+	r_b = start + r_his + r_valid_frames[s];
+	if (stream_state_flag[s] == 0) {
+		num_valid_frames = r_valid_frames[s]-r_his;
+		l_b = start + r_his;
+	} else if (stream_state_flag[s] == 1) {
+		num_valid_frames = r_valid_frames[s];
+		l_b = 0;
+	} else if (stream_state_flag[s] == 2) {
+		num_valid_frames = r_valid_frames[s]+r_his;
+		l_b = 0;
+	}
+      
+    if (r < num_valid_frames) {
+		int idx = (s*buffer_size+curt_start+r)*stride + c;
+		int odx = (s*batch_size+r)*stride + c;
+		out[odx] = in[idx];
+		
+		Real value = 0.0;
+		/// left history
+		for (int order = 0; order < l_order; order++) {
+			shift_index = r-order*l_stride+curt_start;
+			if (shift_index >= l_b)
+				value += in[(s*buffer_size+shift_index)*stride + c] * l_filter[order*stride + c];
+		}
+		
+		/// right history
+		for (int order = 1; order < r_order + 1; order++) {
+			shift_index = r+order*r_stride+curt_start;
+			if (shift_index < r_b)
+				value += in[(s*buffer_size+shift_index)*stride + c] * r_filter[(order - 1)*stride + c];
+		}
+		out[odx] += value;
+    }
+  }
+}
+
+template<typename Real>
+__global__
 static void _memory_err_back(Real* out, const Real* in, const Real *l_filter, const Real *r_filter, float *flags, MatrixDim d, 
                              int l_order, int r_order, int l_stride, int r_stride)
 {
@@ -7149,6 +7203,22 @@ void cudaD_get_r_filter_err(dim3 Gr, dim3 Bl, double *mat_out, const double *dif
                             int r_order, int r_stride, float lr)
 {
   _get_r_filter_err <<<Gr, Bl >>>(mat_out, diff, mat_in, flags, d, r_order, r_stride, lr);
+}
+
+void cudaF_gen_memory_online(dim3 Gr, dim3 Bl, float *mat_out, const float* mat_in, int start, const float *l_filter, const float* r_filter, 
+						const int *l_valid, const int *r_valid, const int *stream_state_flag, 
+                      	MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream)
+{
+  _gen_memory_online <<<Gr, Bl >>>(mat_out, mat_in, start, l_filter, r_filter, l_valid, r_valid, stream_state_flag,
+						d_out, d_in, l_order, r_order, l_stride, r_stride, nstream);
+}
+
+void cudaD_gen_memory_online(dim3 Gr, dim3 Bl, double *mat_out, const double* mat_in, int start, const double *l_filter, const double* r_filter, 
+						const int *l_valid, const int *r_valid, const int *stream_state_flag, 
+                      	MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream)
+{
+  _gen_memory_online <<<Gr, Bl >>>(mat_out, mat_in, start, l_filter, r_filter, l_valid, r_valid, stream_state_flag,
+						d_out, d_in, l_order, r_order, l_stride, r_stride, nstream);
 }
 
 // Launches a kernel that does nothing, explicitly using the legacy default stream;

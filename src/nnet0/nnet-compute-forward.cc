@@ -124,8 +124,10 @@ public:
 	    std::vector<int> lent(num_stream, 0);
 	    std::vector<int> frame_num_utt(num_stream, 0);
 	    std::vector<int> new_utt_flags(num_stream, 0);
+	    std::vector<int> valid_input_frames(num_stream, 0);
+	    std::vector<int> utt_state_flags(num_stream, 0);
 
-	    std::vector<Matrix<BaseFloat> > utt_feats(num_stream);
+	    std::vector<Matrix<BaseFloat> > utt_nnet_out(num_stream);
 	    std::vector<int> utt_curt(num_stream, 0);
 	    std::vector<bool> utt_copied(num_stream, 0);
 
@@ -154,14 +156,15 @@ public:
 			// if any, feed the exhausted stream with a new utterance, update book-keeping infos
 			for (int s = 0; s < num_stream; s++) {
 				// this stream still has valid frames
-				if (curt[s] < lent[s]) {
+				if (curt[s] < lent[s] || utt_state_flags[s] < 2) {
 					new_utt_flags[s] = 0;
+					utt_state_flags[s] = 1; // utterance append
 					continue;
 				}
 
 				if (utt_curt[s] > 0 && !utt_copied[s]) {
 					examples_mutex->Lock();
-					feature_writer->Write(keys[s], utt_feats[s]);
+					feature_writer->Write(keys[s], utt_nnet_out[s]);
 					examples_mutex->Unlock();
 					utt_copied[s] = true;
 				}
@@ -172,7 +175,7 @@ public:
 					// forward the features through a feature-transform,
 					nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
 
-							num_done++;
+					num_done++;
 
 					// checks ok, put the data in the buffers,
 					keys[s] = key;
@@ -182,13 +185,14 @@ public:
 					curt[s] = 0;
 					lent[s] = feats[s].NumRows();
 					new_utt_flags[s] = 1;  // a new utterance feeded to this stream
+					utt_state_flags[s] = 0; // utterance start
 
 					//frame_num_utt[s] = (lent[s]+skip_frames-1)/skip_frames;
 					frame_num_utt[s] = lent[s]/skip_frames;
 					frame_num_utt[s] += lent[s]%skip_frames > 0 ? 1 : 0;
 					lent[s] = lent[s] > frame_num_utt[s]*skip_frames ? frame_num_utt[s]*skip_frames : lent[s];
 					int32 utt_frames = opts->copy_posterior ? lent[s]:frame_num_utt[s];
-					utt_feats[s].Resize(utt_frames, out_dim, kUndefined);
+					utt_nnet_out[s].Resize(utt_frames, out_dim, kUndefined);
 					utt_copied[s] = false;
 					utt_curt[s] = 0;
 
@@ -205,23 +209,44 @@ public:
 
 			if (done) break;
 
-			// fill a multi-stream bptt batch
-			// * target: padded to batch_size
-			// * feat: first shifted to achieve targets delay; then padded to batch_size
-			for (int t = 0; t < batch_size * out_skip; t++) {
-			   for (int s = 0; s < num_stream; s++) {
-				   // feat shifting & padding
-				   if (curt[s] + time_shift*skip_frames < lent[s]) {
-					   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]+time_shift*skip_frames));
-				   } else {
-					   int last = (frame_num_utt[s]-1)*skip_frames; // lent[s]-1
-					   if (last >= 0)
-					   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(last));
-				   }
+			int N, n, nframes;
+			if (opts->network_type == "lstm") {
+				// fill a multi-stream bptt batch
+				// * target: padded to batch_size
+				// * feat: first shifted to achieve targets delay; then padded to batch_size
+				for (int t = 0; t < batch_size * out_skip; t++) {
+				   for (int s = 0; s < num_stream; s++) {
+					   // feat shifting & padding
+					   if (curt[s] + time_shift*skip_frames < lent[s]) {
+						   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]+time_shift*skip_frames));
+					   } else {
+						   int last = (frame_num_utt[s]-1)*skip_frames; // lent[s]-1
+						   if (last >= 0)
+						   feat.Row(t * num_stream + s).CopyFromVec(feats[s].Row(last));
+					   }
 
-				   curt[s] += in_skip;
+					   curt[s] += in_skip;
+					   if (curt[s] >= lent[s]) utt_state_flags[s] = 2;
+				   }
 			   }
-		   }
+			} else if (opts->network_type == "fsmn"){ // fsmn tdnn ...
+	        	for (int s = 0; s < num_stream; s++) {
+	        		N = opts->skip_inner ? skip_frames : 1;
+	        		n = curt[s]+batch_size < lent[s] ? batch_size : lent[s]-curt[s];
+	        		nframes = (curt[s]+n)*N < feats[s].NumRows() ? n*N : feats[s].NumRows()-curt[s]*N;
+                    nframes = nframes < 0 ? 0 : nframes;
+                    valid_input_frames[s] = (nframes+N-1)/N;
+
+	        		if (nframes > 0)
+	        			feat.RowRange(s*batch_size*N, nframes).CopyFromMat(feats[s].RowRange(curt[s]*N, nframes));
+	        		if (nframes < batch_size*N)
+	        			feat.RowRange(s*batch_size*N+nframes, batch_size*N-nframes).SetZero();
+
+	        		if(nframes == 0) utt_state_flags[s] = 2; // utterance end
+	        		curt[s] += batch_size;
+	        	}
+			}
+
 
 			num_frames = feat.NumRows();
 			// report the speed
@@ -238,6 +263,7 @@ public:
 			// for streams with new utterance, history states need to be reset
 			nnet.ResetLstmStreams(new_utt_flags);
 			nnet.SetSeqLengths(new_utt_flags);
+			nnet.SetStreamStatus(utt_state_flags, valid_input_frames);
 
 			// forward pass
 			//nnet.Propagate(feats_transf, &nnet_out);
@@ -261,25 +287,45 @@ public:
 
 			nnet_out.CopyToMat(&nnet_out_host);
 
-			for (int t = 0; t < batch_size; t++) {
-			   for (int s = 0; s < num_stream; s++) {
-				   // feat shifting & padding
-				   if (opts->copy_posterior) {
-					   for (int k = 0; k < skip_frames; k++){
-							if (utt_curt[s] < lent[s]) {
-								utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
-								utt_curt[s]++;
-							}
+			if (opts->network_type == "lstm") {
+				for (int t = 0; t < batch_size; t++) {
+				   for (int s = 0; s < num_stream; s++) {
+					   // feat shifting & padding
+					   if (opts->copy_posterior) {
+						   for (int k = 0; k < skip_frames; k++){
+								if (utt_curt[s] < lent[s]) {
+									utt_nnet_out[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t*num_stream+s));
+									utt_curt[s]++;
+								}
+						   }
+					   } else {
+						   if (utt_curt[s] < frame_num_utt[s]) {
+							   utt_nnet_out[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t*num_stream+s));
+							   utt_curt[s]++;
+						   }
 					   }
 				   }
-				   else {
-					   if (utt_curt[s] < frame_num_utt[s]) {
-						   utt_feats[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(t * num_stream + s));
-						   utt_curt[s]++;
-					   }
-				   }
-			   }
+				}
+			} else if (opts->network_type == "fsmn"){
+				for (int s = 0; s < num_stream; s++) {
+					for (int t = 0; t < valid_input_frames[s]; t++) {
+						if (opts->copy_posterior) {
+						   for (int k = 0; k < skip_frames; k++){
+								if (utt_curt[s] < lent[s]) {
+									utt_nnet_out[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(s*batch_size+t));
+									utt_curt[s]++;
+								}
+						   }
+						} else {
+						   if (utt_curt[s] < frame_num_utt[s]) {
+							   utt_nnet_out[s].Row(utt_curt[s]).CopyFromVec(nnet_out_host.Row(s*batch_size+t));
+							   utt_curt[s]++;
+						   }
+						}
+					}
+				}
 			}
+
 			total_frames += num_frames;
 	    }
 

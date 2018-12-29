@@ -4911,6 +4911,93 @@ void CuMatrixBase<Real>::GenMemory(const CuMatrixBase<Real>& in, const CuMatrixB
 }
 
 template<typename Real>
+void CuMatrixBase<Real>::GenMemoryOnline(const CuMatrixBase<Real>& in, int start,
+									const CuMatrixBase<Real>& l_filter, const CuMatrixBase<Real>& r_filter,
+									std::vector<int32> &l_valid_frames, std::vector<int32> &r_valid_frames,
+									std::vector<int32> &stream_state_flag,
+									int l_order, int r_order, int l_stride, int r_stride, int nstream) {
+  // Check the inputs:
+  KALDI_ASSERT(in.NumCols() == NumCols());
+  KALDI_ASSERT(in.NumRows() % nstream == 0);
+
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    CuTimer tim;
+
+    CuArray<MatrixIndexT> cuda_l_valid_frames(l_valid_frames);
+    CuArray<MatrixIndexT> cuda_r_valid_frames(r_valid_frames);
+    CuArray<MatrixIndexT> cuda_stream_state_flag(stream_state_flag);
+
+    dim3 dimBlock(CU1DBLOCK);
+
+    dim3 dimGrid(n_blocks(num_cols_*num_rows_, CU1DBLOCK));
+
+    cuda_gen_memory_online(dimGrid, dimBlock, this->data_, in.data_, start, l_filter.data_, r_filter.data_,
+			cuda_l_valid_frames.Data(), cuda_r_valid_frames.Data(), cuda_stream_state_flag.Data(),
+			this->Dim(), in.Dim(), l_order, r_order, l_stride, r_stride, nstream);
+
+    CU_SAFE_CALL(cudaGetLastError());
+
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  }else
+#endif
+  {
+
+    Real *data = this->data_;
+    const Real *src_data = in.data_;
+    const Real *LF = l_filter.data_;
+    const Real *RF = r_filter.data_;
+    int shift_index = 0;
+    int rows = NumRows(), src_rows = in.NumRows();
+    int cols = NumCols(), src_cols = in.NumCols();
+    int stride = in.Stride();
+    int batch_size = rows/nstream, buffer_size = src_rows/nstream;
+    int l_his = l_order*l_stride, r_his = r_order*r_stride;
+
+    int curt_start, num_valid_frames, l_b, r_b;
+
+
+    for (int32 s = 0; s < nstream; s++) {
+    	curt_start = stream_state_flag[s]==0 ? start+r_his : start;
+    	r_b = start + r_his + r_valid_frames[s];
+    	if (stream_state_flag[s] == 0) {
+    		num_valid_frames = r_valid_frames[s]-r_his;
+    		l_b = start + r_his;
+    	} else if (stream_state_flag[s] == 1) {
+    		num_valid_frames = r_valid_frames[s];
+    		l_b = 0;
+    	} else if (stream_state_flag[s] == 2) {
+    		num_valid_frames = r_valid_frames[s]+r_his;
+    		l_b = 0;
+    	}
+
+    	for (int32 r = 0; r < num_valid_frames; r++) {
+    		for (int32 c = 0; c < cols; c++) {
+    			int idx = (s*buffer_size+curt_start+r)*stride + c;
+    			int odx = (s*batch_size+r)*stride + c;
+    			data[odx] = src_data[idx];
+
+    			/// left history
+    			for (int order = 0; order < l_order; order++) {
+    				shift_index = r-order*l_stride+curt_start;
+    				if (shift_index >= l_b)
+    					data[odx] += src_data[(s*buffer_size+shift_index)*stride + c] * LF[order*stride + c];
+    			}
+
+    			/// right history
+    			for (int order = 1; order < r_order + 1; order++) {
+    				shift_index = r+order*r_stride+curt_start;
+    				if (shift_index < r_b)
+    					data[odx] += src_data[(s*buffer_size+shift_index)*stride + c] * RF[(order - 1)*stride + c];
+    			}
+    		} // c
+    	} // r
+    } // s
+  }
+}
+
+
+template<typename Real>
 void CuMatrixBase<Real>::MemoryErrBack(const CuMatrixBase<Real>& in, const CuMatrixBase<Real>& l_filter, const CuMatrixBase<Real>& r_filter,
                                        CuVectorBase<BaseFloat> &flags, int l_order, int r_order, int l_stride, int r_stride) {
 #if HAVE_CUDA == 1

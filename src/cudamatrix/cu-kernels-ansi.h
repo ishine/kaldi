@@ -931,16 +931,23 @@ void cudaF_get_l_filter_err(dim3 Gr, dim3 Bl, float *mat_out, const float* diff,
                             int l_order, int l_stride, float lr);
 void cudaD_get_l_filter_err(dim3 Gr, dim3 Bl, double *mat_out, const double* diff, const double* mat_in, float* flags, MatrixDim d,
                             int l_order, int l_stride, float lr);
-// Launches a kernel that does nothing, explicitly using the legacy default stream;
-// this will synchronize all CUDA streams (except for non-blocking streams) on the
-// device.
-void cuda_legacy_noop();
 
 void cudaF_get_r_filter_err(dim3 Gr, dim3 Bl, float *mat_out, const float* diff, const float* mat_in, float* flags, MatrixDim d,
                             int r_order, int r_stride, float lr);
 void cudaD_get_r_filter_err(dim3 Gr, dim3 Bl, double *mat_out, const double* diff, const double* mat_in, float* flags, MatrixDim d,
                             int r_order, int r_stride, float lr);
 
+void cudaF_gen_memory_online(dim3 Gr, dim3 Bl, float *mat_out, const float* mat_in, int start, const float *l_filter, const float* r_filter,
+						const int *l_valid, const int *r_valid, const int *stream_state_flag,
+                      	MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream);
+void cudaD_gen_memory_online(dim3 Gr, dim3 Bl, double *mat_out, const double* mat_in, int start, const double *l_filter, const double* r_filter,
+						const int *l_valid, const int *r_valid, const int *stream_state_flag,
+                      	MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream);
+
+// Launches a kernel that does nothing, explicitly using the legacy default stream;
+// this will synchronize all CUDA streams (except for non-blocking streams) on the
+// device.
+void cuda_legacy_noop();
 } // extern "C"
 
 #endif // HAVE_CUDA

@@ -114,6 +114,8 @@ class Component {
     kDeepFsmn,
     kUniFsmn,
     kUniDeepFsmn,
+	kFsmnStreams,
+	kDeepFsmnStreams,
   } ComponentType;
   /// A pair of type and marker 
   struct key_value {

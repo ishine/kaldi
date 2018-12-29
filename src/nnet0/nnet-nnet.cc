@@ -43,6 +43,8 @@
 #include "nnet0/nnet-deep-fsmn.h"
 #include "nnet0/nnet-uni-fsmn.h"
 #include "nnet0/nnet-uni-deep-fsmn.h"
+#include "nnet0/nnet-fsmn-streams.h"
+#include "nnet0/nnet-deep-fsmn-streams.h"
 #include "nnet0/nnet-statistics-pooling-component.h"
 
 namespace kaldi {
@@ -193,42 +195,35 @@ void Nnet::Backpropagate(const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<B
   //////////////////////////////////////
 }
 
-void Nnet::ResetGradient()
-{
-
-    for (int32 i = NumComponents()-1; i >= 0; i--) {
-            if (components_[i]->IsUpdatable()) {
-              UpdatableComponent *uc = dynamic_cast<UpdatableComponent*>(components_[i]);
-              uc->ResetGradient();
-            }
-          }
+void Nnet::ResetGradient() {
+	for (int32 i = NumComponents()-1; i >= 0; i--) {
+		if (components_[i]->IsUpdatable()) {
+			UpdatableComponent *uc = dynamic_cast<UpdatableComponent*>(components_[i]);
+			uc->ResetGradient();
+		}
+	}
 }
 
-void Nnet::Gradient()
-{
-
+void Nnet::Gradient() {
 	for (int32 i = NumComponents()-1; i >= 0; i--) {
-		    if (components_[i]->IsUpdatable()) {
-		      UpdatableComponent *uc = dynamic_cast<UpdatableComponent*>(components_[i]);
-		      uc->Gradient(propagate_buf_[i], backpropagate_buf_[i+1]);
-		    }
-		  }
+		if (components_[i]->IsUpdatable()) {
+			UpdatableComponent *uc = dynamic_cast<UpdatableComponent*>(components_[i]);
+			uc->Gradient(propagate_buf_[i], backpropagate_buf_[i+1]);
+		}
+	}
 }
 
-void Nnet::UpdateGradient()
-{
+void Nnet::UpdateGradient() {
 	for (int32 i = NumComponents()-1; i >= 0; i--) {
-		    if (components_[i]->IsUpdatable()) {
-		      UpdatableComponent *uc = dynamic_cast<UpdatableComponent*>(components_[i]);
-		      uc->UpdateGradient();
-		    }
-		  }
+		if (components_[i]->IsUpdatable()) {
+			UpdatableComponent *uc = dynamic_cast<UpdatableComponent*>(components_[i]);
+			uc->UpdateGradient();
+		}
+	}
 }
 
 /// Perform update gradient pass through the network
-void Nnet::Update()
-{
-
+void Nnet::Update() {
 	  //////////////////////////////////////
 	  // Update gradient
 	  //
@@ -246,8 +241,7 @@ void Nnet::Update()
 	  //////////////////////////////////////
 }
 
-int Nnet::WeightCopy(void *buffer, int direction, int copykind)
-{
+int Nnet::WeightCopy(void *buffer, int direction, int copykind) {
 	int pos = 0;
 	for (int32 i = 0; i < components_.size(); i++) {
 		if (components_[i]->IsUpdatable()) {
@@ -258,8 +252,7 @@ int Nnet::WeightCopy(void *buffer, int direction, int copykind)
 	return pos;
 }
 
-int Nnet::GetDim() const
-{
+int Nnet::GetDim() const {
 	int pos = 0;
 	for (int32 i = 0; i < components_.size(); i++) {
 		if (components_[i]->IsUpdatable()) {
@@ -550,6 +543,36 @@ void Nnet::ResetLstmStreams(const std::vector<int32> &stream_reset_flag, int32 n
   }
 }
 
+void Nnet::SetStreamStatus(const std::vector<int32> &stream_state_flag,
+		std::vector<int32> &valid_input_frames) {
+	int s, rorder = 0;
+	for (int32 c=0; c < NumComponents(); c++) {
+		if (GetComponent(c).GetType() == Component::kFsmnStreams) {
+			FsmnStreams& comp = dynamic_cast<FsmnStreams&>(GetComponent(c));
+
+			comp.SetStreamStatus(stream_state_flag, valid_input_frames);
+			rorder = comp.GetROrder();
+			for (s = 0; s < stream_state_flag.size(); s++) {
+				if (stream_state_flag[s] == 0)
+					valid_input_frames[s] -= rorder;
+				else if (stream_state_flag[s] == 2)
+					valid_input_frames[s] += rorder;
+			}
+		} else if (GetComponent(c).GetType() == Component::kDeepFsmnStreams) {
+			DeepFsmnStreams& comp = dynamic_cast<FsmnStreams&>(GetComponent(c));
+
+			comp.SetStreamStatus(stream_state_flag, valid_input_frames);
+			rorder = comp.GetROrder();
+			for (s = 0; s < stream_state_flag.size(); s++) {
+				if (stream_state_flag[s] == 0)
+					valid_input_frames[s] -= rorder;
+				else if (stream_state_flag[s] == 2)
+					valid_input_frames[s] += rorder;
+			}
+		}
+	}
+}
+
 void Nnet::ResetSubSample(int nstream, int skip_frames) {
 	for (int32 c=0; c < NumComponents(); c++) {
 		if (GetComponent(c).GetType() == Component::kSubSample) {
@@ -669,8 +692,7 @@ void Nnet::RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
 }
 
 void Nnet::SaveContext(std::vector<Matrix<BaseFloat> > &recurrent,
-		std::vector<Matrix<BaseFloat> > &cell)
-{
+		std::vector<Matrix<BaseFloat> > &cell) {
 	KALDI_ASSERT(recurrent.size() == cell.size());
 	int idx = 0;
 	for (int32 c=0; c < NumComponents(); c++) {
@@ -683,8 +705,7 @@ void Nnet::SaveContext(std::vector<Matrix<BaseFloat> > &recurrent,
 	}
 }
 
-void Nnet::GetHiddenLstmLayerRCInfo(std::vector<int> &recurrent, std::vector<int> &cell)
-{
+void Nnet::GetHiddenLstmLayerRCInfo(std::vector<int> &recurrent, std::vector<int> &cell) {
     int rd, cd;
     recurrent.resize(0);
     cell.resize(0);
