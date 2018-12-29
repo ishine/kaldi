@@ -34,6 +34,7 @@ namespace nnet0 {
   public:
    DeepFsmnStreams(int32 dim_in, int32 dim_out)
      : UpdatableComponent(dim_in, dim_out),
+     nstream_(0),
      learn_rate_coef_(1.0),
 	 clip_gradient_(0.0)
    {
@@ -306,27 +307,22 @@ namespace nnet0 {
    }
 
    void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
-
-	   	static bool do_stream_reset = false;
-	   	if (nstream_ == 0) {
-	   		do_stream_reset = true;
-	   		nstream_ = 1; // Karel: we are in nnet-forward, so 1 stream,
-	   	}
-
-		KALDI_ASSERT(nframes % nstream_ == 0);
-		KALDI_ASSERT(nstream_ == r_valid_frames_.size());
-		KALDI_ASSERT(nstream_ == l_valid_frames_.size());
-
 	   	int buffer_size = 0, nframes = in.NumRows();
 		int32 batch_size = nframes / nstream_,
 				l_his = l_order_*l_stride_,
 				r_his = r_order_*r_stride_;
 		int s, offset;
 
+		KALDI_ASSERT(nframes % nstream_ == 0);
+		KALDI_ASSERT(nstream_ == r_valid_frames_.size());
+		KALDI_ASSERT(nstream_ == l_valid_frames_.size());
+
 		buffer_size = l_his+r_his+batch_size;
 
-		if (prev_nnet_state_.NumRows() != buffer_size*nstream_)
-			prev_nnet_state_.resize(buffer_size*nstream_, output_dim_, kSetZero);
+		if (prev_nnet_state_.NumRows() != buffer_size*nstream_) {
+			prev_nnet_state_.Resize(buffer_size*nstream_, output_dim_, kSetZero);
+            in_his_.Resize(r_his, in.NumCols());
+        }
 
 
 		//////////////////////////////////////
@@ -340,7 +336,7 @@ namespace nnet0 {
 		hid_out_.ApplyFloor(0.0);
 
 		////Step2. linear affine transform
-		/// --- p_out_.Resize(nframes, output_dim_, kUndefined);
+		p_out_.Resize(nframes, output_dim_, kUndefined);
 		p_out_.AddMatMat(1.0, hid_out_, kNoTrans, p_weight_, kTrans, 0.0);
 
 		for (s = 0; s < nstream_; s++) {
@@ -363,9 +359,9 @@ namespace nnet0 {
 				out->RowRange(s*batch_size, r_his).AddMat(1.0, in_his_);
 				offset = r_his;
 			}
-			int lsize = r_valid_frames_[s] - r_his;
+			int lsize = stream_state_flag_[s]!=2 ? r_valid_frames_[s]-r_his : r_valid_frames_[s];
 			if (lsize > 0)
-				out->RowRange(s*batch_size+offset, lsize).AddMat(1.0, in.RowRange(0, lsize));
+				out->RowRange(s*batch_size+offset, lsize).AddMat(1.0, in.RowRange(s*batch_size, lsize));
 		}
 
 		// save history
@@ -377,7 +373,7 @@ namespace nnet0 {
 					prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(tmp_his);
 				} else {
 					prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(
-						prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size), his_size);
+						prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
 				}
 				in_his_.CopyFromMat(in.RowRange(s*batch_size+r_valid_frames_[s]-r_his, r_his));
 			}

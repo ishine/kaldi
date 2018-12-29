@@ -156,7 +156,7 @@ public:
 			// if any, feed the exhausted stream with a new utterance, update book-keeping infos
 			for (int s = 0; s < num_stream; s++) {
 				// this stream still has valid frames
-				if (curt[s] < lent[s] || utt_state_flags[s] < 2) {
+				if (curt[s] < lent[s] || utt_state_flags[s] == 1) {
 					new_utt_flags[s] = 0;
 					utt_state_flags[s] = 1; // utterance append
 					continue;

@@ -559,7 +559,7 @@ void Nnet::SetStreamStatus(const std::vector<int32> &stream_state_flag,
 					valid_input_frames[s] += rorder;
 			}
 		} else if (GetComponent(c).GetType() == Component::kDeepFsmnStreams) {
-			DeepFsmnStreams& comp = dynamic_cast<FsmnStreams&>(GetComponent(c));
+			DeepFsmnStreams& comp = dynamic_cast<DeepFsmnStreams&>(GetComponent(c));
 
 			comp.SetStreamStatus(stream_state_flag, valid_input_frames);
 			rorder = comp.GetROrder();

@@ -4949,10 +4949,10 @@ void CuMatrixBase<Real>::GenMemoryOnline(const CuMatrixBase<Real>& in, int start
     const Real *RF = r_filter.data_;
     int shift_index = 0;
     int rows = NumRows(), src_rows = in.NumRows();
-    int cols = NumCols(), src_cols = in.NumCols();
+    int cols = NumCols();
     int stride = in.Stride();
     int batch_size = rows/nstream, buffer_size = src_rows/nstream;
-    int l_his = l_order*l_stride, r_his = r_order*r_stride;
+    int r_his = r_order*r_stride;
 
     int curt_start, num_valid_frames, l_b, r_b;
 

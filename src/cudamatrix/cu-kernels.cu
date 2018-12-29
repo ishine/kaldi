@@ -6858,14 +6858,14 @@ static void _gen_memory(Real* out, const Real* in, const Real *l_filter, const R
 template<typename Real>
 __global__
 static void _gen_memory_online(Real* out, const Real* in, int start, const Real *l_filter, const Real *r_filter, 
-						const int32_cuda* l_valid, const int32_cuda* r_valid, const int32_cuda* stream_state_flag,
+						const int32_cuda* l_valid_frames, const int32_cuda* r_valid_frames, const int32_cuda* stream_state_flag,
 						MatrixDim d_out, MatrixDim d_in, int l_order, int r_order, int l_stride, int r_stride, int nstream)
 {
   int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
   if(i < d_out.cols*d_out.rows)
   {
     int batch_size = d_out.rows/nstream, buffer_size = d_in.rows/nstream;
-    int l_his = l_order*l_stride, r_his = r_order*r_stride, stride = d_out.stride;
+    int r_his = r_order*r_stride, stride = d_out.stride;
     int curt_start, num_valid_frames, l_b, r_b, shift_index;
   
     int row = i/d_out.cols;
