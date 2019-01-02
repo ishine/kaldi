@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
         "\n"
         "Usage:  nnet-forward-evaluate [options] <model-in> \n"
         "e.g.: \n"
-        " nnet-forward-evaluate --verbose=1 --batch-size=16 --num-iteration=500 --no-softmax=true --feature-transform=final.feature_transform final.nnet\n";
+        " nnet-forward-evaluate --verbose=1 --batch-size=18 --num-iteration=500 --no-softmax=true --feature-transform=final.feature_transform final.nnet\n";
 
     ParseOptions po(usage);
 
@@ -118,6 +118,9 @@ int main(int argc, char *argv[]) {
 
     kaldi::int64 tot_t = 0;
 
+    // fsmn
+    std::vector<int> valid_input_frames(1, batch_size/3);
+    std::vector<int> utt_state_flags(1, 1);
 
     CuMatrix<BaseFloat> feats, feats_transf, nnet_out;
     Matrix<BaseFloat> nnet_out_host, mat;
@@ -145,8 +148,11 @@ int main(int argc, char *argv[]) {
       // fwd-pass, feature transform,
       nnet_transf.Feedforward(feats, &feats_transf);
 
+      // fsmn
+      nnet.SetStreamStatus(utt_state_flags, valid_input_frames);
       // fwd-pass, nnet,
-      nnet.Feedforward(feats_transf, &nnet_out);
+      //nnet.Feedforward(feats_transf, &nnet_out);
+      nnet.Propagate(feats_transf, &nnet_out);
       
       // convert posteriors to log-posteriors,
       if (apply_log) {

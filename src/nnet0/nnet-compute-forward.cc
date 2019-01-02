@@ -268,8 +268,9 @@ public:
 			    nnet.SetStreamStatus(utt_state_flags, valid_input_frames);
 
 			// forward pass
-			//nnet.Propagate(feats_transf, &nnet_out);
+			//nnet.Feedforward(CuMatrix<BaseFloat>(feat), &nnet_out);
 			nnet.Propagate(CuMatrix<BaseFloat>(feat), &nnet_out);
+            //nnet_out.Resize(nnet_out_host.NumRows(),nnet_out_host.NumCols());
 
 			// ctc prior, only scale blank label posterior
 			if (blank_posterior_scale >= 0) {

@@ -225,12 +225,16 @@ namespace nnet0 {
    }
 
    void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
+        if (nstream_ == 0) { 
+            nstream_ = 1; // Karel: we are in nnet-forward, so 1 stream,
+            KALDI_LOG << "Running nnet-forward with per-utterance FSMN-state reset";
+        }    
+
 	   	int buffer_size = 0, nframes = in.NumRows();
 		int32 batch_size = nframes / nstream_,
 				l_his = l_order_*l_stride_,
 				r_his = r_order_*r_stride_;
 
-		KALDI_ASSERT(nstream_ > 0);
 		KALDI_ASSERT(nframes % nstream_ == 0);
 		KALDI_ASSERT(nstream_ == r_valid_frames_.size());
 		KALDI_ASSERT(nstream_ == l_valid_frames_.size());
