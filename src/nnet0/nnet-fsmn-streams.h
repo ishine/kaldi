@@ -230,6 +230,7 @@ namespace nnet0 {
 				l_his = l_order_*l_stride_,
 				r_his = r_order_*r_stride_;
 
+		KALDI_ASSERT(nstream_ > 0);
 		KALDI_ASSERT(nframes % nstream_ == 0);
 		KALDI_ASSERT(nstream_ == r_valid_frames_.size());
 		KALDI_ASSERT(nstream_ == l_valid_frames_.size());

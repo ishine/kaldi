@@ -99,7 +99,8 @@ struct NnetForwardStats {
 	void Print(double time_now)
 	{
 	    // final message
-	    KALDI_LOG << "Done " << num_done << " files"
+	    KALDI_LOG << "Done " << num_done << " files "
+                  << total_frames << " frames"
 	              << " in " << time_now/60 << "min,"
 	              << " (fps " << total_frames/time_now << ")";
 	}

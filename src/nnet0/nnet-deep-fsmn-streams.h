@@ -313,6 +313,7 @@ namespace nnet0 {
 				r_his = r_order_*r_stride_;
 		int s, offset;
 
+		KALDI_ASSERT(nstream_ > 0);
 		KALDI_ASSERT(nframes % nstream_ == 0);
 		KALDI_ASSERT(nstream_ == r_valid_frames_.size());
 		KALDI_ASSERT(nstream_ == l_valid_frames_.size());
@@ -321,7 +322,7 @@ namespace nnet0 {
 
 		if (prev_nnet_state_.NumRows() != buffer_size*nstream_) {
 			prev_nnet_state_.Resize(buffer_size*nstream_, output_dim_, kSetZero);
-            in_his_.Resize(r_his, in.NumCols());
+            in_his_.Resize(r_his*nstream_, in.NumCols(), kSetZero);
         }
 
 
@@ -355,8 +356,8 @@ namespace nnet0 {
 		//out->AddMat(1.0, in, kNoTrans);
 		for (s = 0; s < nstream_; s++) {
 			offset = 0;
-			if (stream_state_flag_[s] != 0) { // not start
-				out->RowRange(s*batch_size, r_his).AddMat(1.0, in_his_);
+			if ((stream_state_flag_[s] == 1 && r_valid_frames_[s] > 0) || stream_state_flag_[s] == 2) { // stream_state_flag_[s] != 0
+				out->RowRange(s*batch_size, r_his).AddMat(1.0, in_his_.RowRange(s*r_his, r_his));
 				offset = r_his;
 			}
 			int lsize = stream_state_flag_[s]!=2 ? r_valid_frames_[s]-r_his : r_valid_frames_[s];
@@ -375,7 +376,7 @@ namespace nnet0 {
 					prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(
 						prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
 				}
-				in_his_.CopyFromMat(in.RowRange(s*batch_size+r_valid_frames_[s]-r_his, r_his));
+				in_his_.RowRange(s*r_his, r_his).CopyFromMat(in.RowRange(s*batch_size+r_valid_frames_[s]-r_his, r_his));
 			}
 		}
    }

@@ -204,7 +204,7 @@ public:
 			// we are done if all streams are exhausted
 			int done = 1;
 			for (int s = 0; s < num_stream; s++) {
-				if (curt[s] < lent[s]) done = 0;  // this stream still contains valid data, not exhausted
+				if (curt[s] < lent[s] || utt_state_flags[s] == 1) done = 0;  // this stream still contains valid data, not exhausted
 			}
 
 			if (done) break;
@@ -232,18 +232,18 @@ public:
 			} else if (opts->network_type == "fsmn"){ // fsmn tdnn ...
 	        	for (int s = 0; s < num_stream; s++) {
 	        		N = opts->skip_inner ? skip_frames : 1;
-	        		n = curt[s]+batch_size < lent[s] ? batch_size : lent[s]-curt[s];
-	        		nframes = (curt[s]+n)*N < feats[s].NumRows() ? n*N : feats[s].NumRows()-curt[s]*N;
+	        		n = curt[s]+batch_size*N < lent[s] ? batch_size*N : lent[s]-curt[s];
+	        		nframes = curt[s]+n < feats[s].NumRows() ? n : feats[s].NumRows()-curt[s];
                     nframes = nframes < 0 ? 0 : nframes;
                     valid_input_frames[s] = (nframes+N-1)/N;
 
 	        		if (nframes > 0)
-	        			feat.RowRange(s*batch_size*N, nframes).CopyFromMat(feats[s].RowRange(curt[s]*N, nframes));
+	        			feat.RowRange(s*batch_size*N, nframes).CopyFromMat(feats[s].RowRange(curt[s], nframes));
 	        		if (nframes < batch_size*N)
 	        			feat.RowRange(s*batch_size*N+nframes, batch_size*N-nframes).SetZero();
 
 	        		if(nframes == 0) utt_state_flags[s] = 2; // utterance end
-	        		curt[s] += batch_size;
+	        		curt[s] += nframes;
 	        	}
 			}
 
@@ -261,9 +261,11 @@ public:
 			//nnet_transf.Feedforward(CuMatrix<BaseFloat>(feat), &feats_transf);
 
 			// for streams with new utterance, history states need to be reset
-			nnet.ResetLstmStreams(new_utt_flags);
-			nnet.SetSeqLengths(new_utt_flags);
-			nnet.SetStreamStatus(utt_state_flags, valid_input_frames);
+            if (opts->network_type == "lstm") {
+			    nnet.ResetLstmStreams(new_utt_flags);
+			    nnet.SetSeqLengths(new_utt_flags);
+            } else if (opts->network_type == "fsmn")
+			    nnet.SetStreamStatus(utt_state_flags, valid_input_frames);
 
 			// forward pass
 			//nnet.Propagate(feats_transf, &nnet_out);
