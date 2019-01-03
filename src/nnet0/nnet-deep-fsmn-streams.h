@@ -312,6 +312,16 @@ namespace nnet0 {
             KALDI_LOG << "Running nnet-forward with per-utterance FSMN-state reset";
         }    
 
+#if HAVE_CUDA == 1
+      if (streamlist_.size() != nstream_+1) {
+           for (int i = 0; i < streamlist_.size(); i++)
+              cudaStreamDestroy(streamlist_[i]);
+          streamlist_.resize(nstream_+1);
+          for (int i = 0; i < nstream_+1; i++)
+              cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamDefault); //cudaStreamNonBlocking
+      }
+#endif
+
 	   	int buffer_size = 0, nframes = in.NumRows();
 		int32 batch_size = nframes / nstream_,
 				l_his = l_order_*l_stride_,
@@ -344,10 +354,29 @@ namespace nnet0 {
 		p_out_.Resize(nframes, output_dim_, kUndefined);
 		p_out_.AddMatMat(1.0, hid_out_, kNoTrans, p_weight_, kTrans, 0.0);
 
-		for (s = 0; s < nstream_; s++) {
-			if (r_valid_frames_[s] > 0)
-			prev_nnet_state_.RowRange(s*buffer_size+l_his+r_his, r_valid_frames_[s]).CopyFromMat(
-					p_out_.RowRange(s*batch_size, r_valid_frames_[s]));
+#if HAVE_CUDA == 1
+		if (streamlist_.size() != 0) {
+			DeletePatches(src_patches_);
+			DeletePatches(des_patches_);
+			for (s = 0; s < nstream_; s++) {
+				if (r_valid_frames_[s] > 0) {
+					src_patches_.push_back(new CuSubMatrix<BaseFloat>(p_out_, s*batch_size, r_valid_frames_[s],
+							0, p_out_.NumCols()));
+					des_patches_.push_back(new CuSubMatrix<BaseFloat>(prev_nnet_state_, s*buffer_size+l_his+r_his,
+							r_valid_frames_[s], 0, prev_nnet_state_.NumCols()));
+				}
+			}
+			kaldi::nnet0::SetStream(des_patches_, streamlist_);
+			CopyFromMatStreamed(src_patches_, des_patches_);
+			ResetStream(des_patches_);
+		} else
+#endif
+		{
+			for (s = 0; s < nstream_; s++) {
+				if (r_valid_frames_[s] > 0)
+				prev_nnet_state_.RowRange(s*buffer_size+l_his+r_his, r_valid_frames_[s]).CopyFromMat(
+						p_out_.RowRange(s*batch_size, r_valid_frames_[s]));
+			}
 		}
 
 		////Step3. fsmn layer
@@ -358,31 +387,83 @@ namespace nnet0 {
 
 		///step4. skip connection
 		//out->AddMat(1.0, in, kNoTrans);
-		for (s = 0; s < nstream_; s++) {
-			offset = 0;
-			if ((stream_state_flag_[s] == 1 && r_valid_frames_[s] > 0) || stream_state_flag_[s] == 2) { // stream_state_flag_[s] != 0
-				out->RowRange(s*batch_size, r_his).AddMat(1.0, in_his_.RowRange(s*r_his, r_his));
-				offset = r_his;
+#if HAVE_CUDA == 1
+		if (streamlist_.size() != 0) {
+			DeletePatches(src_patches_);
+			DeletePatches(des_patches_);
+			for (s = 0; s < nstream_; s++) {
+				offset = 0;
+				if ((stream_state_flag_[s] == 1 && r_valid_frames_[s] > 0) || stream_state_flag_[s] == 2) { // stream_state_flag_[s] != 0
+					src_patches_.push_back(new CuSubMatrix<BaseFloat>(in_his_, s*r_his, r_his, 0, in_his_.NumCols()));
+					des_patches_.push_back(new CuSubMatrix<BaseFloat>(*out, s*batch_size, r_his, 0, out->NumCols()));
+					offset = r_his;
+				}
+				int lsize = stream_state_flag_[s]!=2 ? r_valid_frames_[s]-r_his : r_valid_frames_[s];
+				if (lsize > 0) {
+					src_patches_.push_back(new CuSubMatrix<BaseFloat>(in, s*batch_size, lsize, 0, in.NumCols()));
+					des_patches_.push_back(new CuSubMatrix<BaseFloat>(*out, s*batch_size+offset, lsize, 0, out->NumCols()));
+				}
 			}
-			int lsize = stream_state_flag_[s]!=2 ? r_valid_frames_[s]-r_his : r_valid_frames_[s];
-			if (lsize > 0)
-				out->RowRange(s*batch_size+offset, lsize).AddMat(1.0, in.RowRange(s*batch_size, lsize));
+			kaldi::nnet0::SetStream(des_patches_, streamlist_);
+			AddMatStreamed(1.0, des_patches_, src_patches_);
+			ResetStream(des_patches_);
+		} else
+#endif
+		{
+			for (s = 0; s < nstream_; s++) {
+				offset = 0;
+				if ((stream_state_flag_[s] == 1 && r_valid_frames_[s] > 0) || stream_state_flag_[s] == 2) { // stream_state_flag_[s] != 0
+					out->RowRange(s*batch_size, r_his).AddMat(1.0, in_his_.RowRange(s*r_his, r_his));
+					offset = r_his;
+				}
+				int lsize = stream_state_flag_[s]!=2 ? r_valid_frames_[s]-r_his : r_valid_frames_[s];
+				if (lsize > 0)
+					out->RowRange(s*batch_size+offset, lsize).AddMat(1.0, in.RowRange(s*batch_size, lsize));
+			}
 		}
+
 
 		// save history
 		int his_size = l_his+r_his;
-		for (s = 0; s < nstream_; s++) {
-			if (r_valid_frames_[s] > 0) {
-				if (r_valid_frames_[s] < his_size) {
-					CuMatrix<BaseFloat> tmp_his(prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
-					prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(tmp_his);
-				} else {
-					prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(
-						prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
+#if HAVE_CUDA == 1
+		if (streamlist_.size() != 0) {
+			DeletePatches(src_patches_);
+			DeletePatches(des_patches_);
+			for (s = 0; s < nstream_; s++) {
+				if (r_valid_frames_[s] > 0) {
+					if (r_valid_frames_[s] < his_size) {
+						CuMatrix<BaseFloat> tmp_his(prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
+						prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(tmp_his);
+					} else {
+						src_patches_.push_back(new CuSubMatrix<BaseFloat>(prev_nnet_state_, s*buffer_size+r_valid_frames_[s], his_size,
+								0, prev_nnet_state_.NumCols()));
+						des_patches_.push_back(new CuSubMatrix<BaseFloat>(prev_nnet_state_, s*buffer_size, his_size,
+								0, prev_nnet_state_.NumCols()));
+					}
+					src_patches_.push_back(new CuSubMatrix<BaseFloat>(in, s*batch_size+r_valid_frames_[s]-r_his, r_his, 0, in.NumCols()));
+					des_patches_.push_back(new CuSubMatrix<BaseFloat>(in_his_, s*r_his, r_his, 0, in_his_.NumCols()));
 				}
-				in_his_.RowRange(s*r_his, r_his).CopyFromMat(in.RowRange(s*batch_size+r_valid_frames_[s]-r_his, r_his));
+			}
+			kaldi::nnet0::SetStream(des_patches_, streamlist_);
+			CopyFromMatStreamed(src_patches_, des_patches_);
+			ResetStream(des_patches_);
+		} else
+#endif
+		{
+			for (s = 0; s < nstream_; s++) {
+				if (r_valid_frames_[s] > 0) {
+					if (r_valid_frames_[s] < his_size) {
+						CuMatrix<BaseFloat> tmp_his(prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
+						prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(tmp_his);
+					} else {
+						prev_nnet_state_.RowRange(s*buffer_size, his_size).CopyFromMat(
+							prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
+					}
+					in_his_.RowRange(s*r_his, r_his).CopyFromMat(in.RowRange(s*batch_size+r_valid_frames_[s]-r_his, r_his));
+				}
 			}
 		}
+
    }
 
    void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
@@ -569,12 +650,21 @@ namespace nnet0 {
 
  private:
 
+   void DeletePatches(std::vector<CuSubMatrix<BaseFloat>* > &pathes) {
+	   for (int i = 0; i < pathes.size(); i++)
+		   delete pathes[i];
+	   pathes.clear();
+   }
+
    int32 nstream_;
    std::vector<int32> r_valid_frames_;
    std::vector<int32> l_valid_frames_;
    std::vector<int32> stream_state_flag_; // 0: start; 1: append; 2: end
    CuMatrix<BaseFloat> prev_nnet_state_;
    CuMatrix<BaseFloat> in_his_;
+
+   std::vector<CuSubMatrix<BaseFloat>* > src_patches_;
+   std::vector<CuSubMatrix<BaseFloat>* > des_patches_;
 
    ///fsmn layer
    CuMatrix<BaseFloat> l_filter_;
@@ -605,6 +695,10 @@ namespace nnet0 {
    int r_stride_;  
    int hid_size_;
    int32 num_frames_;
+
+#if HAVE_CUDA == 1
+  std::vector<cudaStream_t > streamlist_;
+#endif
  };
 
 } // namespace nnet0
