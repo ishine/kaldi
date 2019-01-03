@@ -254,11 +254,12 @@ namespace nnet0 {
 		if (prev_nnet_state_.NumRows() != buffer_size*nstream_)
 			prev_nnet_state_.Resize(buffer_size*nstream_, output_dim_, kSetZero);
 
+        /*
 #if HAVE_CUDA == 1
 		if (streamlist_.size() != 0) {
 			DeletePatches(src_patches_);
 			DeletePatches(des_patches_);
-			for (s = 0; s < nstream_; s++) {
+			for (int s = 0; s < nstream_; s++) {
 				if (r_valid_frames_[s] > 0) {
 					src_patches_.push_back(new CuSubMatrix<BaseFloat>(in, s*batch_size, r_valid_frames_[s],
 							0, in.NumCols()));
@@ -271,6 +272,7 @@ namespace nnet0 {
 			ResetStream(des_patches_);
 		} else
 #endif
+        */
 		{
 			for (int s = 0; s < nstream_; s++) {
 				if (r_valid_frames_[s] > 0)
@@ -286,11 +288,12 @@ namespace nnet0 {
 
 		// save history
 		int his_size = l_his+r_his;
+        /*
 #if HAVE_CUDA == 1
 		if (streamlist_.size() != 0) {
 			DeletePatches(src_patches_);
 			DeletePatches(des_patches_);
-			for (s = 0; s < nstream_; s++) {
+			for (int s = 0; s < nstream_; s++) {
 				if (r_valid_frames_[s] > 0) {
 					if (r_valid_frames_[s] < his_size) {
 						CuMatrix<BaseFloat> tmp_his(prev_nnet_state_.RowRange(s*buffer_size+r_valid_frames_[s], his_size));
@@ -308,6 +311,7 @@ namespace nnet0 {
 			ResetStream(des_patches_);
 		} else
 #endif
+        */
 		{
 			for (int s = 0; s < nstream_; s++) {
 				if (r_valid_frames_[s] > 0) {
@@ -424,6 +428,12 @@ namespace nnet0 {
 
 
  private:
+   void DeletePatches(std::vector<CuSubMatrix<BaseFloat>* > &pathes) {
+	   for (int i = 0; i < pathes.size(); i++)
+		   delete pathes[i];
+	   pathes.clear();
+   }
+
    int32 nstream_;
    std::vector<int32> r_valid_frames_;
    std::vector<int32> l_valid_frames_;
