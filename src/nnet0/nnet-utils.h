@@ -385,8 +385,9 @@ void PosteriorToMatrixMappedCTC(const Posterior &post, int32 num_cols, CuMatrix<
 #if HAVE_CUDA == 1
 template <typename Real>
 inline void SetStream(std::vector<CuSubMatrix<Real>* > &matlist, std::vector<cudaStream_t > &streamlist) {
+    int size = streamlist.size();
 	for (int i = 0; i < matlist.size(); i++)
-		matlist[i]->SetLocalCudaStream(streamlist[i]);
+		matlist[i]->SetLocalCudaStream(streamlist[i%size]);
 }
 
 template <typename Real>
@@ -397,8 +398,9 @@ inline void ResetStream(std::vector<CuSubMatrix<Real>* > &matlist) {
 
 template <typename Real>
 inline void SetStream(std::vector<CuSubVector<Real>* > &veclist, std::vector<cudaStream_t > &streamlist) {
+    int size = streamlist.size();
 	for (int i = 0; i < veclist.size(); i++)
-		veclist[i]->SetLocalCudaStream(streamlist[i]);
+		veclist[i]->SetLocalCudaStream(streamlist[i%size]);
 }
 
 template <typename Real>
