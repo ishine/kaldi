@@ -133,6 +133,7 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 
 	int32 samp_remaining = len_ - sample_offset_;
 	int32 batch_size = forward_opts_->batch_size * decoding_opts_->skip_frames;
+    FeatState pos_state;
 
 	if (sample_offset_ <= len_) {
 		SubVector<BaseFloat> wave_part(wav_buffer_, sample_offset_, samp_remaining);
@@ -148,12 +149,14 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 				break;
             else if (feature_pipeline_->IsLastFrame(frame_ready_-1) && frame_ready_ == frame_offset_)
                 break;
-			else if (feature_pipeline_->IsLastFrame(frame_ready_-1) && frame_ready_ < frame_offset_+batch_size) {
+			else if (feature_pipeline_->IsLastFrame(frame_ready_-1) && frame_ready_ <= frame_offset_+batch_size) {
 				frame_ready_ -= frame_offset_;
 				feat_in_.SetZero();
-			}
-			else
+                pos_state = FEAT_END;
+			} else {
 				frame_ready_ = batch_size;
+                pos_state = FEAT_APPEND;
+            }
 
 			for (int i = 0; i < frame_ready_; i += in_skip_) {
 				// feature_pipeline_->GetFrame(frame_offset_+i, &feat_in_.Row(i/in_skip_));
@@ -176,7 +179,7 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 				feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
 			}
 
-			block_ = new OnlineDecodableBlock(feat_out_ready_, state);
+			block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
 			repository_.Accept(block_);
 
 			// wake up decoder thread
@@ -186,17 +189,16 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 }
 
 Result* OnlineFstDecoder::GetResult(FeatState state) {
+    bool newutt = (state == FEAT_END);
+    if (state == FEAT_END) {
+    	while (!result_.isend)
+    		sleep(0.02);
+    }
+
 	std::vector<int32> word_ids;
 	int size = result_.word_ids_.size();
 	for (int i = cur_result_idx_; i < size; i++)
 		word_ids.push_back(result_.word_ids_[i]);
-
-    bool newutt = (state == FEAT_END);
-
-    if (newutt == FEAT_END) {
-    	while (!result_.isend)
-    		sleep(0.02);
-    }
 
 	PrintPartialResult(word_ids, word_syms_, newutt);
     std::cout.flush();

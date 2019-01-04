@@ -104,7 +104,7 @@ struct OnlineDecodableBlock {
 
 	int utt_flag;
 	Matrix<BaseFloat> decodable;
-	OnlineDecodableBlock(MatrixBase<BaseFloat> in, int flag) {
+	OnlineDecodableBlock(const MatrixBase<BaseFloat> &in, int flag) {
 		utt_flag = flag;
 		decodable.Resize(in.NumRows(), in.NumCols(), kUndefined);
 		decodable.CopyFromMat(in);
@@ -153,6 +153,7 @@ public:
 
 		OnlineDecodableBlock *block = NULL;
 		DecodeState state;
+        bool new_partial = false;
 
 		decoder_->ResetDecoder(true);
 		decoder_->InitDecoding();
@@ -161,7 +162,7 @@ public:
 		while (1) {
 
 			// get decodable
-			while ((block = dynamic_cast<OnlineDecodableBlock*>(repository_->Provide())) != NULL) {
+			while ((block = (OnlineDecodableBlock*)(repository_->Provide())) != NULL) {
 				decodable_->AcceptLoglikes(&block->decodable);
 				if (block->utt_flag == FEAT_END)
 					decodable_->InputIsFinished();
@@ -175,17 +176,21 @@ public:
 			while (decoder_->frame() < decodable_->NumFramesReady()) {
 				state = decoder_->Decode(decodable_);
 				if (state != DecodeState::kEndFeats) {
-					decoder_->PartialTraceback(&out_fst);
+					new_partial = decoder_->PartialTraceback(&out_fst);
 				} else {
 					decoder_->FinishTraceBack(&out_fst);
 				}
 
-				fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, &weight);
+                if (new_partial || state == DecodeState::kEndFeats) {
+                    tids.clear();
+                    word_ids.clear();
+				    fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, &weight);
 
-				for (int i = 0; i < word_ids.size(); i++)
-					result_->word_ids_.push_back(word_ids[i]);
-				for (int i = 0; i < tids.size(); i++)
-					result_->tids_.push_back(tids[i]);
+				    for (int i = 0; i < word_ids.size(); i++)
+					    result_->word_ids_.push_back(word_ids[i]);
+				    for (int i = 0; i < tids.size(); i++)
+					    result_->tids_.push_back(tids[i]);
+                }
 
 				if (state == DecodeState::kEndFeats) {
 					result_->score_ = (-weight.Value1() - weight.Value2())/result_->num_frames;
