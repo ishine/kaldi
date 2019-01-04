@@ -35,6 +35,14 @@ OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
 void OnlineFstDecoder::Destory() {
 	Abort();
 
+    if (decoder_thread_ != NULL) {
+        delete decoder_thread_; decoder_thread_ = NULL;
+		delete decoding_;	decoding_ = NULL;
+		delete decoder_;	decoder_ = NULL;
+		delete feature_pipeline_;	feature_pipeline_ = NULL;
+		delete forward_;			forward_ = NULL;
+    }
+
 	if (decodable_ != NULL) {
 		delete decodable_;	decodable_ = NULL;
 	}
@@ -45,14 +53,6 @@ void OnlineFstDecoder::Destory() {
 
 	if (alignment_writer_ != NULL) {
 		delete alignment_writer_; alignment_writer_ = NULL;
-	}
-
-	if (decoder_ != NULL) {
-		delete decoder_;	decoder_ = NULL;
-		delete decoding_;	decoding_ = NULL;
-		delete decoder_thread_;		decoder_thread_ = NULL;
-		delete feature_pipeline_;	feature_pipeline_ = NULL;
-		delete forward_;			forward_ = NULL;
 	}
 }
 
