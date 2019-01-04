@@ -73,4 +73,42 @@ void PrintPartialResult(const std::vector<int32>& words,
     std::cout.flush();
 }
 
+
+void Repository::Accept(
+		void *example) {
+  empty_semaphore_.Wait();
+  examples_mutex_.Lock();
+  examples_.push_back(example);
+  examples_mutex_.Unlock();
+  full_semaphore_.Signal();
+}
+
+void Repository::Done() {
+  for (int32 i = 0; i < buffer_size_; i++)
+    empty_semaphore_.Wait();
+  examples_mutex_.Lock();
+  KALDI_ASSERT(examples_.empty());
+  examples_mutex_.Unlock();
+  done_ = true;
+  full_semaphore_.Signal();
+}
+
+void* Repository::Provide() {
+  full_semaphore_.Wait();
+  if (done_) {
+    KALDI_ASSERT(examples_.empty());
+    full_semaphore_.Signal(); // Increment the semaphore so
+    // the call by the next thread will not block.
+    return NULL; // no examples to return-- all finished.
+  } else {
+    examples_mutex_.Lock();
+    KALDI_ASSERT(!examples_.empty());
+    void *ans = examples_.front();
+    examples_.pop_front();
+    examples_mutex_.Unlock();
+    empty_semaphore_.Signal();
+    return ans;
+  }
+}
+
 } // namespace kaldi

@@ -68,14 +68,14 @@ int main(int argc, char *argv[])
 	    if (!(word_syms = fst::SymbolTable::ReadText(decoding_opts.word_syms_filename)))
 	        KALDI_ERR << "Could not read symbol table from file " << decoding_opts.word_syms_filename;
 
-	    DecoderSync decoder_sync;
+	    Repository repository_;
         Result result;
 
 	    OnlineNnetFasterDecoder decoder(*decode_fst, decoder_opts);
 	    OnlineDecodableMatrixMapped decodable(trans_model, decoding_opts.acoustic_scale);
 
 	    OnlineNnetDecodingClass decoding(decoding_opts,
-	    								&decoder, &decodable, &decoder_sync,
+	    								&decoder, &decodable, &repository_,
 										&result);
 		// The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
@@ -91,30 +91,25 @@ int main(int argc, char *argv[])
             std::string utt_key = loglikes_reader.Key();
         	const Matrix<BaseFloat> &loglikes = loglikes_reader.Value();
 
-            decodable.Reset();
-            decodable.AcceptLoglikes(&loglikes);
-			decodable.InputIsFinished();
-            decoder_sync.DecoderSignal();
+        	OnlineDecodableBlock *block = new OnlineDecodableBlock(loglikes, FEAT_END);
+        	repository_.Accept(block);
 
 			frame_count += loglikes.NumRows();
-			// waiting a utterance finished
-            decoder_sync.DecoderSignal();
-			decoder_sync.UtteranceWait();
             
-            //decoder.GetResult(FEAT_END);
-            PrintPartialResult(result.word_ids_, word_syms, true);
-			KALDI_LOG << "Finish decode utterance: " << utt_key;
-            result.clear();
-        }
+			// get part result
+			Result *result = decoder.GetResult(FEAT_END);
+            result->utt = std::string(utt_key);
 
-        decoder_sync.Abort();
+        	KALDI_LOG << "Finish decode utterance: " << result->utt
+						<< ", Log-like per frame is " << result->score_ << " over "
+		                  << result->num_frames << " frames.";
+        }
 
         double elapsed = timer.Elapsed();
         KALDI_LOG << "Time taken [excluding initialization] "<< elapsed
               << "s: real-time factor assuming 100 frames/sec is "
               << (elapsed*100.0/frame_count);
 
-	    delete decode_fst;
 	    delete word_syms;
 	    return 0;
 	} catch(const std::exception& e) {

@@ -94,63 +94,21 @@ struct OnlineNnetDecodingOptions {
 	}
 };
 
-class DecoderSync
-{
-public:
-	DecoderSync() : sema_utt_(0), sema_batch_(0),
-	is_finished_(false), is_waited_(true) {}
-	~DecoderSync() {}
+typedef enum {
+	FEAT_START,
+	FEAT_APPEND,
+	FEAT_END,
+}FeatState;
 
-	void UtteranceWait() {
-		sema_utt_.Wait();
+struct OnlineDecodableBlock {
+
+	int utt_flag;
+	Matrix<BaseFloat> decodable;
+	OnlineDecodableBlock(MatrixBase<BaseFloat> in, int flag) {
+		utt_flag = flag;
+		decodable.Resize(in.NumRows(), in.NumCols(), kUndefined);
+		decodable.CopyFromMat(in);
 	}
-
-	void UtteranceSignal() {
-		sema_utt_.Signal();
-	}
-
-	std::string GetUtt() {
-		return cur_utt_;
-	}
-
-	void SetUtt(std::string utt) {
-		mutex_.Lock();
-		cur_utt_ = utt;
-		mutex_.Unlock();
-	}
-
-	void DecoderSignal() {
-		mutex_batch_.Lock();
-		if (is_waited_) {
-			sema_batch_.Signal();
-			is_waited_ = false;
-		}
-		mutex_batch_.Unlock();
-	}
-
-	void DecoderWait() {
-		mutex_batch_.Lock();
-		is_waited_ = true;
-		mutex_batch_.Unlock();
-		sema_batch_.Wait();
-	}
-
-    bool IsFinsihed() {
-        return is_finished_;
-    }
-
-    void Abort() {
-        is_finished_ = true;
-    }
-
-private:
-	Semaphore sema_utt_;
-	Semaphore sema_batch_;
-	Mutex mutex_;
-	Mutex mutex_batch_;
-	std::string cur_utt_;
-	bool is_finished_;
-	bool is_waited_;
 };
 
 typedef struct Result_ {
@@ -159,12 +117,14 @@ typedef struct Result_ {
 	std::string utt;
 	BaseFloat score_;
 	int num_frames;
+	bool isend;
 	void clear() {
 		word_ids_.clear();
 		tids_.clear();
 		score_ = 0.0;
 		num_frames = 0;
 		utt = "";
+		isend = false;
 	}
 }Result;
 
@@ -174,10 +134,10 @@ public:
 	OnlineNnetDecodingClass(const OnlineNnetDecodingOptions &opts,
 			OnlineNnetFasterDecoder *decoder,
 			OnlineDecodableInterface *decodable,
-			DecoderSync *decoder_sync,
+			Repository *repository,
 			Result *result):
 				opts_(opts),
-				decoder_(decoder), decodable_(decodable), decoder_sync_(decoder_sync),
+				decoder_(decoder), decodable_(decodable), repository_(repository),
 				result_(result)
 	{ }
 
@@ -185,85 +145,60 @@ public:
 
 	void operator () ()
 	{
+		typedef OnlineNnetFasterDecoder::DecodeState DecodeState;
 		fst::VectorFst<LatticeArc> out_fst;
 		std::vector<int> word_ids;
 		std::vector<int> tids;
 		LatticeWeight weight;
-		typedef OnlineNnetFasterDecoder::DecodeState DecodeState;
-		int batch_size = opts_.batch_size;
-        int frame_ready;
-		std::string utt;
 
-		while (!decoder_sync_->IsFinsihed())
-		{
-            decoder_sync_->DecoderWait();
-            if (decoder_sync_->IsFinsihed())
-                break;
+		OnlineDecodableBlock *block = NULL;
+		DecodeState state;
 
-			decoder_->ResetDecoder(true);
-			decoder_->InitDecoding();
-			result_->clear();
+		decoder_->ResetDecoder(true);
+		decoder_->InitDecoding();
+		decodable_->Reset();
 
-			while (true)
-			{
-				while (decodable_->NumFramesReady() >= decoder_->NumFramesDecoded() + batch_size) {
-					decoder_->Decode(decodable_);
-					if (decoder_->PartialTraceback(&out_fst)) {
-						//fst::GetLinearSymbolSequence(out_fst, static_cast<std::vector<int32> *>(0),
-                        //                                    &word_ids, static_cast<LatticeArc::Weight*>(0));
-						//PrintPartialResult(word_ids, &word_syms_, false);
+		while (1) {
 
-						fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
-						for (int i = 0; i < word_ids.size(); i++)
-							result_->word_ids_.push_back(word_ids[i]);
-						for (int i = 0; i < tids.size(); i++)
-							result_->tids_.push_back(tids[i]);
-					}
+			// get decodable
+			while ((block = dynamic_cast<OnlineDecodableBlock*>(repository_->Provide())) != NULL) {
+				decodable_->AcceptLoglikes(&block->decodable);
+				if (block->utt_flag == FEAT_END)
+					decodable_->InputIsFinished();
+				delete block;
+				break;
+			}
+
+			if (block == NULL) break;
+
+			// decoding
+			while (decoder_->frame() < decodable_->NumFramesReady()) {
+				state = decoder_->Decode(decodable_);
+				if (state != DecodeState::kEndFeats) {
+					decoder_->PartialTraceback(&out_fst);
+				} else {
+					decoder_->FinishTraceBack(&out_fst);
 				}
 
+				fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, &weight);
 
-				frame_ready = decodable_->NumFramesReady();
-				//frame_decoded = decoder_->NumFramesDecoded();
-				//if (decodable_->IsLastFrame(frame_ready-1) && frame_ready <= frame_decoded+batch_size)
-				if (decodable_->IsLastFrame(frame_ready-1))
-                {
-					utt = decoder_sync_->GetUtt();
+				for (int i = 0; i < word_ids.size(); i++)
+					result_->word_ids_.push_back(word_ids[i]);
+				for (int i = 0; i < tids.size(); i++)
+					result_->tids_.push_back(tids[i]);
 
-                    if (frame_ready > 0) {
-					    decoder_->Decode(decodable_);
-
-					    decoder_->FinishTraceBack(&out_fst);
-					    //fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
-					    fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, &weight);
-					    for (int i = 0; i < word_ids.size(); i++)
-						    result_->word_ids_.push_back(word_ids[i]);
-					    for (int i = 0; i < tids.size(); i++)
-						    result_->tids_.push_back(tids[i]);
-					    result_->score_ = (-weight.Value1() - weight.Value2())/result_->num_frames;
-					    //PrintPartialResult(word_ids, &word_syms_, true);
-					}
-
-                    /*
-					// get best full path
-					//decoder_->ReachedFinal();
-					decoder_->GetBestPath(&out_fst);
-					fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, static_cast<LatticeArc::Weight*>(0));
-					PrintPartialResult(word_ids, &word_syms_, true);
-                    */
-
-                    /*
-					if (!word_ids.empty())
-						words_writer_.Write(utt, word_ids);
-					alignment_writer_.Write(utt, tids);
-					*/
-
-					decoder_sync_->UtteranceSignal();
-					break;
+				if (state == DecodeState::kEndFeats) {
+					result_->score_ = (-weight.Value1() - weight.Value2())/result_->num_frames;
+					result_->isend = true;
 				}
+			}
 
-				decoder_sync_->DecoderWait();
-
-			} // message queue
+			// new utterance, reset decoder
+			if (decodable_->IsLastFrame(decoder_->frame()-1)) {
+				decoder_->ResetDecoder(true);
+				decoder_->InitDecoding();
+				decodable_->Reset();
+			}
 		}
 	}
 
@@ -272,11 +207,11 @@ private:
 	const OnlineNnetDecodingOptions &opts_;
 	OnlineNnetFasterDecoder *decoder_;
 	OnlineDecodableInterface *decodable_;
-	DecoderSync *decoder_sync_;
+	Repository *repository_;
 	Result *result_;
 };
 
 
 }// namespace kaldi
 
-#endif /* ONLINE0_ONLINE_NNET_DECODING_MQUEUE_H_ */
+#endif /* ONLINE0_ONLINE_NNET_DECODING_H_ */

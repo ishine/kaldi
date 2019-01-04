@@ -34,12 +34,6 @@
 
 namespace kaldi {
 
-typedef enum {
-	FEAT_START,
-	FEAT_APPEND,
-	FEAT_END,
-}FeatState;
-
 class OnlineFstDecoder {
 
 public:
@@ -78,10 +72,11 @@ private:
 	fst::SymbolTable *word_syms_;
 
 	// likelihood
+	OnlineDecodableBlock *block_;
 	OnlineDecodableInterface *decodable_;
 
 	// decoder
-	DecoderSync decoder_sync_;
+	Repository repository_;
 	OnlineNnetFasterDecoder *decoder_;
 	OnlineNnetDecodingClass *decoding_;
 	MultiThreader<OnlineNnetDecodingClass> *decoder_thread_;

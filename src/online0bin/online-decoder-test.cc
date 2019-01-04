@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 	    		"(nnet0 or nnet1 setup), Note: some configuration values and inputs are\n"
 	    	"set via config files whose filenames are passed as options\n"
 	    	"\n"
-	        "Usage: online-ivector-test [config option]\n"
+	        "Usage: online-decoder-test [config option]\n"
 	    	"e.g.: \n"
 	        "	online-decoder-test --cfg=conf/decode.conf wav.scp\n";
 

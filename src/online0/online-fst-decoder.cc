@@ -25,7 +25,7 @@ OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
 		decoder_cfg_(cfg), decoder_opts_(cfg->decoder_opts_), forward_opts_(cfg->forward_opts_),
 		feature_opts_(cfg->feature_opts_), decoding_opts_(cfg->decoding_opts_),
 		trans_model_(cfg->trans_model_), decode_fst_(cfg->decode_fst_), word_syms_(cfg->word_syms_), 
-        decodable_(NULL), decoder_(NULL), decoding_(NULL), decoder_thread_(NULL),
+		block_(NULL), decodable_(NULL), decoder_(NULL), decoding_(NULL), decoder_thread_(NULL),
 		feature_pipeline_(NULL), forward_(NULL),
 		words_writer_(NULL), alignment_writer_(NULL), state_(FEAT_START),
 		len_(0), sample_offset_(0), frame_offset_(0), frame_ready_(0),
@@ -76,7 +76,7 @@ void OnlineFstDecoder::InitDecoder() {
 	// decoder
 	decoder_ = new OnlineNnetFasterDecoder(*decode_fst_, *decoder_opts_);
 	decoding_ = new OnlineNnetDecodingClass(*decoding_opts_,
-		    								decoder_, decodable_, &decoder_sync_,
+		    								decoder_, decodable_, &repository_,
 											&result_);
 	decoder_thread_ = new MultiThreader<OnlineNnetDecodingClass>(1, *decoding_);
 
@@ -87,8 +87,9 @@ void OnlineFstDecoder::InitDecoder() {
 	forward_ = new OnlineNnetForward(*forward_opts_);
 
 	// decoding buffer
-	in_skip_ = decoding_opts_->skip_inner ? 1:decoding_opts_->skip_frames,
-	        out_skip_ = decoding_opts_->skip_inner ? decoding_opts_->skip_frames : 1;
+	in_skip_ = decoding_opts_->skip_inner ? 1:decoding_opts_->skip_frames;
+	out_skip_ = decoding_opts_->skip_inner ? decoding_opts_->skip_frames : 1;
+
 	int feat_dim = feature_pipeline_->Dim();
 	feat_in_.Resize(out_skip_*forward_opts_->batch_size, feat_dim);
 	// wav buffer
@@ -105,7 +106,6 @@ void OnlineFstDecoder::InitDecoder() {
 void OnlineFstDecoder::Reset() {
 	feature_pipeline_->Reset();
 	forward_->ResetHistory();
-	decodable_->Reset();
 	result_.clear();
 	len_ = 0;
 	sample_offset_ = 0;
@@ -170,24 +170,18 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 				feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
 				for (int i = 0; i < frame_ready_; i++)
 					feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/decoding_opts_->skip_frames));
-
-				decodable_->AcceptLoglikes(&feat_out_ready_);
+			} else {
+				int out_frames = (frame_ready_+out_skip_-1)/out_skip_;
+				feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
+				feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
 			}
-			else
-				decodable_->AcceptLoglikes(&feat_out_);
+
+			block_ = new OnlineDecodableBlock(feat_out_ready_, state);
+			repository_.Accept(block_);
 
 			// wake up decoder thread
 			result_.num_frames += frame_ready_;
-			decoder_sync_.DecoderSignal();
 		}
-	}
-
-	if (state == FEAT_END) {
-		decodable_->InputIsFinished();
-		decoder_sync_.DecoderSignal();
-
-		// waiting a utterance finished
-		decoder_sync_.UtteranceWait();
 	}
 }
 
@@ -198,6 +192,12 @@ Result* OnlineFstDecoder::GetResult(FeatState state) {
 		word_ids.push_back(result_.word_ids_[i]);
 
     bool newutt = (state == FEAT_END);
+
+    if (newutt == FEAT_END) {
+    	while (!result_.isend)
+    		sleep(0.02);
+    }
+
 	PrintPartialResult(word_ids, word_syms_, newutt);
     std::cout.flush();
 
@@ -206,9 +206,8 @@ Result* OnlineFstDecoder::GetResult(FeatState state) {
 }
 
 void OnlineFstDecoder::Abort() {
-	decoder_sync_.Abort();
+	repository_.Done();
 	sleep(0.1);
-	decoder_sync_.DecoderSignal();
 }
 
 }	// namespace kaldi
