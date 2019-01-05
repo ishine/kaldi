@@ -173,23 +173,24 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 				feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
 				for (int i = 0; i < frame_ready_; i++)
 					feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/decoding_opts_->skip_frames));
+			    result_.post_frames += frame_ready_;
 			} else {
 				int out_frames = (frame_ready_+out_skip_-1)/out_skip_;
 				feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
 				feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
+			    result_.post_frames += out_frames;
 			}
 
 			block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
+			// wake up decoder thread
 			repository_.Accept(block_);
 
-			// wake up decoder thread
 			result_.num_frames += frame_ready_;
 		}
 	}
 }
 
 Result* OnlineFstDecoder::GetResult(FeatState state) {
-    bool newutt = (state == FEAT_END);
     if (state == FEAT_END) {
     	while (!result_.isend)
     		sleep(0.02);
@@ -200,6 +201,7 @@ Result* OnlineFstDecoder::GetResult(FeatState state) {
 	for (int i = cur_result_idx_; i < size; i++)
 		word_ids.push_back(result_.word_ids_[i]);
 
+    bool newutt = (state == FEAT_END);
 	PrintPartialResult(word_ids, word_syms_, newutt);
     std::cout.flush();
 

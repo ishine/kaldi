@@ -117,12 +117,14 @@ typedef struct Result_ {
 	std::string utt;
 	BaseFloat score_;
 	int num_frames;
+    int post_frames;
 	bool isend;
 	void clear() {
 		word_ids_.clear();
 		tids_.clear();
 		score_ = 0.0;
 		num_frames = 0;
+        post_frames = 0;
 		utt = "";
 		isend = false;
 	}
@@ -190,10 +192,11 @@ public:
 					    result_->word_ids_.push_back(word_ids[i]);
 				    for (int i = 0; i < tids.size(); i++)
 					    result_->tids_.push_back(tids[i]);
+					result_->score_ += (-weight.Value1() - weight.Value2());
                 }
 
 				if (state == DecodeState::kEndFeats) {
-					result_->score_ = (-weight.Value1() - weight.Value2())/result_->num_frames;
+					result_->score_ /= result_->post_frames;
 					result_->isend = true;
 				}
 			}
