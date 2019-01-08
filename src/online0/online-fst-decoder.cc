@@ -26,8 +26,9 @@ OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
 		feature_opts_(cfg->feature_opts_), decoding_opts_(cfg->decoding_opts_),
 		trans_model_(cfg->trans_model_), decode_fst_(cfg->decode_fst_), word_syms_(cfg->word_syms_), 
 		block_(NULL), decodable_(NULL), decoder_(NULL), decoding_(NULL), decoder_thread_(NULL),
-		feature_pipeline_(NULL), forward_(NULL),
+		feature_pipeline_(NULL), forward_(NULL), ipc_socket_(NULL),
 		words_writer_(NULL), alignment_writer_(NULL), state_(FEAT_START),
+		socket_sample_(NULL), sc_sample_buffer_(NULL), sc_buffer_size_(0),
 		len_(0), sample_offset_(0), frame_offset_(0), frame_ready_(0),
 		in_skip_(0), out_skip_(0), chunk_length_(0), cur_result_idx_(0) {
 }
@@ -40,7 +41,14 @@ void OnlineFstDecoder::Destory() {
 		delete decoding_;	decoding_ = NULL;
 		delete decoder_;	decoder_ = NULL;
 		delete feature_pipeline_;	feature_pipeline_ = NULL;
-		delete forward_;			forward_ = NULL;
+    }
+
+    if (forward_ != NULL) {
+    	delete forward_;	forward_ = NULL;
+    }
+
+    if (sc_sample_buffer_ != NULL) {
+    	delete sc_sample_buffer_;	sc_sample_buffer_ = NULL;
     }
 
 	if (decodable_ != NULL) {
@@ -73,27 +81,40 @@ void OnlineFstDecoder::InitDecoder() {
 	if (decoding_opts_->alignment_wspecifier != "")
 		alignment_writer_ = new Int32VectorWriter(decoding_opts_->alignment_wspecifier);
 
-	// decoder
-	decoder_ = new OnlineNnetFasterDecoder(*decode_fst_, *decoder_opts_);
-	decoding_ = new OnlineNnetDecodingClass(*decoding_opts_,
-		    								decoder_, decodable_, &repository_,
-											&result_);
-	decoder_thread_ = new MultiThreader<OnlineNnetDecodingClass>(1, *decoding_);
-
-	// feature pipeline
-	feature_pipeline_ = new OnlineNnetFeaturePipeline(*feature_opts_);
-
-	// forward
-	forward_ = new OnlineNnetForward(*forward_opts_);
-
 	// decoding buffer
 	in_skip_ = decoding_opts_->skip_inner ? 1:decoding_opts_->skip_frames;
 	out_skip_ = decoding_opts_->skip_inner ? decoding_opts_->skip_frames : 1;
 
 	int feat_dim = feature_pipeline_->Dim();
-	feat_in_.Resize(out_skip_*forward_opts_->batch_size, feat_dim);
+	int in_rows = decoding_opts_->batch_size;
+	feat_in_.Resize(in_rows, feat_dim, kUndefined, kStrideEqualNumCols);
 	// wav buffer
 	wav_buffer_.Resize(VECTOR_INC_STEP, kSetZero); // 16k, 10s
+
+	// feature pipeline
+	feature_pipeline_ = new OnlineNnetFeaturePipeline(*feature_opts_);
+
+	// forward
+	if (decoding_opts_->forward_cfg != "") {
+		forward_ = new OnlineNnetForward(*forward_opts_);
+		KALDI_LOG << "Use forward per decoder" ;
+	} else if (decoding_opts_->use_ipc && decoding_opts_->socket_path != "") {
+		ipc_socket_= new UnixDomainSocket(decoding_opts_->socket_path, SOCK_STREAM);
+		sc_buffer_size_ = sizeof(SocketSample) + in_rows*feat_dim*sizeof(BaseFloat);
+		sc_sample_buffer_ = new char[sc_buffer_size_];
+		socket_sample_ = sc_sample_buffer_;
+		socket_sample_->pid = getpid();
+		socket_sample_->dim = feat_dim;
+		KALDI_LOG << "Use ipc socket forward, socket file path: "<< decoding_opts_->socket_path ;
+	} else
+		KALDI_ERR << "No forward conf or ipc socket forward file path";
+
+	// decoder
+	decoder_ = new OnlineNnetFasterDecoder(*decode_fst_, *decoder_opts_);
+	decoding_ = new OnlineNnetDecodingClass(*decoding_opts_,
+		    								decoder_, decodable_, &repository_, ipc_socket_,
+											&result_);
+	decoder_thread_ = new MultiThreader<OnlineNnetDecodingClass>(1, *decoding_);
 
 	if (decoding_opts_->chunk_length_secs > 0) {
 		chunk_length_ = int32(feature_opts_->samp_freq * decoding_opts_->chunk_length_secs);
@@ -132,7 +153,7 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 	}
 
 	int32 samp_remaining = len_ - sample_offset_;
-	int32 batch_size = forward_opts_->batch_size * decoding_opts_->skip_frames;
+	int32 batch_size = decoding_opts_->batch_size;
     FeatState pos_state;
 
 	if (sample_offset_ <= len_) {
@@ -165,25 +186,36 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 			}
 
 			frame_offset_ += frame_ready_;
-			// feed forward to neural network
-			forward_->Forward(feat_in_, &feat_out_);
 
-			// copy posterior
-			if (decoding_opts_->copy_posterior) {
-				feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
-				for (int i = 0; i < frame_ready_; i++)
-					feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/decoding_opts_->skip_frames));
-			    result_.post_frames += frame_ready_;
-			} else {
-				int out_frames = (frame_ready_+out_skip_-1)/out_skip_;
-				feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
-				feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
-			    result_.post_frames += out_frames;
+			if (!decoding_opts_->use_ipc) {
+				// feed forward to neural network
+				forward_->Forward(feat_in_, &feat_out_);
+
+				// copy posterior
+				if (decoding_opts_->copy_posterior) {
+					feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
+					for (int i = 0; i < frame_ready_; i++)
+						feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/decoding_opts_->skip_frames));
+					result_.post_frames += frame_ready_;
+				} else {
+					int out_frames = (frame_ready_+out_skip_-1)/out_skip_;
+					feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
+					feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
+					result_.post_frames += out_frames;
+				}
+
+				block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
+				// wake up decoder thread
+				repository_.Accept(block_);
+			} else { // ipc forward
+				socket_sample_->num_sample = frame_ready_;
+				memcpy((char*)socket_sample_->sample, (char*)feat_in_.RowData(0),
+						frame_ready_*feat_in_.NumCols()*sizeof(BaseFloat));
+				if (pos_state == FEAT_END)
+					socket_sample_->is_end = true;
+
+				ipc_socket_->Send(sc_sample_buffer_, sc_buffer_size_, 0);
 			}
-
-			block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
-			// wake up decoder thread
-			repository_.Accept(block_);
 
 			result_.num_frames += frame_ready_;
 		}

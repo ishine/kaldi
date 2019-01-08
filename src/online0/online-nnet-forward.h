@@ -38,7 +38,6 @@ struct OnlineNnetForwardOptions {
     int32 gpuid;
     int32 num_threads;
 
-    int32 batch_size;
     int32 num_stream;
     float blank_posterior_scale;
 
@@ -46,7 +45,7 @@ struct OnlineNnetForwardOptions {
 
     OnlineNnetForwardOptions()
     	:feature_transform(""),network_model(""),no_softmax(false),apply_log(false),
-		 use_gpu("no"),gpuid(-1),num_threads(1),batch_size(6),num_stream(1),blank_posterior_scale(-1.0)
+		 use_gpu("no"),gpuid(-1),num_threads(1),num_stream(1),blank_posterior_scale(-1.0)
     {
 
     }
@@ -61,13 +60,7 @@ struct OnlineNnetForwardOptions {
         po->Register("gpuid", &gpuid, "gpuid < 0 for automatic select gpu, gpuid >= 0 for select specified gpu, only has effect if compiled with CUDA");
     	po->Register("num-threads", &num_threads, "Number of threads(GPUs) to use");
         po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
-
-
-
-        //<jiayu>
-        po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
         po->Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
-        //</jiayu>
 
         prior_opts.Register(po);
     }

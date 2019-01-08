@@ -57,21 +57,15 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    /*
-    if (po.NumArgs() != 2) {
-      po.PrintUsage();
-      exit(1);
-    }
-    */
-
-    std::string model_filename = opts.network_model, //po.GetArg(1),
-    		socket_filepath = opts.socket_filename; //po.GetArg(2);
+    std::string model_filename = opts.network_model,
+    		socket_filepath = opts.socket_filename;
 
     //Select the GPU
 #if HAVE_CUDA==1
-    if (opts.use_gpu == "yes")
+    if (opts.use_gpu == "yes") {
+    	CuDevice::Instantiate().AllowMultithreading();
         CuDevice::Instantiate().Initialize();
-    //CuDevice::Instantiate().DisableCaching();
+    }
 #endif
 
 
@@ -103,8 +97,7 @@ int main(int argc, char *argv[]) {
     KALDI_LOG << "Nnet Forward STARTED";
 
     // accept client decoder request
-    while (true)
-    {
+    while (true) {
     	client = server->Accept(false); // non block
 
     	if (client == NULL) {
@@ -128,8 +121,7 @@ int main(int argc, char *argv[]) {
     	}
 
     	// create new forward thread for more client decoder
-    	if (!success)
-    	{
+    	if (!success) {
             if (num_threads >= max_thread)
                 KALDI_ERR << Timer::CurrentTime() << " Exceed max worker gpu threads " << max_thread ;
 

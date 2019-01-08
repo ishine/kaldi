@@ -25,15 +25,6 @@
 
 #define MAX_FILE_PATH 256
 #define MAX_KEY_LEN 256
-//#define MAX_SAMPLE_SIZE (8*40*3*(5+1+5))
-#define MAX_SAMPLE_SIZE (8*40*3*(5+1+10))
-#define MAX_OUTPUT_SIZE (8*10240)
-
-#define MAX_SAMPLE_MQ_MQXMSG (300)
-#define MAX_SAMPLE_MQ_MSGSIZE (2048+1024)
-
-#define MAX_OUTPUT_MQ_MQXMSG (4)
-#define MAX_OUTPUT_MQ_MSGSIZE (16*10240*4+1024)
 
 namespace kaldi {
 
@@ -46,7 +37,7 @@ struct MQSample {
 	int  num_sample;
 	int	 dim;
 	int	 prio;
-	float sample[MAX_SAMPLE_SIZE];
+	float sample[0];
 };
 
 struct MQDecodable {
@@ -55,12 +46,13 @@ struct MQDecodable {
 	int num_sample;
 	int	dim;
 	int	prio;
-	float sample[MAX_OUTPUT_SIZE];
+	float sample[0];
 };
 
 // feature for network input
 struct SocketSample {
-	SocketSample():pid(-1),is_end(0),num_sample(0),dim(0){}
+	SocketSample():pid(-1),is_end(0),
+			num_sample(0),dim(0){}
     void clear() { 
         pid = -1;
         is_end = false;
@@ -78,12 +70,13 @@ struct SocketSample {
     // a frame dim
 	int	 dim;
     // frames data
-	float sample[MAX_SAMPLE_SIZE];
+	float sample[0];
 };
 
 // network output for client decoder
 struct SocketDecodable {
-	SocketDecodable():is_end(0),num_sample(0),dim(0){}
+	SocketDecodable():is_end(0),
+			num_sample(0),dim(0){}
     void clear() { 
         is_end = false;
         num_sample = 0;
@@ -96,7 +89,7 @@ struct SocketDecodable {
     // a frame dim
 	int	 dim;
     // frames data
-	float sample[MAX_OUTPUT_SIZE];
+	float sample[0];
 };
 
 }

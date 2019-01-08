@@ -34,6 +34,18 @@ namespace kaldi {
 	}
 
 	template<class T>
+	CircularQueue<T>::CircularQueue(int size, const T& value)
+	{
+		KALDI_ASSERT(size>0);
+
+		buffer_.resize(size+1, value);
+		rear_ = buffer_.begin();
+		back_ = front_ = rear_;
+		size_ = 0;
+		value_ = value;
+	}
+
+	template<class T>
 	void CircularQueue<T>::Push()
 	{
 		typename std::list<T>::iterator it = front_;
@@ -48,9 +60,9 @@ namespace kaldi {
 		}
 		else // it == rear_ : queue full
 		{
-			T value;
+			// T value;
 			// insert from front of front_
-			buffer_.insert(front_, value);
+			buffer_.insert(front_, value_);
 			back_++;
 		}
 		size_++;
@@ -116,7 +128,7 @@ namespace kaldi {
 	{
 		KALDI_ASSERT(size>0);
 
-		buffer_.resize(size+1);
+		buffer_.resize(size+1, value_);
 		rear_ = buffer_.begin();
 		back_ = front_ = rear_;
 		size_ = 0;

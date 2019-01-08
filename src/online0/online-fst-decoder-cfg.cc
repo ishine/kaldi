@@ -34,7 +34,8 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 	forward_opts_ = new OnlineNnetForwardOptions;
 	feature_opts_ = new OnlineNnetFeaturePipelineOptions(decoding_opts_->feature_cfg);
 	ReadConfigFromFile(decoding_opts_->decoder_cfg, decoder_opts_);
-	ReadConfigFromFile(decoding_opts_->forward_cfg, forward_opts_);
+	if (decoding_opts_->forward_cfg != "")
+		ReadConfigFromFile(decoding_opts_->forward_cfg, forward_opts_);
     
     // load decode resources
     Initialize();
@@ -56,10 +57,6 @@ void OnlineFstDecoderCfg::Destory() {
 }
 
 void OnlineFstDecoderCfg::Initialize() {
-#if HAVE_CUDA==1
-    if (forward_opts_->use_gpu == "yes")
-        CuDevice::Instantiate().Initialize();
-#endif
 	// trainsition model
 	bool binary;
 	if (decoding_opts_->model_rspecifier != "") {

@@ -30,6 +30,7 @@ template<class T>
 class CircularQueue {
 public:
 	CircularQueue(int size = 1);
+	CircularQueue(int size = 1, const T& value);
 
 	void Push();
 
@@ -50,6 +51,7 @@ public:
 	void Resize(int size = 1);
 private:
 
+	T value_;
 	std::list<T> buffer_;
 	typename std::list<T>::iterator front_;
 	typename std::list<T>::iterator rear_;

@@ -30,6 +30,9 @@
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
 
+#include "online0/kaldi-unix-domain-socket.h"
+#include "online0/online-ipc-message.h"
+
 namespace kaldi {
 
 struct OnlineNnetDecodingOptions {
@@ -47,9 +50,12 @@ struct OnlineNnetDecodingOptions {
 	bool allow_partial;
 	BaseFloat chunk_length_secs;
 	int batch_size;
-	int32 skip_frames;
-	bool  copy_posterior;
-    bool  skip_inner;
+	int out_dim;
+	int skip_frames;
+	bool copy_posterior;
+    bool skip_inner;
+    bool use_ipc;
+    std::string socket_path;
 	std::string silence_phones_str;
 
 	std::string word_syms_filename;
@@ -59,10 +65,10 @@ struct OnlineNnetDecodingOptions {
 	std::string alignment_wspecifier;
 	std::string model_type;  // hybrid, ctc
 
-	OnlineNnetDecodingOptions():
-							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(18),
-							skip_frames(1), copy_posterior(true), skip_inner(false), silence_phones_str(""),
-                            word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
+	OnlineNnetDecodingOptions(): feature_cfg(""), decoder_cfg(""), forward_cfg(""),
+							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(18), out_dim(0),
+							skip_frames(1), copy_posterior(true), skip_inner(false), use_ipc(false),
+							socket_path(""), silence_phones_str(""), word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
                             words_wspecifier(""), alignment_wspecifier(""), model_type("hybrid")
     { }
 
@@ -80,9 +86,12 @@ struct OnlineNnetDecodingOptions {
 	                "Length of chunk size in seconds, that we process.  Set to <= 0 "
 	                "to use all input in one chunk.");
 	    po->Register("batch-size", &batch_size, "batch frames feed to decoder in one time.");
+	    po->Register("out-dim", &out_dim, "neural network output dim");
 	    po->Register("skip-frames", &skip_frames, "skip frames for next input");
 	    po->Register("copy-posterior", &copy_posterior, "Copy posterior for skip frames output");
-	    po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
+	    po->Register("skip-inner", &skip_inner, "skip frame in neural network inner or input");
+	    po->Register("use-ipc", &use_ipc, "Use ipc neural network forward");
+	    po->Register("socket-path", &socket_path, "ipc socket file path");
 		po->Register("silence-phones", &silence_phones_str,
                      "Colon-separated list of integer ids of silence phones, e.g. 1:2:3");
 
@@ -137,11 +146,12 @@ public:
 			OnlineNnetFasterDecoder *decoder,
 			OnlineDecodableInterface *decodable,
 			Repository *repository,
+			UnixDomainSocket *ipc_socket,
 			Result *result):
 				opts_(opts),
 				decoder_(decoder), decodable_(decodable), repository_(repository),
-				result_(result)
-	{ }
+				ipc_socket_(ipc_socket), result_(result) {
+	}
 
 	~OnlineNnetDecodingClass() {}
 
@@ -152,11 +162,25 @@ public:
 		std::vector<int> word_ids;
 		std::vector<int> tids;
 		LatticeWeight weight;
-
-		OnlineDecodableBlock *block = NULL;
 		DecodeState state;
         bool new_partial = false;
 
+		OnlineDecodableBlock *block = NULL;
+		// ipc decodable
+		SocketDecodable *sc_decodable = NULL;
+		Matrix<BaseFloat> loglikes;
+		char *sc_buffer = NULL;
+		int sc_buffer_size = 0, rec_size = 0;
+		if (opts_.use_ipc) {
+			int out_skip, num_sample, buffer_size;
+			out_skip = opts_.skip_inner ? opts_.skip_frames : 1;
+			num_sample = (opts_.batch_size+out_skip-1)/out_skip;
+			sc_buffer_size = sizeof(SocketDecodable) + num_sample*opts_.out_dim*sizeof(BaseFloat);
+			sc_buffer = new char[buffer_size];
+			sc_decodable = (SocketDecodable*)sc_buffer;
+		}
+
+		// initialize decoder
 		decoder_->ResetDecoder(true);
 		decoder_->InitDecoding();
 		decodable_->Reset();
@@ -164,15 +188,28 @@ public:
 		while (1) {
 
 			// get decodable
-			while ((block = (OnlineDecodableBlock*)(repository_->Provide())) != NULL) {
-				decodable_->AcceptLoglikes(&block->decodable);
-				if (block->utt_flag == FEAT_END)
+			if (!opts_.use_ipc) {
+				while ((block = (OnlineDecodableBlock*)(repository_->Provide())) != NULL) {
+					decodable_->AcceptLoglikes(&block->decodable);
+					if (block->utt_flag == FEAT_END)
+						decodable_->InputIsFinished();
+					delete block;
+					break;
+				}
+				if (block == NULL) break;
+			} else {
+				rec_size = ipc_socket_->Receive(sc_decodable, sc_buffer_size, MSG_WAITALL);
+				if (rec_size != sc_buffer_size) {
+					ipc_socket_->Close();
+					KALDI_WARN << "something wrong happy, ipc socket closed."
+					break;
+				}
+				loglikes.Resize(sc_decodable->num_sample, sc_decodable->dim, kUndefined, kStrideEqualNumCols);
+				memcpy(loglikes.Data(), sc_decodable->sample, loglikes.SizeInBytes());
+				decodable_->AcceptLoglikes(&loglikes);
+				if (sc_decodable->is_end == 1)
 					decodable_->InputIsFinished();
-				delete block;
-				break;
 			}
-
-			if (block == NULL) break;
 
 			// decoding
 			while (decoder_->frame() < decodable_->NumFramesReady()) {
@@ -216,6 +253,7 @@ private:
 	OnlineNnetFasterDecoder *decoder_;
 	OnlineDecodableInterface *decodable_;
 	Repository *repository_;
+	UnixDomainSocket *ipc_socket_;
 	Result *result_;
 };
 

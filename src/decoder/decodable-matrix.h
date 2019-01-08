@@ -37,7 +37,7 @@ class OnlineDecodableInterface: public DecodableInterface {
     virtual ~OnlineDecodableInterface() {}
 
     virtual void Reset() {}
-    virtual void AcceptLoglikes(const Matrix<BaseFloat> *loglikes) {}
+    virtual void AcceptLoglikes(const MatrixBase<BaseFloat> *loglikes) {}
     virtual void InputIsFinished() { input_is_finished_ = true; }
     virtual bool IsInputFinished() { return input_is_finished_;}
  protected:

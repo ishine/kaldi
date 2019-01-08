@@ -85,6 +85,8 @@ private:
 	OnlineNnetFeaturePipeline *feature_pipeline_;
 	// forward
 	OnlineNnetForward *forward_;
+	// ipc forward socket
+	UnixDomainSocket *ipc_socket_;
 
 	// decode result
 	Int32VectorWriter *words_writer_;
@@ -93,6 +95,10 @@ private:
 	Result result_;
 	FeatState state_;
 
+	// ipc socket input sample
+	SocketSample *socket_sample_;
+	char *sc_sample_buffer_;
+	int sc_buffer_size_;
 	// decoding buffer
 	Matrix<BaseFloat> feat_in_, feat_out_, feat_out_ready_;
 	// wav buffer

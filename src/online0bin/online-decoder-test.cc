@@ -50,8 +50,8 @@ int main(int argc, char *argv[])
         po.Read(argc, argv);
 
         if (po.NumArgs() < 1) {
-        		po.PrintUsage();
-        		exit(1);
+			po.PrintUsage();
+			exit(1);
         }
 
         std::string wavlist_rspecifier = po.GetArg(1);
