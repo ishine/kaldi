@@ -1,4 +1,4 @@
-// online0/Online-fst-decoder.cc
+// online0/online-fst-decoder.cc
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
 // See ../../COPYING for clarification regarding multiple authors
@@ -35,6 +35,10 @@ OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
 
 void OnlineFstDecoder::Destory() {
 	Abort();
+
+    if (ipc_socket_ != NULL) {
+        delete ipc_socket_; ipc_socket_ = NULL;
+    }
 
     if (decoder_thread_ != NULL) {
         delete decoder_thread_; decoder_thread_ = NULL;
@@ -81,8 +85,11 @@ void OnlineFstDecoder::InitDecoder() {
 	if (decoding_opts_->alignment_wspecifier != "")
 		alignment_writer_ = new Int32VectorWriter(decoding_opts_->alignment_wspecifier);
 
+	// feature pipeline
+	feature_pipeline_ = new OnlineNnetFeaturePipeline(*feature_opts_);
+
 	// decoding buffer
-	in_skip_ = decoding_opts_->skip_inner ? 1:decoding_opts_->skip_frames;
+	in_skip_ = decoding_opts_->skip_inner ? 1 : decoding_opts_->skip_frames;
 	out_skip_ = decoding_opts_->skip_inner ? decoding_opts_->skip_frames : 1;
 
 	int feat_dim = feature_pipeline_->Dim();
@@ -91,18 +98,16 @@ void OnlineFstDecoder::InitDecoder() {
 	// wav buffer
 	wav_buffer_.Resize(VECTOR_INC_STEP, kSetZero); // 16k, 10s
 
-	// feature pipeline
-	feature_pipeline_ = new OnlineNnetFeaturePipeline(*feature_opts_);
-
 	// forward
-	if (decoding_opts_->forward_cfg != "") {
+	if (!decoding_opts_->use_ipc && decoding_opts_->forward_cfg != "") {
 		forward_ = new OnlineNnetForward(*forward_opts_);
 		KALDI_LOG << "Use forward per decoder" ;
 	} else if (decoding_opts_->use_ipc && decoding_opts_->socket_path != "") {
 		ipc_socket_= new UnixDomainSocket(decoding_opts_->socket_path, SOCK_STREAM);
 		sc_buffer_size_ = sizeof(SocketSample) + in_rows*feat_dim*sizeof(BaseFloat);
 		sc_sample_buffer_ = new char[sc_buffer_size_];
-		socket_sample_ = sc_sample_buffer_;
+		socket_sample_ = (SocketSample*)sc_sample_buffer_;
+        socket_sample_->clear();
 		socket_sample_->pid = getpid();
 		socket_sample_->dim = feat_dim;
 		KALDI_LOG << "Use ipc socket forward, socket file path: "<< decoding_opts_->socket_path ;
@@ -126,7 +131,8 @@ void OnlineFstDecoder::InitDecoder() {
 
 void OnlineFstDecoder::Reset() {
 	feature_pipeline_->Reset();
-	forward_->ResetHistory();
+    if(!decoding_opts_->use_ipc)
+	    forward_->ResetHistory();
 	result_.clear();
 	len_ = 0;
 	sample_offset_ = 0;
@@ -196,12 +202,10 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 					feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
 					for (int i = 0; i < frame_ready_; i++)
 						feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/decoding_opts_->skip_frames));
-					result_.post_frames += frame_ready_;
 				} else {
 					int out_frames = (frame_ready_+out_skip_-1)/out_skip_;
 					feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
 					feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
-					result_.post_frames += out_frames;
 				}
 
 				block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
@@ -211,9 +215,9 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 				socket_sample_->num_sample = frame_ready_;
 				memcpy((char*)socket_sample_->sample, (char*)feat_in_.RowData(0),
 						frame_ready_*feat_in_.NumCols()*sizeof(BaseFloat));
-				if (pos_state == FEAT_END)
-					socket_sample_->is_end = true;
+                socket_sample_->is_end = pos_state == FEAT_END ? true : false;
 
+				// wake up decoder thread
 				ipc_socket_->Send(sc_sample_buffer_, sc_buffer_size_, 0);
 			}
 
@@ -247,7 +251,4 @@ void OnlineFstDecoder::Abort() {
 }
 
 }	// namespace kaldi
-
-
-
 

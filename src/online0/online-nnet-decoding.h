@@ -65,7 +65,7 @@ struct OnlineNnetDecodingOptions {
 	std::string alignment_wspecifier;
 	std::string model_type;  // hybrid, ctc
 
-	OnlineNnetDecodingOptions(): feature_cfg(""), decoder_cfg(""), forward_cfg(""),
+	OnlineNnetDecodingOptions(): decoder_cfg(""), forward_cfg(""),
 							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(18), out_dim(0),
 							skip_frames(1), copy_posterior(true), skip_inner(false), use_ipc(false),
 							socket_path(""), silence_phones_str(""), word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
@@ -171,12 +171,13 @@ public:
 		Matrix<BaseFloat> loglikes;
 		char *sc_buffer = NULL;
 		int sc_buffer_size = 0, rec_size = 0;
+		int out_skip, num_sample;
 		if (opts_.use_ipc) {
-			int out_skip, num_sample, buffer_size;
 			out_skip = opts_.skip_inner ? opts_.skip_frames : 1;
 			num_sample = (opts_.batch_size+out_skip-1)/out_skip;
+            KALDI_ASSERT(opts_.out_dim > 0);
 			sc_buffer_size = sizeof(SocketDecodable) + num_sample*opts_.out_dim*sizeof(BaseFloat);
-			sc_buffer = new char[buffer_size];
+			sc_buffer = new char[sc_buffer_size];
 			sc_decodable = (SocketDecodable*)sc_buffer;
 		}
 
@@ -199,9 +200,9 @@ public:
 				if (block == NULL) break;
 			} else {
 				rec_size = ipc_socket_->Receive(sc_decodable, sc_buffer_size, MSG_WAITALL);
-				if (rec_size != sc_buffer_size) {
+				if (rec_size != sc_buffer_size || !CheckDecodable(*sc_decodable, num_sample, opts_.out_dim)) {
 					ipc_socket_->Close();
-					KALDI_WARN << "something wrong happy, ipc socket closed."
+					//KALDI_ERR << "something wrong happy, ipc socket closed.";
 					break;
 				}
 				loglikes.Resize(sc_decodable->num_sample, sc_decodable->dim, kUndefined, kStrideEqualNumCols);
@@ -230,6 +231,7 @@ public:
 				    for (int i = 0; i < tids.size(); i++)
 					    result_->tids_.push_back(tids[i]);
 					result_->score_ += (-weight.Value1() - weight.Value2());
+                    result_->post_frames = decoder_->frame();
                 }
 
 				if (state == DecodeState::kEndFeats) {
@@ -248,6 +250,25 @@ public:
 	}
 
 private:
+    // check ipc forward server decodable validity
+    inline bool CheckDecodable(SocketDecodable &decodable, int out_rows, int output_dim) {
+        int size = decodable.dim * decodable.num_sample;
+        int max_size = out_rows * output_dim;
+        if (size < 0) {
+            KALDI_LOG << Timer::CurrentTime() <<" Invalid decodable, dim = " << decodable.dim << " num_sample = " << decodable.num_sample;
+            return false;
+        } else if (size > max_size) {
+            KALDI_LOG << Timer::CurrentTime() <<" Server decodable size " << size << " exceed maximum socket decodable size " << max_size;
+            return false;
+        } else if (output_dim != decodable.dim) {
+            KALDI_LOG << Timer::CurrentTime() <<" Server decodable dim " << decodable.dim << " is not consistent with model output dim " << output_dim;
+            return false;
+        } else if (decodable.is_end == 0 && decodable.num_sample != out_rows) {
+            KALDI_LOG << Timer::CurrentTime() << " number of frame in ipc server decodable " << decodable.num_sample << " is not consistent with forward output batch size " << out_rows;
+            return false;
+        }
+        return true;
+    }
 
 	const OnlineNnetDecodingOptions &opts_;
 	OnlineNnetFasterDecoder *decoder_;

@@ -29,8 +29,8 @@ namespace kaldi {
 template<class T>
 class CircularQueue {
 public:
-	CircularQueue(int size = 1);
-	CircularQueue(int size = 1, const T& value);
+	CircularQueue(int size);
+	CircularQueue(int size, const T& value);
 
 	void Push();
 

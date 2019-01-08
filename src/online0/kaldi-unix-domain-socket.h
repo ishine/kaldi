@@ -31,8 +31,7 @@
 class UnixDomainSocket {
 public:
 	UnixDomainSocket(std::string unix_filepath,
-			int type = SOCK_STREAM, bool block = true) : socket_(-1), block_(block)
-	{
+			int type = SOCK_STREAM, bool block = true) : socket_(-1), block_(block) {
 		if ((socket_ = socket(AF_LOCAL, type, 0)) < 0) {
 			const char *c = strerror(errno);
 			if (c == NULL) { c = "[NULL]"; }
@@ -79,8 +78,7 @@ public:
 	UnixDomainSocket(int socket, struct sockaddr_un	socket_addr, bool block = true)
 	: socket_(socket), block_(block), socket_addr_(socket_addr) {}
 
-	UnixDomainSocket(int type = SOCK_STREAM) : socket_(-1), block_(true)
-	{
+	UnixDomainSocket(int type = SOCK_STREAM) : socket_(-1), block_(true) {
 		if ((socket_ = socket(AF_LOCAL, type, 0)) < 0) {
 			const char *c = strerror(errno);
 			if (c == NULL) { c = "[NULL]"; }
@@ -88,13 +86,11 @@ public:
 		}
 	}
 
-	~UnixDomainSocket()
-	{
-		close(socket_);
+	~UnixDomainSocket() {
+        Close();
 	}
 
-	int Connect(std::string unix_filepath, bool block = true)
-	{
+	int Connect(std::string unix_filepath, bool block = true) {
 		// non block connect
 		if (!block) {
 			int flags = fcntl(socket_, F_GETFL, 0);
@@ -116,8 +112,7 @@ public:
 		return ret;
 	}
 
-	int Connect(std::string unix_filepath, int nmsec, bool block = true) //millisecond
-	{
+	int Connect(std::string unix_filepath, int nmsec, bool block = true) { //millisecond 
 		fd_set rset, wset;
 		struct timeval	tval;
 		int error = 0;
@@ -156,8 +151,7 @@ public:
 			return -1;
 		}
 
-		if (FD_ISSET(socket_, &rset) || FD_ISSET(socket_, &wset))
-		{
+		if (FD_ISSET(socket_, &rset) || FD_ISSET(socket_, &wset)) {
 			len = sizeof(error);
 			if (getsockopt(socket_, SOL_SOCKET, SO_ERROR, &error, &len) < 0)
 				return -1;
@@ -177,8 +171,7 @@ public:
 		return 0;
 	}
 
-	ssize_t Send(void *buff, size_t nbytes, int flags = 0)
-	{
+	ssize_t Send(void *buff, size_t nbytes, int flags = 0) {
         ssize_t nsend = 0, n = 0, req = nbytes;
         while (nsend < nbytes) {
             n = send(socket_, (char*)buff+nsend, req, flags);
@@ -205,8 +198,7 @@ public:
         return nsend;
 	}
 
-	ssize_t Receive(void *buff, size_t nbytes, int flags = 0)
-	{
+	ssize_t Receive(void *buff, size_t nbytes, int flags = 0) {
         ssize_t nrecv = 0, n = 0, req = nbytes;
         int avali = 0;
         
@@ -219,9 +211,11 @@ public:
         while (nrecv < nbytes) {
             n = recv(socket_, (char*)buff+nrecv, req, flags);
             if (n <= 0) {
+                /*
                 const char *c = strerror(errno);
                 if (c == 0) { c = "[NULL]"; }
                 KALDI_WARN << "Error receive block socket, errno was: " << c;
+                */
             	return n;
             }
             nrecv += n;
@@ -230,13 +224,13 @@ public:
         return nrecv;
 	}
 
-	void Close()
-	{
+	void Close() {
+        // on the remote end, this will shut the socket down regardless of reference counts
+        shutdown(socket_, SHUT_RDWR);
 		close(socket_);
 	}
 
-	bool isClosed()
-	{
+	bool isClosed() {
 		int error = 0;
         // disconect error
 		socklen_t len = sizeof(error);
@@ -259,8 +253,6 @@ private:
 	struct sockaddr_un	socket_addr_;
 
 };
-
-
 
 
 #endif /* ONLINE0_KALDI_UNIX_DOMAIN_SOCKET_SERVER_H_ */

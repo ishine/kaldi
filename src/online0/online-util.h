@@ -65,6 +65,8 @@ class Repository {
   /// ExamplesDone() has been called.
   void *Provide();
 
+  int Size();
+
   Repository(int32 buffer_size = 128): buffer_size_(buffer_size),
                                       empty_semaphore_(buffer_size_),
                                       done_(false) { }

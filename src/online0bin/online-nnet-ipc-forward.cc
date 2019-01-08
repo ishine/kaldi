@@ -58,7 +58,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::string model_filename = opts.network_model,
-    		socket_filepath = opts.socket_filename;
+    		socket_filepath = opts.socket_path;
 
     //Select the GPU
 #if HAVE_CUDA==1

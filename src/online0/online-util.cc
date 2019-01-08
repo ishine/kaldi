@@ -111,4 +111,8 @@ void* Repository::Provide() {
   }
 }
 
+int Repository::Size() {
+    return examples_.size();
+}
+
 } // namespace kaldi

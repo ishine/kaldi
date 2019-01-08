@@ -34,25 +34,26 @@ struct OnlineNnetIpcForwardingOptions {
     typedef nnet0::PdfPriorOptions PdfPriorOptions;
     std::string feature_transform;
     std::string network_model;
-    std::string socket_filename;
+    std::string socket_path;
     bool no_softmax;
     bool apply_log;
     bool copy_posterior;
     std::string use_gpu;
     int32 gpuid;
     int32 num_threads;
+    float blank_posterior_scale;
 
     int32 batch_size;
     int32 num_stream;
     int32 skip_frames;
-    int32 skip_inner;
+    bool skip_inner;
 
     const PdfPriorOptions *prior_opts;
 
     OnlineNnetIpcForwardingOptions(const PdfPriorOptions *prior_opts)
-    	:feature_transform(""),network_model(""),socket_filename(""),
-		no_softmax(true),apply_log(false),copy_posterior(false),
-								 use_gpu("no"),gpuid(-1),num_threads(1),
+    	:feature_transform(""),network_model(""),socket_path(""),
+		no_softmax(false),apply_log(false),copy_posterior(false),
+								 use_gpu("no"),gpuid(-1),num_threads(1),blank_posterior_scale(-1.0),
 		 	 	 	 	 	 	 batch_size(18),num_stream(10),
 								 skip_frames(1),skip_inner(false),
 								 prior_opts(prior_opts) {
@@ -61,13 +62,14 @@ struct OnlineNnetIpcForwardingOptions {
     void Register(OptionsItf *po) {
     	po->Register("feature-transform", &feature_transform, "Feature transform in front of main network (in nnet0 format)");
     	po->Register("network-model", &network_model, "Main neural network model (in nnet0 format)");
-    	po->Register("socket-filename", &socket_filename, "Unix domain socket file name");
+    	po->Register("socket-path", &socket_path, "Unix domain socket file path");
     	po->Register("no-softmax", &no_softmax, "No softmax on MLP output (or remove it if found), the pre-softmax activations will be used as log-likelihoods, log-priors will be subtracted");
     	po->Register("apply-log", &apply_log, "Transform MLP output to logscale");
     	po->Register("copy-posterior", &copy_posterior, "Copy posterior for skip frames output");
     	po->Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA");
         po->Register("gpuid", &gpuid, "gpuid < 0 for automatic select gpu, gpuid >= 0 for select specified gpu, only has effect if compiled with CUDA");
     	po->Register("num-threads", &num_threads, "Number of threads(GPUs) to use");
+        po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
 
 
         po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
@@ -216,9 +218,11 @@ public:
 	    in_rows = batch_size*in_skip;
 	    out_rows = (batch_size+out_skip-1)/out_skip;
 
+        SocketSample *socket_sample = NULL;
+        SocketDecodable *decodable = NULL;
 	    sc_sample_size = sizeof(SocketSample) + in_rows*input_dim*sizeof(BaseFloat);
 	    sc_decodable_size = sizeof(SocketDecodable) + out_rows*out_dim*sizeof(BaseFloat);
-	    SocketSample *socket_sample = (SocketSample*) new char[sc_sample_size];
+	    socket_sample = (SocketSample*) new char[sc_sample_size];
 
         Timer time, gap_time;
 
@@ -228,11 +232,11 @@ public:
 	    		while (!decodable_buffer[s].Empty() && send_end[s] == 0 && client_socket_[s] != NULL) {
 	    			SocketDecodable* decodable = *(decodable_buffer[s].Front());
                     gap_time.Reset();
-	    			int ret = client_socket_[s]->Send((void*)decodable, sizeof(SocketDecodable), MSG_NOSIGNAL);
+	    			int ret = client_socket_[s]->Send((void*)decodable, sc_decodable_size, MSG_NOSIGNAL);
                     time_send += gap_time.Elapsed();
 
-	    			if (ret > 0 && ret != sizeof(SocketDecodable)) 
-                        KALDI_WARN << Timer::CurrentTime() <<" Send socket decodable: " << ret << " less than " << sizeof(SocketDecodable);
+	    			if (ret > 0 && ret != sc_decodable_size) 
+                        KALDI_WARN << Timer::CurrentTime() <<" Send socket decodable: " << ret << " less than " << sc_decodable_size;
 	    			if (ret <= 0) break;
 
 	    			// send successful
@@ -384,33 +388,26 @@ public:
 				// get new decodable buffer
 				decodable_buffer[s].Push();
 				SocketDecodable **pp_decodable = decodable_buffer[s].Back();
-				if (**pp_decodable == NULL)
+				if (*pp_decodable == NULL)
 					*pp_decodable = (SocketDecodable*)new char[sc_decodable_size];
-				SocketDecodable *decodable = *pp_decodable;
+				decodable = *pp_decodable;
                 decodable->clear(); 
 
 				out_dim = nnet_out_host.NumCols();
 				float *dest = decodable->sample;
+                int nframes = opts_.copy_posterior ? skip_frames : 1;
+                int ncurt = opts_.copy_posterior ? curt[s] : (curt[s]+skip_frames-1)/skip_frames;
+                int nlen = opts_.copy_posterior ? lent[s] : frame_num_utt[s];
 
 				for (t = 0; t < out_rows; t++) {
-					// feat shifting & padding
-					if (opts_.copy_posterior) {
-					   for (k = 0; k < skip_frames; k++){
-							if (utt_curt[s] < curt[s] && utt_curt[s] < lent[s]) {
-								memcpy((char*)dest, (char*)nnet_out_host.RowData(t * num_stream + s), out_dim*sizeof(float));
-								dest += out_dim;
-								utt_curt[s]++;
-								decodable->num_sample++;
-							}
-					   }
-					} else {
-					   if (utt_curt[s] < curt[s] && utt_curt[s] < lent[s]) {
-						   memcpy((char*)dest, (char*)nnet_out_host.RowData(t * num_stream + s), out_dim*sizeof(float));
-						   dest += out_dim;
-						   utt_curt[s]+=skip_frames;
-						   decodable->num_sample++;
-					   }
-					}
+                    for (k = 0; k < nframes; k++) {
+						if (utt_curt[s] < ncurt && utt_curt[s] < nlen) {
+                            memcpy((char*)dest, (char*)nnet_out_host.RowData(t * num_stream + s), out_dim*sizeof(float));
+							dest += out_dim;
+							utt_curt[s]++;
+							decodable->num_sample++;
+                        }
+                    }
 				}
 
 				decodable->dim = out_dim;

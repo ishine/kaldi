@@ -30,8 +30,7 @@
 
 class UnixDomainSocketServer {
 public:
-	UnixDomainSocketServer(std::string unix_filepath, int type = SOCK_STREAM)
-	{
+	UnixDomainSocketServer(std::string unix_filepath, int type = SOCK_STREAM) {
 		if ((socket_ = socket(AF_LOCAL, type, 0)) < 0) {
 			const char *c = strerror(errno);
 			if (c == NULL) { c = "[NULL]"; }
@@ -61,8 +60,7 @@ public:
 
 	UnixDomainSocketServer():socket_(-1) {}
 
-	UnixDomainSocketServer(int type = SOCK_STREAM)
-	{
+	UnixDomainSocketServer(int type = SOCK_STREAM) {
 		if ((socket_ = socket(AF_LOCAL, type, 0)) < 0) {
 			const char *c = strerror(errno);
 			if (c == NULL) { c = "[NULL]"; }
@@ -70,8 +68,7 @@ public:
 		}
 	}
 
-	void Bind(std::string unix_filepath)
-	{
+	void Bind(std::string unix_filepath) {
 		// socket address
 		unlink(unix_filepath.c_str());
 		bzero(&socket_addr_, sizeof(sockaddr_un));
@@ -93,13 +90,11 @@ public:
 		}
 	}
 
-	~UnixDomainSocketServer()
-	{
-		close(socket_);
+	~UnixDomainSocketServer() {
+        Close();
 	}
 
-	UnixDomainSocket* Accept(bool block = true)
-	{
+	UnixDomainSocket* Accept(bool block = true) {
 		int conn_socket_fd;
 		struct sockaddr_un client_socket_addr;
 		socklen_t addr_len;
@@ -129,13 +124,13 @@ public:
 		return socket;
 	}
 
-	void Close()
-	{
+	void Close() {
+        // on the remote end, this will shut the socket down regardless of reference counts
+        shutdown(socket_, SHUT_RDWR);
 		close(socket_);
 	}
 
-	bool isClosed()
-	{
+	bool isClosed() {
 		int error = 0;
 		socklen_t len = sizeof(error);
 		int ret = getsockopt(socket_, SOL_SOCKET, SO_ERROR, &error, &len);

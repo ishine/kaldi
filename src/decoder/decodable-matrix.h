@@ -407,7 +407,7 @@ class OnlineDecodableMatrixCtc: public OnlineDecodableInterface {
   // a number equal to frames_to_discard.  You should only set frames_to_discard
   // to nonzero if you know your decoder won't want to access the loglikes
   // for older frames.
-  void AcceptLoglikes(const Matrix<BaseFloat> *loglikes) {
+  void AcceptLoglikes(const MatrixBase<BaseFloat> *loglikes) {
 	int num_frames = loglikes->NumRows();
 	int num_cols = loglikes->NumCols();
 	if (num_frames == 0) return;
