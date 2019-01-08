@@ -44,7 +44,7 @@ public:
 	void InitDecoder();
 
 	// feed wave data to decoder
-	void FeedData(void *data, int nbytes, FeatState state);
+	int FeedData(void *data, int nbytes, FeatState state);
 
 	// get online decoder result
 	Result* GetResult(FeatState state);

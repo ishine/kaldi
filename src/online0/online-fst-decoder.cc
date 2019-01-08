@@ -143,7 +143,7 @@ void OnlineFstDecoder::Reset() {
 	wav_buffer_.Resize(VECTOR_INC_STEP, kUndefined); // 16k, 10s
 }
 
-void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
+int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 	// extend buffer
 	if (wav_buffer_.Dim() < len_+nbytes/sizeof(float)) {
         int size = std::max((int)(wav_buffer_.Dim()+VECTOR_INC_STEP), int(len_+nbytes/sizeof(float)));
@@ -218,12 +218,18 @@ void OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
                 socket_sample_->is_end = pos_state == FEAT_END ? true : false;
 
 				// wake up decoder thread
-				ipc_socket_->Send(sc_sample_buffer_, sc_buffer_size_, 0);
+				int ret = ipc_socket_->Send(sc_sample_buffer_, sc_buffer_size_, 0);
+                if (ret != sc_buffer_size_) {
+                    KALDI_ERR << "Send socket socket_sample: " << ret << " less than " << sc_buffer_size_
+                                << " ipc forward server may offline.";
+                    return -1;
+                }
 			}
 
 			result_.num_frames += frame_ready_;
 		}
 	}
+    return nbytes;
 }
 
 Result* OnlineFstDecoder::GetResult(FeatState state) {

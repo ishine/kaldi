@@ -271,6 +271,7 @@ public:
     				utt_curt[s] = 0;
     				new_utt_flags[s] = 1;
                     send_frames[s] = 0;
+                    frame_num_utt[s] = 0;
                     decodable_buffer[s].Resize(MAX_BUFFER_SIZE);
 	    		}
 
