@@ -103,9 +103,11 @@ private:
 	Matrix<BaseFloat> feat_in_, feat_out_, feat_out_ready_;
 	// wav buffer
 	Vector<BaseFloat> wav_buffer_;
+	std::vector<int> utt_state_flags_;
+	std::vector<int> valid_input_frames_;
 	// online feed
 	int len_, sample_offset_, frame_offset_, frame_ready_;
-	int in_skip_, out_skip_, chunk_length_, cur_result_idx_;
+	int in_skip_, out_skip_, skip_frames_, chunk_length_, cur_result_idx_;
 };
 
 }	 // namespace kaldi

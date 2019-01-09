@@ -30,7 +30,7 @@ OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
 		words_writer_(NULL), alignment_writer_(NULL), state_(FEAT_START),
 		socket_sample_(NULL), sc_sample_buffer_(NULL), sc_buffer_size_(0),
 		len_(0), sample_offset_(0), frame_offset_(0), frame_ready_(0),
-		in_skip_(0), out_skip_(0), chunk_length_(0), cur_result_idx_(0) {
+		in_skip_(0), out_skip_(0), skip_frames_(1), chunk_length_(0), cur_result_idx_(0) {
 }
 
 void OnlineFstDecoder::Destory() {
@@ -89,14 +89,18 @@ void OnlineFstDecoder::InitDecoder() {
 	feature_pipeline_ = new OnlineNnetFeaturePipeline(*feature_opts_);
 
 	// decoding buffer
-	in_skip_ = decoding_opts_->skip_inner ? 1 : decoding_opts_->skip_frames;
-	out_skip_ = decoding_opts_->skip_inner ? decoding_opts_->skip_frames : 1;
+	skip_frames_ = decoding_opts_->skip_frames;
+	in_skip_ = decoding_opts_->skip_inner ? 1 : skip_frames_;
+	out_skip_ = decoding_opts_->skip_inner ? skip_frames_ : 1;
 
 	int feat_dim = feature_pipeline_->Dim();
 	int in_rows = decoding_opts_->batch_size;
 	feat_in_.Resize(in_rows, feat_dim, kUndefined, kStrideEqualNumCols);
 	// wav buffer
 	wav_buffer_.Resize(VECTOR_INC_STEP, kSetZero); // 16k, 10s
+	// fsmn
+	utt_state_flags_.resize(forward_opts_->num_stream, 0);
+	valid_input_frames_.resize(forward_opts_->num_stream, 0);
 
 	// forward
 	if (!decoding_opts_->use_ipc && decoding_opts_->forward_cfg != "") {
@@ -182,7 +186,7 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
                 pos_state = FEAT_END;
 			} else {
 				frame_ready_ = batch_size;
-                pos_state = FEAT_APPEND;
+                pos_state = frame_offset_ == 0 ? FEAT_START : FEAT_APPEND;
             }
 
 			for (int i = 0; i < frame_ready_; i += in_skip_) {
@@ -195,22 +199,44 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 
 			if (!decoding_opts_->use_ipc) {
 				// feed forward to neural network
-				forward_->Forward(feat_in_, &feat_out_);
+				if (forward_opts_->network_type == "lstm") {
+					forward_->Forward(feat_in_, &feat_out_);
+					// copy posterior
+					if (decoding_opts_->copy_posterior) {
+						feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
+						for (int i = 0; i < frame_ready_; i++)
+							feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/skip_frames_));
+					} else {
+						int out_frames = (frame_ready_+out_skip_-1)/out_skip_;
+						feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
+						feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
+					}
+					block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
+					// wake up decoder thread
+					repository_.Accept(block_);
+				} else if (forward_opts_->network_type == "fsmn"){
+					int n = 1, nframe = 0, N = pos_state == FEAT_END ? 2 : 1;
+					while (n<=N) {
+						utt_state_flags_[0] = (pos_state != FEAT_END) ? pos_state : 1;
+						utt_state_flags_[0] = (n == 2) ? FEAT_END : utt_state_flags_[0];
+						valid_input_frames_[0] = (frame_ready_+out_skip_-1)/out_skip_;
+						valid_input_frames_[0] = (n == 2) ? 0 : valid_input_frames_[0];
+						forward_->SetStreamStatus(utt_state_flags_, &valid_input_frames_);
+						forward_->Forward(feat_in_, &feat_out_);
+						nframe = decoding_opts_->copy_posterior ?
+								valid_input_frames_[0]*skip_frames_ : valid_input_frames_[0];
+						feat_out_ready_.Resize(nframe, feat_out_.NumCols(), kUndefined);
+						if (decoding_opts_->copy_posterior) {
+							for (int i = 0; i < nframe; i++)
+								feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/skip_frames_));
+						} else {
+							feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, nframe));
+						}
 
-				// copy posterior
-				if (decoding_opts_->copy_posterior) {
-					feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
-					for (int i = 0; i < frame_ready_; i++)
-						feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/decoding_opts_->skip_frames));
-				} else {
-					int out_frames = (frame_ready_+out_skip_-1)/out_skip_;
-					feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
-					feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
+						block_ = new OnlineDecodableBlock(feat_out_ready_, utt_state_flags_[0]);
+						repository_.Accept(block_);
+					}
 				}
-
-				block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
-				// wake up decoder thread
-				repository_.Accept(block_);
 			} else { // ipc forward
 				socket_sample_->num_sample = frame_ready_;
 				memcpy((char*)socket_sample_->sample, (char*)feat_in_.RowData(0),

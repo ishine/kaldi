@@ -42,6 +42,7 @@ struct OnlineNnetIpcForwardingOptions {
     int32 gpuid;
     int32 num_threads;
     float blank_posterior_scale;
+    std::string network_type;
 
     int32 batch_size;
     int32 num_stream;
@@ -53,7 +54,8 @@ struct OnlineNnetIpcForwardingOptions {
     OnlineNnetIpcForwardingOptions(const PdfPriorOptions *prior_opts)
     	:feature_transform(""),network_model(""),socket_path(""),
 		no_softmax(false),apply_log(false),copy_posterior(false),
-								 use_gpu("no"),gpuid(-1),num_threads(1),blank_posterior_scale(-1.0),
+								 use_gpu("no"),gpuid(-1),num_threads(1),
+								 blank_posterior_scale(-1.0),network_type("lstm"),
 		 	 	 	 	 	 	 batch_size(18),num_stream(10),
 								 skip_frames(1),skip_inner(false),
 								 prior_opts(prior_opts) {
@@ -70,7 +72,7 @@ struct OnlineNnetIpcForwardingOptions {
         po->Register("gpuid", &gpuid, "gpuid < 0 for automatic select gpu, gpuid >= 0 for select specified gpu, only has effect if compiled with CUDA");
     	po->Register("num-threads", &num_threads, "Number of threads(GPUs) to use");
         po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
-
+        po->Register("network-type", &network_type, "multi-stream forward neural network type, (lstm|fsmn)");
 
         po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
         po->Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");

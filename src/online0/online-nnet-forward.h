@@ -41,17 +41,17 @@ struct OnlineNnetForwardOptions {
     int32 num_stream;
     float blank_posterior_scale;
 
+    std::string network_type;
+
     PdfPriorOptions prior_opts;
 
     OnlineNnetForwardOptions()
     	:feature_transform(""),network_model(""),no_softmax(false),apply_log(false),
-		 use_gpu("no"),gpuid(-1),num_threads(1),num_stream(1),blank_posterior_scale(-1.0)
-    {
-
+		 use_gpu("no"),gpuid(-1),num_threads(1),num_stream(1),blank_posterior_scale(-1.0),
+		 network_type("lstm") {
     }
 
-    void Register(OptionsItf *po)
-    {
+    void Register(OptionsItf *po) {
     	po->Register("feature-transform", &feature_transform, "Feature transform in front of main network (in nnet0 format)");
     	po->Register("network-model", &network_model, "Main neural network model (in nnet0 format)");
     	po->Register("no-softmax", &no_softmax, "No softmax on MLP output (or remove it if found), the pre-softmax activations will be used as log-likelihoods, log-priors will be subtracted");
@@ -61,6 +61,7 @@ struct OnlineNnetForwardOptions {
     	po->Register("num-threads", &num_threads, "Number of threads(GPUs) to use");
         po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
         po->Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
+        po->Register("network-type", &network_type, "multi-stream forward neural network type, (lstm|fsmn)");
 
         prior_opts.Register(po);
     }
@@ -91,10 +92,10 @@ public:
 		std::string feature_transform = opts_.feature_transform;
 		std::string model_filename = opts_.network_model;
 
-    		if (opts_.feature_transform != "")
-    			nnet_transf_.Read(opts_.feature_transform);
+		if (opts_.feature_transform != "")
+			nnet_transf_.Read(opts_.feature_transform);
 
-    		nnet_.Read(opts_.network_model);
+		nnet_.Read(opts_.network_model);
 
 	    // optionally remove softmax,
 	    Component::ComponentType last_type = nnet_.GetComponent(nnet_.NumComponents()-1).GetType();
@@ -139,7 +140,9 @@ public:
 		feat_.CopyFromMat(in);
 		nnet_transf_.Propagate(feat_, &feats_transf); // Feedforward
 		// for streams with new utterance, history states need to be reset
-		nnet_.ResetLstmStreams(new_utt_flags_);
+		if (opts_.network_type == "lstm") {
+			nnet_.ResetLstmStreams(new_utt_flags_);
+		}
 		// forward pass
 		nnet_.Propagate(feats_transf, &feat_out_);
 
@@ -166,6 +169,11 @@ public:
 
 	void ResetHistory() {
 		new_utt_flags_[0] = 1;
+	}
+
+	void SetStreamStatus(const std::vector<int> &utt_state_flags,
+			std::vector<int> *valid_input_frames) {
+		nnet_.SetStreamStatus(utt_state_flags, *valid_input_frames);
 	}
 
 private:
