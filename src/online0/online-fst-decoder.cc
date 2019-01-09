@@ -235,6 +235,7 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 
 						block_ = new OnlineDecodableBlock(feat_out_ready_, utt_state_flags_[0]);
 						repository_.Accept(block_);
+                        n++;
 					}
 				}
 			} else { // ipc forward
