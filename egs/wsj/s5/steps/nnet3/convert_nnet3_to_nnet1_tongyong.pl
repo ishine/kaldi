@@ -1,7 +1,8 @@
 #!/usr/bin/perl -w
-# This script convert kaldi's nnet3 to nnet1. It only support the lstm structure for now.
+# This script convert kaldi's nnet3 to nnet1. The supported structure including:
+# lstm, tdnn, fsmn, dfsmn.
 # Other nnet layers will be added later.
-# Date: Thur. May 31 2018 -- wangzhichao214232@sogou-inc.com
+# Date: Thur. Dec 11 2018 -- wangzhichao214232@sogou-inc.com
 #########################################################################################
 if(@ARGV!=2)
 {
@@ -10,50 +11,144 @@ if(@ARGV!=2)
 }
 
 ################### Set net config ######################
-#$NumComponents=4;
-$NumComponents=31;
-################### tdnn-lstm example ###################
+#$NumComponents=4;          #for lstm set-up
+#$NumComponents=31;         #for tdnn-lstm set-up
+#$NumComponents=24;         #for FSMN online set-up
+$NumComponents=60;          #for FSMN offline set-up
+################### Deep FSMN offline example ###################
 system("cat <<EOF > nnet.proto
-name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1024
+name=affine1 type=NaturalGradientAffineComponent input=355 output=1536
 name=relu1 type=RectifiedLinearComponent 
-name=renorm1 type=NormalizeComponent
-name=splice1 type=Splice offset=[-1,0,1] input=1024 output=3072
-name=tdnn2 type=NaturalGradientAffineComponent input=3072 output=1024
-name=relu2 type=RectifiedLinearComponent
-name=renorm2 type=NormalizeComponent
-name=splice2 type=Splice offset=[-1,0,1] input=1024 output=3072
-name=tdnn3 type=NaturalGradientAffineComponent input=3072 output=1024
-name=relu3 type=RectifiedLinearComponent
-name=renorm3 type=NormalizeComponent
-name=lstm1 type=Lstm input=1024 cell=2048 output=768 discard=4
-name=splice3 type=Splice offset=[-1,0,1] input=768 output=2304
-name=tdnn4 type=NaturalGradientAffineComponent input=2304 output=1024
-name=relu4 type=RectifiedLinearComponent
-name=renorm4 type=NormalizeComponent
-name=splice4 type=Splice offset=[-1,0,1] input=1024 output=3072
-name=tdnn5 type=NaturalGradientAffineComponent input=3072 output=1024
-name=relu5 type=RectifiedLinearComponent
-name=renorm5 type=NormalizeComponent
-name=lstm2 type=Lstm input=1024 cell=2048 output=512 discard=8
-name=splice5 type=Splice offset=[-1,0,1] input=512 output=1536
-name=tdnn6 type=NaturalGradientAffineComponent input=1536 output=1024
-name=relu6 type=RectifiedLinearComponent
-name=renorm6 type=NormalizeComponent
-name=splice6 type=Splice offset=[-1,0,1] input=1024 output=3072
-name=tdnn7 type=NaturalGradientAffineComponent input=3072 output=1024
-name=relu7 type=RectifiedLinearComponent
-name=renorm7 type=NormalizeComponent
-name=lstm3 type=Lstm input=1024 cell=2048 output=512 discard=12
-name=output type=NaturalGradientAffineComponent input=512 output=3766
+name=batchnorm1 type=BatchNormComponent
+name=linear1 type=LinearComponent input=1536 output=512
+name=fsmn1 type=Fsmn input=512 output=512 l-order=3 r-order=1 stride=1 depend=0
+name=affine2 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu2 type=RectifiedLinearComponent 
+name=batchnorm2 type=BatchNormComponent
+name=linear2 type=LinearComponent input=1536 output=512
+name=fsmn2 type=Fsmn input=512 output=512 l-order=3 r-order=0 stride=1 depend=0
+name=affine3 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu3 type=RectifiedLinearComponent 
+name=batchnorm3 type=BatchNormComponent
+name=linear3 type=LinearComponent input=1536 output=512
+name=fsmn3 type=Fsmn input=512 output=512 l-order=3 r-order=1 stride=1 depend=-2
+name=affine4 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu4 type=RectifiedLinearComponent 
+name=batchnorm4 type=BatchNormComponent
+name=linear4 type=LinearComponent input=1536 output=512
+name=fsmn4 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+name=affine5 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu5 type=RectifiedLinearComponent 
+name=batchnorm5 type=BatchNormComponent
+name=linear5 type=LinearComponent input=1536 output=512
+name=fsmn5 type=Fsmn input=512 output=512 l-order=1 r-order=1 stride=1 depend=-2
+name=affine6 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu6 type=RectifiedLinearComponent 
+name=batchnorm6 type=BatchNormComponent
+name=linear6 type=LinearComponent input=1536 output=512
+name=fsmn6 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+name=affine7 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu7 type=RectifiedLinearComponent 
+name=batchnorm7 type=BatchNormComponent
+name=linear7 type=LinearComponent input=1536 output=512
+name=fsmn7 type=Fsmn input=512 output=512 l-order=1 r-order=1 stride=1 depend=-2
+name=affine8 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu8 type=RectifiedLinearComponent 
+name=batchnorm8 type=BatchNormComponent
+name=linear8 type=LinearComponent input=1536 output=512
+name=fsmn8 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+name=affine9 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu9 type=RectifiedLinearComponent 
+name=batchnorm9 type=BatchNormComponent
+name=linear9 type=LinearComponent input=1536 output=512
+name=fsmn9 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+name=affine10 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu10 type=RectifiedLinearComponent 
+name=batchnorm10 type=BatchNormComponent
+name=linear10 type=LinearComponent input=1536 output=512
+name=fsmn10 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+name=affine11 type=NaturalGradientAffineComponent input=512 output=1536
+name=relu11 type=RectifiedLinearComponent 
+name=batchnorm11 type=BatchNormComponent
+name=linear11 type=LinearComponent input=1536 output=512
+name=prefinal.affine type=NaturalGradientAffineComponent input=512 output=1536
+name=prefinal.relu type=RectifiedLinearComponent
+name=prefinal.batchnorm1 type=BatchNormComponent
+name=prefinal.linear type=LinearComponent input=1536 output=256
+name=prefinal.batchnorm2 type=BatchNormComponent
+name=output type=NaturalGradientAffineComponent input=256 output=3766
 EOF");
 
+################### Deep FSMN online example ###################
+#system("cat <<EOF > nnet.proto
+#name=affine1 type=NaturalGradientAffineComponent input=355 output=1536
+#name=relu1 type=RectifiedLinearComponent 
+#name=batchnorm1 type=BatchNormComponent
+#name=linear1 type=LinearComponent input=1536 output=512
+#name=fsmn1 type=Fsmn input=512 output=512 l-order=3 r-order=1 stride=1
+#name=dfsmn2 type=Dfsmn input=512 hid=1536 output=512 l-order=3 r-order=0 stride=1
+#name=dfsmn3 type=Dfsmn input=512 hid=1536 output=512 l-order=3 r-order=1 stride=1
+#name=dfsmn4 type=Dfsmn input=512 hid=1536 output=512 l-order=2 r-order=0 stride=1
+#name=dfsmn5 type=Dfsmn input=512 hid=1536 output=512 l-order=1 r-order=1 stride=1
+#name=dfsmn6 type=Dfsmn input=512 hid=1536 output=512 l-order=2 r-order=0 stride=1
+#name=dfsmn7 type=Dfsmn input=512 hid=1536 output=512 l-order=1 r-order=1 stride=1
+#name=dfsmn8 type=Dfsmn input=512 hid=1536 output=512 l-order=2 r-order=0 stride=1
+#name=dfsmn9 type=Dfsmn input=512 hid=1536 output=512 l-order=2 r-order=0 stride=1
+#name=dfsmn10 type=Dfsmn input=512 hid=1536 output=512 l-order=2 r-order=0 stride=1
+#name=affine2 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu2 type=RectifiedLinearComponent 
+#name=batchnorm2 type=BatchNormComponent
+#name=linear2 type=LinearComponent input=1536 output=512
+#name=prefinal.affine type=NaturalGradientAffineComponent input=512 output=1536
+#name=prefinal.relu type=RectifiedLinearComponent
+#name=prefinal.batchnorm1 type=BatchNormComponent
+#name=prefinal.linear type=LinearComponent input=1536 output=256
+#name=prefinal.batchnorm2 type=BatchNormComponent
+#name=output type=NaturalGradientAffineComponent input=256 output=3766
+#EOF");
+
+################### tdnn-lstm example ###################
+#system("cat <<EOF > nnet.proto
+#name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1024
+#name=relu1 type=RectifiedLinearComponent 
+#name=renorm1 type=NormalizeComponent
+#name=splice1 type=Splice offset=[-1,0,1] input=1024 output=3072
+#name=tdnn2 type=NaturalGradientAffineComponent input=3072 output=1024
+#name=relu2 type=RectifiedLinearComponent
+#name=renorm2 type=NormalizeComponent
+#name=splice2 type=Splice offset=[-1,0,1] input=1024 output=3072
+#name=tdnn3 type=NaturalGradientAffineComponent input=3072 output=1024
+#name=relu3 type=RectifiedLinearComponent
+#name=renorm3 type=NormalizeComponent
+#name=lstm1 type=Lstm input=1024 cell=2048 output=768 discard=4
+#name=splice3 type=Splice offset=[-1,0,1] input=768 output=2304
+#name=tdnn4 type=NaturalGradientAffineComponent input=2304 output=1024
+#name=relu4 type=RectifiedLinearComponent
+#name=renorm4 type=NormalizeComponent
+#name=splice4 type=Splice offset=[-1,0,1] input=1024 output=3072
+#name=tdnn5 type=NaturalGradientAffineComponent input=3072 output=1024
+#name=relu5 type=RectifiedLinearComponent
+#name=renorm5 type=NormalizeComponent
+#name=lstm2 type=Lstm input=1024 cell=2048 output=512 discard=8
+#name=splice5 type=Splice offset=[-1,0,1] input=512 output=1536
+#name=tdnn6 type=NaturalGradientAffineComponent input=1536 output=1024
+#name=relu6 type=RectifiedLinearComponent
+#name=renorm6 type=NormalizeComponent
+#name=splice6 type=Splice offset=[-1,0,1] input=1024 output=3072
+#name=tdnn7 type=NaturalGradientAffineComponent input=3072 output=1024
+#name=relu7 type=RectifiedLinearComponent
+#name=renorm7 type=NormalizeComponent
+#name=lstm3 type=Lstm input=1024 cell=2048 output=512 discard=12
+#name=output type=NaturalGradientAffineComponent input=512 output=3766
+#EOF");
+
 ################### lstm example #######################
-system("cat <<EOF > nnet.proto
-name=lstm1 type=Lstm input=355 cell=2560 output=768 discard=0
-name=lstm2 type=Lstm input=768 cell=2560 output=768 discard=0
-name=lstm3 type=Lstm input=768 cell=2560 output=768 discard=0
-name=output type=NaturalGradientAffineComponent input=768 output=3766
-EOF");
+#system("cat <<EOF > nnet.proto
+#name=lstm1 type=Lstm input=355 cell=2560 output=768 discard=0
+#name=lstm2 type=Lstm input=768 cell=2560 output=768 discard=0
+#name=lstm3 type=Lstm input=768 cell=2560 output=768 discard=0
+#name=output type=NaturalGradientAffineComponent input=768 output=3766
+#EOF");
 ################### Net conf end ########################
 $model_in=$ARGV[0];
 $model_out=$ARGV[1];
@@ -72,14 +167,26 @@ while($layer_cnt < $NumComponents)
   if($component=~/AffineComponent/) {
     &parse_affine($component);
   }
+  elsif($component=~/=LinearComponent/) { ### "=" is to fix the conflict with RectifiedLinearComponent
+    &parse_linear($component);
+  }
   elsif($component=~/RectifiedLinearComponent/) {
     &parse_relu($component);
   }  
-  elsif($component=~/NormalizeComponen/) {
-    &parse_renorm($component);
+  elsif($component=~/NormalizeComponen/) { 
+    &parse_renorm($component); 
+  } 
+  elsif($component=~/BatchNormComponent/) {
+    &parse_batchnorm($component);
   }
   elsif($component=~/Splice/) {
     &parse_splice($component);
+  }
+  elsif($component=~/Fsmn/) {
+    &parse_fsmn($component);
+  }
+  elsif($component=~/Dfsmn/) {
+    &parse_dfsmn($component); 
   }
   elsif($component=~/Lstm/) {
     &parse_lstm($component);
@@ -88,10 +195,8 @@ while($layer_cnt < $NumComponents)
     exit 1;
   }
   $layer_cnt++;
-}
-
-print OUT "</Nnet>\n";
-print "Success! Converting finished!\n";
+} 
+print OUT "</Nnet>\n"; print "Success! Converting finished!\n";
 
 sub parse_node {
   @a = split /=/, $_[0];
@@ -155,6 +260,55 @@ sub parse_affine {
   print "converting  $_[0] finished...\n";
 }
 
+sub parse_linear {
+  $find = 0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $output_dim = &parse_node($units[3]);
+
+  @linear_affine=();   # $output_dim * $input_dim;
+  
+  while($line=<IN>)
+  {  
+    if($line=~/ComponentName/ && $line=~/<LinearComponent>/)
+    {
+      $find = 1;
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+        push @linear_affine, @params[1..$input_dim];
+        $cnt++;
+      }
+
+      # write to nnet1 model
+      print OUT "<LinearTransform> $output_dim $input_dim\n";
+      print OUT "<LearnRateCoef> 2.5 <MaxNorm> 0\n";
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        if ($cnt == ($output_dim-1))
+        {
+          print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n"; 
+        $cnt++;
+      }
+      last;
+    }
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting  $_[0] finished...\n";
+}
+
 sub parse_relu {
   $find = 0;
   
@@ -201,6 +355,51 @@ sub parse_renorm {
   }
   print "converting  $_[0] finished...\n";
 }
+
+sub parse_batchnorm {
+  $find=0;
+  @stat_mean = ();
+  @stat_var = ();
+  while($line=<IN>)
+  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/BatchNormComponent/)
+    {
+      $find = 1;
+      @a = split /\s+/, $line;
+      $dim = $a[4];
+      $block_dim = $a[6];
+      $epsilon = $a[8];
+      $target_rms = $a[10];
+      $count = $a[14];
+      $cnt = 0;
+	  while($cnt < 16) {
+	    shift @a;
+		$cnt++;
+	  }
+	  push @stat_mean, @a[1..$dim];
+	  $line = <IN>;
+	  chomp $line;
+      @params = split /\s+/, $line;
+	  shift @params;
+	  push @stat_var, @params[1..$dim];
+	  
+	  ### write nnet1 batchnorm ###
+      print OUT "<BatchNormComponent> $dim $dim\n";
+      print OUT "<BlockDim> $block_dim <Epsilon> $epsilon <TargetRms> $target_rms <Count> $count\n";
+	  print OUT "[ @stat_mean ]\n";
+	  print OUT "[ @stat_var ]\n";
+      last;
+    }
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting  $_[0] finished...\n";
+}
+
 sub parse_splice {
   @units = split /\s+/, $_[0];
   $offset = &parse_node($units[2]);
@@ -211,6 +410,259 @@ sub parse_splice {
   @splice_idx = split /,/, $offset;
   print OUT "[ @splice_idx ]\n";
   
+  print "converting  $_[0] finished...\n";
+}
+
+sub parse_fsmn {
+  $find = 0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $output_dim = &parse_node($units[3]);
+  $l_order = &parse_node($units[4]);
+  $r_order = &parse_node($units[5]);
+  $stride = &parse_node($units[6]);
+  $depend = &parse_node($units[7]);
+  @filter_params = ();
+  while($line=<IN>) 
+  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/NaturalGradientPerElementScaleComponent/)	
+	{
+	  $find = 1;
+	  @a = split /\s+/, $line;
+	  $line=<IN>;
+	  
+	  #read the SumBlockComponent and check the filter size
+	  $line=<IN>;          
+	  chomp $line;
+	  @b = split /\s+/, $line;
+	  $sum_block_in = $b[4];
+	  if ($sum_block_in != ($l_order+$r_order+1)*$input_dim)
+	  {
+	    print "Error: the filter order in $_[0] may be wrong!\n";
+		exit 1;
+	  }
+	  $cnt = 0;
+	  while($cnt < 10)
+	  {
+	    shift @a;
+		$cnt++;
+	  }
+	  push @filter_params, @a[1..$input_dim*($l_order+$r_order+1)];
+	  
+	  ####### write nnet1 fsmn ########	  
+	  print OUT "<Fsmn> $output_dim $input_dim\n";
+	  print OUT "<LearnRateCoef> 2.5 <LOrder> $l_order <ROrder> $r_order <Stride> $stride <Depend> $depend\n";
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $l_order+$r_order+1)
+      {
+        if ($cnt == ($l_order+$r_order))
+        {
+          print OUT "  @filter_params[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @filter_params[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n"; 
+        $cnt++;
+      }
+	  last;
+	}
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting  $_[0] finished...\n";
+}
+
+sub parse_dfsmn {
+  $find = 0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $hid_dim = &parse_node($units[3]);
+  $output_dim = &parse_node($units[4]);
+  $l_order = &parse_node($units[5]);
+  $r_order = &parse_node($units[6]);
+  $stride = &parse_node($units[7]);
+  $epsilon = 0;
+  $target_rms = 0;
+  $count = 0;
+  @linear_affine = ();
+  @affine_bias = ();
+  @stat_mean = ();
+  @stat_var = ();
+  @linear_project = ();
+  @filter_params = ();
+  while($line=<IN>) 
+  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/NaturalGradientAffineComponent/)	
+	{
+      ### reading the affine-transform part ###
+      $cnt=0;
+      while($cnt < $hid_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+        push @linear_affine, @params[1..$input_dim];
+        $cnt++;
+      }
+	  
+	  $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @affine_bias=();   # 1 * $hid_dim; 
+      push @affine_bias, @params[1..$hid_dim];
+	  
+      ### reading the relu part ###
+	  $line=<IN>;
+	  $line=<IN>;
+	  chomp $line;
+	  if(!($line=~/ComponentName/ && $line=~/RectifiedLinearComponent/))
+	  {
+	    print "Error: RELU part in DFSMN is not found!\n";
+		$find = 0;
+		last;
+	  }
+      
+	  ### reading the batchnorm part ###
+      $line=<IN>;  $line=<IN>; $line=<IN>;
+      $line=<IN>;
+	  chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/BatchNormComponent/))
+      {
+	  	print "Error: BatchNorm part in DFSMN is not found!\n";
+		$find = 0;
+		last;  
+	  }
+      @a = split /\s+/, $line;
+      $epsilon = $a[8];
+      $target_rms = $a[10];
+      $count = $a[14];
+      $cnt = 0;
+	  while($cnt < 16) {
+	    shift @a;
+		$cnt++;
+	  }
+	  push @stat_mean, @a[1..$hid_dim];
+	  $line = <IN>;
+	  chomp $line;
+      @params = split /\s+/, $line;
+	  shift @params;
+	  push @stat_var, @params[1..$hid_dim];
+	  
+	  ### reading the linear-project part ###
+	  $line=<IN>;
+	  $line=<IN>;
+	  chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/LinearComponent/))
+      {
+	    print "Error: Linear-project part in DFSMN is not found!\n";
+		$find = 0;
+		last;
+	  }
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+        push @linear_project, @params[1..$hid_dim];
+        $cnt++;
+      }	
+	  
+	  ### reading the fsmn part ###
+	  $line=<IN>;
+	  $line=<IN>;
+	  chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/NaturalGradientPerElementScaleComponent/))	
+	  {
+        print "Error: the FSMN part in DFSMN is not found!\n";
+		$find = 0;
+		last;
+	  }
+	  @a = split /\s+/, $line;
+	  $line=<IN>;	  
+	  #read the SumBlockComponent and check the filter size
+	  $line=<IN>;          
+	  chomp $line;
+	  @b = split /\s+/, $line;
+	  $sum_block_in = $b[4];
+	  if ($sum_block_in != ($l_order+$r_order+1)*$input_dim)
+	  {
+	    print "Error: the filter order in $_[0] may be wrong!\n";
+		exit 1;
+	  }
+	  $cnt = 0;
+	  while($cnt < 10)
+	  {
+	    shift @a;
+		$cnt++;
+	  }
+	  push @filter_params, @a[1..$input_dim*($l_order+$r_order+1)];
+	  
+	  ### write nne1 dfsmn ###
+	  $find = 1;
+      print OUT "<DeepFsmn> $output_dim $input_dim\n";
+      print OUT "<LearnRateCoef> 2.5 <HidSize> $hid_dim <LOrder> $l_order <ROrder> $r_order <Stride> $stride <Epsilon> $epsilon <TargetRms> $target_rms <Count> $count\n";
+	  
+	  ### write affine-transform part ###
+      print OUT " [\n";
+	  $cnt=0;
+      while($cnt < $hid_dim)
+      {
+        if ($cnt == ($hid_dim-1))
+        {
+          print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n"; 
+        $cnt++;
+      }	  
+      print OUT " [ @affine_bias ]\n";
+	  
+	  ### write RELU part ###
+	  
+	  ### write batchnorm part ###
+      print OUT "[ @stat_mean ]\n";
+	  print OUT "[ @stat_var ]\n";
+	  
+	  ### write linear-project part ###
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        if ($cnt == ($output_dim-1))
+        {
+          print OUT "  @linear_project[$cnt*$hid_dim..($cnt+1)*$hid_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_project[$cnt*$hid_dim..($cnt+1)*$hid_dim-1]\n"; 
+        $cnt++;
+      }	  
+	  
+	  ### write fsmn part ###
+      $cnt=0;
+      while($cnt < $l_order+$r_order+1)
+      {
+        if ($cnt == ($l_order+$r_order))
+        {
+          print OUT "  @filter_params[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @filter_params[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n"; 
+        $cnt++;
+      }
+	  last;
+	}
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
   print "converting  $_[0] finished...\n";
 }
 
@@ -462,4 +914,5 @@ sub parse_lstm {
 
 close(IN);
 close(OUT);
+
 close(PROTO);

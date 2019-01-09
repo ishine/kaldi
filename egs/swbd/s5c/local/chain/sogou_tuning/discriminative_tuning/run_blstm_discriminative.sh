@@ -20,9 +20,9 @@ cleanup=false  # run with --cleanup true --stage 6 to clean up (remove large thi
                # alignments and degs).
 
 # Frame chunk options that will be used for blstm models.
-frames_per_chunk=150
+frames_per_chunk=10000
 extra_left_context=50
-extra_right_context=0
+extra_right_context=50
 extra_left_context_initial=0
 extra_right_context_final=0
 
@@ -30,8 +30,8 @@ extra_right_context_final=0
 . ./path.sh
 . ./utils/parse_options.sh
 
-srcdir=exp/chain/tdnn_lstm_1c_LFR_noLD_60M_4w5_smbr_beforeSearch
-train_data_dir=data/train_sogou_fbank_record_4kh
+srcdir=exp/chain/9tdnn_4blstm_56M_7300h
+train_data_dir=data/train_sogou_fbank_1000h_4dt
 online_ivector_dir=
 degs_dir=                     # If provided, will skip the degs directory creation
 lats_dir=                     # If provided, will skip denlats creation
@@ -40,7 +40,7 @@ lats_dir=                     # If provided, will skip denlats creation
 criterion=smbr
 one_silence_class=true
 
-dir=${srcdir}_${criterion}_translate2
+dir=${srcdir}_${criterion}
 
 ## Egs options
 frames_per_eg=150
@@ -139,7 +139,7 @@ if [ -z "$lats_dir" ]; then
       $train_data_dir $lang $srcdir ${lats_dir} ;
   fi
 fi
-exit 1
+
 model_left_context=`nnet3-am-info $srcdir/final.mdl | grep "left-context:" | awk '{print $2}'`
 model_right_context=`nnet3-am-info $srcdir/final.mdl | grep "right-context:" | awk '{print $2}'`
 
@@ -169,7 +169,6 @@ if [ -z "$degs_dir" ]; then
       $train_data_dir $lang ${srcdir}_ali${affix} $lats_dir $srcdir/final.mdl $degs_dir ;
   fi
 fi
-
 ###################  adjust params ##################
 if [ $stage -le 4 ]; then
   steps/nnet3/train_discriminative.sh --cmd "$decode_cmd" \
