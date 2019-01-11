@@ -77,7 +77,7 @@ public:
 		int32 batch_size = opts_.batch_size;
 		int32 skip_frames = opts_.skip_frames;
 		int32 input_dim = opts_.input_dim;
-		int32 out_dim = opts_.output_dim;
+		int32 output_dim = opts_.output_dim;
 
 
 	    CircularQueue<SocketDecodable* > default_queue(MAX_BUFFER_SIZE, NULL);
@@ -110,7 +110,7 @@ public:
         SocketSample *socket_sample = NULL;
         SocketDecodable *decodable = NULL;
 	    sc_sample_size = sizeof(SocketSample) + in_rows*input_dim*sizeof(BaseFloat);
-	    sc_decodable_size = sizeof(SocketDecodable) + out_rows*out_dim*sizeof(BaseFloat);
+	    sc_decodable_size = sizeof(SocketDecodable) + out_rows*output_dim*sizeof(BaseFloat);
 	    socket_sample = (SocketSample*) new char[sc_sample_size];
 	    new_utt_flags.resize(num_stream, 1);
 	    update_state_flags.resize(num_stream, 1);
@@ -266,7 +266,7 @@ public:
 				decodable = *pp_decodable;
                 decodable->clear(); 
 
-				out_dim = p_nnet_out->NumCols();
+				output_dim = p_nnet_out->NumCols();
 				float *dest = decodable->sample;
                 int nframes = opts_.copy_posterior ? skip_frames : 1;
                 int ncurt = opts_.copy_posterior ? curt[s] : (curt[s]+skip_frames-1)/skip_frames;
@@ -275,15 +275,15 @@ public:
 				for (t = 0; t < out_rows; t++) {
                     for (k = 0; k < nframes; k++) {
 						if (utt_curt[s] < ncurt && utt_curt[s] < nlen) {
-                            memcpy((char*)dest, (char*)p_nnet_out->RowData(t * num_stream + s), out_dim*sizeof(float));
-							dest += out_dim;
+                            memcpy((char*)dest, (char*)p_nnet_out->RowData(t * num_stream + s), output_dim*sizeof(float));
+							dest += output_dim;
 							utt_curt[s]++;
 							decodable->num_sample++;
                         }
                     }
 				}
 
-				decodable->dim = out_dim;
+				decodable->dim = output_dim;
 				decodable->is_end = recv_end[s] == 1 && ((opts_.copy_posterior && utt_curt[s] == lent[s]) ||
 										(!opts_.copy_posterior && utt_curt[s] == frame_num_utt[s]));
 				new_utt_flags[s] = decodable->is_end ? 1 : 0;

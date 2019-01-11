@@ -60,7 +60,9 @@ struct OnlineNnetIpcForwardOptions {
 								 use_gpu("no"),gpuid(-1),num_threads(1),
 								 blank_posterior_scale(-1.0),network_type("lstm"),
 		 	 	 	 	 	 	 batch_size(18),num_stream(10),
-								 skip_frames(1),skip_inner(false),
+								 skip_frames(1),
+                                 input_dim(0), output_dim(0), 
+                                 skip_inner(false),
 								 prior_opts(prior_opts) {
     }
 
@@ -108,6 +110,8 @@ public:
         gpu_mutex_.Unlock();
     }
 
+    Repository *repo_in_;
+    Repository *repo_out_;
     std::vector<int> new_utt_flags_;
     std::vector<int> update_state_flags_;
     double time_now_;
@@ -117,8 +121,6 @@ public:
 
 private:
     Mutex gpu_mutex_;
-    Repository *repo_in_;
-    Repository *repo_out_;
 };
 
 class OnlineNnetIpcForwardClass : public MultiThreadable {
@@ -156,9 +158,6 @@ public:
 		bool no_softmax = opts_.no_softmax;
 		std::string feature_transform = opts_.feature_transform;
 		bool apply_log = opts_.apply_log;
-		int32 num_stream = opts_.num_stream;
-		int32 batch_size = opts_.batch_size;
-		int32 skip_frames = opts_.skip_frames;
 		const PdfPriorOptions *prior_opts = opts_.prior_opts;
 
 		Nnet nnet_transf;
@@ -189,24 +188,30 @@ public:
 	    PdfPrior pdf_prior(*prior_opts);
 
 	    CuMatrix<BaseFloat>  cufeat, feats_transf, nnet_out;
-	    Matrix<BaseFloat> *nnet_in_host, nnet_out_host;
+	    Matrix<BaseFloat> *p_nnet_in_host, nnet_out_host;
 	    std::vector<int> &new_utt_flags = forward_sync_.new_utt_flags_;
 	    std::vector<int> &update_state_flags = forward_sync_.update_state_flags_;
+
+        int input_dim, output_dim;
+        input_dim = feature_transform != "" ? nnet_transf.InputDim() : nnet.InputDim();
+        output_dim = nnet.OutputDim();
+        KALDI_ASSERT(opts_.input_dim == input_dim);
+        KALDI_ASSERT(opts_.output_dim == output_dim);
 
         Timer gap_time;
 
 	    while (true) {
 
-	    	nnet_in_host = forward_sync_.repo_in_->Provide();
-	    	if (nnet_in_host == NULL) {
+	    	p_nnet_in_host = (Matrix<BaseFloat> *)forward_sync_.repo_in_->Provide();
+	    	if (p_nnet_in_host == NULL) {
 	    		forward_sync_.repo_out_->Done();
 	    		break;
 	    	}
 
 	    	gap_time.Reset();
 	    	// apply optional feature transform
-	    	cufeat.Resize(nnet_in_host->NumRows(), nnet_in_host->NumCols(), kUndefined);
-            cufeat.CopyFromMat(*nnet_in_host);
+	    	cufeat.Resize(p_nnet_in_host->NumRows(), p_nnet_in_host->NumCols(), kUndefined);
+            cufeat.CopyFromMat(*p_nnet_in_host);
 	    	nnet_transf.Propagate(cufeat, &feats_transf); // Feedforward
 
 			// for streams with new utterance, history states need to be reset
