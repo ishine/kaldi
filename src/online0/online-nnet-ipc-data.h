@@ -90,17 +90,18 @@ public:
 	    std::vector<int> recv_end(num_stream, 0);
 	    std::vector<int> send_end(num_stream, 1);
 	    std::vector<int> send_frames(num_stream, 0);
-
-	    std::vector<int> &new_utt_flags = forward_sync_.new_utt_flags_;
-	    std::vector<int> &update_state_flags = forward_sync_.update_state_flags_;
+	    std::vector<int> new_utt_flags(num_stream, 1);
+	    std::vector<int> update_state_flags(num_stream, 1);
+	    std::vector<int> forward_processed(num_stream, 1);
 
 	 	std::vector<Matrix<BaseFloat> > feats(num_stream);
-	    Matrix<BaseFloat> sample, nnet_in, *p_nnet_out = NULL;
+	    Matrix<BaseFloat> sample, *p_nnet_in = NULL, *p_nnet_out = NULL;
 
 	    int in_rows, out_rows;
 	    int in_skip, out_skip;
 	    int sc_sample_size, sc_decodable_size;
-	    int t, s , k, len;
+	    int t, s , k, len, idx = 0;
+	    bool in_sucess = false;
 
 	    in_skip = opts_.skip_inner ? 1 : opts_.skip_frames;
 	    out_skip = opts_.skip_inner ? opts_.skip_frames : 1;
@@ -112,8 +113,10 @@ public:
 	    sc_sample_size = sizeof(SocketSample) + in_rows*input_dim*sizeof(BaseFloat);
 	    sc_decodable_size = sizeof(SocketDecodable) + out_rows*output_dim*sizeof(BaseFloat);
 	    socket_sample = (SocketSample*) new char[sc_sample_size];
-	    new_utt_flags.resize(num_stream, 1);
-	    update_state_flags.resize(num_stream, 1);
+
+	    DataInBuffer **data_in_buffer = new DataInBuffer[2](in_rows, input_dim, num_stream);
+	    DataOutBuffer *out_buffer = NULL;
+	    p_nnet_in = &data_in_buffer[idx]->data_in_;
 
         Timer time, gap_time;
 
@@ -211,15 +214,13 @@ public:
 	        	continue;
 	        }
 
-
-			if (nnet_in.NumCols() != input_dim)
-				nnet_in.Resize(in_rows*num_stream, input_dim, kSetZero, kStrideEqualNumCols);
-
 	    	 // fill a multi-stream bptt batch
 	    	for (t = 0; t < batch_size; t++) {
 	    		for (s = 0; s < num_stream; s++) {
+		    		if (forward_processed[s] == 0)
+		    			continue;
 					if (curt[s] < lent[s]) {
-						nnet_in.Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]));
+						p_nnet_in->Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]));
 					    curt[s] += in_skip;
 					    update_state_flags[s] = 1;
 					} else {
@@ -227,8 +228,20 @@ public:
 					}
 	    		}
 	    	}
+	    	for (s = 0; s < num_stream; s++)
+	    		forward_processed[s] = update_state_flags[s] == 1 ? 0 : 1;
 
-	    	forward_sync_.repo_in_->Accept(&nnet_in);
+
+	    	// push forward data
+	    	data_in_buffer[idx]->update_state_flags_ = update_state_flags;
+	    	data_in_buffer[idx]->new_utt_flags_ = new_utt_flags;
+	    	in_sucess = forward_sync_.repo_in_->TryAccept(data_in_buffer[idx]);
+	    	if (in_sucess) {
+	    		for (s = 0; s < num_stream; s++)
+	    			forward_processed[s] = 1;
+	    		idx = (idx+1)%2;
+	    		p_nnet_in = &data_in_buffer[idx]->data_in_;
+	    	}
 
 
             double curt_time = time.Elapsed();
@@ -241,13 +254,12 @@ public:
                 forward_sync_.time_now_ = time.Elapsed();
             }
 
-			// decodable data
-            p_nnet_out = (Matrix<BaseFloat> *)forward_sync_.repo_out_->Provide();
-            if (NULL == p_nnet_out) {
-            	forward_sync_.repo_in_->Done();
-            	break;
-            }
+			// receive forward data
+            out_buffer = (DataOutBuffer *)forward_sync_.repo_out_->TryProvide();
+            if (NULL == out_buffer)
+            	continue;
 
+            p_nnet_out = &out_buffer->data_out_;
             // rearrange output for each client
 			for (s = 0; s < num_stream; s++) {
 				if (opts_.copy_posterior) {

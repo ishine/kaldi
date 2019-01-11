@@ -74,13 +74,23 @@ void PrintPartialResult(const std::vector<int32>& words,
 }
 
 
-void Repository::Accept(
-		void *example) {
+void Repository::Accept(void *example) {
   empty_semaphore_.Wait();
   examples_mutex_.Lock();
   examples_.push_back(example);
   examples_mutex_.Unlock();
   full_semaphore_.Signal();
+}
+
+bool Repository::TryAccept(void *example) {
+  bool sucess = empty_semaphore_.TryWait();
+  if (!sucess)
+	  return false;
+  examples_mutex_.Lock();
+  examples_.push_back(example);
+  examples_mutex_.Unlock();
+  full_semaphore_.Signal();
+  return true;
 }
 
 void Repository::Done() {
@@ -95,6 +105,26 @@ void Repository::Done() {
 
 void* Repository::Provide() {
   full_semaphore_.Wait();
+  if (done_) {
+    KALDI_ASSERT(examples_.empty());
+    full_semaphore_.Signal(); // Increment the semaphore so
+    // the call by the next thread will not block.
+    return NULL; // no examples to return-- all finished.
+  } else {
+    examples_mutex_.Lock();
+    KALDI_ASSERT(!examples_.empty());
+    void *ans = examples_.front();
+    examples_.pop_front();
+    examples_mutex_.Unlock();
+    empty_semaphore_.Signal();
+    return ans;
+  }
+}
+
+void* Repository::TryProvide() {
+  bool sucess = full_semaphore_.TryWait();
+  if (!sucess)
+	  return NULL;
   if (done_) {
     KALDI_ASSERT(examples_.empty());
     full_semaphore_.Signal(); // Increment the semaphore so

@@ -54,6 +54,8 @@ class Repository {
   /// The following function is called by the code that reads in the examples.
   void Accept(void *example);
 
+  bool TryAccept(void *example);
+
   /// The following function is called by the code that reads in the examples,
   /// when we're done reading examples; it signals this way to this class
   /// that the stream is now empty
@@ -64,6 +66,8 @@ class Repository {
   /// available.  It returns NULL when there are no examples left and
   /// ExamplesDone() has been called.
   void *Provide();
+
+  void *TryProvide();
 
   int Size();
 

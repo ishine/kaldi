@@ -112,8 +112,6 @@ public:
 
     Repository *repo_in_;
     Repository *repo_out_;
-    std::vector<int> new_utt_flags_;
-    std::vector<int> update_state_flags_;
     double time_now_;
     double time_send_;
     double time_received_;
@@ -122,6 +120,26 @@ public:
 private:
     Mutex gpu_mutex_;
 };
+
+
+struct DataInBuffer {
+	DataInBuffer(int in_rows, int in_cols, int nstream) {
+		data_in_.Resize(in_rows*nstream, in_cols, kSetZero, kStrideEqualNumCols);
+		new_utt_flags_.resize(nstream, 1);
+		new_utt_flags_.resize(nstream, 1);
+	}
+	Matrix<BaseFloat> data_in_;
+	std::vector<int> new_utt_flags_;
+	std::vector<int> update_state_flags_;
+};
+
+struct DataOutBuffer {
+	DataOutBuffer(int out_rows, int out_cols, int nstream) {
+		data_out_.Resize(out_rows*nstream, out_cols, kSetZero, kStrideEqualNumCols);
+	}
+	Matrix<BaseFloat> data_out_;
+};
+
 
 class OnlineNnetIpcForwardClass : public MultiThreadable {
 private:
@@ -188,38 +206,41 @@ public:
 	    PdfPrior pdf_prior(*prior_opts);
 
 	    CuMatrix<BaseFloat>  cufeat, feats_transf, nnet_out;
-	    Matrix<BaseFloat> *p_nnet_in_host, nnet_out_host;
-	    std::vector<int> &new_utt_flags = forward_sync_.new_utt_flags_;
-	    std::vector<int> &update_state_flags = forward_sync_.update_state_flags_;
+	    Matrix<BaseFloat> *p_nnet_in_host, *p_nnet_out_host;
 
-        int input_dim, output_dim;
+        int input_dim, output_dim, idx = 0;
         input_dim = feature_transform != "" ? nnet_transf.InputDim() : nnet.InputDim();
         output_dim = nnet.OutputDim();
         KALDI_ASSERT(opts_.input_dim == input_dim);
         KALDI_ASSERT(opts_.output_dim == output_dim);
 
+
+        DataOutBuffer **out_buffer = new DataOutBuffer[2];
+        DataInBuffer *in_buffer = NULL;
+        p_nnet_out_host = &out_buffer[idx]->data_out_;
+
         Timer gap_time;
 
 	    while (true) {
 
-	    	p_nnet_in_host = (Matrix<BaseFloat> *)forward_sync_.repo_in_->Provide();
-	    	if (p_nnet_in_host == NULL) {
+	    	in_buffer = (DataInBuffer *)forward_sync_.repo_in_->Provide();
+	    	if (in_buffer == NULL) {
 	    		forward_sync_.repo_out_->Done();
 	    		break;
 	    	}
-
+	    	p_nnet_in_host = &in_buffer->data_in_;
 	    	gap_time.Reset();
 	    	// apply optional feature transform
 	    	cufeat.Resize(p_nnet_in_host->NumRows(), p_nnet_in_host->NumCols(), kUndefined);
             cufeat.CopyFromMat(*p_nnet_in_host);
-	    	nnet_transf.Propagate(cufeat, &feats_transf); // Feedforward
 
 			// for streams with new utterance, history states need to be reset
-			nnet.ResetLstmStreams(new_utt_flags);
-			nnet.SetSeqLengths(new_utt_flags);
+			nnet.ResetLstmStreams(in_buffer->new_utt_flags_);
+			nnet.SetSeqLengths(in_buffer->new_utt_flags_);
 	    	// for streams with new data, history states need to be update
-	    	nnet.UpdateLstmStreamsState(update_state_flags);
+	    	nnet.UpdateLstmStreamsState(in_buffer->update_state_flags_);
 
+	    	nnet_transf.Propagate(cufeat, &feats_transf); // Feedforward
 			// forward pass
 			nnet.Propagate(feats_transf, &nnet_out);
 
@@ -234,13 +255,17 @@ public:
 	    		pdf_prior.SubtractOnLogpost(&nnet_out);
 	    	}
 
-	    	if (nnet_out_host.NumRows() != nnet_out.NumRows())
-	    		nnet_out_host.Resize(nnet_out.NumRows(), nnet_out.NumCols(), kSetZero, kStrideEqualNumCols);
+	    	if (p_nnet_out_host->NumRows() != p_nnet_out_host->NumRows()) {
+	    		p_nnet_out_host->Resize(nnet_out.NumRows(), nnet_out.NumCols(), kSetZero, kStrideEqualNumCols);
+	    	}
 
-			nnet_out.CopyToMat(&nnet_out_host);
+			nnet_out.CopyToMat(p_nnet_out_host);
 			forward_sync_.time_forward_ += gap_time.Elapsed();
 
-			forward_sync_.repo_out_->Accept(&nnet_out_host);
+
+			forward_sync_.repo_out_->Accept(out_buffer[idx]);
+			idx = (idx+1)%2;
+			p_nnet_out_host = &out_buffer[idx]->data_out_;
 
 	    } // while loop
 	}
