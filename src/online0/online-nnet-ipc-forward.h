@@ -134,6 +134,7 @@ struct DataInBuffer {
 };
 
 struct DataOutBuffer {
+    DataOutBuffer() {}
 	DataOutBuffer(int out_rows, int out_cols, int nstream) {
 		data_out_.Resize(out_rows*nstream, out_cols, kSetZero, kStrideEqualNumCols);
 	}
@@ -215,9 +216,9 @@ public:
         KALDI_ASSERT(opts_.output_dim == output_dim);
 
 
-        DataOutBuffer **out_buffer = new DataOutBuffer[2];
+        std::vector<DataOutBuffer> out_buffer(2);
         DataInBuffer *in_buffer = NULL;
-        p_nnet_out_host = &out_buffer[idx]->data_out_;
+        p_nnet_out_host = &out_buffer[idx].data_out_;
 
         Timer gap_time;
 
@@ -255,17 +256,17 @@ public:
 	    		pdf_prior.SubtractOnLogpost(&nnet_out);
 	    	}
 
-	    	if (p_nnet_out_host->NumRows() != p_nnet_out_host->NumRows()) {
-	    		p_nnet_out_host->Resize(nnet_out.NumRows(), nnet_out.NumCols(), kSetZero, kStrideEqualNumCols);
+	    	if (p_nnet_out_host->NumRows() != nnet_out.NumRows()) {
+	    		p_nnet_out_host->Resize(nnet_out.NumRows(), nnet_out.NumCols(), kUndefined, kStrideEqualNumCols);
 	    	}
 
 			nnet_out.CopyToMat(p_nnet_out_host);
 			forward_sync_.time_forward_ += gap_time.Elapsed();
 
 
-			forward_sync_.repo_out_->Accept(out_buffer[idx]);
+			forward_sync_.repo_out_->Accept(&out_buffer[idx]);
 			idx = (idx+1)%2;
-			p_nnet_out_host = &out_buffer[idx]->data_out_;
+			p_nnet_out_host = &out_buffer[idx].data_out_;
 
 	    } // while loop
 	}

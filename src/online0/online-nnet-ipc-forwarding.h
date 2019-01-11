@@ -47,6 +47,8 @@ struct OnlineNnetIpcForwardingOptions {
     int32 batch_size;
     int32 num_stream;
     int32 skip_frames;
+    int32 input_dim;
+    int32 output_dim;
     bool skip_inner;
 
     const PdfPriorOptions *prior_opts;
@@ -57,7 +59,9 @@ struct OnlineNnetIpcForwardingOptions {
 								 use_gpu("no"),gpuid(-1),num_threads(1),
 								 blank_posterior_scale(-1.0),network_type("lstm"),
 		 	 	 	 	 	 	 batch_size(18),num_stream(10),
-								 skip_frames(1),skip_inner(false),
+								 skip_frames(1),
+                                 input_dim(0), output_dim(0), 
+                                 skip_inner(false),
 								 prior_opts(prior_opts) {
     }
 
@@ -78,6 +82,8 @@ struct OnlineNnetIpcForwardingOptions {
         po->Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
         po->Register("skip-frames", &skip_frames, "LSTM model skip frames for next input");
         po->Register("skip-inner", &skip_inner, "skip frame in neural network inner or input");
+        po->Register("input-dim", &input_dim, "neural network model input dim");
+        po->Register("output-dim", &output_dim, "neural network model output dim");
     }
 
 };

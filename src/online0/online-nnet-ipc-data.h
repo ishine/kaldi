@@ -101,7 +101,7 @@ public:
 	    int in_skip, out_skip;
 	    int sc_sample_size, sc_decodable_size;
 	    int t, s , k, len, idx = 0;
-	    bool in_sucess = false;
+	    //bool in_sucess = false;
 
 	    in_skip = opts_.skip_inner ? 1 : opts_.skip_frames;
 	    out_skip = opts_.skip_inner ? opts_.skip_frames : 1;
@@ -114,9 +114,9 @@ public:
 	    sc_decodable_size = sizeof(SocketDecodable) + out_rows*output_dim*sizeof(BaseFloat);
 	    socket_sample = (SocketSample*) new char[sc_sample_size];
 
-	    DataInBuffer **data_in_buffer = new DataInBuffer[2](in_rows, input_dim, num_stream);
+        std::vector<DataInBuffer> data_in_buffer(2, DataInBuffer(in_rows, input_dim, num_stream));
 	    DataOutBuffer *out_buffer = NULL;
-	    p_nnet_in = &data_in_buffer[idx]->data_in_;
+	    p_nnet_in = &data_in_buffer[idx].data_in_;
 
         Timer time, gap_time;
 
@@ -160,6 +160,7 @@ public:
 
 	    		if (send_end[s] == 1) {
 	    			recv_end[s] = 0;
+                    send_end[s] = 0;
     				lent[s] = 0;
     				curt[s] = 0;
     				utt_curt[s] = 0;
@@ -217,8 +218,8 @@ public:
 	    	 // fill a multi-stream bptt batch
 	    	for (t = 0; t < batch_size; t++) {
 	    		for (s = 0; s < num_stream; s++) {
-		    		if (forward_processed[s] == 0)
-		    			continue;
+		    		//if (forward_processed[s] == 0)
+		    			//continue;
 					if (curt[s] < lent[s]) {
 						p_nnet_in->Row(t * num_stream + s).CopyFromVec(feats[s].Row(curt[s]));
 					    curt[s] += in_skip;
@@ -228,20 +229,25 @@ public:
 					}
 	    		}
 	    	}
+            /*
 	    	for (s = 0; s < num_stream; s++)
 	    		forward_processed[s] = update_state_flags[s] == 1 ? 0 : 1;
+            */
 
 
 	    	// push forward data
-	    	data_in_buffer[idx]->update_state_flags_ = update_state_flags;
-	    	data_in_buffer[idx]->new_utt_flags_ = new_utt_flags;
-	    	in_sucess = forward_sync_.repo_in_->TryAccept(data_in_buffer[idx]);
+	    	data_in_buffer[idx].update_state_flags_ = update_state_flags;
+	    	data_in_buffer[idx].new_utt_flags_ = new_utt_flags;
+            forward_sync_.repo_in_->Accept(&data_in_buffer[idx]);
+            /*
+	    	in_sucess = forward_sync_.repo_in_->TryAccept(&data_in_buffer[idx]);
 	    	if (in_sucess) {
 	    		for (s = 0; s < num_stream; s++)
 	    			forward_processed[s] = 1;
 	    		idx = (idx+1)%2;
-	    		p_nnet_in = &data_in_buffer[idx]->data_in_;
+	    		p_nnet_in = &data_in_buffer[idx].data_in_;
 	    	}
+            */
 
 
             double curt_time = time.Elapsed();
@@ -255,9 +261,11 @@ public:
             }
 
 			// receive forward data
-            out_buffer = (DataOutBuffer *)forward_sync_.repo_out_->TryProvide();
-            if (NULL == out_buffer)
-            	continue;
+            out_buffer = (DataOutBuffer *)forward_sync_.repo_out_->Provide();
+            if (NULL == out_buffer) {
+                forward_sync_.repo_in_->Done();
+            	break;
+             }
 
             p_nnet_out = &out_buffer->data_out_;
             // rearrange output for each client
