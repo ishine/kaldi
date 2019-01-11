@@ -27,7 +27,8 @@
 
 #include "nnet0/nnet-nnet.h"
 #include "online0/kaldi-unix-domain-socket-server.h"
-#include "online0/online-nnet-ipc-forwarding.h"
+#include "online0/online-nnet-ipc-forward.h"
+#include "online0/online-nnet-ipc-data.h"
 
 int main(int argc, char *argv[]) {
 	  using namespace kaldi;
@@ -47,7 +48,7 @@ int main(int argc, char *argv[]) {
     PdfPriorOptions prior_opts;
     prior_opts.Register(&po);
 
-    OnlineNnetIpcForwardingOptions opts(&prior_opts);
+    OnlineNnetIpcForwardOptions opts(&prior_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -76,21 +77,25 @@ int main(int argc, char *argv[]) {
 
     int max_thread = 20;
     std::vector<std::vector<UnixDomainSocket*> > client_list(max_thread);
-    std::vector<MultiThreader<OnlineNnetIpcForwardingClass> *> forward_thread(max_thread, NULL);
+    std::vector<MultiThreader<OnlineNnetIpcForwardClass> *> forward_thread(max_thread, NULL);
+    std::vector<MultiThreader<OnlineNnetIpcDataClass> *> data_thread(max_thread, NULL);
     UnixDomainSocketServer *server = new UnixDomainSocketServer(socket_filepath);
     UnixDomainSocket *client = NULL;
-    IpcForwardSync forward_sync;
+    std::vector<IpcForwardSync* > forward_sync(max_thread);
 
     for (int i = 0; i < num_threads; i++) {
     	client_list[i].resize(num_stream, NULL);
 
 		// initialize forward thread
 		// forward_thread[i] = new OnlineNnetIpcForwardingClass(opts, client_list[i], model_filename);
-		OnlineNnetIpcForwardingClass *forwarding = new OnlineNnetIpcForwardingClass(opts, client_list[i], forward_sync, model_filename);
+    	forward_sync[i] = new IpcForwardSync;
+		OnlineNnetIpcForwardClass *forward = new OnlineNnetIpcForwardClass(opts, *forward_sync[i], model_filename);
+		OnlineNnetIpcDataClass *data = new OnlineNnetIpcDataClass(opts, client_list[i], *forward_sync[i]);
 		// The initialization of the following class spawns the threads that
 		// process the examples.  They get re-joined in its destructor.
 		// MultiThreader<OnlineNnetIpcForwardingClass> m(1, *forward_thread[i]);
-		forward_thread[i] = new  MultiThreader<OnlineNnetIpcForwardingClass>(1, *forwarding);
+		forward_thread[i] = new  MultiThreader<OnlineNnetIpcForwardClass>(1, *forward);
+		data_thread[i] = new  MultiThreader<OnlineNnetIpcDataClass>(1, *data);
     }
 
 
@@ -127,15 +132,22 @@ int main(int argc, char *argv[]) {
 
             client_list[num_threads].resize(num_stream, NULL);
 			client_list[num_threads][0] = client;
+
     		// initialize forward thread
-		    OnlineNnetIpcForwardingClass *forwarding = new OnlineNnetIpcForwardingClass(opts, client_list[num_threads], forward_sync, model_filename);
-		    forward_thread[num_threads] = new  MultiThreader<OnlineNnetIpcForwardingClass>(1, *forwarding);
+			forward_sync[num_threads] = new IpcForwardSync;
+		    OnlineNnetIpcForwardClass *forward = new OnlineNnetIpcForwardClass(opts, *forward_sync[num_threads], model_filename);
+		    OnlineNnetIpcDataClass *data = new OnlineNnetIpcDataClass(opts, client_list[num_threads], *forward_sync[num_threads]);
+		    forward_thread[num_threads] = new  MultiThreader<OnlineNnetIpcForwardClass>(1, *forward);
+		    data_thread[num_threads] = new  MultiThreader<OnlineNnetIpcDataClass>(1, *data);
             num_threads++;
     	}
     }
 
-    for (int i = 0; i < forward_thread.size(); i++)
+    for (int i = 0; i < forward_thread.size(); i++) {
         delete forward_thread[i];
+        delete data_thread[i];
+        delete forward_sync[i];
+    }
 
     KALDI_LOG << "Nnet Forward FINISHED; ";
 
