@@ -48,7 +48,7 @@ struct OnlineLatticeFasterDecoderOptions : public LatticeFasterDecoderConfig {
 	    max_beam_update(0.05), cutoff("hybrid") {}
 
 	  void Register(OptionsItf *opts, bool full = true) {
-	    FasterDecoderOptions::Register(opts, full);
+	    LatticeFasterDecoderConfig::Register(opts);
 	    opts->Register("rt-min", &rt_min,
 	                   "Approximate minimum decoding run time factor");
 	    opts->Register("rt-max", &rt_max,
@@ -70,7 +70,7 @@ struct OnlineLatticeFasterDecoderOptions : public LatticeFasterDecoderConfig {
 };
 
 template <typename FST>
-class OnlineLatticeFasterDecoder : public LatticeFasterOnlineDecoderTpl<FST> {
+class OnlineLatticeFasterDecoderTpl : public LatticeFasterOnlineDecoderTpl<FST> {
 public:
 	// Codes returned by Decode() to show the current state of the decoder
 	enum DecodeState {
@@ -79,10 +79,17 @@ public:
 		kEndBatch = 3, // End of batch - end of utterance not reached yet
 	};
 
-	OnlineLatticeFasterDecoder(const FST &fst,
+    using Arc = typename FST::Arc;
+    using Label = typename Arc::Label;
+    using StateId = typename Arc::StateId;
+    using Weight = typename Arc::Weight;
+    //using Token = decoder::BackpointerToken;
+    using Token = typename kaldi::LatticeFasterOnlineDecoderTpl<FST>::Token;
+
+	OnlineLatticeFasterDecoderTpl(const FST &fst,
 							   const OnlineLatticeFasterDecoderOptions &opts):
 								   LatticeFasterOnlineDecoderTpl<FST>(fst, opts),
-								opts_(opts), max_beam_(opts.beam), effective_beam_(FasterDecoder::config_.beam),
+								opts_(opts), 
 								state_(kStartFeats), frame_(0), utt_frames_(0),
 								immortal_tok_(NULL), prev_immortal_tok_(NULL) {
 								}
@@ -126,17 +133,15 @@ private:
 
 
 	const OnlineLatticeFasterDecoderOptions &opts_;
-	const BaseFloat max_beam_; // the maximum allowed beam
-	BaseFloat &effective_beam_; // the currently used beam
 	DecodeState state_; // the current state of the decoder
 	int32 frame_; // the next frame to be processed
 	int32 utt_frames_; // # frames processed from the current utterance
 	Token *immortal_tok_;      // "immortal" token means it's an ancestor of ...
 	Token *prev_immortal_tok_; // ... all currently active tokens
-	KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineLatticeFasterDecoder);
+	KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineLatticeFasterDecoderTpl);
 };
 
-typedef OnlineLatticeFasterDecoder<fst::StdFst> OnlineLatticeFasterDecoder;
+typedef OnlineLatticeFasterDecoderTpl<fst::StdFst> OnlineLatticeFasterDecoder;
 
 
 } // namespace kaldi

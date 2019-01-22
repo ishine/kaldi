@@ -30,14 +30,10 @@
 namespace kaldi {
 
 template <typename FST>
-void OnlineLatticeFasterDecoder<FST>::ResetDecoder(bool full) {
-  ClearToks(toks_.Clear());
-  StateId start_state = fst_.Start();
-  KALDI_ASSERT(start_state != fst::kNoStateId);
-  Arc dummy_arc(0, 0, Weight::One(), start_state);
-  Token *dummy_token = new Token(dummy_arc, NULL);
-  toks_.Insert(start_state, dummy_token);
-  prev_immortal_tok_ = immortal_tok_ = dummy_token;
+void OnlineLatticeFasterDecoderTpl<FST>::ResetDecoder(bool full) {
+  this->InitDecoding();
+
+  //prev_immortal_tok_ = immortal_tok_ = dummy_token;
   utt_frames_ = 0;
   if (full)
     frame_ = 0;
@@ -46,7 +42,7 @@ void OnlineLatticeFasterDecoder<FST>::ResetDecoder(bool full) {
 
 
 template <typename FST>
-void OnlineLatticeFasterDecoder<FST>::MakeLattice(const Token *start,
+void OnlineLatticeFasterDecoderTpl<FST>::MakeLattice(const Token *start,
                                  const Token *end,
                                  fst::MutableFst<LatticeArc> *out_fst) const {
   out_fst->DeleteStates();
@@ -88,7 +84,7 @@ void OnlineLatticeFasterDecoder<FST>::MakeLattice(const Token *start,
 }
 
 template <typename FST>
-void OnlineLatticeFasterDecoder<FST>::UpdateImmortalToken() {
+void OnlineLatticeFasterDecoderTpl<FST>::UpdateImmortalToken() {
   unordered_set<Token*> emitting;
   for (const Elem *e = toks_.GetList(); e != NULL; e = e->tail) {
     Token* tok = e->val;
@@ -126,7 +122,7 @@ void OnlineLatticeFasterDecoder<FST>::UpdateImmortalToken() {
 }
 
 template <typename FST>
-bool OnlineLatticeFasterDecoder<FST>::PartialTraceback(fst::MutableFst<LatticeArc> *out_fst) {
+bool OnlineLatticeFasterDecoderTpl<FST>::PartialTraceback(fst::MutableFst<LatticeArc> *out_fst) {
   UpdateImmortalToken();
   if(immortal_tok_ == prev_immortal_tok_)
     return false; //no partial traceback at that point of time
@@ -135,7 +131,7 @@ bool OnlineLatticeFasterDecoder<FST>::PartialTraceback(fst::MutableFst<LatticeAr
 }
 
 template <typename FST>
-void OnlineLatticeFasterDecoder<FST>::FinishTraceBack(fst::MutableFst<LatticeArc> *out_fst) {
+void OnlineLatticeFasterDecoderTpl<FST>::FinishTraceBack(fst::MutableFst<LatticeArc> *out_fst) {
   Token *best_tok = NULL;
   bool is_final = ReachedFinal();
   if (!is_final) {
@@ -157,7 +153,7 @@ void OnlineLatticeFasterDecoder<FST>::FinishTraceBack(fst::MutableFst<LatticeArc
 }
 
 template <typename FST>
-void OnlineLatticeFasterDecoder<FST>::TracebackNFrames(int32 nframes,
+void OnlineLatticeFasterDecoderTpl<FST>::TracebackNFrames(int32 nframes,
                                       fst::MutableFst<LatticeArc> *out_fst) {
   Token *best_tok = NULL;
   for (const Elem *e = toks_.GetList(); e != NULL; e = e->tail)
@@ -208,9 +204,9 @@ void OnlineLatticeFasterDecoder<FST>::TracebackNFrames(int32 nframes,
 }
 
 template <typename FST>
-void OnlineLatticeFasterDecoder<FST>::GetLattice(bool end_of_utterance,
+void OnlineLatticeFasterDecoderTpl<FST>::GetLattice(bool end_of_utterance,
 		CompactLattice *clat, const TransitionModel *trans_model) const {
-	if (NumFramesDecoded() == 0)
+	if (this->NumFramesDecoded() == 0)
 	  KALDI_ERR << "You cannot get a lattice if you decoded no frames.";
 	Lattice raw_lat;
 	this->GetRawLattice(&raw_lat, end_of_utterance);
@@ -225,8 +221,8 @@ void OnlineLatticeFasterDecoder<FST>::GetLattice(bool end_of_utterance,
 }
 
 template <typename FST>
-OnlineLatticeFasterDecoder<FST>::DecodeState
-OnlineLatticeFasterDecoder<FST>::Decode(DecodableInterface *decodable) {
+typename OnlineLatticeFasterDecoderTpl<FST>::DecodeState
+OnlineLatticeFasterDecoderTpl<FST>::Decode(DecodableInterface *decodable) {
   if (state_ == kEndFeats) // new utterance
     return state_;
 

@@ -54,7 +54,7 @@ public:
 
 	void operator () ()
 	{
-		typedef OnlineFasterDecoder::DecodeState DecodeState;
+		typedef OnlineLatticeFasterDecoder::DecodeState DecodeState;
 		fst::VectorFst<LatticeArc> out_fst;
 		std::vector<int> word_ids;
 		std::vector<int> tids;
