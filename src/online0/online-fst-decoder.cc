@@ -22,10 +22,14 @@
 namespace kaldi {
 
 OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
-		decoder_cfg_(cfg), decoder_opts_(cfg->decoder_opts_), forward_opts_(cfg->forward_opts_),
+		decoder_cfg_(cfg), fast_decoder_opts_(cfg->fast_decoder_opts_),
+		lat_decoder_opts_(cfg->lat_decoder_opts_),
+		forward_opts_(cfg->forward_opts_),
 		feature_opts_(cfg->feature_opts_), decoding_opts_(cfg->decoding_opts_),
 		trans_model_(cfg->trans_model_), decode_fst_(cfg->decode_fst_), word_syms_(cfg->word_syms_), 
-		block_(NULL), decodable_(NULL), decoder_(NULL), decoding_(NULL), decoder_thread_(NULL),
+		block_(NULL), decodable_(NULL),
+		fast_decoder_(NULL), fast_decoding_(NULL), fast_decoder_thread_(NULL),
+		lat_decoder_(NULL), lat_decoding_(NULL), lat_decoder_thread_(NULL),
 		feature_pipeline_(NULL), forward_(NULL), ipc_socket_(NULL),
 		words_writer_(NULL), alignment_writer_(NULL), state_(FEAT_START),
 		socket_sample_(NULL), sc_sample_buffer_(NULL), sc_buffer_size_(0),
@@ -40,12 +44,18 @@ void OnlineFstDecoder::Destory() {
         delete ipc_socket_; ipc_socket_ = NULL;
     }
 
-    if (decoder_thread_ != NULL) {
-        delete decoder_thread_; decoder_thread_ = NULL;
-		delete decoding_;	decoding_ = NULL;
-		delete decoder_;	decoder_ = NULL;
+    if (fast_decoder_thread_ != NULL) {
+        delete fast_decoder_thread_; fast_decoder_thread_ = NULL;
+		delete fast_decoding_;	fast_decoding_ = NULL;
+		delete fast_decoder_;	fast_decoder_ = NULL;
 		delete feature_pipeline_;	feature_pipeline_ = NULL;
     }
+
+	if (lat_decoder_thread_ != NULL) {
+		delete lat_decoder_thread_; lat_decoder_thread_ = NULL;
+		delete lat_decoding_;	lat_decoding_ = NULL;
+		delete lat_decoder_;	lat_decoder_ = NULL;
+	}
 
     if (forward_ != NULL) {
     	delete forward_;	forward_ = NULL;
@@ -119,11 +129,17 @@ void OnlineFstDecoder::InitDecoder() {
 		KALDI_ERR << "No forward conf or ipc socket forward file path";
 
 	// decoder
-	decoder_ = new OnlineNnetFasterDecoder(*decode_fst_, *decoder_opts_);
-	decoding_ = new OnlineNnetDecodingClass(*decoding_opts_,
-		    								decoder_, decodable_, &repository_, ipc_socket_,
-											&result_);
-	decoder_thread_ = new MultiThreader<OnlineNnetDecodingClass>(1, *decoding_);
+	if (decoding_opts_->use_lat) {
+		lat_decoder_ = new OnlineLatticeFasterDecoder(*decode_fst_, *lat_decoder_opts_);
+		lat_decoding_ = new OnlineNnetLatticeDecodingClass(*decoding_opts_, lat_decoder_,
+				decodable_, &repository_, ipc_socket_, &result_);
+		lat_decoder_thread_ = new MultiThreader<OnlineNnetLatticeDecodingClass>(1, *lat_decoding_);
+	} else {
+		fast_decoder_ = new OnlineFasterDecoder(*decode_fst_, *fast_decoder_opts_);
+		fast_decoding_ = new OnlineNnetDecodingClass(*decoding_opts_, fast_decoder_,
+				decodable_, &repository_, ipc_socket_, &result_);
+		fast_decoder_thread_ = new MultiThreader<OnlineNnetDecodingClass>(1, *fast_decoding_);
+	}
 
 	if (decoding_opts_->chunk_length_secs > 0) {
 		chunk_length_ = int32(feature_opts_->samp_freq * decoding_opts_->chunk_length_secs);
