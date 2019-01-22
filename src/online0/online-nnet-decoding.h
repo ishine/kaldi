@@ -26,7 +26,7 @@
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
 
-#include "online0/online-nnet-faster-decoder.h"
+#include "online0/online-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
 
@@ -55,6 +55,7 @@ struct OnlineNnetDecodingOptions {
 	bool copy_posterior;
     bool skip_inner;
     bool use_ipc;
+    bool use_lat;
     std::string socket_path;
 	std::string silence_phones_str;
 
@@ -67,7 +68,7 @@ struct OnlineNnetDecodingOptions {
 
 	OnlineNnetDecodingOptions(): decoder_cfg(""), forward_cfg(""),
 							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(18), out_dim(0),
-							skip_frames(1), copy_posterior(true), skip_inner(false), use_ipc(false),
+							skip_frames(1), copy_posterior(true), skip_inner(false), use_ipc(false), use_lat(false),
 							socket_path(""), silence_phones_str(""), word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
                             words_wspecifier(""), alignment_wspecifier(""), model_type("hybrid")
     { }
@@ -91,6 +92,7 @@ struct OnlineNnetDecodingOptions {
 	    po->Register("copy-posterior", &copy_posterior, "Copy posterior for skip frames output");
 	    po->Register("skip-inner", &skip_inner, "skip frame in neural network inner or input");
 	    po->Register("use-ipc", &use_ipc, "Use ipc neural network forward");
+	    po->Register("use-lat", &use_lat, "Use lattice decoder");
 	    po->Register("socket-path", &socket_path, "ipc socket file path");
 		po->Register("silence-phones", &silence_phones_str,
                      "Colon-separated list of integer ids of silence phones, e.g. 1:2:3");
@@ -143,7 +145,7 @@ class OnlineNnetDecodingClass : public MultiThreadable
 {
 public:
 	OnlineNnetDecodingClass(const OnlineNnetDecodingOptions &opts,
-			OnlineNnetFasterDecoder *decoder,
+			OnlineFasterDecoder *decoder,
 			OnlineDecodableInterface *decodable,
 			Repository *repository,
 			UnixDomainSocket *ipc_socket,
@@ -157,7 +159,7 @@ public:
 
 	void operator () ()
 	{
-		typedef OnlineNnetFasterDecoder::DecodeState DecodeState;
+		typedef OnlineFasterDecoder::DecodeState DecodeState;
 		fst::VectorFst<LatticeArc> out_fst;
 		std::vector<int> word_ids;
 		std::vector<int> tids;
@@ -271,7 +273,7 @@ private:
     }
 
 	const OnlineNnetDecodingOptions &opts_;
-	OnlineNnetFasterDecoder *decoder_;
+	OnlineFasterDecoder *decoder_;
 	OnlineDecodableInterface *decodable_;
 	Repository *repository_;
 	UnixDomainSocket *ipc_socket_;

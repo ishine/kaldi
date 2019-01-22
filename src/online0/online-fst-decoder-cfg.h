@@ -21,21 +21,23 @@
 
 #include "fstext/fstext-lib.h"
 #include "decoder/decodable-matrix.h"
+#include "online-faster-decoder.h"
 #include "util/kaldi-semaphore.h"
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
 
-#include "online0/online-nnet-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
 #include "online0/online-nnet-decoding.h"
+#include "online0/online-nnet-lattice-decoding.h"
 
 namespace kaldi {
 
 class OnlineFstDecoderCfg {
 
 public:
-	OnlineNnetFasterDecoderOptions *decoder_opts_;
+	OnlineFasterDecoderOptions *fast_decoder_opts_;
+	OnlineLatticeFasterDecoderOptions *lat_decoder_opts_;
 	OnlineNnetForwardOptions *forward_opts_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;

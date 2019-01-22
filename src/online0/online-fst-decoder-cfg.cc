@@ -22,7 +22,8 @@
 namespace kaldi {
 
 OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
-		decoder_opts_(NULL), forward_opts_(NULL), feature_opts_(NULL), decoding_opts_(NULL),
+		fast_decoder_opts_(NULL), lat_decoder_opts_(NULL), forward_opts_(NULL),
+		feature_opts_(NULL), decoding_opts_(NULL),
 		trans_model_(NULL), decode_fst_(NULL), word_syms_(NULL) {
 
 	// main config
@@ -30,10 +31,16 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 	ReadConfigFromFile(cfg, decoding_opts_);
 
 	// decoder feature forward config
-	decoder_opts_ = new OnlineNnetFasterDecoderOptions;
+	fast_decoder_opts_ = new OnlineFasterDecoderOptions;
+	lat_decoder_opts_ = new OnlineLatticeFasterDecoderOptions;
 	forward_opts_ = new OnlineNnetForwardOptions;
 	feature_opts_ = new OnlineNnetFeaturePipelineOptions(decoding_opts_->feature_cfg);
-	ReadConfigFromFile(decoding_opts_->decoder_cfg, decoder_opts_);
+
+	if (decoding_opts_->use_lat)
+		ReadConfigFromFile(decoding_opts_->decoder_cfg, lat_decoder_opts_);
+	else
+		ReadConfigFromFile(decoding_opts_->decoder_cfg, fast_decoder_opts_);
+
 	if (decoding_opts_->forward_cfg != "")
 		ReadConfigFromFile(decoding_opts_->forward_cfg, forward_opts_);
     
@@ -42,8 +49,9 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 }
 
 void OnlineFstDecoderCfg::Destory() {
-	if (decoder_opts_ != NULL) {
-		delete decoder_opts_;	decoder_opts_ = NULL;
+	if (decoding_opts_ != NULL) {
+		delete fast_decoder_opts_;	fast_decoder_opts_ = NULL;
+		delete lat_decoder_opts_;	lat_decoder_opts_ = NULL;
 		delete forward_opts_;	forward_opts_ = NULL;
 		delete feature_opts_;	feature_opts_ = NULL;
 		delete decoding_opts_;	decoding_opts_ = NULL;
@@ -66,7 +74,7 @@ void OnlineFstDecoderCfg::Initialize() {
 	}
 
 	// HCLG fst graph
-	decode_fst_ = fst::ReadFstKaldi(decoding_opts_->fst_rspecifier);
+	decode_fst_ = fst::ReadFstKaldiGeneric(decoding_opts_->fst_rspecifier);
 	if (!(word_syms_ = fst::SymbolTable::ReadText(decoding_opts_->word_syms_filename)))
 		KALDI_ERR << "Could not read symbol table from file " << decoding_opts_->word_syms_filename;
 }

@@ -1,4 +1,4 @@
-// online0/online-nnet-faster-decoder.h
+// online0/online-faster-decoder.h
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -17,8 +17,8 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ONLINE0_ONLINE_NNET_FASTER_DECODER_H_
-#define ONLINE0_ONLINE_NNET_FASTER_DECODER_H_
+#ifndef ONLINE0_ONLINE_FASTER_DECODER_H_
+#define ONLINE0_ONLINE_FASTER_DECODER_H_
 
 #include "util/stl-utils.h"
 #include "decoder/faster-decoder.h"
@@ -30,7 +30,7 @@ namespace kaldi {
 // Extends the definition of FasterDecoder's options to include additional
 // parameters. The meaning of the "beam" option is also redefined as
 // the _maximum_ beam value allowed.
-struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
+struct OnlineFasterDecoderOptions : public FasterDecoderOptions {
 	  BaseFloat rt_min; // minimum decoding runtime factor
 	  BaseFloat rt_max; // maximum decoding runtime factor
 	  int32 batch_size; // number of features decoded in one go
@@ -41,7 +41,7 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	  BaseFloat max_beam_update; // maximum rate of beam adjustment
 	  std::string cutoff;
 
-	  OnlineNnetFasterDecoderOptions() :
+	  OnlineFasterDecoderOptions() :
 	    rt_min(0.7), rt_max(0.75), batch_size(18),
 	    inter_utt_sil(50), max_utt_len_(1500),
 	    update_interval(3), beam_update(0.01),
@@ -69,7 +69,7 @@ struct OnlineNnetFasterDecoderOptions : public FasterDecoderOptions {
 	  }
 };
 
-class OnlineNnetFasterDecoder : public FasterDecoder {
+class OnlineFasterDecoder : public FasterDecoder {
 
 
 public:
@@ -80,8 +80,8 @@ public:
 		kEndBatch = 3, // End of batch - end of utterance not reached yet
 	};
 
-	OnlineNnetFasterDecoder(const fst::Fst<fst::StdArc> &fst,
-							const OnlineNnetFasterDecoderOptions &opts):
+	OnlineFasterDecoder(const fst::Fst<fst::StdArc> &fst,
+							const OnlineFasterDecoderOptions &opts):
 								FasterDecoder(fst, opts), opts_(opts),
 								max_beam_(opts.beam), effective_beam_(FasterDecoder::config_.beam),
 								state_(kStartFeats), frame_(0), utt_frames_(0),
@@ -120,7 +120,7 @@ private:
 	void UpdateImmortalToken();
 
 
-	const OnlineNnetFasterDecoderOptions &opts_;
+	const OnlineFasterDecoderOptions &opts_;
 	const BaseFloat max_beam_; // the maximum allowed beam
 	BaseFloat &effective_beam_; // the currently used beam
 	DecodeState state_; // the current state of the decoder
@@ -128,11 +128,11 @@ private:
 	int32 utt_frames_; // # frames processed from the current utterance
 	Token *immortal_tok_;      // "immortal" token means it's an ancestor of ...
 	Token *prev_immortal_tok_; // ... all currently active tokens
-	KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNnetFasterDecoder);
+	KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineFasterDecoder);
 };
 
 }	 // namespace kaldi
 
 
 
-#endif /* ONLINE0_ONLINE_NNET_FASTER_DECODER_H_ */
+#endif /* ONLINE0_ONLINE_FASTER_DECODER_H_ */

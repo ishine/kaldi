@@ -21,16 +21,17 @@
 
 #include "fstext/fstext-lib.h"
 #include "decoder/decodable-matrix.h"
+#include "online-faster-decoder.h"
 #include "util/kaldi-semaphore.h"
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
 
 #include "online0/online-fst-decoder-cfg.h"
 
-#include "online0/online-nnet-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
 #include "online0/online-nnet-decoding.h"
+#include "online0/online-nnet-lattice-decoding.h"
 
 namespace kaldi {
 
@@ -62,7 +63,8 @@ private:
 	// read only decoder resources
 	OnlineFstDecoderCfg *decoder_cfg_;
 
-	OnlineNnetFasterDecoderOptions *decoder_opts_;
+	OnlineFasterDecoderOptions *fast_decoder_opts_;
+	OnlineLatticeFasterDecoderOptions *lat_decoder_opts_;
 	OnlineNnetForwardOptions *forward_opts_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;
@@ -77,9 +79,12 @@ private:
 
 	// decoder
 	Repository repository_;
-	OnlineNnetFasterDecoder *decoder_;
-	OnlineNnetDecodingClass *decoding_;
-	MultiThreader<OnlineNnetDecodingClass> *decoder_thread_;
+	OnlineFasterDecoder *fast_decoder_;
+	OnlineNnetDecodingClass *fast_decoding_;
+	MultiThreader<OnlineNnetDecodingClass> *fast_decoder_thread_;
+	OnlineLatticeFasterDecoder *lat_decoder_;
+	OnlineNnetLatticeDecodingClass *lat_decoding_;
+	MultiThreader<OnlineNnetLatticeDecodingClass> *lat_decoder_thread_;
 
 	// feature pipeline
 	OnlineNnetFeaturePipeline *feature_pipeline_;

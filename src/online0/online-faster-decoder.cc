@@ -1,4 +1,4 @@
-// online0/online-nnet-faster-decoder.cc
+// online0/online-faster-decoder.cc
 
 // Copyright 2012 Cisco Systems (author: Matthias Paulik)
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
@@ -22,13 +22,13 @@
 // limitations under the License.
 
 #include "base/timer.h"
-#include "online0/online-nnet-faster-decoder.h"
+#include "online0/online-faster-decoder.h"
 #include "fstext/fstext-utils.h"
 #include "hmm/hmm-utils.h"
 
 namespace kaldi {
 
-void OnlineNnetFasterDecoder::ResetDecoder(bool full) {
+void OnlineFasterDecoder::ResetDecoder(bool full) {
   ClearToks(toks_.Clear());
   StateId start_state = fst_.Start();
   KALDI_ASSERT(start_state != fst::kNoStateId);
@@ -44,7 +44,7 @@ void OnlineNnetFasterDecoder::ResetDecoder(bool full) {
 
 
 void
-OnlineNnetFasterDecoder::MakeLattice(const Token *start,
+OnlineFasterDecoder::MakeLattice(const Token *start,
                                  const Token *end,
                                  fst::MutableFst<LatticeArc> *out_fst) const {
   out_fst->DeleteStates();
@@ -86,7 +86,7 @@ OnlineNnetFasterDecoder::MakeLattice(const Token *start,
 }
 
 
-void OnlineNnetFasterDecoder::UpdateImmortalToken() {
+void OnlineFasterDecoder::UpdateImmortalToken() {
   unordered_set<Token*> emitting;
   for (const Elem *e = toks_.GetList(); e != NULL; e = e->tail) {
     Token* tok = e->val;
@@ -125,7 +125,7 @@ void OnlineNnetFasterDecoder::UpdateImmortalToken() {
 
 
 bool
-OnlineNnetFasterDecoder::PartialTraceback(fst::MutableFst<LatticeArc> *out_fst) {
+OnlineFasterDecoder::PartialTraceback(fst::MutableFst<LatticeArc> *out_fst) {
   UpdateImmortalToken();
   if(immortal_tok_ == prev_immortal_tok_)
     return false; //no partial traceback at that point of time
@@ -135,7 +135,7 @@ OnlineNnetFasterDecoder::PartialTraceback(fst::MutableFst<LatticeArc> *out_fst) 
 
 
 void
-OnlineNnetFasterDecoder::FinishTraceBack(fst::MutableFst<LatticeArc> *out_fst) {
+OnlineFasterDecoder::FinishTraceBack(fst::MutableFst<LatticeArc> *out_fst) {
   Token *best_tok = NULL;
   bool is_final = ReachedFinal();
   if (!is_final) {
@@ -158,7 +158,7 @@ OnlineNnetFasterDecoder::FinishTraceBack(fst::MutableFst<LatticeArc> *out_fst) {
 
 
 void
-OnlineNnetFasterDecoder::TracebackNFrames(int32 nframes,
+OnlineFasterDecoder::TracebackNFrames(int32 nframes,
                                       fst::MutableFst<LatticeArc> *out_fst) {
   Token *best_tok = NULL;
   for (const Elem *e = toks_.GetList(); e != NULL; e = e->tail)
@@ -209,8 +209,8 @@ OnlineNnetFasterDecoder::TracebackNFrames(int32 nframes,
 }
 
 
-OnlineNnetFasterDecoder::DecodeState
-OnlineNnetFasterDecoder::Decode(DecodableInterface *decodable) {
+OnlineFasterDecoder::DecodeState
+OnlineFasterDecoder::Decode(DecodableInterface *decodable) {
   if (state_ == kEndFeats) // new utterance
     return state_;
 
