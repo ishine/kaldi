@@ -96,14 +96,16 @@ public:
 
 	DecodeState Decode(DecodableInterface *decodable);
 
-	// Makes a linear graph, by tracing back from the last "immortal" token
-	// to the previous one
-	bool PartialTraceback(fst::MutableFst<LatticeArc> *out_fst);
+	/// Finalizes the decoding. Cleans up and prunes remaining tokens, so the
+	/// GetLattice() call will return faster.  You must not call this before
+	/// calling (TerminateDecoding() or InputIsFinished()) and then Wait().
+	void FinalizeDecoding();
 
-	// Makes a linear graph, by tracing back from the best currently active token
-	// to the last immortal token. This method is meant to be invoked at the end
-	// of an utterance in order to get the last chunk of the hypothesis
-	void FinishTraceBack(fst::MutableFst<LatticeArc> *fst_out);
+	/// Outputs an FST corresponding to the single best path through the current
+	/// lattice. If "use_final_probs" is true AND we reached the final-state of
+	/// the graph then it will include those as final-probs, else it will treat
+	/// all final-probs as one.
+	void GetBestPath(bool end_of_utterance, Lattice *best_path) const;
 
 	/// Gets the lattice.  The output lattice has any acoustic scaling in it
 	/// (which will typically be desirable in an online-decoding context); if you
@@ -119,17 +121,6 @@ public:
 
 private:
 
-	// Returns a linear fst by tracing back the last N frames, beginning
-	// from the best current token
-	void TracebackNFrames(int32 nframes, fst::MutableFst<LatticeArc> *out_fst);
-
-	// Makes a linear "lattice", by tracing back a path delimited by two tokens
-	void MakeLattice(const Token *start,
-				   const Token *end,
-				   fst::MutableFst<LatticeArc> *out_fst) const;
-
-	// Searches for the last token, ancestor of all currently active tokens
-	void UpdateImmortalToken();
 
 
 	const OnlineLatticeFasterDecoderOptions &opts_;

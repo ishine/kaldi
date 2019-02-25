@@ -21,6 +21,7 @@
 #define ONLINE0_ONLINE_NNET_LATTICE_DECODING_H_
 
 #include "fstext/fstext-lib.h"
+#include "lat/lattice-functions.h"
 #include "decoder/decodable-matrix.h"
 #include "util/kaldi-semaphore.h"
 #include "util/kaldi-mutex.h"
@@ -80,7 +81,6 @@ public:
 
 		// initialize decoder
 		decoder_->ResetDecoder(true);
-		decoder_->InitDecoding();
 		decodable_->Reset();
 
 		while (1) {
@@ -113,34 +113,33 @@ public:
 			while (decoder_->frame() < decodable_->NumFramesReady()) {
 				state = decoder_->Decode(decodable_);
 				if (state != DecodeState::kEndFeats) {
-					new_partial = decoder_->PartialTraceback(&out_fst);
+					decoder_->GetBestPath(false, &out_fst);
 				} else {
-					decoder_->FinishTraceBack(&out_fst);
+					decoder_->GetBestPath(true, &out_fst);
 				}
 
-                if (new_partial || state == DecodeState::kEndFeats) {
-                    tids.clear();
-                    word_ids.clear();
-				    fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, &weight);
+				word_ids.clear();
+				tids.clear();
+				fst::GetLinearSymbolSequence(out_fst, &tids, &word_ids, &weight);
+				result_->word_ids_ = word_ids;
+				result_->tids_ = tids;
 
-				    for (int i = 0; i < word_ids.size(); i++)
-					    result_->word_ids_.push_back(word_ids[i]);
-				    for (int i = 0; i < tids.size(); i++)
-					    result_->tids_.push_back(tids[i]);
-					result_->score_ += (-weight.Value1() - weight.Value2());
+                if (state == DecodeState::kEndFeats) {
                     result_->post_frames = decoder_->frame();
-                }
+                    result_->score_ = (-weight.Value1() - weight.Value2());
+                    result_->score_ /= result_->post_frames;
 
-				if (state == DecodeState::kEndFeats) {
-					result_->score_ /= result_->post_frames;
-					result_->isend = true;
-				}
+                    if (opts_.clat_wspecifier != "") {
+                    	decoder_->GetLattice(true, &result_->clat);
+                    	ScaleLattice(AcousticLatticeScale(1.0/opts_.acoustic_scale), &result_->clat);
+                    }
+                    result_->isend = true;
+                }
 			}
 
 			// new utterance, reset decoder
 			if (decodable_->IsLastFrame(decoder_->frame()-1)) {
 				decoder_->ResetDecoder(true);
-				decoder_->InitDecoding();
 				decodable_->Reset();
 			}
 		}

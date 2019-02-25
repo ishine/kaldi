@@ -64,6 +64,7 @@ struct OnlineNnetDecodingOptions {
 	std::string model_rspecifier;
 	std::string words_wspecifier;
 	std::string alignment_wspecifier;
+	std::string clat_wspecifier;
 	std::string model_type;  // hybrid, ctc
 
 	OnlineNnetDecodingOptions(): decoder_cfg(""), forward_cfg(""),
@@ -101,6 +102,7 @@ struct OnlineNnetDecodingOptions {
 	    po->Register("fst-rspecifier", &fst_rspecifier, "fst filename");
 	    po->Register("model-rspecifier", &model_rspecifier, "transition model filename");
 	    po->Register("words-wspecifier", &words_wspecifier, "transcript wspecifier");
+	    po->Register("clat_wspecifier", &clat_wspecifier, "compact lattice wspecifier");
 	    po->Register("alignment-wspecifier", &alignment_wspecifier, "alignment wspecifier");
 	}
 };
@@ -125,6 +127,7 @@ struct OnlineDecodableBlock {
 typedef struct Result_ {
 	std::vector<int> word_ids_;
 	std::vector<int> tids_;
+	CompactLattice clat;
 	std::string utt;
 	BaseFloat score_;
 	int num_frames;
