@@ -39,23 +39,24 @@ extern "C" {
                                     float cut_time = 6, int type = 1, int state = 2);
 
 	/// return xvector size
-	int  GetXvectorDim(void *lp_extractor);
+	int  GetXvectorDim(void *lp_extractor, int type = 2);
 
 	/// xvector: xvector for current utterance
-	/// type: plda(2)
+	/// type: raw(0), lda(1), plda(2)
 	int  GetCurrentXvector(void *lp_extractor, float *xvector, int type = 2);
 
 	/// compute two xvector similarity score
 	/// enroll: enroll or register xvector
 	/// eval: test or evaluate xvector
 	/// size: xvector size
-	/// type: plda(2)
+	/// type: raw(0), lda(1), plda(2)
 	float GetXvectorScore(void *lp_extractor, float *enroll, float *eval, int size,
 			int enroll_num = 1, int type = 2);
 
-	/// speaker enroll (unimplemented)
-	int GetEnrollSpeakerXvector(void *lp_extractor, float *spk_ivector, float *ivectors,
-		    int ivec_dim, int num_ivec, int type = 2);
+	/// speaker enroll
+	/// type: raw(0), lda(1), plda(2)
+	int GetEnrollSpeakerXvector(void *lp_extractor, float *spk_xvector, float *xvectors,
+		    int xvec_dim, int num_xvec, int type = 2);
 
 	/// in general, reset xvector extractor state when start a new utterance.
 	void ResetXvectorExtractor(void *lp_extractor);

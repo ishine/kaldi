@@ -89,9 +89,9 @@ int	XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes,
     return nbytes;
 }
 
-int GetXvectorDim(void *lp_extractor) {
+int GetXvectorDim(void *lp_extractor, int type) {
     OnlineXvectorExtractor *extractor = (OnlineXvectorExtractor *)lp_extractor;
-    return extractor->GetXvectorDim();
+    return extractor->GetXvectorDim(type);
 }
 
 int GetCurrentXvector(void *lp_extractor, float *result, int type) {
@@ -115,10 +115,21 @@ float GetXvectorScore(void *lp_extractor, float *enroll, float *eval,
 	return extractor->GetScore(vec1, enroll_num, vec2, type);
 }
 
-int GetEnrollSpeakerXvector(void *lp_extractor, float *spk_ivec, float *ivecs,
-		int ivec_dim, int num_ivec, int type) {
-	// Unimplemented now
-	return 0;
+int GetEnrollSpeakerXvector(void *lp_extractor, float *spk_xvec, float *xvecs,
+		int xvec_dim, int num_xvec, int type) {
+	OnlineXvectorExtractor *extractor = (OnlineXvectorExtractor *)lp_extractor;
+	std::vector<Vector<BaseFloat> > xvectors(num_xvec);
+	Vector<BaseFloat> spk_xvector;
+
+	for (int i = 0; i < num_xvec; i++) {
+		SubVector<BaseFloat> xvec(xvecs+i*xvec_dim, xvec_dim);
+		xvectors[i] = xvec;
+	}
+
+	extractor->GetEnrollSpeakerXvector(xvectors, spk_xvector, type);
+	int dim = spk_xvector.Dim();
+	memcpy(spk_xvec, spk_xvector.Data(), dim*sizeof(float));
+	return dim;
 }
 
 void ResetXvectorExtractor(void *lp_extractor) {

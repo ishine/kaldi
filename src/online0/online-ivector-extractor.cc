@@ -224,8 +224,7 @@ void OnlineIvectorExtractor::GetEnrollSpeakerIvector(const std::vector<Vector<Ba
 
 		if (type == 0) {
 			spk_ivector = mean_ivector;
-		}
-		else if (type == 1) {
+		} else if (type == 1) {
 			// normalize
 			ivector_feature_->LdaTransform(mean_ivector, spk_ivector);
 		}

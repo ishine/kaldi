@@ -133,7 +133,8 @@ void OnlineXvectorExtractor::XvectorLengthNormalize(Vector<BaseFloat> &xvector) 
 }
 
 // post processing
-void OnlineXvectorExtractor::XvectorPostProcess(const VectorBase<BaseFloat> &in, Vector<BaseFloat> &out, int type) {
+void OnlineXvectorExtractor::XvectorPostProcess(const VectorBase<BaseFloat> &in,
+		Vector<BaseFloat> &out, int type) {
 	int transform_rows, transform_cols, vec_dim;
 	Vector<BaseFloat> xvector_raw(in);
 	Vector<BaseFloat> xvector_lda;
@@ -158,10 +159,10 @@ void OnlineXvectorExtractor::XvectorPostProcess(const VectorBase<BaseFloat> &in,
 		}
 
 		final_xvec = &xvector_lda;
-	}
 
-	// normalize length
-	XvectorLengthNormalize(*final_xvec);
+		// normalize length
+		XvectorLengthNormalize(*final_xvec);
+	}
     out = *final_xvec;
 }
 
@@ -276,6 +277,7 @@ BaseFloat OnlineXvectorExtractor::GetScore(const VectorBase<BaseFloat> &train_xv
 
 	Vector<BaseFloat> train_post, test_post;
 
+	// extract xvector have post processed
 	if (!xvector_config_->use_post) {
 		XvectorPostProcess(train_xvec, train_post, type);
 		XvectorPostProcess(test_xvec, test_post, type);
@@ -304,22 +306,32 @@ BaseFloat OnlineXvectorExtractor::GetScore(const VectorBase<BaseFloat> &train_xv
 
 void OnlineXvectorExtractor::GetEnrollSpeakerXvector(const std::vector<Vector<BaseFloat> > &xvectors,
 											Vector<BaseFloat> &spk_xvector, int type) {
+	int size = xvectors.size();
+	if (size == 0)
+		return;
+
+	Vector<BaseFloat> mean_xvector(xvectors[0].Dim());
+	for (int i = 0; i < size; i++)
+		mean_xvector.AddVec(1.0, xvectors[i]);
+	// mean
+	mean_xvector.Scale(1.0/size);
+
+	// mean, lda, length normalization ...
+	XvectorPostProcess(mean_xvector, spk_xvector, type);
 }
 
-int OnlineXvectorExtractor::GetXvectorDim() {
+int OnlineXvectorExtractor::GetXvectorDim(int type) {
 	int raw_dim = forward_->OutputDim();
 	int lda_dim = lda_transform_.NumRows();
 	int plda_dim = plda_.Dim();
 
-	int xvec_dim = 0;
+	int xvec_dim = raw_dim;
 
-    if (xvector_config_->use_post) {
-	    if (plda_dim > 0)
-		    xvec_dim = plda_dim;
-	    else if (lda_dim > 0)
-		    xvec_dim = lda_dim;
-    } else
-		xvec_dim = raw_dim;
+	if (type == 1 && lda_dim > 0)
+		xvec_dim = lda_dim;
+	else if (type == 2 && plda_dim > 0)
+		xvec_dim = plda_dim;
+
 	return xvec_dim;
 }
 

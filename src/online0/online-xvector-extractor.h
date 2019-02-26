@@ -107,23 +107,24 @@ public:
 	int FeedData(void *data, int nbytes, FeatState state);
 
 	// get current frame xvector,
-	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector
+	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector;
 	Xvector* GetCurrentXvector(int type = 2);
 
 	// compute xvector score
-	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector
+	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector;
 	BaseFloat GetScore(const VectorBase<BaseFloat> &train_xvec, int num_utts,
 			const VectorBase<BaseFloat> &test_xvec, int type = 2);
 
 	// compute enroll xvector for a speaker
-	// type: 0, raw xvector; 1, lda transformed xvector
+	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector;
 	void GetEnrollSpeakerXvector(const std::vector<Vector<BaseFloat> > &xvectors,
-			Vector<BaseFloat> &spk_xvector, int type = 1);
+			Vector<BaseFloat> &spk_xvector, int type = 2);
 
 	// Reset Extractor
 	void Reset();
 
-	int GetXvectorDim();
+	// type: 0, raw xvector; 1, lda transformed xvector; 2, plda transformed xvector;
+	int GetXvectorDim(int type = 2);
     int GetAudioFrequency();
 
 private:
