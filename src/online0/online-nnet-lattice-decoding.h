@@ -55,13 +55,13 @@ public:
 
 	void operator () ()
 	{
+        using namespace fst;
 		typedef OnlineLatticeFasterDecoder::DecodeState DecodeState;
 		fst::VectorFst<LatticeArc> out_fst;
 		std::vector<int> word_ids;
 		std::vector<int> tids;
 		LatticeWeight weight;
 		DecodeState state;
-        bool new_partial = false;
 
 		OnlineDecodableBlock *block = NULL;
 		// ipc decodable
@@ -113,9 +113,9 @@ public:
 			while (decoder_->frame() < decodable_->NumFramesReady()) {
 				state = decoder_->Decode(decodable_);
 				if (state != DecodeState::kEndFeats) {
-					decoder_->GetBestPath(false, &out_fst);
+					decoder_->GetBestPath(&out_fst, false);
 				} else {
-					decoder_->GetBestPath(true, &out_fst);
+					decoder_->GetBestPath(&out_fst, true);
 				}
 
 				word_ids.clear();

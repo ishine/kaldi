@@ -86,9 +86,8 @@ public:
     //using Token = decoder::BackpointerToken;
     using Token = typename kaldi::LatticeFasterOnlineDecoderTpl<FST>::Token;
 
-	OnlineLatticeFasterDecoderTpl(const FST &fst,
-							   const OnlineLatticeFasterDecoderOptions &opts):
-								   LatticeFasterOnlineDecoderTpl<FST>(fst, opts),
+	OnlineLatticeFasterDecoderTpl(const FST &fst, const OnlineLatticeFasterDecoderOptions &opts):
+								LatticeFasterOnlineDecoderTpl<FST>(fst, opts),
 								opts_(opts), 
 								state_(kStartFeats), frame_(0), utt_frames_(0),
 								immortal_tok_(NULL), prev_immortal_tok_(NULL) {
@@ -100,12 +99,6 @@ public:
 	/// GetLattice() call will return faster.  You must not call this before
 	/// calling (TerminateDecoding() or InputIsFinished()) and then Wait().
 	void FinalizeDecoding();
-
-	/// Outputs an FST corresponding to the single best path through the current
-	/// lattice. If "use_final_probs" is true AND we reached the final-state of
-	/// the graph then it will include those as final-probs, else it will treat
-	/// all final-probs as one.
-	void GetBestPath(bool end_of_utterance, Lattice *best_path) const;
 
 	/// Gets the lattice.  The output lattice has any acoustic scaling in it
 	/// (which will typically be desirable in an online-decoding context); if you
@@ -133,7 +126,6 @@ private:
 };
 
 typedef OnlineLatticeFasterDecoderTpl<fst::StdFst> OnlineLatticeFasterDecoder;
-
 
 } // namespace kaldi
 

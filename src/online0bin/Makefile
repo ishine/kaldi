@@ -7,9 +7,9 @@ LDFLAGS += $(CUDA_LDFLAGS)
 LDLIBS += $(CUDA_LDLIBS)
 LDLIBS += $(MPICH_LDLIBS)
 
-BINFILES = pid-test online-nnet-ipc-decoder  online-nnet-ipc-forward \
-		   online-nnet-wav-decoder  online-feature-extractor online-decoder-test \
-		   online-fast-decoder online-ivector-extractor-test online-ivector-enroll-test \
+BINFILES = pid-test online-nnet-ipc-forward online-nnet-ipc-forward1 \
+		   online-feature-extractor online-decoder-test \
+		   online-ivector-extractor-test online-ivector-enroll-test \
 		   online-xvector-extractor-test online-xvector-score-test
 
 OBJFILES =

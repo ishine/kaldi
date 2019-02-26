@@ -7,7 +7,8 @@ LDLIBS += $(CUDA_LDLIBS)
 
 TESTFILES =
 
-OBJFILES = online-util.o online-nnet-faster-decoder.o online-feature.o \
+OBJFILES = online-util.o online-feature.o \
+		   online-faster-decoder.o online-lattice-faster-decoder.o \
 		   online-nnet-feature-pipeline.o online-fst-decoder-cfg.o online-fst-decoder.o \
 		   online-ivector-feature.o online-ivector-extractor.o online-xvector-extractor.o \
 		   speex-ogg-dec.o online-speex-wrapper.o decoder_export.o ivector_export.o xvector_export.o

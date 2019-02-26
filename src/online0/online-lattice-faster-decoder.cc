@@ -46,11 +46,6 @@ void OnlineLatticeFasterDecoderTpl<FST>::FinalizeDecoding() {
 }
 
 template <typename FST>
-void OnlineLatticeFasterDecoderTpl<FST>::GetBestPath(bool end_of_utterance, Lattice *best_path) const {
-  this->GetBestPath(best_path, end_of_utterance);
-}
-
-template <typename FST>
 void OnlineLatticeFasterDecoderTpl<FST>::GetLattice(bool end_of_utterance,
 		CompactLattice *clat, const TransitionModel *trans_model) const {
 	if (this->NumFramesDecoded() == 0)
@@ -82,5 +77,12 @@ OnlineLatticeFasterDecoderTpl<FST>::Decode(DecodableInterface *decodable) {
 
   return state_;
 }
+
+
+// Instantiate the template for the FST types that we'll need.
+template class OnlineLatticeFasterDecoderTpl<fst::Fst<fst::StdArc> >;
+template class OnlineLatticeFasterDecoderTpl<fst::VectorFst<fst::StdArc> >;
+template class OnlineLatticeFasterDecoderTpl<fst::ConstFst<fst::StdArc> >;
+template class OnlineLatticeFasterDecoderTpl<fst::GrammarFst>;
 
 } // namespace kaldi
