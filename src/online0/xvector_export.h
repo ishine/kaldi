@@ -36,9 +36,10 @@ extern "C" {
 	/// type:  ogg(0), pcm(1), raw feature(2, e.g.fbank, plp, mfcc)
 	///	state: start(0), append(1), end(2)
 	int  XvectorExtractorFeedData(void *lp_extractor, const void *data, int nbytes, 
-                                    float cut_time = 6, int type = 1, int state = 2);
+                                    float cut_time = 4, int type = 1, int state = 2);
 
 	/// return xvector size
+	/// type: raw(0), lda(1), plda(2)
 	int  GetXvectorDim(void *lp_extractor, int type = 2);
 
 	/// xvector: xvector for current utterance
