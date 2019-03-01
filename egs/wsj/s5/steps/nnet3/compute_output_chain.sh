@@ -10,11 +10,11 @@
 stage=1
 nj=1 # number of jobs.  
 cmd=run.pl
-use_gpu=true
+use_gpu=false
 frames_per_chunk=150
 iter=final
 extra_left_context=49
-extra_right_context=0
+extra_right_context=49
 extra_left_context_initial=0
 extra_right_context_final=0
 frame_subsampling_factor=3
@@ -54,7 +54,7 @@ fdir=`perl -e '($dir,$pwd)= @ARGV; if($dir!~m:^/:) { $dir = "$pwd/$dir"; } print
 
 model=$srcdir/$iter.raw
 if [ ! -f $srcdir/$iter.raw ]; then
-  echo "$0: WARNING: no such file $srcdir/$iter.raw. Trying $srcdir/$iter.mdl instead." && exit 1
+  echo "$0: WARNING: no such file $srcdir/$iter.raw. Trying $srcdir/$iter.mdl instead."
   model=$srcdir/$iter.mdl
 fi
 

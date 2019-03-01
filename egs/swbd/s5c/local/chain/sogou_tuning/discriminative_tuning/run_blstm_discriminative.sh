@@ -20,7 +20,7 @@ cleanup=false  # run with --cleanup true --stage 6 to clean up (remove large thi
                # alignments and degs).
 
 # Frame chunk options that will be used for blstm models.
-frames_per_chunk=10000
+frames_per_chunk=150
 extra_left_context=50
 extra_right_context=50
 extra_left_context_initial=0
@@ -30,8 +30,8 @@ extra_right_context_final=0
 . ./path.sh
 . ./utils/parse_options.sh
 
-srcdir=exp/chain/9tdnn_4blstm_56M_7300h
-train_data_dir=data/train_sogou_fbank_1000h_4dt
+srcdir=exp/chain/3tdnn_3blstm_4w5
+train_data_dir=data/train_sogou_fbank_trapen2_dt_3w5_leval_2-1
 online_ivector_dir=
 degs_dir=                     # If provided, will skip the degs directory creation
 lats_dir=                     # If provided, will skip denlats creation
@@ -104,7 +104,7 @@ if [ $frame_subsampling_factor -ne 1 ]; then
 
   train_data_dir=${train_data_dir}_fs
 
-  affix=_fs
+  affix=_fs_leval_2-1
 fi
 
 ##rm ${online_ivector_dir}_fs/ivector_online.scp 2>/dev/null || true
@@ -116,7 +116,7 @@ fi
 if [ $stage -le 1 ]; then
   # hardcode no-GPU for alignment, although you could use GPU [you wouldn't
   # get excellent GPU utilization though.]
-  nj=24 # have a high number of jobs because this could take a while, and we might
+  nj=40 # have a high number of jobs because this could take a while, and we might
          # have some stragglers.
   steps/nnet3/align.sh  --cmd "$decode_cmd" --use-gpu true \
     $context_opts \
@@ -177,34 +177,37 @@ if [ $stage -le 4 ]; then
     --criterion $criterion --drop-frames true --acoustic-scale 1.0 \
     --num-epochs $num_epochs --one-silence-class $one_silence_class --minibatch-size $minibatch_size \
     --num-jobs-nnet $num_jobs_nnet --num-threads $num_threads \
-    --keep-model-iters 50 \
+    --keep-model-iters 100 \
     --regularization-opts "$regularization_opts" --use-frame-shift false \
       ${degs_dir} $dir ;
 fi
-exit 1;
-graph_dir=$srcdir/graph_offline
+testsets="testC1pen_0215eva_0.3m_sogou testC1pen_0215eva_1m_sogou testC1pen_0215eva_2m_sogou testRecordv2-dialog2-represent-long-0.3m_sogou testRecordv2-dialog2-interview-long-1m_sogou testRecordv2-dialog2-meeting-long-2m_sogou"
+decode_suff=0528_level-2-1
+graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
 if [ $stage -le 5 ]; then
-  for x in `seq $decode_start_epoch $num_epochs`; do
-    for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
-      (
-      iter=epoch$x_adj
-
-      steps/nnet3/decode_sogou.sh --nj 6 --cmd "$decode_cmd" --iter $iter \
-        --acwt 1.0 --post-decode-acwt 10.0 \
-        $context_opts \
-        $graph_dir data/${decode_set} dir/decode_${decode_set}_$iter ;
-      ) &
-    done
+  iter_opts=
+  if [ ! -z $decode_iter ]; then
+    iter_opts=" --iter $decode_iter "
+  fi
+  for decode_set in $testsets; do
+       steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
+          --nj 8 --cmd "$decode_cmd" $iter_opts \
+          --extra-left-context $extra_left_context  \
+          --extra-right-context $extra_right_context  \
+          --extra-left-context-initial 0 \
+          --extra-right-context-final 0 \
+          --frames-per-chunk 150 \
+         $graph_dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${decode_set} \
+         $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done
 fi
 wait;
-
+exit 1;
 if [ $stage -le 6 ] && $cleanup; then
   # if you run with "--cleanup true --stage 6" you can clean up.
   rm ${lats_dir}/lat.*.gz || true
   rm ${srcdir}_ali/ali.*.gz || true
   steps/nnet2/remove_egs.sh ${srcdir}_degs || true
 fi
-
 
 exit 0;
