@@ -798,4 +798,4 @@ void BatchedThreadedNnet3CudaPipeline::ExecuteWorker(int threadId) {
 }  // end namespace cuda_decoder
 }  // end namespace kaldi
 
-#endif  // HAVE_CUDA == 1
+//#endif  // HAVE_CUDA == 1

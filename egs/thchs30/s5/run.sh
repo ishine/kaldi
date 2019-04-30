@@ -5,10 +5,10 @@
 . ./path.sh
 
 H=`pwd`  #exp home
-n=8      #parallel jobs
+n=4      #parallel jobs
 
 #corpus and trans directory
-thchs=/nfs/public/materials/data/thchs30-openslr
+thchs=/home/liutuo/workspace/AI/kaldi/egs/thchs30/s5/thchs30-openslr
 
 #you can obtain the database by uncommting the following lines
 #[ -d $thchs ] || mkdir -p $thchs  || exit 1

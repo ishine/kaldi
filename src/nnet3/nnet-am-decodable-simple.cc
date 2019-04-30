@@ -135,6 +135,8 @@ void DecodableNnetSimple::EnsureFrameIsComputed(int32 subsampled_frame) {
     extra_right_context = opts_.extra_right_context_final;
   int32 left_context = nnet_left_context_ + extra_left_context,
       right_context = nnet_right_context_ + extra_right_context;
+
+  KALDI_VLOG(1) << "left context:" << left_context << ", right context:" << right_context;
   int32 first_input_frame = first_output_frame - left_context,
       last_input_frame = last_output_frame + right_context,
       num_input_frames = last_input_frame + 1 - first_input_frame;
@@ -142,6 +144,8 @@ void DecodableNnetSimple::EnsureFrameIsComputed(int32 subsampled_frame) {
   GetCurrentIvector(first_output_frame,
                     last_output_frame - first_output_frame,
                     &ivector);
+  KALDI_VLOG(1) << "num_input_frames:" << num_input_frames;
+  KALDI_VLOG(1) << "num_subsampled_frames:" << num_subsampled_frames;
 
   Matrix<BaseFloat> input_feats;
   if (first_input_frame >= 0 &&
@@ -221,7 +225,8 @@ void DecodableNnetSimple::DoNnetComputation(
   ComputationRequest request;
   request.need_model_derivative = false;
   request.store_component_stats = false;
-
+  KALDI_VLOG(1) << "DoNnetCompute input start at:" << input_t_start
+                << ", output start at: " << output_t_start;
   bool shift_time = true; // shift the 'input' and 'output' to a consistent
   // time, to take advantage of caching in the compiler.
   // An optimization.
@@ -273,6 +278,7 @@ void DecodableNnetSimple::DoNnetComputation(
   // the following statement just swaps the pointers if we're not using a GPU.
   cu_output.Swap(&current_log_post_);
   current_log_post_subsampled_offset_ = output_t_start / subsample;
+  KALDI_VLOG(1) << "current_log_post_subsampled_offset_: " << current_log_post_subsampled_offset_;
 }
 
 void DecodableNnetSimple::CheckAndFixConfigs() {

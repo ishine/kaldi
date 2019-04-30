@@ -149,3 +149,11 @@ GSYMS
 /tools/cub-1.8.0/
 /tools/cub
 /tools/python/
+
+cmake-build-debug/CMakeFiles/
+
+\.idea/
+
+cmake-build-debug/
+
+egs/

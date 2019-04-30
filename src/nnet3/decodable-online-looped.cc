@@ -149,6 +149,8 @@ void DecodableNnetLoopedOnlineBase::AdvanceChunk() {
     KALDI_ERR << "Attempt to access frame past the end of the available input";
   }
 
+  int32 chunk_size = end_input_frame - begin_input_frame;
+  KALDI_LOG << "num_chunks_computed: " << num_chunks_computed_ << "chunk size: " << chunk_size;
 
   CuMatrix<BaseFloat> feats_chunk;
   { // this block sets 'feats_chunk'.

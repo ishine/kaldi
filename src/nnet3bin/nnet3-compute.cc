@@ -51,7 +51,7 @@ int main(int argc, char *argv[]) {
     opts.acoustic_scale = 1.0; // by default do no scaling.
 
     bool apply_exp = false, use_priors = false;
-    std::string use_gpu = "yes";
+    std::string use_gpu = "no";
 
     std::string ivector_rspecifier,
                 online_ivector_rspecifier,

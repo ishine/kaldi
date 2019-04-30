@@ -4,18 +4,18 @@
 
 SHELL := /bin/bash
 
-SUBDIRS = base matrix util feat cudafeat tree gmm transform \
-          fstext hmm lm decoder lat kws cudamatrix nnet \
-          bin fstbin gmmbin fgmmbin featbin cudafeatbin \
-          nnetbin latbin sgmm2 sgmm2bin nnet2 nnet3 rnnlm chain nnet3bin nnet2bin kwsbin \
-          ivector ivectorbin online2 online2bin lmbin chainbin rnnlmbin \
-          cudadecoder cudadecoderbin
+SUBDIRS = base matrix util feat tree gmm transform \
+          fstext hmm lm decoder lat kws cudamatrix \
+          bin fstbin gmmbin fgmmbin featbin mace macebin \
+          latbin sgmm2 sgmm2bin chain kwsbin nnet nnet2 nnet3 \
+          ivector ivectorbin lmbin chainbin online2 online2bin rnnlm rnnlmbin
+# cudadecoder cudadecoderbin
 
-MEMTESTDIRS = base matrix util feat cudafeat tree gmm transform \
-          fstext hmm lm decoder lat nnet kws chain \
-          bin fstbin gmmbin fgmmbin featbin cudafeatbin \
-          nnetbin latbin sgmm2 nnet2 nnet3 rnnlm nnet2bin nnet3bin sgmm2bin kwsbin \
-          ivector ivectorbin online2 online2bin lmbin
+MEMTESTDIRS = base matrix util feat tree gmm transform \
+          fstext hmm lm decoder lat kws chain \
+          bin fstbin gmmbin fgmmbin featbin \
+          latbin sgmm2 sgmm2bin kwsbin \
+          ivector ivectorbin lmbin rnnlm rnnlmbin
 
 CUDAMEMTESTDIR = cudamatrix
 
@@ -31,7 +31,7 @@ include kaldi.mk
 
 # Reset the default goal, so that the all target will become default
 .DEFAULT_GOAL :=
-all: $(SUBDIRS) matrix/test
+all: $(SUBDIRS)
 	-echo Done
 
 mklibdir:
@@ -143,10 +143,10 @@ $(EXT_SUBDIRS) : checkversion kaldi.mk mklibdir ext_depend
 ### Dependency list ###
 # this is necessary for correct parallel compilation
 #1)The tools depend on all the libraries
-bin fstbin gmmbin fgmmbin sgmm2bin featbin cudafeatbin nnetbin nnet2bin nnet3bin chainbin latbin ivectorbin lmbin kwsbin online2bin rnnlmbin cudadecoderbin: \
+bin fstbin gmmbin fgmmbin sgmm2bin featbin cudafeatbin nnetbin nnet2bin nnet3bin chainbin latbin ivectorbin lmbin kwsbin online2bin rnnlmbin: \
  base matrix util feat cudafeat tree gmm transform sgmm2 fstext hmm \
- lm decoder lat cudamatrix nnet nnet2 nnet3 ivector chain kws online2 rnnlm \
- cudadecoder
+ lm decoder lat cudamatrix nnet nnet2 nnet3 ivector chain kws online2 rnnlm
+# cudadecoder
 
 #2)The libraries have inter-dependencies
 base: base/.depend.mk
@@ -172,10 +172,13 @@ ivector: base util matrix transform tree gmm
 #3)Dependencies for optional parts of Kaldi
 onlinebin: base matrix util feat tree gmm transform sgmm2 fstext hmm lm decoder lat cudamatrix nnet nnet2 online
 # python-kaldi-decoding: base matrix util feat tree gmm transform sgmm2 fstext hmm decoder lat online
-cudafeat: base matrix util gmm transform tree feat cudamatrix online2
-cudafeatbin: base matrix util gmm transform tree feat cudamatrix cudafeat online2
+#cudafeat: base matrix util gmm transform tree feat cudamatrix online2
+#cudafeatbin: base matrix util gmm transform tree feat cudamatrix cudafeat online2
 online: decoder gmm transform feat matrix util base lat hmm tree
 online2: decoder gmm transform feat matrix util base lat hmm tree ivector cudamatrix nnet2 nnet3 chain
 kws: base util hmm tree matrix lat
-cudadecoder:  cudamatrix cudafeat online2 nnet3 ivector feat fstext lat chain transform
-cudadecoderbin: cudadecoder cudafeat cudamatrix online2 nnet3 ivector feat fstext lat chain transform
+#cudadecoder:  cudamatrix cudafeat online2 nnet3 ivector feat fstext lat chain transform
+#cudadecoderbin: cudadecoder cudafeat cudamatrix online2 nnet3 ivector feat fstext lat chain transform
+#4)Dependencies for Kaldi-MACE
+mace: base util matrix decoder lat hmm cudamatrix fstext online2
+macebin: base util matrix cudamatrix ivector decoder lat hmm fstext online2 mace

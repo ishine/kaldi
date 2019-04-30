@@ -40,7 +40,7 @@ namespace nnet3 {
 // uses the 'looped' network evaluation, which is more efficient because it
 // re-uses hidden activations (and therefore doesn't have to pad chunks of data
 // with extra left-context); it is applicable to TDNNs and to forwards-recurrent
-// topologies like LSTMs, but not tobackwards-recurrent topologies such as
+// topologies like LSTMs, but not to backwards-recurrent topologies such as
 // BLSTMs.
 
 // The options are passed in the same way as in decodable-simple-looped.h,

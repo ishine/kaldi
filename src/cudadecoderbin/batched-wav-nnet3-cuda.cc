@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#if HAVE_CUDA == 1
+//#if HAVE_CUDA == 1
 
 #include <cuda.h>
 #include <cuda_profiler_api.h>
@@ -331,4 +331,4 @@ int main(int argc, char *argv[]) {
   }
 } // main()
 
-#endif  // if HAVE_CUDA == 1
+//#endif  // if HAVE_CUDA == 1

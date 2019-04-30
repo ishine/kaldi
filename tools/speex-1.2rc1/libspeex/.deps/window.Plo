@@ -1,0 +1,12 @@
+window.lo: window.c /usr/include/stdc-predef.h ../config.h arch.h \
+ ../include/speex/speex_types.h ../include/speex/speex_config_types.h
+
+/usr/include/stdc-predef.h:
+
+../config.h:
+
+arch.h:
+
+../include/speex/speex_types.h:
+
+../include/speex/speex_config_types.h:

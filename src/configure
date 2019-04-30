@@ -97,6 +97,7 @@ Configuration options:
   --host=HOST           Host triple in the format 'cpu-vendor-os'
                         If provided, it is prepended to all toolchain programs.
   --android-incdir=DIR  Android include directory
+  --mace-libdir=DIR     MACE library directory
 
 Following environment variables can be used to override the default toolchain.
   CXX         C++ compiler [default=g++]
@@ -708,6 +709,34 @@ function linux_configure_atlas_static {
   echo "Successfully configured for Linux [static libraries] with ATLASLIBS =$ATLASLIBS"
 }
 
+function linux_configure_mace {
+  # Check whether the user has called tools/extras/install_speex.sh or not
+  [ ! -z "$MACELIBDIR" ] || MACELIBDIR=`pwd`/../src/lib
+  static_mace=$1
+  if [ "foo"$static_mace == "foo" ]; then
+    static_mace=false
+  fi
+
+  if $static_mace; then
+    mace_type=a
+  else
+    mace_type=so
+  fi
+
+  if [ ! -f "$MACELIBDIR/libmace.${mace_type}" ]; then
+    failure "Could not find the Mace library $MACELIBDIR/libmace.${mace_type}"
+  else
+    echo >> kaldi.mk
+    if $static_mace; then
+      echo LDLIBS += $MACELIBDIR/libmace.a
+    else
+      echo LDLIBS += -L${MACELIBDIR} -lmace >> kaldi.mk
+      echo LDFLAGS += -Wl,-rpath=${MACELIBDIR} >> kaldi.mk
+    fi
+    echo "Successfully configured with Mace at $MACELIBDIR, (static=[$static_mace])"
+  fi
+}
+
 #############################    CONFIGURATION    #############################
 
 # If configuration sets any of these variables, we will switch the external
@@ -719,6 +748,7 @@ MATHLIB=
 MKLLIBDIR=
 MKLROOT=
 OPENBLASROOT=
+MACELIBDIR=
 
 # This variable identifies the type of system where built programs and
 # libraries will run. It is set by the configure script when cross compiling.
@@ -747,6 +777,7 @@ static_math=false
 threaded_atlas=false
 mkl_threading=sequential
 android=false
+use_mace=false
 
 FSTROOT=`rel2abs ../tools/openfst`
 CUBROOT=`rel2abs ../tools/cub`
@@ -893,10 +924,23 @@ do
     threaded_math=false;
     static_math=true;
     static_fst=true;
-    dynamic_kaldi=false;
+    dynamic_kaldi=true;
     MATHLIB='OPENBLAS';
     GetSwitchExistingPathOrDie ANDROIDINC "$1"
     shift;;
+  --mace-libdir=*)
+    use_mace=true
+    GetSwitchExistingPathOrDie MACELIBDIR "$1"
+    shift ;;
+  --use-mace)
+    use_mace=true;
+    shift ;;
+  --use-mace=yes)
+    use_mace=true;
+    shift ;;
+  --use-mace=no)
+    use_mace=false;
+    shift ;;
   *)  echo "Unknown argument: $1, exiting"; usage; exit 1 ;;
   esac
 done
@@ -1079,7 +1123,6 @@ else
   echo "CUBROOT = $CUBROOT" >> kaldi.mk
 fi
 
-
 # OS-specific steps given below append to kaldi.mk
 echo "Doing OS specific configurations ..."
 
@@ -1108,6 +1151,8 @@ if $android ; then
   echo "ANDROIDINC = $ANDROIDINC" >> kaldi.mk
 
   cat makefiles/android_openblas.mk >> kaldi.mk
+
+  $use_mace &&linux_configure_mace
 
   echo "Successfully configured for Android with OpenBLAS from $OPENBLASROOT."
 
@@ -1332,6 +1377,7 @@ elif [ "`uname`" == "Linux" ]; then
   fi
   $use_cuda && configure_cuda
   linux_configure_speex
+  $use_mace &&linux_configure_mace
 else
   failure "Could not detect the platform or we have not yet worked out the
   appropriate configuration for this platform. Please contact the developers."

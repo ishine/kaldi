@@ -230,6 +230,8 @@ int main(int argc, char *argv[]) {
           chunk_length = std::numeric_limits<int32>::max();
         }
 
+        KALDI_LOG << "chunk length: " << chunk_length;
+
         int32 samp_offset = 0;
         std::vector<std::pair<int32, BaseFloat> > delta_weights;
 
