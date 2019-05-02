@@ -58,9 +58,9 @@ for line in sys.stdin.readlines():
     continue
   else:
     if ' '.join(parts[1:3]) == 'sox --vol':
-      print('true')
+      print ('true')
       sys.exit(0)
-print('false')
+print ('false')
 "` || exit 1
 
 if $volume_perturb_done; then
