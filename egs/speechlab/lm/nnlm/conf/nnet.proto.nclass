@@ -1,0 +1,6 @@
+<NnetProto>
+<WordVectorTransform> <InputDim> 1 <OutputDim> 200 <ParamRange> 0.100 <VocabSize> 82726
+<LstmProjectedStreamsFast> <InputDim> 200 <OutputDim> 256 <CellDim> 1024 <ParamScale> 0.010000 <ClipGradient> 5.000000 <FgateBias> 1.0
+<ClassAffineTransform> <InputDim> 256 <OutputDim> 82796 <Class> 70 <BiasMean> 0.0 <BiasRange> 0.0 <ParamRange> 0.040000
+<CBSoftmax> <InputDim> 82796 <OutputDim> 82796
+</NnetProto>

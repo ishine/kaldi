@@ -1,0 +1,12 @@
+<NnetProto>
+<TimeDelayTransform> <InputDim> 920 <OutputDim> 896 <NumInputContext> 23 <NumOutputContext> 7 <NumIndexes> 5 <InputContext> -2 -1 0 1 2 <Indexes> 0 1 2 3 4 <Indexes> 3 4 5 6 7 <Indexes> 6 7 8 9 10 <Indexes> 9 10 11 12 13 <Indexes> 12 13 14 15 16 <Indexes> 15 16 17 18 19 <Indexes> 18 19 20 21 22 <BiasMean> 0.05 <BiasRange> 0.1 <ParamStddev> 0.010976
+<Relu> <InputDim> 896 <OutputDim> 896
+<CompressedTimeDelayTransform> <InputDim> 896 <OutputDim> 512 <NumInputContext> 7 <NumOutputContext> 4 <NumIndexes> 2 <InputContext> -1 2 <Indexes> 0 1 <Indexes> 2 3 <Indexes> 3 4 <Indexes> 5 6  <BiasMean> 0.05 <BiasRange> 0.1 <ParamStddev> 0.010976 <Rank> 64
+<Relu> <InputDim> 512 <OutputDim> 512
+<CompressedTimeDelayTransform> <InputDim> 512 <OutputDim> 256 <NumInputContext> 4 <NumOutputContext> 2 <NumIndexes> 2 <InputContext> -3 3 <Indexes> 0 1 <Indexes> 2 3 <BiasMean> 0.05 <BiasRange> 0.1 <ParamStddev> 0.010976 <Rank> 64
+<Relu> <InputDim> 256 <OutputDim> 256
+<CompressedTimeDelayTransform> <InputDim> 256 <OutputDim> 128 <NumInputContext> 2 <NumOutputContext> 1 <NumIndexes> 2 <InputContext> -7 2 <Indexes> 0 1 <BiasMean> 0.05 <BiasRange> 0.1 <ParamStddev> 0.010976 <Rank> 64
+<Relu> <InputDim> 128 <OutputDim> 128
+<AffineTransform> <InputDim> 128 <OutputDim> 411 <BiasMean> 0.02 <BiasRange> 0.05000 <ParamStddev> 0.002
+<Softmax> <InputDim> 411 <OutputDim> 411
+</NnetProto>

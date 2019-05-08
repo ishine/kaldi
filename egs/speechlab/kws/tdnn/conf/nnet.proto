@@ -1,0 +1,7 @@
+<NnetProto>
+<LstmProjectedStreamsFast> <InputDim> 40 <OutputDim> 128 <CellDim> 384 <ParamScale> 0.01 <ClipGradient> 20.0 <FgateBias> 1.5
+<LstmProjectedStreamsFast> <InputDim> 128 <OutputDim> 128 <CellDim> 384 <ParamScale> 0.01 <ClipGradient> 20.0 <FgateBias> 1.5
+<LstmProjectedStreamsFast> <InputDim> 128 <OutputDim> 128 <CellDim> 384 <ParamScale> 0.01 <ClipGradient> 20.0 <FgateBias> 1.5
+<AffineTransform> <InputDim> 128 <OutputDim> 411 <BiasMean> 0.0 <BiasRange> 0.0 <ParamStddev> 0.04
+<Softmax> <InputDim> 411 <OutputDim> 411
+</NnetProto>

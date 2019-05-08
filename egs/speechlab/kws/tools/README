@@ -1,0 +1,14 @@
+awk 'NR==FNR{ss[$2]=$1;}NR>FNR{for(i=2;i<NF;i+=3)$i=ss[$i]; print;}' kws_tools/phones.txt ali.phone.length.txt > ali.phone.dnn.txt
+awk 'NR==FNR{ss[$1]=$0;}NR>FNR{if($1 in ss){print ss[$1]; print $0; }}' text ali.phone.dnn.txt > tmp.txt
+kws_tools/run.sh kws_tools/phone2pinyin.dict tmp.txt > label.txt
+
+
+grep -w -v error label.txt | awk '{printf $1; for(i=2;i<NF;i+=2){n=split($i,ss,"_");for(j=1;j<=n;j++)printf(" %s",ss[j]);} printf "\n";}' > label.txt1
+awk 'NR==FNR{ss[$1]=$3;}NR>FNR{printf $1; for(i=2;i<=NF;i++) printf(" %s",ss[$i]);printf "\n"; }' kws_tools/pinyin.map.txt label.txt1 > label.txt2
+
+awk 'NR==FNR{ss[$1]=$0;}NR>FNR{if($1 in ss){print ss[$1]; print $0; }}' label.txt2 ali.phone.dnn.txt > tmp.txt1
+kws_tools/run1.sh kws_tools/pinyin.map.txt tmp.txt1 > label_pinyin.txt
+
+awk 'NR==FNR{ss[$1]=$2;}NR>FNR{for(i=2;i<=NF;i+=2){if($i=="sil")$i="0";else{len=length($i);phone=substr($i,1,len-1);if(phone in ss)$i=ss[phone];else {next;}}} print $0;}' kws_tools/phonelist.txt label_pinyin.txt > label_phone.txt
+
+awk '{printf("%s",$1); for(i=2;i<NF;i+=2){for(j=0;j<$(i+1);j++) printf(" %s",$i);} printf("\n");}' label_phone.txt | awk 'NR==FNR{ss[$1]=$2;}NR>FNR{if($1 in ss){len=ss[$1]; printf("%s",$1); j=2; for(i=1;i<=len;i++){if(j>NF)printf" ERROR"; printf(" %s",$j); j+=2;} printf"\n"; }}' ../ark_fbank/featlen.scp - > label_phone.subsample.txt

@@ -1,0 +1,15 @@
+<NnetProto>
+<SubSample> <InputDim> 440 <OutputDim> 440 <SkipFrames> 3
+<Convolutional2DComponentFast> <InputDim> 440 <OutputDim> 12672 <FmapXLen> 11 <FmapYLen> 40 <FiltXLen> 9 <FiltYLen> 8 <FiltXStep> 1 <FiltYStep> 1  <ConnectFmap> 0 <BiasMean> 0.0500000 <BiasRange> 0.1000 <ParamRange> 0.027
+<MaxPooling2DComponentFast> <InputDim> 12672 <OutputDim> 4224 <FmapXLen> 3 <FmapYLen> 33 <PoolXLen> 1 <PoolYLen> 3 <PoolXStep> 1 <PoolYStep> 3
+<Relu> <InputDim> 4224 <OutputDim> 4224
+<AffineTransform> <InputDim> 4224 <OutputDim> 320 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamRange> 0.030976
+
+<LstmProjectedStreamsFast> <InputDim> 320 <OutputDim> 320 <CellDim> 1536 <ParamScale> 0.010000 <ClipGradient> 5.000000 <FgateBias> 1.5
+<LstmProjectedStreamsFast> <InputDim> 320 <OutputDim> 320 <CellDim> 1536 <ParamScale> 0.010000 <ClipGradient> 5.000000 <FgateBias> 1.5
+<LstmProjectedStreamsFast> <InputDim> 320 <OutputDim> 320 <CellDim> 1536 <ParamScale> 0.010000 <ClipGradient> 5.000000 <FgateBias> 1.5
+<LstmProjectedStreamsFast> <InputDim> 320 <OutputDim> 448 <CellDim> 1536 <ParamScale> 0.010000 <ClipGradient> 5.000000 <FgateBias> 1.5
+
+<AffineTransform> <InputDim> 448 <OutputDim> 121 <BiasMean> 0.0 <BiasRange> 0.0 <ParamStddev> 0.040000
+<Softmax> <InputDim> 121 <OutputDim> 121
+</NnetProto>
