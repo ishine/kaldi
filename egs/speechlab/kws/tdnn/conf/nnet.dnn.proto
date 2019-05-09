@@ -1,0 +1,12 @@
+<NnetProto>
+<AffineTransform> <InputDim> 1320 <OutputDim> 512 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamStddev> 0.010976 
+<Relu> <InputDim> 512 <OutputDim> 512
+<AffineTransform> <InputDim> 512 <OutputDim> 512 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamStddev> 0.010976 
+<Relu> <InputDim> 512 <OutputDim> 512
+<AffineTransform> <InputDim> 512 <OutputDim> 512 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamStddev> 0.010976
+<Relu> <InputDim> 512 <OutputDim> 512
+<AffineTransform> <InputDim> 512 <OutputDim> 512 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamStddev> 0.010976
+<Relu> <InputDim> 512 <OutputDim> 512
+<AffineTransform> <InputDim> 512 <OutputDim> 411 <BiasMean> 0.02 <BiasRange> 0.05000 <ParamStddev> 0.002
+<Softmax> <InputDim> 411 <OutputDim> 411
+</NnetProto>

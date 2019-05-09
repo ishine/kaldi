@@ -180,7 +180,7 @@ class ClassAffineTransform : public UpdatableComponent {
     CuArray<int32> idx(sortedclass_id_index_);
     input_sorted_.Resize(in.NumRows(), in.NumCols(), kUndefined);
 
-	input_sorted_.CopyRows(in, idx);
+	  input_sorted_.CopyRows(in, idx);
 
     int size = idx.Dim();
     int beg = 0, cid, clen;

@@ -1,0 +1,14 @@
+<NnetProto>
+<Convolutional2DComponentFast> <InputDim> 1320 <OutputDim> 3168 <FmapXLen> 11 <FmapYLen> 40 <FiltXLen> 9 <FiltYLen> 8 <FiltXStep> 1 <FiltYStep> 1 <ConnectFmap> 0 <BiasMean> 0.0500000 <BiasRange> 0.1000 <ParamRange> 0.027
+<MaxPooling2DComponentFast> <InputDim> 3168 <OutputDim> 1056 <FmapXLen> 3 <FmapYLen> 33 <PoolXLen> 1 <PoolYLen> 3 <PoolXStep> 1 <PoolYStep> 3
+<Relu> <InputDim> 1056 <OutputDim> 1056 
+
+<AffineTransform> <InputDim> 1056 <OutputDim> 512 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamStddev> 0.010976 
+<Relu> <InputDim> 512 <OutputDim> 512
+<AffineTransform> <InputDim> 512 <OutputDim> 512 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamStddev> 0.010976
+<Relu> <InputDim> 512 <OutputDim> 512
+<AffineTransform> <InputDim> 512 <OutputDim> 512 <BiasMean> 0.0500000 <BiasRange> 0.100000 <ParamStddev> 0.010976
+<Relu> <InputDim> 512 <OutputDim> 512
+<AffineTransform> <InputDim> 512 <OutputDim> 411 <BiasMean> 0.02 <BiasRange> 0.05000 <ParamStddev> 0.002
+<Softmax> <InputDim> 411 <OutputDim> 411
+</NnetProto>

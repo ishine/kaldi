@@ -230,7 +230,7 @@ class WordVectorTransform : public UpdatableComponent {
 	  {
 	  	streamlist_.resize(size);
 	  	for (int i = 0; i < size; i++)
-		  	cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamNonBlocking);
+		  	cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamNonBlocking); // cudaStreamDefault
 	  }
 #endif
 

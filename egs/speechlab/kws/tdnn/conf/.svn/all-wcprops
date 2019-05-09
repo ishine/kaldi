@@ -1,0 +1,29 @@
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svnroot/kaldi/!svn/ver/1976/trunk/egs/swbd/s5/conf
+END
+topo.proto
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/svnroot/kaldi/!svn/ver/879/trunk/egs/swbd/s5/conf/topo.proto
+END
+fbank.conf
+K 25
+svn:wc:ra_dav:version-url
+V 62
+/svnroot/kaldi/!svn/ver/1383/trunk/egs/swbd/s5/conf/fbank.conf
+END
+decode.config
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svnroot/kaldi/!svn/ver/1976/trunk/egs/swbd/s5/conf/decode.config
+END
+mfcc.conf
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svnroot/kaldi/!svn/ver/879/trunk/egs/swbd/s5/conf/mfcc.conf
+END
