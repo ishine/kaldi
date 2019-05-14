@@ -367,7 +367,7 @@ void CBXent::SetClassBoundary(const std::vector<int32>& class_boundary)
 #if HAVE_CUDA == 1
 		streamlist_.resize(num_class+1);
 		for (i = 0; i < num_class+1; i++)
-			cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamNonBlocking);
+			cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamDefault); // cudaStreamNonBlocking
 #endif
 }
 
@@ -812,7 +812,6 @@ void CBXent::Merge(int myid, int root)
 }
 
 /* Mse */
-
 void Mse::Eval(const VectorBase<BaseFloat> &frame_weights,
                const CuMatrixBase<BaseFloat>& net_out, 
                const CuMatrixBase<BaseFloat>& target, 
