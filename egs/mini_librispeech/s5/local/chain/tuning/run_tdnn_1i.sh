@@ -167,7 +167,8 @@ if [ $stage -le 6 ]; then
 fi
 
 num_pdfs=$(awk '{print $2}' $train_data_dir/utt2spk | sort | uniq -c | wc -l)
-
+num_train_utt=$(awk '{print $2}' $train_data_dir/utt2spk | wc -l)
+num_repeat=$(( num_train_utt/num_pdfs ))
 # Now we create the xvector nnet examples using sid/nnet3/xvector/get_egs.sh.
 # The argument --num-repeats is related to the number of times a speaker
 # repeats per archive.  If it seems like you're getting too many archives
@@ -298,14 +299,14 @@ frame_subsampling_factor=1
 egs_left_context=$(perl -e "print (int($left_context + $frame_subsampling_factor / 2))")
 egs_right_context=$(perl -e "print (int($right_context + $frame_subsampling_factor / 2))")
 
-phone_lm_scales="1,1"
+phone_lm_scales="1"
 
 if [ $stage -le 9 ]; then
   echo "$0: compute {den,normalization}.fst using weighted phone LM."
   steps/nnet3/chain/make_weighted_den_fst.sh --cmd "$train_cmd" \
     --num-repeats $phone_lm_scales \
     --lm-opts '--num-extra-lm-states=200' \
-    $tree_dir $lat_dir $dir || exit 1;
+    $tree_dir $dir || exit 1;
 fi
 
 if [ $stage -le 10 ]; then
@@ -318,6 +319,7 @@ if [ $stage -le 10 ]; then
   steps/nnet3/chain/get_egs.sh --cmd "$train_cmd" \
     --cmvn-opts "--norm-means=false --norm-vars=false" \
     --left-context $model_left_context --right-context $model_right_context \
+    --generate-egs-scp true \
     "${train_data_dir}" $dir $lat_dir $egs_dir
   
 fi
@@ -328,7 +330,7 @@ if [ $stage -le 11 ] && [ ! -z $egs_dir_final ]; then
   steps/nnet3/chain/mtl/combine_egs.sh --cmd "$decode_cmd" \
     ${egs_dir} ${egs_dir_xvec} ${egs_dir_final} || exit 1;
 fi
-
+exit 1
 if [ $stage -le 12 ]; then
   steps/nnet3/chain/train.py --stage=$train_stage \
     --cmd="$decode_cmd" \

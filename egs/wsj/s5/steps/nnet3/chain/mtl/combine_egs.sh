@@ -24,15 +24,15 @@ stage=0
 shift 1
 args=("$@")
 egs_dir=${args[1]}
-egs_dir_xvec=${[2]}
-egs_dir_final=${[3]}
+egs_dir_xvec=${args[2]}
+egs_dir_final=${args[3]}
 
 echo "$0 $@"  # Print the command line for logging
 
 if [ -f path.sh ]; then . ./path.sh; fi
 . parse_options.sh || exit 1;
 
-if [ $# -lt 11 ]; then
+if [ $# -lt 4 ]; then
   cat <<EOF
   This script generates examples for multitask training of neural network
   using separate input egs dir per task as input. Currently, it supports
@@ -70,7 +70,7 @@ done
 
 tot_num_archives=0
 
-for dir in ($egs_dir $egs_dir_xvec);do
+for dir in $egs_dir $egs_dir_xvec;do
   for f in $required; do
     if [ ! -f ${dir}/$f ]; then
       echo "$0: no such file ${dir}/$f." && exit 1;
