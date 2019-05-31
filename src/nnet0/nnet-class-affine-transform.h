@@ -434,7 +434,7 @@ class ClassAffineTransform : public UpdatableComponent {
 	  int32 num_class = class_boundary.size()-1;
 	  streamlist_.resize(num_class+1);
 	  for (int i = 0; i < num_class+1; i++)
-		  cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamDefault); // cudaStreamNonBlocking
+		  cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamNonBlocking);
 #endif
   }
 

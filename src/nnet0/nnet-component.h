@@ -108,6 +108,8 @@ class Component {
     kFramePoolingComponent, 
     kParallelComponent,
 	kParallelComponentMultiTask,
+	kMultiNetComponent,
+	kRNNTJoinTransform,
 
     //FSMN
     kFsmn,

@@ -6,6 +6,8 @@
 !/src/doc/*
 !/src/*/Makefile
 !/src/*/README
+!/src/warp-ctc
+!/src/warp-transducer
 
 # Compiled Object files and python ciles
 *.slo
