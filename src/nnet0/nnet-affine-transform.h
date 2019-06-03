@@ -85,13 +85,17 @@ class AffineTransform : public UpdatableComponent {
     // Initialize trainable parameters,
     // if Xavier_flag=1, use the “Xavier” initialization
     if(xavier_flag){
+      // Uniform,
       float range = sqrt(6)/sqrt(OutputDim() + InputDim());
       linearity_.Resize(OutputDim(), InputDim(), kSetZero);
       RandUniform(0.0, range, &linearity_);
-
       bias_.Resize(OutputDim(),kSetZero);
-    }
-    else{
+    } else if (param_range != 0.0) {
+      // Uniform,
+      linearity_.Resize(OutputDim(), InputDim(), kSetZero);
+      RandUniform(0.0, param_range, &linearity_);
+      bias_.Resize(OutputDim(),kSetZero);
+    } else{
       // Gaussian with given std_dev (mean = 0),
       linearity_.Resize(OutputDim(), InputDim());
       RandGauss(0.0, param_stddev, &linearity_);

@@ -403,6 +403,77 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 	return true;
 }
 
+bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples)
+{
+    utt = feature_reader->Key();
+    KALDI_VLOG(3) << "Reading " << utt;
+    // check that we have targets
+    if (!wordid_reader->HasKey(utt)) {
+      KALDI_WARN << utt << ", missing targets";
+      stats->num_no_tgt_mat++;
+      return false;
+    }
+
+    // get feature / target pair
+    input_frames = feature_reader->Value();
+    input_wordids = wordid_reader->Value(utt);
+    if (use_kld) si_input_frames = si_feature_reader->Value(utt);
+
+    examples.resize(1);
+
+    // split feature
+    int32 skip_frames = opts->skip_frames;
+    int32 sweep_time = opts->sweep_time;
+
+    if (sweep_time>skip_frames) {
+    	KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
+    	sweep_time = skip_frames;
+    }
+
+    if (skip_frames <= 1) {
+    	examples[0] = this;
+    	return true;
+    }
+
+    if (sweep_time == skip_frames) {
+    	this->sweep_frames.resize(sweep_time);
+    	for (int i = 0; i < sweep_time; i++)
+    		sweep_frames[i] = i;
+    }
+
+    examples.resize(sweep_frames.size());
+
+    RNNTNnetExample *example = NULL;
+    int32 lent, feat_lent, cur,
+		utt_len = input_frames.NumRows();
+    for (int i = 0; i < sweep_frames.size(); i++) {
+    	example = new RNNTNnetExample(feature_reader,
+    			si_feature_reader, wordid_reader, stats, opts);
+    	example->utt = utt;
+    	example->input_wordids = input_wordids;
+
+    	lent = utt_len/skip_frames;
+    	lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
+		//feat_lent = this->inner_skipframes ? utt_len-sweep_frames[i] : lent;
+    	feat_lent = this->inner_skipframes ? lent*skip_frames : lent;
+    	example->input_frames.Resize(feat_lent, input_frames.NumCols());
+    	if (use_kld) example->si_input_frames.Resize(feat_lent, input_frames.NumCols());
+
+    	cur = sweep_frames[i];
+    	for (int j = 0; j < feat_lent; j++) {
+    		example->input_frames.Row(j).CopyFromVec(input_frames.Row(cur));
+    		if (use_kld) example->si_input_frames.Row(j).CopyFromVec(si_input_frames.Row(cur));
+    		cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
+    		if (cur >= utt_len) cur = utt_len-1;
+    	}
+
+    	examples[i] = example;
+    }
+
+    return true;
+}
+
+
 bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 {
     utt = wordid_reader->Key();

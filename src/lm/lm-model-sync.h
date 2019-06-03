@@ -43,7 +43,7 @@ public:
 		cache_pos_ = 0;
 		streamlist_.resize(size);
 		for (int i = 0; i < size; i++)
-			cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamNonBlocking);
+			cudaStreamCreateWithFlags(&streamlist_[i], cudaStreamDefault); // cudaStreamNonBlocking
 	}
 
 	virtual ~StreamCache()
