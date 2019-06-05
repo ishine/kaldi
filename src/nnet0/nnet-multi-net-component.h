@@ -271,10 +271,10 @@ class MultiNetComponent : public UpdatableComponent {
 	  return nnet_;
   }
 
-  Nnet &GetNestNnet(std::string name) {
+  Nnet *GetNestNnet(std::string name) {
       if (nnet_.find(name) == nnet_.end())
-        KALDI_WARN << "not find nest nnet " << name;
-	  return nnet_[name];
+    	  return NULL;
+	  return &nnet_[name];
   }
 
  private:
