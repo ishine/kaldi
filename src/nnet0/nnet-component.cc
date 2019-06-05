@@ -63,6 +63,7 @@
 #include "nnet0/nnet-class-affine-transform.h"
 #include "nnet0/nnet-parallel-component-multitask.h"
 #include "nnet0/nnet-multi-net-component.h"
+#include "nnet0/nnet-rnnt-join-transform.h"
 #include "nnet0/nnet-parametric-relu.h"
 
 #include <sstream>
@@ -135,6 +136,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kParallelComponent, "<ParallelComponent>"},
   { Component::kParallelComponentMultiTask, "<ParallelComponentMultiTask>"},
   { Component::kMultiNetComponent, "<MultiNetComponent>"},
+  { Component::kRNNTJoinTransform, "<RNNTJoinTransform>"},
   { Component::kFsmn, "<Fsmn>" },
   { Component::kDeepFsmn, "<DeepFsmn>" },
   { Component::kUniFsmn, "<UniFsmn>" },
@@ -329,6 +331,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kMultiNetComponent :
       ans = new MultiNetComponent(input_dim, output_dim);
+      break;
+    case Component::kRNNTJoinTransform :
+      ans = new RNNTJoinTransform(input_dim, output_dim);
       break;
     case Component::kFsmn:
       ans = new Fsmn(input_dim, output_dim);

@@ -28,5 +28,9 @@ ifeq ($(USE_WARP_CTC), true)
     ADDLIBS += ../warp-ctc/build/warpctc.a
 endif
 
+ifeq ($(USE_WARP_TRANSDUCER), true)
+    ADDLIBS += ../warp-transducer/build/warprnnt.so
+endif
+
 include ../makefiles/default_rules.mk
 

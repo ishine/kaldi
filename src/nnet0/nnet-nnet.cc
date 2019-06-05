@@ -39,6 +39,7 @@
 #include "nnet0/nnet-gru-projected-streams-fast.h"
 #include "nnet0/nnet-class-affine-transform.h"
 #include "nnet0/nnet-parallel-component-multitask.h"
+#include "nnet0/nnet-multi-net-component.h"
 #include "nnet0/nnet-fsmn.h"
 #include "nnet0/nnet-deep-fsmn.h"
 #include "nnet0/nnet-uni-fsmn.h"
@@ -99,7 +100,8 @@ void Nnet::Propagate(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> 
   // we need at least L+1 input buffers
   KALDI_ASSERT((int32)propagate_buf_.size() >= NumComponents()+1);
   
-  propagate_buf_[0].Resize(in.NumRows(), in.NumCols(), kUndefined, kStrideEqualNumCols);
+  propagate_buf_[0].Resize(in.NumRows(), in.NumCols(), kUndefined);
+  //propagate_buf_[0].Resize(in.NumRows(), in.NumCols(), kUndefined, kStrideEqualNumCols);
   propagate_buf_[0].CopyFromMat(in);
 
   for(int32 i=0; i<(int32)components_.size(); i++) {
@@ -110,7 +112,6 @@ void Nnet::Propagate(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> 
   CuMatrix<BaseFloat> &mat = propagate_buf_[components_.size()];
   if (out->NumRows() != mat.NumRows() || out->NumCols() != mat.NumCols())
   		(static_cast<CuMatrix<BaseFloat>*>(out))->Resize(mat.NumRows(), mat.NumCols(), kUndefined);
-  		//(static_cast<CuMatrix<BaseFloat>*>(out))->Resize(mat.NumRows(), mat.NumCols(), kUndefined, kStrideEqualNumCols);
   out->CopyFromMat(mat);
 }
 
@@ -165,8 +166,8 @@ void Nnet::Backpropagate(const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<B
   KALDI_ASSERT((int32)backpropagate_buf_.size() == NumComponents()+1);
 
   // copy out_diff to last buffer
-  //backpropagate_buf_[NumComponents()] = out_diff;
-  backpropagate_buf_[NumComponents()].Resize(out_diff.NumRows(), out_diff.NumCols(), kUndefined, kStrideEqualNumCols);
+  backpropagate_buf_[NumComponents()].Resize(out_diff.NumRows(), out_diff.NumCols(), kUndefined);
+  //backpropagate_buf_[NumComponents()].Resize(out_diff.NumRows(), out_diff.NumCols(), kUndefined, kStrideEqualNumCols);
   backpropagate_buf_[NumComponents()].CopyFromMat(out_diff);
   // backpropagate using buffers
   for (int32 i = NumComponents()-1; i >= 0; i--) {
@@ -835,6 +836,10 @@ std::string Nnet::InfoPropagate() const {
     // nested networks too...
     if (Component::kParallelComponent == components_[i]->GetType()) {
       ostr << dynamic_cast<ParallelComponent*>(components_[i])->InfoPropagate();
+    } else if (Component::kMultiNetComponent == components_[i]->GetType()) {
+      ostr << dynamic_cast<MultiNetComponent*>(components_[i])->InfoPropagate();
+    } else if (Component::kParallelComponentMultiTask == components_[i]->GetType()) {
+      ostr << dynamic_cast<ParallelComponentMultiTask*>(components_[i])->InfoPropagate();
     }
   }
   return ostr.str();

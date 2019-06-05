@@ -237,7 +237,6 @@ class StatisticsPoolingComponent : public Component {
 	  batch_size_ = batch_size;
   }
 
-
   void SetStream(int nstream) {
 	  is_reset_ = nstream_ != nstream ? true : false;
       nstream_ = nstream;
@@ -245,6 +244,13 @@ class StatisticsPoolingComponent : public Component {
 
   int32 GetStream() {
       return nstream_;
+  }
+
+  int32 OutputRow(int32 in_row) {
+      int nsubsample = this->GetSubSampleRate();
+      int S = this->GetStream();
+      int T = (in_row/S + nsubsample-1)/nsubsample;
+      return T*S; 
   }
 
   /// set the utterance length used for parallel training

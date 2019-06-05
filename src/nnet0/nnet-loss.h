@@ -516,7 +516,7 @@ private:
 #if HAVE_CUDA == 1
     cudaStream_t stream_;
 #endif
-	CuVector<BaseFloat> ctc_workspace_;
+	CuVector<BaseFloat> rnnt_workspace_;
     CuMatrix<BaseFloat> net_out_act_;
 };
 
