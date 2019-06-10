@@ -28,7 +28,8 @@
 #include "hmm/posterior.h"
 
 #include "warp-ctc/include/ctc.h"
-#include "warp-transducer/include/rnnt.h"
+//#include "warp-transducer/include/rnnt.h"
+#include "add_network/include/rnnt.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -462,6 +463,7 @@ class Ctc : public CtcItf {
 };
 
 
+/// Baidu warp ctc
 class WarpCtc : public CtcItf {
 public:
     WarpCtc(int blank_label = 0);
@@ -489,6 +491,8 @@ private:
     CuMatrix<BaseFloat> net_out_act_;
 };
 
+/*
+/// Alex Graves 2012 RNNT join network
 class WarpRNNT : public CtcItf {
 public:
 	WarpRNNT();
@@ -516,8 +520,43 @@ private:
 #if HAVE_CUDA == 1
     cudaStream_t stream_;
 #endif
-	CuVector<BaseFloat> ctc_workspace_;
+	CuVector<BaseFloat> rnnt_workspace_;
     CuMatrix<BaseFloat> net_out_act_;
+};
+*/
+
+
+/// Alex Graves 2012 RNNT add network
+class WarpRNNT : public CtcItf {
+public:
+	WarpRNNT();
+	WarpRNNT(int maxT, int maxU, int blank_label = 0);
+
+	/// RNNT training over a single sequence from the labels. The errors are returned to [diff]
+	void Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff);
+
+	/// RNNT training over multiple sequences. The errors are returned to [diff]
+	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
+
+	inline void throw_on_error(rnntStatus_t status, const char* message) {
+	    if (status != RNNT_STATUS_SUCCESS) {
+	        throw std::runtime_error(message + (", stat = " + std::string(rnntGetStatusString(status))));
+	    }
+	}
+
+	rnntOptions &GetOption() {
+		return options_;
+	}
+
+private:
+	rnntOptions options_;
+#if HAVE_CUDA == 1
+    cudaStream_t stream_;
+#endif
+	CuVector<BaseFloat> rnnt_workspace_;
+    CuMatrix<BaseFloat> trans_act_;
+    CuMatrix<BaseFloat> pred_act_;
 };
 
 } // namespace nnet0

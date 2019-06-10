@@ -57,7 +57,7 @@ class RNNTJoinTransform : public UpdatableComponent {
     float bias_mean = -2.0, bias_range = 2.0, param_stddev = 0.1, param_range = 0.0;
     float learn_rate_coef = 1.0, bias_learn_rate_coef = 1.0;
     float max_norm = 0.0;
-    int32 encoder_dim = 128, predict_dim = 128, join_dim = 1024, index = 0;
+    int32 encoder_dim = 128, predict_dim = 128, join_dim = 1024;
     int xavier_flag = 0;
     // parse config
     std::string token; 
@@ -79,7 +79,8 @@ class RNNTJoinTransform : public UpdatableComponent {
       is >> std::ws; // eat-up whitespace
     }
 
-    KALDI_ASSERT(encoder_dim + predict_dim == input_dim_);
+    int32 max_dim = encoder_dim > predict_dim ? encoder_dim : predict_dim;
+    KALDI_ASSERT(max_dim == input_dim_);
     //
     // Initialize trainable parameters,
     // if Xavier_flag=1, use the “Xavier” initialization
@@ -166,7 +167,8 @@ class RNNTJoinTransform : public UpdatableComponent {
     KALDI_ASSERT(join_dim_ == bias_.Dim());
     KALDI_ASSERT(join_dim_ == join_linearity_.NumCols());
 
-    KALDI_ASSERT(encoder_dim_+predict_dim_ == input_dim_);
+    int32 max_dim = encoder_dim_ > predict_dim_ ? encoder_dim_ : predict_dim_;
+    KALDI_ASSERT(max_dim == input_dim_);
     KALDI_ASSERT(join_linearity_.NumRows() == output_dim_);
     KALDI_ASSERT(join_bias_.Dim() == output_dim_);
 
@@ -271,7 +273,7 @@ class RNNTJoinTransform : public UpdatableComponent {
 	  int en_frames = nstream_*maxT_;
 	  int pre_frames = nstream_*maxU_;
 
-	  KALDI_ASSERT(en_frames+pre_frames == num_frames_);
+	  KALDI_ASSERT(en_frames+pre_frames == num_frames);
 	  out->AddVecToRows(1.0, join_bias_, 0.0);
 
 	  CuSubMatrix<BaseFloat> encoder_in(in, 0, en_frames, 0, encoder_dim_);
@@ -409,10 +411,13 @@ class RNNTJoinTransform : public UpdatableComponent {
 	  predict_utt_words_ = predict_utt_words;
 	  maxT_ = maxT;
 	  maxU_ = maxU;
-	  nstream_ = encoder_utt_frames_.size()/maxT_ ;
-	  KALDI_ASSERT(encoder_utt_frames_.size()%maxT_ == 0);
-	  KALDI_ASSERT(predict_utt_words_.size()%maxU_ == 0);
-	  KALDI_ASSERT(encoder_utt_frames_.size()/maxT_ == predict_utt_words_.size()/maxU_);
+	  nstream_ = encoder_utt_frames_.size();
+	  KALDI_ASSERT(encoder_utt_frames_.size() == predict_utt_words_.size());
+  }
+
+  int32 OutputRow(int32 in_row) {
+	  KALDI_ASSERT((maxT_+maxU_)*nstream_ == in_row);
+      return nstream_*maxT_*maxU_; 
   }
 
   CuMatrix<BaseFloat> GetInputDiff() {

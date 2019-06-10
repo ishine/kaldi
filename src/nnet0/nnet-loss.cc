@@ -1383,10 +1383,10 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
   }else
 #endif
-        {
-                // not implemented for CPU yet
-                // return 0;
-        }
+  {
+     // not implemented for CPU yet
+     // return 0;
+  }
 
 }
 
@@ -1397,8 +1397,9 @@ WarpCtc::WarpCtc(int blank_label) : blank_label_(blank_label) {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
     options_.loc = CTC_GPU;
-    cudaStreamCreate(&stream_);
-    options_.stream = stream_;
+    //cudaStreamCreate(&stream_);
+    //options_.stream = stream_;
+    options_.stream = NULL;
   }
 #endif
 }
@@ -1411,7 +1412,8 @@ void WarpCtc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int
 
 void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
-    /*
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
     net_out_act_.Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
 	diff->Resize(net_out.NumRows(), net_out.NumCols(), kSetZero, kStrideEqualNumCols);
     net_out_act_.CopyFromMat(net_out);
@@ -1456,7 +1458,6 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 
 
     CuTimer tim;
-
 	// Compute ctc error
 	throw_on_error(compute_ctc_loss(net_out_act_.Data(), diff->Data(),
 									flat_labels.data(),
@@ -1469,10 +1470,9 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 									options_),
 				   "Error: compute_ctc_loss int EvalParallel");
 
-#if HAVE_CUDA == 1
-    if (CuDevice::Instantiate().Enabled()) 
-        CuDevice::Instantiate().AccuProfile("compute_ctc_loss", tim);
-#endif
+    CU_SAFE_CALL(cudaGetLastError());                
+    CuDevice::Instantiate().AccuProfile("compute_ctc_loss", tim);
+
 
 	// Clip loss
 	diff->ApplyFloor(-1.0);
@@ -1501,10 +1501,18 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 		  ref_num_progress_ = 0;
 		}
 	}
-    */
+
+  }else
+#endif
+  {
+     // not implemented for CPU yet
+     // return 0;
+  }
 
 }
 
+// Alex Graves 2013 RNNT join network
+/*
 WarpRNNT::WarpRNNT(int maxT, int maxU, int blank_label) {
 	options_.blank_label = blank_label;
 	options_.maxT = maxT;
@@ -1539,14 +1547,15 @@ WarpRNNT::WarpRNNT() {
   }
 }
 
-/// CTC training over a single sequence from the labels. The errors are returned to [diff]
+/// RNNT training over a single sequence from the labels. The errors are returned to [diff]
 void WarpRNNT::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) {
 	// not implemented yet
 }
 
 void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
-
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
     net_out_act_.Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
 	diff->Resize(net_out.NumRows(), net_out.NumCols(), kSetZero, kStrideEqualNumCols);
     net_out_act_.CopyFromMat(net_out);
@@ -1560,52 +1569,51 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 	int alphabet_size = net_out.NumCols();
 
 	std::vector<int> label_lengths(num_sequence);
-	for (int i = 0; i < num_sequence; i++) {
-		label_lengths[i] = label[i].size() - 1;
+	for (int i = 0; i < num_sequence; i++)
+		label_lengths[i] = label[i].size();
 
 
 	std::vector<int32> flat_labels(num_sequence*(maxU-1), 0);
 	// utterances label concatenation padding
 	for (int i = 0; i < num_sequence; i++) {
-		for (int j = 1; j < label[i].size(); j++) {
-			flat_labels[i*maxU+j-1] = label[i][j];
+		for (int j = 0; j < label[i].size(); j++) {
+			flat_labels[i*(maxU-1)+j] = label[i][j];
 		}
 	}
 
 	Vector<BaseFloat> pzx(num_sequence, kSetZero);
+    CuArray<MatrixIndexT> input_lengths_gpu(frame_num_utt);
+    CuArray<MatrixIndexT> label_lengths_gpu(label_lengths);
+    CuArray<MatrixIndexT> flat_labels_gpu(flat_labels);
 
 	// get rnnt workspace size
 	size_t workspace_alloc_bytes;
-    throw_on_error(get_workspace_size(maxT, maxU,
+    throw_on_error(get_rnnt_workspace_size(maxT, maxU,
     								  num_sequence,
                                       true,
                                       &workspace_alloc_bytes),
-                   "Error: rnnt get_workspace_size in EvalParallel");
+                   "Error: get_rnnt_workspace_size in EvalParallel");
 
     // Allocate rnnt workspace
-	ctc_workspace_.Resize((workspace_alloc_bytes+sizeof(BaseFloat)-1)/sizeof(BaseFloat), kUndefined);
+	rnnt_workspace_.Resize((workspace_alloc_bytes+sizeof(BaseFloat)-1)/sizeof(BaseFloat), kUndefined);
 
-#if HAVE_CUDA == 1
     CuTimer tim;
-#endif
-
 	// Compute rnnt error
 	throw_on_error(compute_rnnt_loss(net_out_act_.Data(),
 									diff->Data(),
-									flat_labels.data(),
-									label_lengths.data(),
-									frame_num_utt.data(),
+									flat_labels_gpu.Data(),
+									label_lengths_gpu.Data(),
+									input_lengths_gpu.Data(),
 									alphabet_size,
 									num_sequence,
 									pzx.Data(),
-									ctc_workspace_.Data(),
+									rnnt_workspace_.Data(),
 									options_),
 				   "Error: compute_rnnt_loss in EvalParallel");
 
-#if HAVE_CUDA == 1
-    if (CuDevice::Instantiate().Enabled())
-        CuDevice::Instantiate().AccuProfile("compute_rnnt_loss", tim);
-#endif
+    CU_SAFE_CALL(cudaGetLastError());                
+    CuDevice::Instantiate().AccuProfile("compute_rnnt_loss", tim);
+
 
 	// Clip loss
 	diff->ApplyFloor(-1.0);
@@ -1635,6 +1643,159 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 		}
 	}
 
+  }else
+#endif
+  {
+     // not implemented for CPU yet
+     // return 0;
+  }
+}
+*/
+
+// Alex Graves 2012 RNNT add network
+WarpRNNT::WarpRNNT(int maxT, int maxU, int blank_label) {
+	options_.blank_label = blank_label;
+	options_.maxT = maxT;
+	options_.maxU = maxU;
+	options_.batch_first = false;
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    options_.loc = RNNT_GPU;
+    //cudaStreamCreate(&stream_);
+    //options_.stream = stream_;
+    options_.stream = NULL;
+  } else
+#endif
+  {
+	options_.loc = RNNT_CPU;
+	options_.num_threads = 1;
+  }
+}
+
+WarpRNNT::WarpRNNT() {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    options_.loc = RNNT_GPU;
+    //cudaStreamCreate(&stream_);
+    //options_.stream = stream_;
+    options_.stream = NULL;
+  } else
+#endif
+  {
+	options_.loc = RNNT_CPU;
+	options_.num_threads = 1;
+  }
+}
+
+/// RNNT training over a single sequence from the labels. The errors are returned to [diff]
+void WarpRNNT::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff) {
+	// not implemented yet
+}
+
+void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+
+	int num_sequence = frame_num_utt.size();  // minibatch
+	int alphabet_size = net_out.NumCols();
+	int maxT = options_.maxT;
+	int maxU = options_.maxU;
+	int num_frames = net_out.NumRows();
+
+	KALDI_ASSERT(num_frames == num_sequence*(maxT+maxU));  // after padding, number of frames is a multiple of number of sequences
+
+	trans_act_.Resize(num_sequence*maxT, net_out.NumCols(), kUndefined, kStrideEqualNumCols);
+	pred_act_.Resize(num_sequence*maxU, net_out.NumCols(), kUndefined, kStrideEqualNumCols);
+	diff->Resize(net_out.NumRows(), net_out.NumCols(), kSetZero, kStrideEqualNumCols);
+
+	trans_act_.CopyFromMat(net_out.RowRange(0, num_sequence*maxT));
+	pred_act_.CopyFromMat(net_out.RowRange(num_sequence*maxT, num_sequence*maxU));
+
+	CuSubMatrix<BaseFloat> trans_grad(diff->RowRange(0, num_sequence*maxT));
+	CuSubMatrix<BaseFloat> pred_grad(diff->RowRange(num_sequence*maxT, num_sequence*maxU));
+
+
+	std::vector<int> label_lengths(num_sequence);
+	for (int i = 0; i < num_sequence; i++)
+		label_lengths[i] = label[i].size();
+
+
+	std::vector<int32> flat_labels(num_sequence*(maxU-1), 0);
+	// utterances label concatenation padding
+	for (int i = 0; i < num_sequence; i++) {
+		for (int j = 0; j < label[i].size(); j++) {
+			flat_labels[i*(maxU-1)+j] = label[i][j];
+		}
+	}
+
+	Vector<BaseFloat> pzx(num_sequence, kSetZero);
+
+	// get rnnt workspace size
+	size_t workspace_alloc_bytes;
+    throw_on_error(get_rnnt_workspace_size(maxT, maxU,
+    								  num_sequence,
+                                      true,
+                                      &workspace_alloc_bytes),
+                   "Error: get_rnnt_workspace_size in EvalParallel");
+
+    // Allocate rnnt workspace
+	rnnt_workspace_.Resize((workspace_alloc_bytes+sizeof(BaseFloat)-1)/sizeof(BaseFloat), kUndefined);
+
+    CuTimer tim;
+	// Compute rnnt error
+	throw_on_error(compute_rnnt_loss(trans_act_.Data(),
+									pred_act_.Data(),
+									trans_grad.Data(),
+									pred_grad.Data(),
+									flat_labels.Data(),
+									label_lengths.Data(),
+									frame_num_utt.Data(),
+									alphabet_size,
+									num_sequence,
+									pzx.Data(),
+									rnnt_workspace_.Data(),
+									options_),
+				   "Error: compute_rnnt_loss in EvalParallel");
+
+    CU_SAFE_CALL(cudaGetLastError());
+    CuDevice::Instantiate().AccuProfile("compute_rnnt_loss", tim);
+
+
+	// Clip loss
+	diff->ApplyFloor(-1.0);
+	diff->ApplyCeiling(1.0);
+
+	// update registries
+	obj_progress_ += -pzx.Sum();
+	sequences_progress_ += num_sequence;
+	sequences_num_ += num_sequence;
+	for (int s = 0; s < num_sequence; s++) {
+		frames_progress_ += frame_num_utt[s];
+		frames_ += frame_num_utt[s];
+	}
+
+	// progressive reporting
+	{
+		if (sequences_progress_ > report_step_) {
+		  KALDI_VLOG(1) << "After " << sequences_num_ << " sequences (" << frames_/(100.0 * 3600) << "Hr): "
+						<< "Obj(log[Pzx]) = " << obj_progress_/sequences_progress_
+						<< "  TokenAcc = " << 100.0*(1.0 - error_num_progress_/ref_num_progress_) << "%";
+		  // reset
+		  sequences_progress_ = 0;
+		  frames_progress_ = 0;
+		  obj_progress_ = 0.0;
+		  error_num_progress_ = 0;
+		  ref_num_progress_ = 0;
+		}
+	}
+
+  }else
+#endif
+  {
+     // not implemented for CPU yet
+     // return 0;
+  }
 }
 
 } // namespace nnet0

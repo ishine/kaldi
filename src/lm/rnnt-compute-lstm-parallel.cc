@@ -53,6 +53,7 @@ class TrainRNNTLstmParallelClass: public MultiThreadable {
 	typedef nnet0::ExamplesRepository  ExamplesRepository;
 	typedef nnet0::Nnet nnet;
 	typedef nnet0::Component Component;
+    typedef nnet0::NnetExample NnetExample;
 	typedef nnet0::RNNTNnetExample RNNTNnetExample;
 	typedef nnet0::MultiNetComponent MultiNetComponent;
 	typedef nnet0::RNNTJoinTransform RNNTJoinTransform;
@@ -167,19 +168,33 @@ private:
 	    nnet.SetTrainOptions(*trn_opts);
 
 	    // encoder predict join network
-	    MultiNetComponent multi_net;
-	    RNNTJoinTransform join_com;
+	    MultiNetComponent *multi_net = NULL;
+	    RNNTJoinTransform *join_com = NULL;
 	    for (int32 c = 0; c < nnet.NumComponents(); c++) {
 	    	if (nnet.GetComponent(c).GetType() == Component::kMultiNetComponent)
 	    		multi_net = &(dynamic_cast<MultiNetComponent&>(nnet.GetComponent(c)));
 	    }
-	    Nnet &am = multi_net.GetNestNnet("encoder");
-	    Nnet &lm = multi_net.GetNestNnet("predict");
-	    Nnet &join = multi_net.GetNestNnet("join");
-		for (int32 c = 0; c < join.NumComponents(); c++) {
-			if (join.GetComponent(c).GetType() == Component::kRNNTJoinTransform)
-				join_com = &(dynamic_cast<RNNTJoinTransform&>(nnet.GetComponent(c)));
+        if (multi_net == NULL)
+            KALDI_ERR << "RNNT network not exist" ;
+
+	    Nnet *am = multi_net->GetNestNnet("encoder");
+	    Nnet *lm = multi_net->GetNestNnet("predict");
+	    Nnet *join = multi_net->GetNestNnet("join");
+	    if (am == NULL || lm == NULL || join == NULL)
+	    	KALDI_ERR << "encoder, predict or join network not exist" ;
+
+		for (int32 c = 0; c < join->NumComponents(); c++) {
+			if (join->GetComponent(c).GetType() == Component::kRNNTJoinTransform)
+				join_com = &(dynamic_cast<RNNTJoinTransform&>(join->GetComponent(c)));
 		}
+
+        // using activations directly: remove softmax, if present
+        if (join->GetComponent(join->NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
+            KALDI_LOG << "Removing softmax from the nnet " << model_filename;
+            join->RemoveComponent(join->NumComponents()-1);
+        } else {
+            KALDI_LOG << "The nnet was without softmax " << model_filename;
+        }    
 
 	    // speaker independent network
 	    Nnet si_nnet;
@@ -194,9 +209,7 @@ private:
 	    rnnt_opts.batch_first = false;
 	    rnnt_opts.blank_label = opts->blank_label;
 
-		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff;
-		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
-
+	    CuMatrix<BaseFloat> feats_transf, words, join_in, join_out, nnet_diff, join_in_diff;
 		//double t1, t2, t3, t4;
 		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0;
 		kaldi::int64 total_frames = 0;
@@ -217,34 +230,34 @@ private:
 	    Matrix<BaseFloat> am_featmat;
 	    Vector<BaseFloat> am_frame_mask;
 	    // lm
-	    Vector<BaseFloat> lm_feat;
+	    Vector<BaseFloat> lm_featvec;
 	    Vector<BaseFloat> lm_frame_mask;
 	    Matrix<BaseFloat> lm_featmat;
-	    CuMatrix<BaseFloat> words;
-
-	    CuMatrix<BaseFloat> feats_transf, join_in, join_out, nnet_diff, join_in_diff;
 
 		int32 cur_stream_num = 0, num_skip, in_rows, out_rows,
-              in_frames, out_frames, in_frames_pad, out_frames_pad,
-			  in_words_pad, out_words_pad;
+              in_frames_pad, out_frames_pad,
+			  in_words_pad, out_words_pad,
+              sos_id;
 		int32 am_feat_dim, am_out_dim, lm_word_dim, lm_out_dim, max_out_dim;
 
-		am_feat_dim = am.InputDim();
-		am_out_dim = am.OutputDim();
-		lm_word_dim = lm.InputDim();
-		lm_out_dim = lm.OutputDim();
+		am_feat_dim = am->InputDim();
+		am_out_dim = am->OutputDim();
+		lm_word_dim = lm->InputDim();
+		lm_out_dim = lm->OutputDim();
 		max_out_dim = am_out_dim > lm_out_dim ? am_out_dim : lm_out_dim;
 	    num_skip = opts->skip_inner ? skip_frames : 1;
         frame_limit *= num_skip;
+        sos_id = opts->sos_id;
 
         std::string utt;
-        RNNTNnetExample *example;
+        RNNTNnetExample *rnnt_example = NULL;
+	    NnetExample		*example = NULL;
 	    Timer time;
 	    double time_now = 0;
 
 	    while (num_stream) {
 
-			int32 s = 0, max_frame_num = 0, max_words_num = 0, cur_frames = 0;
+			int s = 0, max_frame_num = 0, max_words_num = 0, cur_frames = 0;
 			cur_stream_num = 0;
 			num_frames = 0;
 			num_utt_frame_in.clear();
@@ -261,12 +274,12 @@ private:
 				utt = example->utt;
 				Matrix<BaseFloat> &mat = example->input_frames;
 
-				example = dynamic_cast<RNNTNnetExample*>(example);
-				labels_utt[s] = example->input_wordids;
+				rnnt_example = dynamic_cast<RNNTNnetExample*>(example);
+				labels_utt[s] = rnnt_example->input_wordids;
 
 				if ((s+1)*mat.NumRows() > frame_limit || (s+1)*max_frame_num > frame_limit) break;
 				if (max_frame_num < mat.NumRows()) max_frame_num = mat.NumRows();
-				if (max_words_num < labels_utt[s].size()) max_words_num = labels_utt[s].size();
+				if (max_words_num < labels_utt[s].size()+1) max_words_num = labels_utt[s].size()+1;
 
 				// forward the features through a feature-transform,
 				nnet_transf.Feedforward(CuMatrix<BaseFloat>(mat), &feats_transf);
@@ -285,7 +298,7 @@ private:
 				num_utt_frame_out.push_back(out_rows);
 
 				// lm feature
-				num_utt_word_in.push_back(labels_utt[s].size()-1);
+				num_utt_word_in.push_back(labels_utt[s].size()+1);
 
 				s++;
 				num_done++;
@@ -301,11 +314,11 @@ private:
 			in_frames_pad = cur_stream_num * max_frame_num;
 			out_frames_pad = cur_stream_num * ((max_frame_num+num_skip-1)/num_skip);
 			new_utt_flags.resize(cur_stream_num, 1);
-			rnnt_opts.maxT = max_frame_num;
+			rnnt_opts.maxT = (max_frame_num+num_skip-1)/num_skip;
 			rnnt_opts.maxU = max_words_num;
 
 			// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
-			am_featmat.Resize(in_frames_pad, feat_dim, kSetZero);
+			am_featmat.Resize(in_frames_pad, am_feat_dim, kSetZero);
 			for (int s = 0; s < cur_stream_num; s++) {
 				for (int r = 0; r < num_utt_frame_in[s]; r++) {
 				  if (r + targets_delay < num_utt_frame_in[s]) {
@@ -319,22 +332,35 @@ private:
 
 			// language model padding
 			in_words_pad = cur_stream_num * max_words_num;
-			out_words_pad = cur_stream_num * ((max_words_num+num_skip-1)/num_skip);
-			lm_feat.Resize(in_frames_pad, kSetZero);
+			out_words_pad = cur_stream_num * max_words_num;
+			lm_featvec.Resize(in_words_pad, kSetZero);
 			for (int s = 0; s < cur_stream_num; s++) {
 				for (int r = 0; r < num_utt_word_in[s]; r++) {
-				  if (r+targets_delay < num_utt_word_in[s]) {
-					  lm_feat(r*cur_stream_num + s) = labels_utt[s][r+targets_delay];
+                  if (r == 0) { // sos input
+                      lm_featvec(r*cur_stream_num + s) = sos_id;
+				  } else if (r+targets_delay < num_utt_word_in[s]) {
+					  lm_featvec(r*cur_stream_num + s) = labels_utt[s][r-1+targets_delay];
 				  } else{
 					  int last = (num_utt_word_in[s]-1);
-					  lm_feat(r*cur_stream_num + s) = labels_utt[s][last];
+					  lm_featvec(r*cur_stream_num + s) = labels_utt[s][last-1];
 				  }
 				}
 			}
 
+	        // report the speed
+	        if (num_done % 5000 == 0) {
+	          time_now = time.Elapsed();
+	          KALDI_VLOG(1) << "After " << num_done << " utterances: time elapsed = "
+	                        << time_now/60 << " min; processed " << total_frames/time_now
+	                        << " frames per second.";
+	        }
+
 			// lstm
-			am.ResetLstmStreams(new_utt_flags, batch_size);
-			lm.ResetLstmStreams(new_utt_flags, batch_size);
+			am->ResetLstmStreams(new_utt_flags, batch_size);
+			lm->ResetLstmStreams(new_utt_flags, batch_size);
+			if (join_com != NULL) {
+				join_com->SetRNNTStreamSize(num_utt_frame_out, num_utt_word_in, rnnt_opts.maxT, rnnt_opts.maxU);
+			}
 
 			// Propagation and CTC training
 			join_in.Resize(out_frames_pad+out_words_pad, max_out_dim, kSetZero);
@@ -344,12 +370,12 @@ private:
 			CuSubMatrix<BaseFloat> am_out_diff(join_in_diff, 0, out_frames_pad, 0, am_out_dim);
 			CuSubMatrix<BaseFloat> lm_out_diff(join_in_diff, out_frames_pad, out_words_pad, 0, lm_out_dim);
 
-			lm_featmat.Resize(lm_feat.Dim(), 1);
-			lm_featmat.CopyColFromVec(lm_feat, 0);
+			lm_featmat.Resize(lm_featvec.Dim(), lm_word_dim);
+			lm_featmat.CopyColFromVec(lm_featvec, 0);
 
-			am.Propagate(CuMatrix<BaseFloat>(am_featmat), &am_out);
-			lm.Propagate(CuMatrix<BaseFloat>(lm_featmat), &lm_out);
-			join.Propagate(join_in, join_out);
+			am->Propagate(CuMatrix<BaseFloat>(am_featmat), &am_out);
+			lm->Propagate(CuMatrix<BaseFloat>(lm_featmat), &lm_out);
+			join->Propagate(join_in, &join_out);
 			
 			// evaluate objective function we've chosen
 			if (objective_function == "rnnt") {
@@ -360,9 +386,9 @@ private:
 		    // backward pass
 			if (!crossvalidate) {
 				// backpropagate
-				join.Backpropagate(nnet_diff, &join_in_diff, true);
-				am.Backpropagate(am_out_diff, NULL, true);
-				lm.Backpropagate(lm_out_diff, NULL, true);
+				join->Backpropagate(nnet_diff, &join_in_diff, true);
+				am->Backpropagate(am_out_diff, NULL, true);
+				lm->Backpropagate(lm_out_diff, NULL, true);
 
 				update_frames += num_frames;
 				if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&

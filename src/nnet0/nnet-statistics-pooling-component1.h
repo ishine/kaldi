@@ -307,6 +307,13 @@ class StatisticsPoolingComponent : public Component {
       return nstream_;
   }
 
+  int32 OutputRow(int32 in_row) {
+      int nsubsample = this->GetSubSampleRate();
+      int S = this->GetStream();
+      int T = (in_row/S + nsubsample-1)/nsubsample;
+      return T*S; 
+  }
+
   /// set the utterance length used for parallel training
   void SetSeqLengths(const std::vector<int32> &sequence_lengths) {
 	  utt_num_frame_ = sequence_lengths;

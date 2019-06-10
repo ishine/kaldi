@@ -245,6 +245,13 @@ class SubSample : public Component {
       return nstream_;
   }
 
+  int32 OutputRow(int32 in_row) {
+      int nsubsample = this->GetSubSampleRate();
+      int S = this->GetStream();
+      int T = (in_row/S + nsubsample-1)/nsubsample;
+      return T*S; 
+  }
+
  private:
    int32 skip_frames_;
    int32 nstream_;

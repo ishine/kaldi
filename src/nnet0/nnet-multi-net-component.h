@@ -50,8 +50,6 @@ class MultiNetComponent : public UpdatableComponent {
     // std::vector<std::string> nested_nnet_filename;
     // parse config
     std::string token, name;
-	int32 offset, len = 0; 
-    BaseFloat scale, escale;
     while (is >> std::ws, !is.eof()) {
       ReadToken(is, false, &token); 
       if (token == "<NestedNnet>" || token == "<NestedNnetFilename>") {
@@ -65,7 +63,7 @@ class MultiNetComponent : public UpdatableComponent {
           Nnet nnet;
           nnet.Read(file_or_end);
           nnet_[name] = nnet;
-          KALDI_LOG << "Loaded nested <Nnet> from file : " << file_or_end;
+          KALDI_LOG << "Loaded nested nnet " << name << " from file : " << file_or_end;
 
           ReadToken(is, false, &file_or_end);
           KALDI_ASSERT(file_or_end == "</NestedNnet>" || file_or_end == "</NestedNnetFilename>");
@@ -81,7 +79,7 @@ class MultiNetComponent : public UpdatableComponent {
           Nnet nnet;
           nnet.Init(file_or_end);
           nnet_[name] = nnet;
-          KALDI_LOG << "Initialized nested <Nnet> from prototype : " << file_or_end;
+          KALDI_LOG << "Initialized nested nnet " << name << " from prototype : " << file_or_end;
 
           ReadToken(is, false, &file_or_end);
           KALDI_ASSERT(file_or_end == "</NestedNnetProto>");
@@ -273,8 +271,10 @@ class MultiNetComponent : public UpdatableComponent {
 	  return nnet_;
   }
 
-  Nnet &GetNestNnet(std::string name) {
-	  return nnet_[name];
+  Nnet *GetNestNnet(std::string name) {
+      if (nnet_.find(name) == nnet_.end())
+    	  return NULL;
+	  return &nnet_[name];
   }
 
  private:
