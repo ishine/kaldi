@@ -25,6 +25,7 @@
 #include "util/common-utils.h"
 #include "base/timer.h"
 #include "cudamatrix/cu-device.h"
+#include "nnet0/nnet-activation.h"
 #include "lm/rnnt-compute-lstm-parallel.h"
 
 int main(int argc, char *argv[]) {
@@ -103,8 +104,12 @@ int main(int argc, char *argv[]) {
 								&stats);
 
 
-    if (!opts.crossvalidate)
-       nnet.Write(target_model_filename, opts.binary);
+    if (!opts.crossvalidate) {
+        //add back the softmax
+        KALDI_LOG << "Appending the softmax " << target_model_filename;
+        nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+        nnet.Write(target_model_filename, opts.binary);
+    }
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

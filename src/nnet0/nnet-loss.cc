@@ -1148,11 +1148,12 @@ void CtcItf::ErrorRateMSeq(const std::vector<int> &frame_num_utt, const CuMatrix
 }
 
 /// Merge lost
-void CtcItf::Add(CtcItf *ctc)
-{
+void CtcItf::Add(CtcItf *ctc) {
 	  this->error_num_ += ctc->error_num_;
+	  this->sequences_num_ += ctc->sequences_num_;
 	  this->ref_num_ += ctc->ref_num_;
 	  this->frames_ += ctc->frames_;
+	  this->obj_total_ += ctc->obj_total_;
 
 	  // partial results during training
 	  this->error_num_progress_ += ctc->error_num_progress_;
@@ -1163,9 +1164,7 @@ void CtcItf::Add(CtcItf *ctc)
 
 }
 
-void CtcItf::Merge(int myid, int root)
-{
-
+void CtcItf::Merge(int myid, int root) {
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	void *addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->error_num_));
@@ -1174,10 +1173,16 @@ void CtcItf::Merge(int myid, int root)
 	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->ref_num_));
 	MPI_Reduce(addr, (void*)(&this->ref_num_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
 
+	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->obj_total_));
+	MPI_Reduce(addr, (void*)(&this->obj_total_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+    addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->sequences_num_));
+    MPI_Reduce(addr, (void*)(&this->sequences_num_), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 }
 
 std::string CtcItf::Report() {
   std::ostringstream oss;
+  oss << "\nLOG_PZX >> " << -obj_total_/sequences_num_ << " <<";
   oss << "\nTOKEN_ACCURACY >> " << 100.0*(1.0 - error_num_/ref_num_) << "% <<";
   return oss.str();
 }
@@ -1237,6 +1242,7 @@ void Ctc::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> 
 
   // update registries
   obj_progress_ += pzx;
+  obj_total_ += pzx;
   sequences_progress_ += 1;
   sequences_num_ += 1;
   frames_progress_ += num_frames;
@@ -1339,26 +1345,14 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
   diff->AddMat(-1.0, net_out_tmp);
 
-  /*
-  for (int s = 0; s < num_sequence; s++) {
-	  if (pzx(s) > -500.0)
-		  continue;
-
-	  for (int t = 0; t < num_frames_per_sequence; t++) {
-		  diff->Row(t*num_sequence + s).Set(0.0);
-	  }
-	  KALDI_WARN << "Dropped: " << s << "th/" << frame_num_utt[s] << " frames.";
-	  num_droped_++;
-	  pzx(s) = 0;
-  }
-  */
-
   // Clip gradient
   diff->ApplyFloor(-1.0);
   diff->ApplyCeiling(1.0);
 
   // update registries
-  obj_progress_ += pzx.Sum();
+  double pzx_sum = pzx.Sum();
+  obj_progress_ += pzx_sum;
+  obj_total_ += pzx_sum;
   sequences_progress_ += num_sequence;
   sequences_num_ += num_sequence;
   for (int s = 0; s < num_sequence; s++) {
@@ -1479,7 +1473,9 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 	diff->ApplyCeiling(1.0);
 
 	// update registries
-	obj_progress_ += -pzx.Sum();
+    double pzx_sum = -pzx.Sum();
+    obj_progress_ += pzx_sum;
+    obj_total_ += pzx_sum;
 	sequences_progress_ += num_sequence;
 	sequences_num_ += num_sequence;
 	for (int s = 0; s < num_sequence; s++) {
@@ -1569,9 +1565,11 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 	int alphabet_size = net_out.NumCols();
 
 	std::vector<int> label_lengths(num_sequence);
-	for (int i = 0; i < num_sequence; i++)
+	for (int i = 0; i < num_sequence; i++) {
+        ref_num_ += label[i].size();
+        ref_num_progress_ += label[i].size();
 		label_lengths[i] = label[i].size();
-
+    }
 
 	std::vector<int32> flat_labels(num_sequence*(maxU-1), 0);
 	// utterances label concatenation padding
@@ -1620,7 +1618,9 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 	diff->ApplyCeiling(1.0);
 
 	// update registries
-	obj_progress_ += -pzx.Sum();
+    double pzx_sum = -pzx.Sum();
+    obj_progress_ += pzx_sum;
+    obj_total_ += pzx_sum;
 	sequences_progress_ += num_sequence;
 	sequences_num_ += num_sequence;
 	for (int s = 0; s < num_sequence; s++) {
@@ -1717,9 +1717,11 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 
 
 	std::vector<int> label_lengths(num_sequence);
-	for (int i = 0; i < num_sequence; i++)
+	for (int i = 0; i < num_sequence; i++) {
 		label_lengths[i] = label[i].size();
-
+        ref_num_ += label[i].size();
+        ref_num_progress_ += label[i].size();
+    }
 
 	std::vector<int32> flat_labels(num_sequence*(maxU-1), 0);
 	// utterances label concatenation padding
@@ -1748,9 +1750,9 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 									pred_act_.Data(),
 									trans_grad.Data(),
 									pred_grad.Data(),
-									flat_labels.Data(),
-									label_lengths.Data(),
-									frame_num_utt.Data(),
+									flat_labels.data(),
+									label_lengths.data(),
+									frame_num_utt.data(),
 									alphabet_size,
 									num_sequence,
 									pzx.Data(),
@@ -1767,7 +1769,9 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 	diff->ApplyCeiling(1.0);
 
 	// update registries
-	obj_progress_ += -pzx.Sum();
+    double pzx_sum = -pzx.Sum();
+    obj_progress_ += pzx_sum;
+    obj_total_ += pzx_sum;
 	sequences_progress_ += num_sequence;
 	sequences_num_ += num_sequence;
 	for (int s = 0; s < num_sequence; s++) {

@@ -29,7 +29,7 @@ ifeq ($(USE_WARP_CTC), true)
 endif
 
 ifeq ($(USE_WARP_TRANSDUCER), true)
-    ADDLIBS += ../warp-transducer/build/warprnnt.so
+    ADDLIBS += ../lib/warprnnt.so
 endif
 
 include ../makefiles/default_rules.mk
