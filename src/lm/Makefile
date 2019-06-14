@@ -22,7 +22,7 @@ ADDLIBS = ../fstext/kaldi-fstext.a ../util/kaldi-util.a \
           ../base/kaldi-base.a ../nnet0/kaldi-nnet0.a ../cudamatrix/kaldi-cudamatrix.a ../matrix/kaldi-matrix.a
 
 ifeq ($(USE_WARP_TRANSDUCER), true)
-    ADDLIBS += ../warp-transducer/build/warprnnt.so
+    ADDLIBS += ../lib/warprnnt.so
 endif
 
 include ../makefiles/default_rules.mk

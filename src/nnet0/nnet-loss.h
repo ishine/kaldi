@@ -392,7 +392,7 @@ class MultiTaskLoss : public LossItf {
 
 class CtcItf {
 public:
-	CtcItf() : frames_(0), sequences_num_(0), ref_num_(0), error_num_(0),
+	CtcItf() : frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
 		  frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
 		  sequences_progress_(0), obj_progress_(0.0), report_step_(1000), num_dropped_(0) { }
 	virtual ~CtcItf() {};
@@ -432,6 +432,7 @@ protected:
 	int32 sequences_num_;
 	double ref_num_;                   // total number of tokens in label sequences
 	double error_num_;                 // total number of errors (edit distance between hyp and ref)
+	double obj_total_;                       // total optimization objective
 
 	int32 frames_progress_;
 	int32 ref_num_progress_;

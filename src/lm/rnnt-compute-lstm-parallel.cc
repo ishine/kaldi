@@ -39,7 +39,9 @@
 #include "nnet0/nnet-affine-transform.h"
 #include "nnet0/nnet-multi-net-component.h"
 #include "nnet0/nnet-rnnt-join-transform.h"
+#include "nnet0/nnet-word-vector-transform.h"
 
+#include "lm/lm-compute-lstm-parallel.h"
 #include "lm/rnnt-compute-lstm-parallel.h"
 
 namespace kaldi {
@@ -57,6 +59,7 @@ class TrainRNNTLstmParallelClass: public MultiThreadable {
 	typedef nnet0::RNNTNnetExample RNNTNnetExample;
 	typedef nnet0::MultiNetComponent MultiNetComponent;
 	typedef nnet0::RNNTJoinTransform RNNTJoinTransform;
+    typedef nnet0::WordVectorTransform WordVectorTransform;
 
 private:
     const RNNTLstmUpdateOptions *opts;
@@ -170,6 +173,7 @@ private:
 	    // encoder predict join network
 	    MultiNetComponent *multi_net = NULL;
 	    RNNTJoinTransform *join_com = NULL;
+        WordVectorTransform *word_transf = NULL;
 	    for (int32 c = 0; c < nnet.NumComponents(); c++) {
 	    	if (nnet.GetComponent(c).GetType() == Component::kMultiNetComponent)
 	    		multi_net = &(dynamic_cast<MultiNetComponent&>(nnet.GetComponent(c)));
@@ -177,6 +181,7 @@ private:
         if (multi_net == NULL)
             KALDI_ERR << "RNNT network not exist" ;
 
+        TrainlmUtil util;
 	    Nnet *am = multi_net->GetNestNnet("encoder");
 	    Nnet *lm = multi_net->GetNestNnet("predict");
 	    Nnet *join = multi_net->GetNestNnet("join");
@@ -188,8 +193,13 @@ private:
 				join_com = &(dynamic_cast<RNNTJoinTransform&>(join->GetComponent(c)));
 		}
 
+        for (int32 c = 0; c < lm->NumComponents(); c++) {
+            if (lm->GetComponent(c).GetType() == Component::kWordVectorTransform)
+                word_transf = &(dynamic_cast<WordVectorTransform&>(lm->GetComponent(c)));
+        }   
+
         // using activations directly: remove softmax, if present
-        if (join->GetComponent(join->NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
+        if (join->NumComponents() > 0 && join->GetComponent(join->NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
             KALDI_LOG << "Removing softmax from the nnet " << model_filename;
             join->RemoveComponent(join->NumComponents()-1);
         } else {
@@ -198,9 +208,8 @@ private:
 
 	    // speaker independent network
 	    Nnet si_nnet;
-	    if (this->kld_scale > 0) {
+	    if (this->kld_scale > 0 && si_model_filename != "")
 	    	si_nnet.Read(si_model_filename);
-	    }
 
 	    model_sync->Initialize(&nnet, this->thread_id_);
 
@@ -225,6 +234,8 @@ private:
 	    std::vector<int> num_utt_frame_in, num_utt_frame_out;
 	    std::vector<int> num_utt_word_in;
 	    std::vector<int> new_utt_flags;
+	    std::vector<int> sortedword_id;
+	    std::vector<int> sortedword_id_index;
 
 	    // am
 	    Matrix<BaseFloat> am_featmat;
@@ -362,7 +373,6 @@ private:
 				join_com->SetRNNTStreamSize(num_utt_frame_out, num_utt_word_in, rnnt_opts.maxT, rnnt_opts.maxU);
 			}
 
-			// Propagation and CTC training
 			join_in.Resize(out_frames_pad+out_words_pad, max_out_dim, kSetZero);
 			CuSubMatrix<BaseFloat> am_out(join_in, 0, out_frames_pad, 0, am_out_dim);
 			CuSubMatrix<BaseFloat> lm_out(join_in, out_frames_pad, out_words_pad, 0, lm_out_dim);
@@ -370,9 +380,14 @@ private:
 			CuSubMatrix<BaseFloat> am_out_diff(join_in_diff, 0, out_frames_pad, 0, am_out_dim);
 			CuSubMatrix<BaseFloat> lm_out_diff(join_in_diff, out_frames_pad, out_words_pad, 0, lm_out_dim);
 
+	        // sort input word id
+	        util.SortUpdateWord(lm_featvec, sortedword_id, sortedword_id_index);
+	        word_transf->SetUpdateWordId(sortedword_id, sortedword_id_index);
+
 			lm_featmat.Resize(lm_featvec.Dim(), lm_word_dim);
 			lm_featmat.CopyColFromVec(lm_featvec, 0);
 
+			// Propagation and CTC training
 			am->Propagate(CuMatrix<BaseFloat>(am_featmat), &am_out);
 			lm->Propagate(CuMatrix<BaseFloat>(lm_featmat), &lm_out);
 			join->Propagate(join_in, &join_out);
