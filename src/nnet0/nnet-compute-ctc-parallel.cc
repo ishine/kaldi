@@ -53,6 +53,7 @@ private:
 				targets_rspecifier;
 
 	ExamplesRepository *repository_;
+	Nnet *host_nnet_;
     NnetStats *stats_;
 
     const NnetTrainOptions *trn_opts;
@@ -83,6 +84,7 @@ private:
 				model_filename(model_filename),
 				targets_rspecifier(targets_rspecifier),
 				repository_(repository),
+                host_nnet_(nnet),
 				stats_(stats)
  	 		{
 				trn_opts = opts->trn_opts;
@@ -584,14 +586,17 @@ private:
 					p_merge_func->Merge(0);
 						KALDI_VLOG(1) << "Model merge NO." << parallel_opts->num_merge-p_merge_func->leftMerge()
 									   << " Current mergesize = " << p_merge_func->CurrentMergeCache() << " frames.";
-						model_sync->SetWeight(&nnet);
+				    model_sync->SetWeight(&nnet);
 				}
 			}
 
 			if (last_thread)
 			{
 				KALDI_VLOG(1) << "Last thread upload model to host.";
-					model_sync->CopyToHost(&nnet);
+				// model_sync->CopyToHost(&nnet);
+                // prevent copy local nnet component propagate buffer (e.g. lstm,cnn)
+                host_nnet_->Read(model_filename);
+				model_sync->SetWeight(host_nnet_);
 			}
 
 			model_sync->isfinished_[thread_idx] = true;

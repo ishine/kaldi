@@ -105,9 +105,11 @@ int main(int argc, char *argv[]) {
 
 
     if (!opts.crossvalidate) {
+        /*
         //add back the softmax
         KALDI_LOG << "Appending the softmax " << target_model_filename;
         nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+        */
         nnet.Write(target_model_filename, opts.binary);
     }
 

@@ -70,6 +70,7 @@ private:
 				si_model_filename;
 
 	ExamplesRepository *repository_;
+    Nnet *host_nnet_;
     RNNTStats *stats_;
 
     const NnetTrainOptions *trn_opts;
@@ -95,6 +96,7 @@ private:
 				model_sync(model_sync),
 				model_filename(model_filename),
 				repository_(repository),
+                host_nnet_(nnet),
 				stats_(stats)
  	 		{
 				trn_opts = opts->trn_opts;
@@ -226,7 +228,8 @@ private:
 		int32 num_stream = opts->num_stream;
 		int32 frame_limit = opts->max_frames;
 		int32 targets_delay = opts->targets_delay;
-		int32 batch_size = opts->batch_size;
+		int32 am_truncated = opts->am_truncated;
+		int32 lm_truncated = opts->lm_truncated;
         int32 skip_frames = opts->skip_frames;
 
 	    std::vector<Matrix<BaseFloat> > feats_utt(num_stream);  // Feature matrix of every utterance
@@ -367,8 +370,8 @@ private:
 	        }
 
 			// lstm
-			am->ResetLstmStreams(new_utt_flags, batch_size);
-			lm->ResetLstmStreams(new_utt_flags, batch_size);
+			am->ResetLstmStreams(new_utt_flags, am_truncated);
+			lm->ResetLstmStreams(new_utt_flags, lm_truncated);
 			if (join_com != NULL) {
 				join_com->SetRNNTStreamSize(num_utt_frame_out, num_utt_word_in, rnnt_opts.maxT, rnnt_opts.maxU);
 			}
@@ -480,11 +483,18 @@ private:
 				KALDI_VLOG(1) << "Thread " << thread_id_ << " merge NO."
 								<< parallel_opts->num_merge - model_sync->leftMerge()
 									<< " Current mergesize = " << update_frames << " frames.";
-			}
+			} else if(parallel_opts->num_threads == 1) {
+                // upload current model
+                model_sync->GetWeight(&nnet, this->thread_id_);
+            }
 
 			if (this->thread_id_ == 0) {
-				model_sync->CopyToHost(&nnet);
 				KALDI_VLOG(1) << "Last thread upload model to host.";
+                // prevent copy local nnet component propagate buffer (e.g. lstm,cnn)
+				// model_sync->CopyToHost(&nnet);
+                host_nnet_->Read(model_filename);
+				// download last model
+				model_sync->SetWeight(host_nnet_, this->thread_id_);
 			}
 		}
 	}

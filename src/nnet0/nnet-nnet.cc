@@ -857,6 +857,10 @@ std::string Nnet::InfoBackPropagate() const {
     // nested networks too...
     if (Component::kParallelComponent == components_[i]->GetType()) {
       ostr << dynamic_cast<ParallelComponent*>(components_[i])->InfoBackPropagate();
+    } else if (Component::kMultiNetComponent == components_[i]->GetType()) {
+      ostr << dynamic_cast<MultiNetComponent*>(components_[i])->InfoBackPropagate();
+    } else if (Component::kParallelComponentMultiTask == components_[i]->GetType()) {
+      ostr << dynamic_cast<ParallelComponentMultiTask*>(components_[i])->InfoBackPropagate();
     }
   }
   return ostr.str();

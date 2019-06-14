@@ -53,13 +53,15 @@ struct RNNTLstmUpdateOptions : public NnetUpdateOptions {
     int32 num_stream;
     int32 max_frames;
     int32 batch_size;
+    int32 am_truncated;
+    int32 lm_truncated;
     int32 blank_label;
     int32 sos_id;
 
 	RNNTLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts,
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
     	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts),
-		  num_stream(4), max_frames(25000), batch_size(0), blank_label(0), sos_id(0) { 
+		  num_stream(4), max_frames(25000), batch_size(0), am_truncated(0), lm_truncated(0), blank_label(0), sos_id(0) { 
           objective_function = "rnnt";
     }
 
@@ -67,7 +69,9 @@ struct RNNTLstmUpdateOptions : public NnetUpdateOptions {
 	  	NnetUpdateOptions::Register(po);
 	  	po->Register("num-stream", &num_stream, "---CTC--- BPTT multi-stream training");
 	  	po->Register("max-frames", &max_frames, "Max number of frames to be processed");
-	  	po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
+	  	po->Register("batch-size", &batch_size, "lstm bptt truncated size");
+	  	po->Register("am-truncated", &am_truncated, "encoder lstm network bptt truncated size");
+	  	po->Register("lm-truncated", &lm_truncated, "predict lstm network bptt truncated size");
 	  	po->Register("blank-label", &blank_label, "CTC output bank label id");
 	  	po->Register("sos-id", &sos_id, "start of utterance(<s>) id in predict model");
   	}
