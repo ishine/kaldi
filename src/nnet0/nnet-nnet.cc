@@ -498,46 +498,40 @@ void Nnet::ResetLstmStreams(const std::vector<int32> &stream_reset_flag, int32 n
     if (GetComponent(c).GetType() == Component::kLstmProjectedStreams) {
       LstmProjectedStreams& comp = dynamic_cast<LstmProjectedStreams&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
-    }    
-    else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
+    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
       LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
-    }
-    else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
+    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
       LstmProjectedStreamsFixedPoint& comp = dynamic_cast<LstmProjectedStreamsFixedPoint&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
-    }
-    else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsSimple) {
+    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsSimple) {
       LstmProjectedStreamsSimple& comp = dynamic_cast<LstmProjectedStreamsSimple&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
-    }
-    else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsResidual) {
+    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsResidual) {
       LstmProjectedStreamsResidual& comp = dynamic_cast<LstmProjectedStreamsResidual&>(GetComponent(c));
 	  comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
-	}
-    else if (GetComponent(c).GetType() == Component::kLstmStreams) {
+	} else if (GetComponent(c).GetType() == Component::kLstmStreams) {
       LstmStreams& comp = dynamic_cast<LstmStreams&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
-    }
-    else if (GetComponent(c).GetType() == Component::kGruStreams) {
+    } else if (GetComponent(c).GetType() == Component::kGruStreams) {
     	GruStreams& comp = dynamic_cast<GruStreams&>(GetComponent(c));
       comp.ResetGRUStreams(stream_reset_flag, ntruncated_bptt_size);
-    }else if(GetComponent(c).GetType() == Component::kGruProjectedStreams){
+    } else if(GetComponent(c).GetType() == Component::kGruProjectedStreams){
         GruProjectedStreams& comp = dynamic_cast<GruProjectedStreams&>(GetComponent(c));
         comp.ResetGRUProjectedStreams(stream_reset_flag, ntruncated_bptt_size);
-    }else if (GetComponent(c).GetType() == Component::kGruProjectedStreamsFast) {
+    } else if (GetComponent(c).GetType() == Component::kGruProjectedStreamsFast) {
         GruProjectedStreamsFast& comp = dynamic_cast<GruProjectedStreamsFast&>(GetComponent(c));
         comp.ResetGRUProjectedStreamsFast(stream_reset_flag, ntruncated_bptt_size);
-    }   
-    else if (GetComponent(c).GetType() == Component::kParallelComponentMultiTask) {
+    } else if (GetComponent(c).GetType() == Component::kParallelComponentMultiTask) {
       ParallelComponentMultiTask& comp = dynamic_cast<ParallelComponentMultiTask&>(GetComponent(c));
       comp.ResetLstmStreams(stream_reset_flag, ntruncated_bptt_size);
-    }
-    else if (GetComponent(c).GetType() == Component::kSubSample) {
+    } else if (GetComponent(c).GetType() == Component::kSubSample) {
       SubSample& comp = dynamic_cast<SubSample&>(GetComponent(c));
       comp.SetStream(stream_reset_flag.size());
-    }
-    else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
+    } else if (GetComponent(c).GetType() == Component::kSpliceSample) {
+        SpliceSample& comp = dynamic_cast<SpliceSample&>(GetComponent(c));
+        comp.SetStream(stream_reset_flag.size());
+    } else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
     	StatisticsPoolingComponent& comp = dynamic_cast<StatisticsPoolingComponent&>(GetComponent(c));
     	comp.SetStream(stream_reset_flag.size());
 	}
@@ -580,8 +574,11 @@ void Nnet::ResetSubSample(int nstream, int skip_frames) {
 			SubSample& comp = dynamic_cast<SubSample&>(GetComponent(c));
 			comp.SetStream(nstream);
 			comp.SetSubSampleRate(skip_frames);
-		}
-		else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
+		} if (GetComponent(c).GetType() == Component::kSpliceSample) {
+			SpliceSample& comp = dynamic_cast<SpliceSample&>(GetComponent(c));
+			comp.SetStream(nstream);
+			comp.SetSubSampleRate(skip_frames);
+		} else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
 			StatisticsPoolingComponent& comp = dynamic_cast<StatisticsPoolingComponent&>(GetComponent(c));
 			comp.SetStream(nstream);
 			comp.SetSubSampleRate(skip_frames);
@@ -857,6 +854,10 @@ std::string Nnet::InfoBackPropagate() const {
     // nested networks too...
     if (Component::kParallelComponent == components_[i]->GetType()) {
       ostr << dynamic_cast<ParallelComponent*>(components_[i])->InfoBackPropagate();
+    } else if (Component::kMultiNetComponent == components_[i]->GetType()) {
+      ostr << dynamic_cast<MultiNetComponent*>(components_[i])->InfoBackPropagate();
+    } else if (Component::kParallelComponentMultiTask == components_[i]->GetType()) {
+      ostr << dynamic_cast<ParallelComponentMultiTask*>(components_[i])->InfoBackPropagate();
     }
   }
   return ostr.str();

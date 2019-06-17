@@ -95,6 +95,7 @@ class Component {
     kAddShift,
     kRescale,
 	kSubSample,
+	kSpliceSample,
     
     kKlHmm = 0x0800,
     kSentenceAveragingComponent, /* deprecated */

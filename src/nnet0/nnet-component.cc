@@ -121,6 +121,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kRbm,"<Rbm>" },
   { Component::kSplice,"<Splice>" },
   { Component::kSubSample,"<SubSample>" },
+  { Component::kSpliceSample,"<SpliceSample>" },
   { Component::kCopy,"<Copy>" },
   { Component::kAddShift,"<AddShift>" },
   { Component::kRescale,"<Rescale>" },
@@ -286,6 +287,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kSubSample :
       ans = new SubSample(input_dim, output_dim);
+      break;
+    case Component::kSpliceSample :
+      ans = new SpliceSample(input_dim, output_dim);
       break;
     case Component::kCopy :
       ans = new CopyComponent(input_dim, output_dim);
