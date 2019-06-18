@@ -674,6 +674,35 @@ void Nnet::SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_
 	*/
 }
 
+void Nnet::SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_bias,
+		bool remove_head = false) {
+	int32 c, out_dim, tag;
+	AffineTransform  *affine;
+	for (c = this->NumComponents()-1; c>=0; c++) {
+		if (this->GetComponent(c).GetType() == Component::kAffineTransform) {
+			// output class affine layer
+			affine = &(dynamic_cast<AffineTransform&>(this->GetComponent(c)));
+            tag = c;
+			break;
+		}
+	}
+
+	Matrix<BaseFloat> &mat = affine->GetLinearity();
+	Vector<BaseFloat> &bias = affine->GetBias();
+
+	out_linearity.Resize(mat.NumRows(), mat.NumCols());
+	out_bias.Resize(bias.Dim());
+	out_linearity.CopyFromMat(mat);
+	out_bias.CopyFromVec(bias);
+
+    // remove AffineTransform, softmax layer
+	// retain word vecotor and lstm layer
+	if (remove_head) {
+		for (c = this->NumComponents()-1; c >= tag; c--)
+			this->RemoveComponent(c);
+	}
+}
+
 void Nnet::RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
 		const std::vector<Matrix<BaseFloat> > &cell)
 {
