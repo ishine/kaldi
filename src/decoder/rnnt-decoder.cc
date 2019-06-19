@@ -21,20 +21,18 @@
 
 namespace kaldi {
 
-RNNTDecoder::RNNTDecoder(KaldiRNNTlmWrapper rnntlm,
+RNNTDecoder::RNNTDecoder(KaldiRNNTlmWrapper &rnntlm,
 						RNNTDecoderOptions &config):
-		rnntlm_(rnntlm), config_(config) {
+		config_(config), rnntlm_(rnntlm) {
 	A_ = new std::list<Sequence*>;
 	B_ = new std::list<Sequence*>;
 	rd_ = rnntlm.GetRDim();
 	cd_ = rnntlm.GetCDim();
 }
 
-void RNNTDecoder::FreeSequence(std::list<Sequence* > &list) {
-	for (auto &seq : list) {
-		for (int i = 0; i < seq->pred.size(); i++)
-			pred_buffer_.push_back(seq->pred[i]);
-		his_buffer_.push_back(seq->lmhis);
+void RNNTDecoder::FreeList(std::list<Sequence* > *list) {
+	for (auto &seq : *list) {
+        FreeSeqence(seq);
 		delete seq;
 	}
 
@@ -55,6 +53,13 @@ void RNNTDecoder::FreeSequence(std::list<Sequence* > &list) {
 		}
 		his_buffer_.resize(config_.max_mem);
 	}
+}
+
+void RNNTDecoder::FreeSeqence(Sequence *seq) {
+    if (seq == NULL) return;
+	for (int i = 0; i < seq->pred.size(); i++)
+		pred_buffer_.push_back(seq->pred[i]);
+	his_buffer_.push_back(seq->lmhis);
 }
 
 Vector<BaseFloat>* RNNTDecoder::MallocPred() {
@@ -82,7 +87,7 @@ LstmLmHistroy* RNNTDecoder::MallocHis(MatrixResizeType resize_type = kSetZero) {
 void RNNTDecoder::InitDecoding() {
 	// initialization
 	// for (auto &seq : *B_) delete seq;
-	FreeSequence(*B_);
+	FreeList(B_);
 	B_->clear();
 	LstmLmHistroy *sos_h = MallocHis(kSetZero);
 	Sequence *seq = new Sequence(sos_h, config_.blank);
@@ -102,7 +107,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
 	int vocab_size, len;
-	Sequence *seq, *seqi, *seqj;
+	Sequence *seqi, *seqj;
 	Vector<BaseFloat> *pred, logprob(rnntlm_.GetVocabSize());
 	LstmLmHistroy *his;
 
@@ -111,7 +116,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	for (int n = 0; n < nframe; n++) {
 		B_->sort(RNNTUtil::compare_len_reverse);
 		//for (auto &seq : *A_) delete seq;
-		FreeSequence(*A_);
+		FreeList(A_);
 		delete A_;
 
 		A_ = B_;
@@ -181,7 +186,9 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				}
 				A_->push_back(y_k);
 			}
-
+            
+            FreeSeqence(y_hat);
+            delete y_hat;
 			y_hat = *std::max_element(A_->begin(), A_->end(), RNNTUtil::compare_logp);
 			y_b = *std::max_element(B_->begin(), B_->end(), RNNTUtil::compare_logp);
 			if (B_->size() >= config_.beam && y_b->logp >= y_hat->logp) break;

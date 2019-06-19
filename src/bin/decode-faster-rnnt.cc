@@ -74,6 +74,7 @@ int main(int argc, char *argv[]) {
     BaseFloat tot_like = 0.0, logp = 0.0;
     kaldi::int64 frame_count = 0;
     int num_success = 0, num_fail = 0;
+    std::vector<int> words;
 
     Timer timer;
     for (; !loglikes_reader.Done(); loglikes_reader.Next()) {
@@ -88,8 +89,6 @@ int main(int argc, char *argv[]) {
 		// decoding
 		decoder.BeamSearch(loglikes);
 
-		std::vector<int> words;
-		float logp;
 		if (decoder.GetBestPath(words, logp)) {
 			words_writer.Write(key, words);
 			if (word_syms != NULL) {

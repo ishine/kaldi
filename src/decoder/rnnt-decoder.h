@@ -54,13 +54,14 @@ class RNNTDecoder {
 
 	protected:
 		void InitDecoding();
-		void FreeSequence(std::list<Sequence* > &list);
+		void FreeList(std::list<Sequence* > *list);
+		void FreeSequence(Sequence* > *seq);
 		Vector<BaseFloat>* MallocPred();
 		LstmLmHistroy* MallocHis(MatrixResizeType resize_type);
 
 
-		RNNTDecoderOptions config_;
-		KaldiRNNTlmWrapper rnntlm_;
+		RNNTDecoderOptions &config_;
+		KaldiRNNTlmWrapper &rnntlm_;
 		std::list<Sequence* > *A_;
 		std::list<Sequence* > *B_;
 		std::list<Vector<BaseFloat> *> pred_buffer_;
