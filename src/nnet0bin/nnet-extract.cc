@@ -22,6 +22,7 @@
 #include "util/common-utils.h"
 #include "nnet0/nnet-nnet.h"
 #include "nnet0/nnet-parallel-component-multitask.h"
+#include "nnet0/nnet-multi-net-component.h"
 
 int main(int argc, char *argv[]) {
   try {
@@ -62,24 +63,31 @@ int main(int argc, char *argv[]) {
     }
 
     ParallelComponentMultiTask *parallel = NULL;
+    MultiNetComponent *multi_net = NULL;
     for (int32 c = 0; c < nnet.NumComponents(); c++) {   
         if (nnet.GetComponent(c).GetType() == Component::kParallelComponentMultiTask)
             parallel = &(dynamic_cast<ParallelComponentMultiTask&>(nnet.GetComponent(c)));
+        else if (nnet.GetComponent(c).GetType() == Component::kMultiNetComponent)
+            multi_net = &(dynamic_cast<MultiNetComponent&>(nnet.GetComponent(c)));
     }
 
-    Nnet nnet_out = nnet;
+    Output ko(model_out_filename, binary_write);
+
     if (parallel != NULL) {
+        Nnet nnet_out = nnet;
         std::unordered_map<std::string, Nnet> &mnet = parallel->GetNnet();
         if(mnet.find(output_name) == mnet.end())
             KALDI_ERR << "Can not find ouput network name " << output_name;
         nnet_out.RemoveLastComponent();
         nnet_out.AppendNnet(mnet[output_name]);
-    }
-
-    //finally write the nnet to disk
-    {
-      Output ko(model_out_filename, binary_write);
-      nnet_out.Write(ko.Stream(), binary_write);
+        //finally write the nnet to disk
+        nnet_out.Write(ko.Stream(), binary_write);
+    } else if (multi_net != NULL) {
+        Nnet *nnet_out = multi_net->GetNestNnet(output_name);
+        if (nnet_out == NULL)
+            KALDI_ERR << "Can not find ouput network name " << output_name;
+        //finally write the nnet to disk
+        nnet_out->Write(ko.Stream(), binary_write);
     }
 
     KALDI_LOG << "Written model to " << model_out_filename;

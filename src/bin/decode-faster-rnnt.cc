@@ -88,18 +88,20 @@ int main(int argc, char *argv[]) {
 
     SequentialBaseFloatMatrixReader loglikes_reader(loglikes_rspecifier);
     // Reads the language model.
-	KaldiRNNTlmWrapper rnntlm(rnntlm_opts, word_syms, "", lstmlm_rxfilename);
+	KaldiRNNTlmWrapper rnntlm(rnntlm_opts, word_syms_filename, "", lstmlm_rxfilename);
 
 	std::list<Sequence* > *A = new std::list<Sequence*>;
 	std::list<Sequence* > *B = new std::list<Sequence*>;
 	Vector<BaseFloat> pred, logprob;
-	LstmLmHistroy his;
 	Sequence *seq, *seqi, *seqj;
+    std::vector<int> rd = rnntlm.GetRDim(), cd = rnntlm.GetCDim();
+	LstmLmHistroy his(rd, cd, kUndefined);
+    LstmLmHistroy sos_h(rd, cd, kSetZero);
 
     BaseFloat tot_like = 0.0, logp = 0.0;
     kaldi::int64 frame_count = 0;
     int num_success = 0, num_fail = 0;
-    int rd = rnntlm.GetRDim(), cd = rnntlm.GetCDim(), vocab_size, len;
+    int vocab_size, len;
 
     Timer timer;
     for (; !loglikes_reader.Done(); loglikes_reader.Next()) {
@@ -113,25 +115,24 @@ int main(int argc, char *argv[]) {
 		}
 
 		// initialization
-		for (auto &seq : B) delete seq;
+		for (auto &seq : *B) delete seq;
 		B->clear();
-		LstmLmHistroy h(rd, cd, kSetZero);
-		seq = new Sequence(blank, h);
+		seq = new Sequence(sos_h, blank);
 		B->push_back(seq);
 
 		// decode one utterance
 		int nframe = loglikes.NumRows();
 		for (int n = 0; n < nframe; n++) {
-			B->sort(RNNTUtil::compare_len);
-			for (auto &seq : A) delete seq;
+			B->sort(RNNTUtil::compare_len_reverse);
+			for (auto &seq : *A) delete seq;
 			delete A;
 			A = B;
 			B = new std::list<Sequence*>;
 
 			if (use_prefix) {
-				auto last = A->rend()-1;
-				for (auto iterj = A->begin(); iterj != last; iterj++) {
-					for (auto iteri = iterj+1; iteri != A->end(); iteri++) {
+				for (auto iterj = A->begin(); iterj != A->end(); iterj++) {
+                    auto iteri = iterj; iteri++;
+					for (; iteri != A->end(); iteri++) {
 						seqi = *iteri; seqj = *iterj;
 						if (!RNNTUtil::isprefix(seqi->k, seqj->k))
 							continue;
@@ -157,8 +158,10 @@ int main(int argc, char *argv[]) {
 			while (true) {
 				// y* = most probable in A
 				Sequence *y_hat, *y_b;
-				y_hat = std::max(A->begin(), A->end(), RNNTUtil::compare_logp);
-				A->remove(y_hat);
+				auto it = std::max_element(A->begin(), A->end(), RNNTUtil::compare_logp);
+                y_hat = *it;
+                A->erase(it);
+				//A->remove(y_hat);
 
 				// get rnnt lm current output and hidden state
 				len = y_hat->k.size();
@@ -171,7 +174,7 @@ int main(int argc, char *argv[]) {
 
 				vocab_size = logprob.Dim();
 				for (int k = 0; k < vocab_size; k++) {
-					Sequence *y_k = new Sequence(y_hat);
+					Sequence *y_k = new Sequence(*y_hat);
 					y_k->logp += logprob(k);
 					if (k == blank) {
 						B->push_back(y_k);
@@ -186,13 +189,13 @@ int main(int argc, char *argv[]) {
 					A->push_back(y_k);
 				}
 
-				y_hat = std::max(A->begin(), A->end(), RNNTUtil::compare_logp);
-				y_b = std::max(B->begin(), B->end(), RNNTUtil::compare_logp);
+				y_hat = *std::max_element(A->begin(), A->end(), RNNTUtil::compare_logp);
+				y_b = *std::max_element(B->begin(), B->end(), RNNTUtil::compare_logp);
 				if (B->size() >= beam && y_b->logp >= y_hat->logp) break;
 			}
 
 			// beam width
-			B->sort(RNNTUtil::compare_logp);
+			B->sort(RNNTUtil::compare_logp_reverse);
 			// free memory
 			int idx = 0;
 			for (auto it = B->begin(); it != B->end(); it++) {

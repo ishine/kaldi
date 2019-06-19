@@ -40,13 +40,14 @@ struct LstmLmHistroy {
         for (int i = 0; i < cdim.size(); i++)
             his_cell[i].Resize(cdim[i], resize_type);
     }
+    LstmLmHistroy() {}
 
 	std::vector<Vector<BaseFloat> > his_recurrent; //  each hidden lstm layer recurrent history
 	std::vector<Vector<BaseFloat> > his_cell; //  each hidden lstm layer cell history
 };
 
 struct Sequence {
-	Sequence(int blank = 0, LstmLmHistroy &h) {
+	Sequence(LstmLmHistroy &h, int blank = 0) {
 		pred.clear();
 		k.push_back(blank);
 		lmhis = h;
@@ -64,12 +65,20 @@ struct Sequence {
 };
 
 struct RNNTUtil {
-	static bool compare_len(const Sequence &a, const Sequence &b) {
-		return a.k.size() > b.k.size();
+	static bool compare_len(const Sequence *a, const Sequence *b) {
+		return a->k.size() < b->k.size();
 	}
 
-	static bool compare_logp(const Sequence &a, const Sequence &b) {
-		return a.logp > b.logp;
+	static bool compare_len_reverse(const Sequence *a, const Sequence *b) {
+		return a->k.size() > b->k.size();
+	}
+
+	static bool compare_logp(const Sequence *a, const Sequence *b) {
+		return a->logp < b->logp;
+	}
+
+	static bool compare_logp_reverse(const Sequence *a, const Sequence *b) {
+		return a->logp > b->logp;
 	}
 
 	static bool isprefix(const std::vector<int> &a, const std::vector<int> &b) {
