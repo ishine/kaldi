@@ -333,7 +333,7 @@ class SpliceSample : public Component {
 	    int in_cols = in.NumCols();
         int T = rows/nstream_, idx = 0;
         for (int i = 0; i < num_indexes_; i++) {
-        	CuSubMatrix<BaseFloat> out_splice(out, 0, rows, i*in_cols, in_cols);
+        	CuSubMatrix<BaseFloat> out_splice(*out, 0, rows, i*in_cols, in_cols);
 	    	in2out_indexes_.resize(rows, NULL);
 	    	for (int t = 0; t < T; t++) {
                 for (int s = 0; s < nstream_; s++) {
@@ -353,7 +353,7 @@ class SpliceSample : public Component {
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
                         const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
 	  	KALDI_ASSERT((in_diff->NumRows()/nstream_ + skip_frames_-1)/skip_frames_ == out_diff.NumRows()/nstream_);
-	  	KALDI_ASSERT(out_diff->NumCols() == in_diff->NumCols()*num_indexes_);
+	  	KALDI_ASSERT(out_diff.NumCols() == in_diff->NumCols()*num_indexes_);
 
 	  	in_diff->SetZero();
 
