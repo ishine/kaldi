@@ -47,16 +47,16 @@ struct LstmLmHistroy {
 };
 
 struct Sequence {
-	Sequence(LstmLmHistroy &h, int blank = 0) {
+	Sequence(LstmLmHistroy *h, int blank = 0) {
 		pred.clear();
 		k.push_back(blank);
 		lmhis = h;
 		logp = 0;
 	}
 
-	std::vector<Vector<BaseFloat> > pred; 	// rnnt language model output
+	std::vector<Vector<BaseFloat>* > pred; 	// rnnt language model output
 	std::vector<int> k;						// decoded word list
-	LstmLmHistroy lmhis;					// rnnt language model history
+	LstmLmHistroy *lmhis;					// rnnt language model history
 	BaseFloat logp;							// probability of this sequence, in log scale
 
 	std::string tostring() {
@@ -127,6 +127,7 @@ class KaldiRNNTlmWrapper {
 
   std::vector<int> &GetRDim() { return recurrent_dim_; }
   std::vector<int> &GetCDim() { return cell_dim_; }
+  int GetVocabSize() { return nnlm_.OutputDim();}
 
   void GetLogProbParallel(const std::vector<int> &curt_words,
   										 const std::vector<LstmLmHistroy*> &context_in,

@@ -78,6 +78,7 @@ KaldiRNNTlmWrapper::KaldiRNNTlmWrapper(
 	    }
 	}
 
+	unk_ = eos_ = sos_ = 0;
 	in_words_.Resize(num_stream_, kUndefined);
 	in_words_mat_.Resize(num_stream_, 1, kUndefined);
 	words_.Resize(num_stream_, kUndefined);
