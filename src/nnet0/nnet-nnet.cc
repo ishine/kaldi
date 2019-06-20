@@ -676,8 +676,8 @@ void Nnet::SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_
 
 void Nnet::SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_bias,
 		bool remove_head = false) {
-	int32 c, out_dim, tag;
-	AffineTransform  *affine;
+	int32 c, tag;
+	AffineTransform  *affine = NULL;
 	for (c = this->NumComponents()-1; c>=0; c++) {
 		if (this->GetComponent(c).GetType() == Component::kAffineTransform) {
 			// output class affine layer
@@ -687,8 +687,10 @@ void Nnet::SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_
 		}
 	}
 
-	Matrix<BaseFloat> &mat = affine->GetLinearity();
-	Vector<BaseFloat> &bias = affine->GetBias();
+    if (affine == NULL) return;
+
+	const CuMatrixBase<BaseFloat> &mat = affine->GetLinearity();
+	const CuVectorBase<BaseFloat> &bias = affine->GetBias();
 
 	out_linearity.Resize(mat.NumRows(), mat.NumCols());
 	out_bias.Resize(bias.Dim());

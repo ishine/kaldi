@@ -73,41 +73,12 @@ KaldiRNNTlmWrapper::KaldiRNNTlmWrapper(
 	// Reads lstm lm symbol table.
 	fst::SymbolTable *lm_word_symbols = word_symbols;
 	if (lm_word_symbol_table_rxfilename != "") {
-	if (!(lm_word_symbols = fst::SymbolTable::ReadText(lm_word_symbol_table_rxfilename))) {
-	  KALDI_ERR << "Could not read symbol table from file " << lm_word_symbol_table_rxfilename;
-	}
-	}
-
-	for (int i = 0; i < lm_word_symbols->NumSymbols(); i++)
-	  word_to_lmwordid_[lm_word_symbols->Find(i)] = i;
-
-	auto it = word_to_lmwordid_.find(opts.unk_symbol);
-	if (it == word_to_lmwordid_.end())
-	  KALDI_WARN << "Could not find symbol " << opts.unk_symbol
-				  << " for out-of-vocabulary " << lm_word_symbol_table_rxfilename;
-	it = word_to_lmwordid_.find(opts.sos_symbol);
-	if (it == word_to_lmwordid_.end())
-	  KALDI_ERR << "Could not find start of sentence symbol " << opts.sos_symbol
-				  << " in " << lm_word_symbol_table_rxfilename;
-	sos_ = it->second;
-	it = word_to_lmwordid_.find(opts.eos_symbol);
-	if (it == word_to_lmwordid_.end())
-	  KALDI_ERR << "Could not find end of sentence symbol " << opts.eos_symbol
-				  << " in " << lm_word_symbol_table_rxfilename;
-	eos_ = it->second;
-
-	//map label id to language model word id
-	unk_ = word_to_lmwordid_[opts.unk_symbol];
-	label_to_lmwordid_.resize(label_to_word_.size());
-	for (int i = 0; i < label_to_word_.size(); i++)
-	{
-	  auto it = word_to_lmwordid_.find(label_to_word_[i]);
-	  if (it != word_to_lmwordid_.end())
-		  label_to_lmwordid_[i] = it->second;
-	  else
-		  label_to_lmwordid_[i] = unk_;
+	    if (!(lm_word_symbols = fst::SymbolTable::ReadText(lm_word_symbol_table_rxfilename))) {
+	        KALDI_ERR << "Could not read symbol table from file " << lm_word_symbol_table_rxfilename;
+	    }
 	}
 
+	unk_ = eos_ = sos_ = 0;
 	in_words_.Resize(num_stream_, kUndefined);
 	in_words_mat_.Resize(num_stream_, 1, kUndefined);
 	words_.Resize(num_stream_, kUndefined);
@@ -115,7 +86,7 @@ KaldiRNNTlmWrapper::KaldiRNNTlmWrapper(
 }
 
 void KaldiRNNTlmWrapper::Forward(int words_in, LstmLmHistroy& context_in,
-		  	   Vector<BaseFloat> &nnet_out, LstmLmHistroy& context_out) {
+		  	   Vector<BaseFloat> *nnet_out, LstmLmHistroy *context_out) {
 	// next produce and save current word rc information (recommend GPU)
 	// restore history
 	int i, num_layers = context_in.his_recurrent.size();
@@ -132,14 +103,19 @@ void KaldiRNNTlmWrapper::Forward(int words_in, LstmLmHistroy& context_in,
 	// forward propagate
 	nnlm_.Propagate(words_, &hidden_out_);
 
-	// save current words history
-	nnlm_.SaveContext(his_recurrent_, his_cell_);
-	for (i = 0; i < num_layers; i++) {
-		context_out.his_recurrent[i] = his_recurrent_[i].Row(0);
-		context_out.his_cell[i] = his_cell_[i].Row(0);
+	if (context_out != NULL) {
+		// save current words history
+		nnlm_.SaveContext(his_recurrent_, his_cell_);
+		for (i = 0; i < num_layers; i++) {
+			context_out.his_recurrent[i] = his_recurrent_[i].Row(0);
+			context_out.his_cell[i] = his_cell_[i].Row(0);
+		}
 	}
 
-	nnet_out = hidden_out_.Row(0);
+	if (nnet_out != NULL) {
+		nnet_out.Resize(hidden_out_.NumCols(), kUndefined);
+		hidden_out_.Row(0).CopyToVec(&nnet_out);
+	}
 }
 
 void KaldiRNNTlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
@@ -148,7 +124,7 @@ void KaldiRNNTlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 										 std::vector<BaseFloat> &logprob) {
 	// get current words log probility (CPU done)
 	LstmLmHistroy *his;
-	int i, j, wid, cid;
+	int i, j, wid;
 	logprob.resize(num_stream_);
 	for (i = 0; i < num_stream_; i++) {
 		wid = curt_words[i];
@@ -196,7 +172,7 @@ BaseFloat KaldiRNNTlmWrapper::GetLogProb(int32 curt_word,
 	SubVector<BaseFloat> linear_vec(out_linearity_.Row(curt_word));
 	Vector<BaseFloat> &hidden_out_vec = context_in->his_recurrent.back();
 
-	BaseFloat prob = VecVec(hidden_out_vec, linear_vec) + out_bias_(curt_word);
+	logprob = VecVec(hidden_out_vec, linear_vec) + out_bias_(curt_word);
 
 	if (context_out == NULL)
         return logprob;
