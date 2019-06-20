@@ -64,6 +64,7 @@ class RNNTDecoder {
 		void CopyPredList(std::vector<Pred*> &predlist);
 		void CopyHis(LstmLmHistroy* his);
 		void DeepCopySeq(Sequence *seq);
+        void CleanBuffer();
 
 
 		RNNTDecoderOptions &config_;

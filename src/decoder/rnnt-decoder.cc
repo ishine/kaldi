@@ -16,7 +16,6 @@
 // MERCHANTABLITY OR NON-INFRINGEMENT.
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
-
 #include "decoder/rnnt-decoder.h"
 
 namespace kaldi {
@@ -137,15 +136,28 @@ void RNNTDecoder::DeepCopySeq(Sequence *seq) {
 	CopyHis(seq->lmhis);
 }
 
+void RNNTDecoder::CleanBuffer() {
+    for (auto it = pred_buffer_.begin(); it != pred_buffer_.end(); it++)
+        delete it->first;
+    for (auto it = his_buffer_.begin(); it != his_buffer_.end(); it++)
+        delete it->first;
+    pred_buffer_.clear();
+    his_buffer_.clear();
+}
+
 void RNNTDecoder::InitDecoding() {
 	// initialization
 	// for (auto &seq : *B_) delete seq;
-	pred_buffer_.clear();
-	his_buffer_.clear();
+	FreeList(A_);
+	A_->clear();
 
 	FreeList(B_);
 	B_->clear();
-	LstmLmHistroy *sos_h = new LstmLmHistroy(kSetZero);
+
+    CleanBuffer();
+
+    // first input <s>
+    LstmLmHistroy *sos_h = new LstmLmHistroy(rd_, cd_, kSetZero);
 	Sequence *seq = new Sequence(sos_h, config_.blank);
 	DeepCopySeq(seq);
 	B_->push_back(seq);
