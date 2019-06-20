@@ -86,7 +86,7 @@ KaldiRNNTlmWrapper::KaldiRNNTlmWrapper(
 }
 
 void KaldiRNNTlmWrapper::Forward(int words_in, LstmLmHistroy& context_in,
-		  	   Vector<BaseFloat> &nnet_out, LstmLmHistroy& context_out) {
+		  	   Vector<BaseFloat> *nnet_out, LstmLmHistroy *context_out) {
 	// next produce and save current word rc information (recommend GPU)
 	// restore history
 	int i, num_layers = context_in.his_recurrent.size();
@@ -103,15 +103,19 @@ void KaldiRNNTlmWrapper::Forward(int words_in, LstmLmHistroy& context_in,
 	// forward propagate
 	nnlm_.Propagate(words_, &hidden_out_);
 
-	// save current words history
-	nnlm_.SaveContext(his_recurrent_, his_cell_);
-	for (i = 0; i < num_layers; i++) {
-		context_out.his_recurrent[i] = his_recurrent_[i].Row(0);
-		context_out.his_cell[i] = his_cell_[i].Row(0);
+	if (context_out != NULL) {
+		// save current words history
+		nnlm_.SaveContext(his_recurrent_, his_cell_);
+		for (i = 0; i < num_layers; i++) {
+			context_out.his_recurrent[i] = his_recurrent_[i].Row(0);
+			context_out.his_cell[i] = his_cell_[i].Row(0);
+		}
 	}
 
-    nnet_out.Resize(hidden_out_.NumCols(), kUndefined);
-    hidden_out_.Row(0).CopyToVec(&nnet_out);
+	if (nnet_out != NULL) {
+		nnet_out.Resize(hidden_out_.NumCols(), kUndefined);
+		hidden_out_.Row(0).CopyToVec(&nnet_out);
+	}
 }
 
 void KaldiRNNTlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,

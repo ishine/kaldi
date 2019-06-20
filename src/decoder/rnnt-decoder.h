@@ -47,6 +47,7 @@ struct RNNTDecoderOptions {
 };
 
 class RNNTDecoder {
+	typedef Vector<BaseFloat> Pred;
 	public:
 		RNNTDecoder(KaldiRNNTlmWrapper &rnntlm, RNNTDecoderOptions &config);
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
@@ -55,17 +56,24 @@ class RNNTDecoder {
 	protected:
 		void InitDecoding();
 		void FreeList(std::list<Sequence* > *list);
-		void FreeSequence(Sequence* > *seq);
-		Vector<BaseFloat>* MallocPred();
-		LstmLmHistroy* MallocHis(MatrixResizeType resize_type);
+		void FreeSeq(Sequence *seq);
+		void FreePred(Pred *pred);
+		void FreeHis(LstmLmHistroy *his);
+		Pred* MallocPred();
+		LstmLmHistroy* MallocHis();
+		void CopyPredList(std::vector<Pred*> &predlist);
+		void CopyHis(LstmLmHistroy* his);
+		void DeepCopySeq(Sequence *seq);
 
 
 		RNNTDecoderOptions &config_;
 		KaldiRNNTlmWrapper &rnntlm_;
 		std::list<Sequence* > *A_;
 		std::list<Sequence* > *B_;
-		std::list<Vector<BaseFloat> *> pred_buffer_;
-		std::list<LstmLmHistroy *> his_buffer_;
+		std::unordered_map<Vector<BaseFloat> *, int> pred_buffer_;
+		std::unordered_map<LstmLmHistroy *, int> his_buffer_;
+		std::list<Vector<BaseFloat> *> pred_list_;
+		std::list<LstmLmHistroy *>	his_list_;
 		std::vector<int> rd_;
 		std::vector<int> cd_;
 

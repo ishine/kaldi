@@ -138,7 +138,7 @@ class KaldiRNNTlmWrapper {
 		  	  	  	  	  	  	  	   LstmLmHistroy* context_out);
 
   void Forward(int words_in, LstmLmHistroy& context_in,
-		  	   Vector<BaseFloat> &nnet_out, LstmLmHistroy& context_out);
+		  	   Vector<BaseFloat> *nnet_out, LstmLmHistroy *context_out);
 
   inline int GetWordId(int wid) { return label_to_lmwordid_[wid];}
   inline int GetWordId(std::string word) { return word_to_lmwordid_[word];}

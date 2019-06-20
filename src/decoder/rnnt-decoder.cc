@@ -32,65 +32,122 @@ RNNTDecoder::RNNTDecoder(KaldiRNNTlmWrapper &rnntlm,
 
 void RNNTDecoder::FreeList(std::list<Sequence* > *list) {
 	for (auto &seq : *list) {
-        FreeSeqence(seq);
+		FreeSeq(seq);
 		delete seq;
 	}
 
 	int idx = 0;
-	if (pred_buffer_.size() > config_.max_mem) {
-		for (auto it = pred_buffer_.begin(); it != pred_buffer_.end(); it++) {
+	if (pred_list_.size() > config_.max_mem) {
+		for (auto it = pred_list_.begin(); it != pred_list_.end(); it++) {
 			if (idx >= config_.max_mem) delete (*it);
 			idx++;
 		}
-		pred_buffer_.resize(config_.max_mem);
+		pred_list_.resize(config_.max_mem);
 	}
 
 	idx = 0;
-	if (his_buffer_.size() > config_.max_mem) {
-		for (auto it = his_buffer_.begin(); it != his_buffer_.end(); it++) {
+	if (his_list_.size() > config_.max_mem) {
+		for (auto it = his_list_.begin(); it != his_list_.end(); it++) {
 			if (idx >= config_.max_mem) delete (*it);
 			idx++;
 		}
-		his_buffer_.resize(config_.max_mem);
+		his_list_.resize(config_.max_mem);
 	}
 }
 
-void RNNTDecoder::FreeSeqence(Sequence *seq) {
-    if (seq == NULL) return;
+void RNNTDecoder::FreeSeq(Sequence *seq) {
+	if (seq == NULL) return;
 	for (int i = 0; i < seq->pred.size(); i++)
-		pred_buffer_.push_back(seq->pred[i]);
-	his_buffer_.push_back(seq->lmhis);
+		FreePred(seq->pred[i]);
+    FreeHis(seq->lmhis);
+}
+
+void RNNTDecoder::FreePred(Pred *pred) {
+	auto it = pred_buffer_.find(pred);
+	if (it != pred_buffer_.end()) {
+		if (it->second-1 == 0) {
+			pred_buffer_.erase(it);
+			pred_list_.push_back(pred);
+		} else {
+			pred_buffer_[pred] = it->second-1;
+		}
+	}
+}
+
+void RNNTDecoder::FreeHis(LstmLmHistroy *his) {
+	auto it = his_buffer_.find(his);
+	if (it != his_buffer_.end()) {
+		if (it->second-1 == 0) {
+			his_buffer_.erase(it);
+			his_list_.push_back(his);
+		} else {
+			his_buffer_[his] = it->second-1;
+		}
+	}
 }
 
 Vector<BaseFloat>* RNNTDecoder::MallocPred() {
-	Vector<BaseFloat> *pred = NULL;
-	if (pred_buffer_.size() > 0) {
-		pred = pred_buffer_.front();
-		pred_buffer_.pop_front();
+	Pred *pred = NULL;
+	if (pred_list_.size() > 0) {
+		pred = pred_list_.front();
+		pred_list_.pop_front();
 	} else {
 		pred = new Vector<BaseFloat>;
 	}
+
+	if (pred != NULL)
+		pred_buffer_[pred] = 1;
+
 	return pred;
 }
 
-LstmLmHistroy* RNNTDecoder::MallocHis(MatrixResizeType resize_type = kSetZero) {
+LstmLmHistroy* RNNTDecoder::MallocHis() {
 	LstmLmHistroy *his = NULL;
-	if (his_buffer_.size() > 0) {
-		his = his_buffer_.front();
-		his_buffer_.pop_front();
+	if (his_list_.size() > 0) {
+		his = his_list_.front();
+		his_list_.pop_front();
 	} else {
-		his = new LstmLmHistroy(rd_, cd_, resize_type);
+		his = new LstmLmHistroy(rd_, cd_, kUndefined);
 	}
+
+	if (his != NULL)
+		his_buffer_[his] = 1;
+
 	return his;
+}
+
+void RNNTDecoder::CopyPredList(std::vector<Pred*> &predlist) {
+	for (int i = 0; i < predlist.size(); i++) {
+		auto it = pred_buffer_.find(predlist[i]);
+		if (it != pred_buffer_.end())
+			pred_buffer_[predlist[i]]++;
+	}
+}
+
+void RNNTDecoder::CopyHis(LstmLmHistroy* his) {
+	auto it = his_buffer_.find(his);
+	if (it != his_buffer_.end())
+		his_buffer_[his]++;
+}
+
+void RNNTDecoder::DeepCopySeq(Sequence *seq) {
+	if (seq == NULL) return;
+
+	CopyPredList(seq->pred);
+	CopyHis(seq->lmhis);
 }
 
 void RNNTDecoder::InitDecoding() {
 	// initialization
 	// for (auto &seq : *B_) delete seq;
+	pred_buffer_.clear();
+	his_buffer_.clear();
+
 	FreeList(B_);
 	B_->clear();
-	LstmLmHistroy *sos_h = MallocHis(kSetZero);
+	LstmLmHistroy *sos_h = new LstmLmHistroy(kSetZero);
 	Sequence *seq = new Sequence(sos_h, config_.blank);
+	DeepCopySeq(seq);
 	B_->push_back(seq);
 }
 
@@ -134,8 +191,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					int lenj = seqj->k.size();
 
 					pred = MallocPred();
-					his = MallocHis(kUndefined);
-					rnntlm_.Forward(seqi->k[leni-1], *seqi->lmhis, *pred, *his);
+					rnntlm_.Forward(seqi->k[leni-1], *seqi->lmhis, pred, NULL);
 
 					logprob.CopyFromVec(*pred);
 					logprob.AddVec(1.0, loglikes.Row(n));
@@ -148,22 +204,23 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 						curlogp += seqj->k[m+1];
 					}
 					seqj->logp = LogAdd(seqj->logp, curlogp);
+					FreePred(pred);
 				}
 			}
 		}
 
 		while (true) {
 			// y* = most probable in A
-			Sequence *y_hat, *y_b;
+			Sequence *y_hat, *y_a, *y_b;
 			auto it = std::max_element(A_->begin(), A_->end(), RNNTUtil::compare_logp);
-			y_hat = *it;
 			A_->erase(it);
+			y_hat = *it;
 
 			// get rnnt lm current output and hidden state
-			len = y_hat->k.size();
 			pred = MallocPred();
-			his = MallocHis(kUndefined);
-			rnntlm_.Forward(y_hat->k[len-1], *y_hat->lmhis, *pred, *his);
+			his = MallocHis();
+			len = y_hat->k.size();
+			rnntlm_.Forward(y_hat->k[len-1], *y_hat->lmhis, pred, his);
 
 			// log probability for each rnnt output k
 			logprob.CopyFromVec(*pred);
@@ -173,25 +230,32 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			vocab_size = logprob.Dim();
 			for (int k = 0; k < vocab_size; k++) {
 				Sequence *y_k = new Sequence(*y_hat);
+
 				y_k->logp += logprob(k);
 				if (k == config_.blank) {
+					DeepCopySeq(y_hat);
 					B_->push_back(y_k);
 					continue;
 				}
+
 				// next t add to A
-				y_k->lmhis = his;
 				y_k->k.push_back(k);
+				y_k->lmhis = his;
+				CopyHis(his);
 				if (config_.use_prefix) {
 					y_k->pred.push_back(pred);
+					CopyPredList(y_k->pred);
 				}
 				A_->push_back(y_k);
 			}
             
-            FreeSeqence(y_hat);
-            delete y_hat;
-			y_hat = *std::max_element(A_->begin(), A_->end(), RNNTUtil::compare_logp);
+			// free link count
+			FreeSeq(y_hat);
+			FreePred(pred);
+			FreeHis(his);
+			y_a = *std::max_element(A_->begin(), A_->end(), RNNTUtil::compare_logp);
 			y_b = *std::max_element(B_->begin(), B_->end(), RNNTUtil::compare_logp);
-			if (B_->size() >= config_.beam && y_b->logp >= y_hat->logp) break;
+			if (B_->size() >= config_.beam && y_b->logp >= y_a->logp) break;
 		}
 
 		// beam width
@@ -199,7 +263,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 		// free memory
 		int idx = 0;
 		for (auto it = B_->begin(); it != B_->end(); it++) {
-			if (idx >= config_.beam) delete (*it);
+			if (idx >= config_.beam) FreeSeq(*it);
 			idx++;
 		}
 		B_->resize(config_.beam);
