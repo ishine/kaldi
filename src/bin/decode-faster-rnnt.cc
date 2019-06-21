@@ -36,8 +36,10 @@ int main(int argc, char *argv[]) {
 
     ParseOptions po(usage);
     bool binary = true;
+    std::string search = "beam";
     std::string word_syms_filename;
     po.Register("binary", &binary, "Write output in binary mode");
+    po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
 
     KaldiRNNTlmWrapperOpts rnntlm_opts;
@@ -87,7 +89,12 @@ int main(int argc, char *argv[]) {
 			continue;
 		}
 		// decoding
-		decoder.BeamSearch(loglikes);
+		if (search == "beam")
+			decoder.BeamSearch(loglikes);
+		else if (search == "greedy")
+			decoder.GreedySearch(loglikes);
+		else
+			KALDI_ERR << "UnSupported search function: " << search;
 
 		if (decoder.GetBestPath(words, logp)) {
 			words_writer.Write(key, words);

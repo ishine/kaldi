@@ -50,6 +50,7 @@ class RNNTDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
 		RNNTDecoder(KaldiRNNTlmWrapper &rnntlm, RNNTDecoderOptions &config);
+		void GreedySearch(const Matrix<BaseFloat> &loglikes);
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp);
 
