@@ -107,14 +107,14 @@ void KaldiRNNTlmWrapper::Forward(int words_in, LstmLmHistroy& context_in,
 		// save current words history
 		nnlm_.SaveContext(his_recurrent_, his_cell_);
 		for (i = 0; i < num_layers; i++) {
-			context_out.his_recurrent[i] = his_recurrent_[i].Row(0);
-			context_out.his_cell[i] = his_cell_[i].Row(0);
+			context_out->his_recurrent[i] = his_recurrent_[i].Row(0);
+			context_out->his_cell[i] = his_cell_[i].Row(0);
 		}
 	}
 
 	if (nnet_out != NULL) {
-		nnet_out.Resize(hidden_out_.NumCols(), kUndefined);
-		hidden_out_.Row(0).CopyToVec(&nnet_out);
+		nnet_out->Resize(hidden_out_.NumCols(), kUndefined);
+		hidden_out_.Row(0).CopyToVec(nnet_out);
 	}
 }
 

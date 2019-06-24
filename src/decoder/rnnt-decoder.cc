@@ -16,7 +16,6 @@
 // MERCHANTABLITY OR NON-INFRINGEMENT.
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
-
 #include "decoder/rnnt-decoder.h"
 
 namespace kaldi {
@@ -137,15 +136,28 @@ void RNNTDecoder::DeepCopySeq(Sequence *seq) {
 	CopyHis(seq->lmhis);
 }
 
+void RNNTDecoder::CleanBuffer() {
+    for (auto it = pred_buffer_.begin(); it != pred_buffer_.end(); it++)
+        delete it->first;
+    for (auto it = his_buffer_.begin(); it != his_buffer_.end(); it++)
+        delete it->first;
+    pred_buffer_.clear();
+    his_buffer_.clear();
+}
+
 void RNNTDecoder::InitDecoding() {
 	// initialization
 	// for (auto &seq : *B_) delete seq;
-	pred_buffer_.clear();
-	his_buffer_.clear();
+	FreeList(A_);
+	A_->clear();
 
 	FreeList(B_);
 	B_->clear();
-	LstmLmHistroy *sos_h = new LstmLmHistroy(kSetZero);
+
+    CleanBuffer();
+
+    // first input <s>
+    LstmLmHistroy *sos_h = new LstmLmHistroy(rd_, cd_, kSetZero);
 	Sequence *seq = new Sequence(sos_h, config_.blank);
 	DeepCopySeq(seq);
 	B_->push_back(seq);
@@ -158,6 +170,46 @@ bool RNNTDecoder::GetBestPath(std::vector<int> &words, BaseFloat &logp) {
 	logp = -seq->logp;
 	words = seq->k;
 	return true;
+}
+void RNNTDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
+	int nframe = loglikes.NumRows();
+	int len, k;
+	Vector<BaseFloat> *pred, logprob(rnntlm_.GetVocabSize());
+	Sequence *y_hat;
+	LstmLmHistroy *his;
+	BaseFloat logp;
+
+	InitDecoding();
+	// decode one utterance
+	y_hat = B_->front();
+
+	// <sos> first
+	pred = MallocPred();
+	his = MallocHis();
+	len = y_hat->k.size();
+	rnntlm_.Forward(y_hat->k[len-1], *y_hat->lmhis, pred, his);
+	logprob.CopyFromVec(*pred);
+
+	for (int n = 0; n < nframe; n++) {
+		// log probability for each rnnt output k
+		logprob.AddVec(1.0, loglikes.Row(n));
+		logprob.ApplyLogSoftMax();
+
+		logp = logprob.Max(&k);
+		if (k != config_.blank) {
+			y_hat->k.push_back(k);
+			y_hat->pred.push_back(pred);
+			FreeHis(y_hat->lmhis);
+			y_hat->lmhis = his;
+			y_hat->logp += logp;
+
+			pred = MallocPred();
+			his = MallocHis();
+			len = y_hat->k.size();
+			rnntlm_.Forward(y_hat->k[len-1], *y_hat->lmhis, pred, his);
+			logprob.CopyFromVec(*pred);
+		}
+	}
 }
 
 void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
