@@ -312,9 +312,9 @@ class RNNTJoinTransform : public UpdatableComponent {
 	  // tanh
 	  d_h_t_u_.DiffTanh(h_t_u_, d_h_t_u_);
 
-	  int in_dim = encoder_dim_ > predict_dim_ ? encoder_dim_ : predict_dim_;
+	  //int in_dim = encoder_dim_ > predict_dim_ ? encoder_dim_ : predict_dim_;
 	  join_diff_.Resize(en_frames+pre_frames, join_dim_, kSetZero);
-	  in_diff_.Resize(en_frames+pre_frames, in_dim, kUndefined);
+	  //in_diff->Resize(en_frames+pre_frames, in_dim, kUndefined);
 
 	  // T deriv
 	  for(int t = 0; t < maxT_; t++) {
@@ -337,10 +337,10 @@ class RNNTJoinTransform : public UpdatableComponent {
 	  // multiply error derivative by weights
 	  CuSubMatrix<BaseFloat> d_join_encoder(join_diff_, 0, en_frames, 0, join_dim_);
 	  CuSubMatrix<BaseFloat> d_join_predict(join_diff_, en_frames, pre_frames, 0, join_dim_);
-	  CuSubMatrix<BaseFloat> d_encoder(in_diff_, 0, en_frames, 0, encoder_dim_);
-	  CuSubMatrix<BaseFloat> d_predict(in_diff_, en_frames, pre_frames, 0, predict_dim_);
-	  in_diff_.AddMatMat(1.0, d_join_encoder, kNoTrans, encoder_linearity_, kNoTrans, 0.0);
-	  in_diff_.AddMatMat(1.0, d_join_predict, kNoTrans, predict_linearity_, kNoTrans, 0.0);
+	  CuSubMatrix<BaseFloat> d_encoder(*in_diff, 0, en_frames, 0, encoder_dim_);
+	  CuSubMatrix<BaseFloat> d_predict(*in_diff, en_frames, pre_frames, 0, predict_dim_);
+	  d_encoder.AddMatMat(1.0, d_join_encoder, kNoTrans, encoder_linearity_, kNoTrans, 0.0);
+	  d_predict.AddMatMat(1.0, d_join_predict, kNoTrans, predict_linearity_, kNoTrans, 0.0);
   }
 
   void ResetGradient() {
@@ -418,10 +418,6 @@ class RNNTJoinTransform : public UpdatableComponent {
   int32 OutputRow(int32 in_row) {
 	  KALDI_ASSERT((maxT_+maxU_)*nstream_ == in_row);
       return nstream_*maxT_*maxU_; 
-  }
-
-  CuMatrix<BaseFloat> GetInputDiff() {
-	  return in_diff_;
   }
 
   int WeightCopy(void *host, int direction, int copykind) {
@@ -526,7 +522,7 @@ protected:
   CuVector<BaseFloat> join_bias_;
   CuMatrix<BaseFloat> join_linearity_corr_;
   CuVector<BaseFloat> join_bias_corr_;
-  CuMatrix<BaseFloat> join_diff_, in_diff_;
+  CuMatrix<BaseFloat> join_diff_;
 
   CuMatrix<BaseFloat> Ah_t_, Bp_u_, h_t_u_;
   CuMatrix<BaseFloat> d_Ah_t_, d_Bp_u_, d_h_t_u_;
