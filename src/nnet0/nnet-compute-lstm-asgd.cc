@@ -303,8 +303,7 @@ private:
 						if (curt[s] < targets_delay) {
 							frame_mask(t * num_stream + s) = 0;
 							target[t * num_stream + s] = targets[s][0];
-						}
-						else if (curt[s] < lent[s] + targets_delay) {
+						} else if (curt[s] < lent[s] + targets_delay) {
 							frame_mask(t * num_stream + s) = 1;
 							target[t * num_stream + s] = targets[s][curt[s]-targets_delay];
 						} else {

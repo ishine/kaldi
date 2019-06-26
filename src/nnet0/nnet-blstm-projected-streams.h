@@ -2,6 +2,8 @@
 
 // Copyright 2014  Jiayu DU (Jerry), Wei Li
 // Copyright 2015  Chongjia Ni
+// Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
+
 // See ../../COPYING for clarification regarding multiple authors
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -282,56 +284,65 @@ class BLstmProjectedStreams : public UpdatableComponent {
          f_w_r_m_.NumRows() * f_w_r_m_.NumCols() );
   }
 
+  int32 GetDim() const {
+    return 2*( f_w_gifo_x_.SizeInBytes()/sizeof(BaseFloat) +
+    	 f_w_gifo_r_.SizeInBytes()/sizeof(BaseFloat) +
+         f_bias_.Dim() +
+         f_peephole_i_c_.Dim() +
+         f_peephole_f_c_.Dim() +
+         f_peephole_o_c_.Dim() +
+         f_w_r_m_.SizeInBytes()/sizeof(BaseFloat) );
+  }
 
   void GetParams(Vector<BaseFloat>* wei_copy) const {
-    wei_copy->Resize(NumParams());
-    int32 offset, len;
+		wei_copy->Resize(NumParams());
+		int32 offset, len;
 
-    // Copying parameters corresponding to forward direction
-    offset = 0;  len = f_w_gifo_x_.NumRows() * f_w_gifo_x_.NumCols();
-    wei_copy->Range(offset, len).CopyRowsFromMat(f_w_gifo_x_);
+		// Copying parameters corresponding to forward direction
+		offset = 0;  len = f_w_gifo_x_.NumRows() * f_w_gifo_x_.NumCols();
+		wei_copy->Range(offset, len).CopyRowsFromMat(f_w_gifo_x_);
 
-    offset += len; len =f_w_gifo_r_.NumRows() * f_w_gifo_r_.NumCols();
-    wei_copy->Range(offset, len).CopyRowsFromMat(f_w_gifo_r_);
+		offset += len; len =f_w_gifo_r_.NumRows() * f_w_gifo_r_.NumCols();
+		wei_copy->Range(offset, len).CopyRowsFromMat(f_w_gifo_r_);
 
-    offset += len; len = f_bias_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(f_bias_);
+		offset += len; len = f_bias_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(f_bias_);
 
-    offset += len; len = f_peephole_i_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(f_peephole_i_c_);
+		offset += len; len = f_peephole_i_c_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(f_peephole_i_c_);
 
-    offset += len; len = f_peephole_f_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(f_peephole_f_c_);
+		offset += len; len = f_peephole_f_c_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(f_peephole_f_c_);
 
-    offset += len; len = f_peephole_o_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(f_peephole_o_c_);
+		offset += len; len = f_peephole_o_c_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(f_peephole_o_c_);
 
-    offset += len; len = f_w_r_m_.NumRows() * f_w_r_m_.NumCols();
-    wei_copy->Range(offset, len).CopyRowsFromMat(f_w_r_m_);
+		offset += len; len = f_w_r_m_.NumRows() * f_w_r_m_.NumCols();
+		wei_copy->Range(offset, len).CopyRowsFromMat(f_w_r_m_);
 
-    // Copying parameters corresponding to backward direction
-    offset += len; len = b_w_gifo_x_.NumRows() * b_w_gifo_x_.NumCols();
-    wei_copy->Range(offset, len).CopyRowsFromMat(b_w_gifo_x_);
+		// Copying parameters corresponding to backward direction
+		offset += len; len = b_w_gifo_x_.NumRows() * b_w_gifo_x_.NumCols();
+		wei_copy->Range(offset, len).CopyRowsFromMat(b_w_gifo_x_);
 
-    offset += len; len = b_w_gifo_r_.NumRows() * b_w_gifo_r_.NumCols();
-    wei_copy->Range(offset, len).CopyRowsFromMat(b_w_gifo_r_);
+		offset += len; len = b_w_gifo_r_.NumRows() * b_w_gifo_r_.NumCols();
+		wei_copy->Range(offset, len).CopyRowsFromMat(b_w_gifo_r_);
 
-    offset += len; len = b_bias_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(b_bias_);
+		offset += len; len = b_bias_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(b_bias_);
 
-    offset += len; len = b_peephole_i_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(b_peephole_i_c_);
+		offset += len; len = b_peephole_i_c_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(b_peephole_i_c_);
 
-    offset += len; len = b_peephole_f_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(b_peephole_f_c_);
+		offset += len; len = b_peephole_f_c_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(b_peephole_f_c_);
 
-    offset += len; len = b_peephole_o_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(b_peephole_o_c_);
+		offset += len; len = b_peephole_o_c_.Dim();
+		wei_copy->Range(offset, len).CopyFromVec(b_peephole_o_c_);
 
-    offset += len; len = b_w_r_m_.NumRows() * b_w_r_m_.NumCols();
-    wei_copy->Range(offset, len).CopyRowsFromMat(b_w_r_m_);
+		offset += len; len = b_w_r_m_.NumRows() * b_w_r_m_.NumCols();
+		wei_copy->Range(offset, len).CopyRowsFromMat(b_w_r_m_);
 
-    return;
+		return;
   }
 
 
@@ -925,7 +936,7 @@ class BLstmProjectedStreams : public UpdatableComponent {
    	    const BaseFloat l2 = opts_.l2_penalty;
    	    //const BaseFloat l1 = opts_.l1_penalty;
    	    // we will also need the number of frames in the mini-batch
-   	    const int32 num_frames = input.NumRows();
+   	    num_frames_ = input.NumRows();
 
 
   	    int DEBUG = 0;
@@ -1090,77 +1101,248 @@ class BLstmProjectedStreams : public UpdatableComponent {
 	          std::cerr << "peephole_f_c_corr_ " << b_peephole_f_c_corr_;
 	          std::cerr << "peephole_o_c_corr_ " << b_peephole_o_c_corr_;
 	        }
-
- 		    // l2 regularization
- 		    if (l2 != 0.0) {
- 		    	f_w_gifo_x_.AddMat(-lr*l2*num_frames, f_w_gifo_x_);
- 		    	f_w_gifo_r_.AddMat(-lr*l2*num_frames, f_w_gifo_r_);
- 		    	f_w_r_m_.AddMat(-lr*l2*num_frames, f_w_r_m_);
-
- 		    	//f_peephole_i_c_.AddVec(-lr*l2*num_frames, f_peephole_i_c_);
- 		    	//f_peephole_f_c_.AddVec(-lr*l2*num_frames, f_peephole_f_c_);
- 		    	//f_peephole_o_c_.AddVec(-lr*l2*num_frames, f_peephole_o_c_);
-
- 		    	b_w_gifo_x_.AddMat(-lr*l2*num_frames, b_w_gifo_x_);
- 		    	b_w_gifo_r_.AddMat(-lr*l2*num_frames, b_w_gifo_r_);
- 		    	b_w_r_m_.AddMat(-lr*l2*num_frames, b_w_r_m_);
-
- 		    	//b_peephole_i_c_.AddVec(-lr*l2*num_frames, b_peephole_i_c_);
- 		    	//b_peephole_f_c_.AddVec(-lr*l2*num_frames, b_peephole_f_c_);
- 		    	//b_peephole_o_c_.AddVec(-lr*l2*num_frames, b_peephole_o_c_);
- 		    }
   }
 
-  void UpdateGradient()
+  void UpdateGradient() {
+		const BaseFloat lr  = opts_.learn_rate * learn_rate_coef_;
+		const BaseFloat l2 = opts_.l2_penalty;
+		// l2 regularization
+		if (l2 != 0.0) {
+			// forward direction
+			f_w_gifo_x_.AddMat(-lr*l2*num_frames_, f_w_gifo_x_);
+			f_w_gifo_r_.AddMat(-lr*l2*num_frames_, f_w_gifo_r_);
+			f_bias_.AddVec(-lr*l2*num_frames_, f_bias_);
+
+			f_peephole_i_c_.AddVec(-lr*l2*num_frames_, f_peephole_i_c_);
+			f_peephole_f_c_.AddVec(-lr*l2*num_frames_, f_peephole_f_c_);
+			f_peephole_o_c_.AddVec(-lr*l2*num_frames_, f_peephole_o_c_);
+
+			f_w_r_m_.AddMat(-lr*l2*num_frames_, f_w_r_m_);
+
+			// backward direction
+			b_w_gifo_x_.AddMat(-lr*l2*num_frames_, b_w_gifo_x_);
+			b_w_gifo_r_.AddMat(-lr*l2*num_frames_, b_w_gifo_r_);
+			b_bias_.AddVec(-lr*l2*num_frames_, b_bias_);
+
+			b_peephole_i_c_.AddVec(-lr*l2*num_frames_, b_peephole_i_c_);
+			b_peephole_f_c_.AddVec(-lr*l2*num_frames_, b_peephole_f_c_);
+			b_peephole_o_c_.AddVec(-lr*l2*num_frames_, b_peephole_o_c_);
+
+			b_w_r_m_.AddMat(-lr*l2*num_frames_, b_w_r_m_);
+		}
+
+		// forward direction
+		f_w_gifo_x_.AddMat(-lr, f_w_gifo_x_corr_);
+		f_w_gifo_r_.AddMat(-lr, f_w_gifo_r_corr_);
+		f_bias_.AddVec(-lr, f_bias_corr_, 1.0);
+
+		f_peephole_i_c_.AddVec(-lr, f_peephole_i_c_corr_, 1.0);
+		f_peephole_f_c_.AddVec(-lr, f_peephole_f_c_corr_, 1.0);
+		f_peephole_o_c_.AddVec(-lr, f_peephole_o_c_corr_, 1.0);
+
+		f_w_r_m_.AddMat(-lr, f_w_r_m_corr_);
+
+		// backward direction
+		b_w_gifo_x_.AddMat(-lr, b_w_gifo_x_corr_);
+		b_w_gifo_r_.AddMat(-lr, b_w_gifo_r_corr_);
+		b_bias_.AddVec(-lr, f_bias_corr_, 1.0);
+
+		b_peephole_i_c_.AddVec(-lr, b_peephole_i_c_corr_, 1.0);
+		b_peephole_f_c_.AddVec(-lr, b_peephole_f_c_corr_, 1.0);
+		b_peephole_o_c_.AddVec(-lr, b_peephole_o_c_corr_, 1.0);
+
+		b_w_r_m_.AddMat(-lr, b_w_r_m_corr_);
+  }
+
+  int WeightCopy(void *host, int direction, int copykind)
   {
-	    const BaseFloat lr  = opts_.learn_rate * learn_rate_coef_;
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+        CuTimer tim;
 
-	    f_w_gifo_x_.AddMat(-lr, f_w_gifo_x_corr_);
-	    f_w_gifo_r_.AddMat(-lr, f_w_gifo_r_corr_);
-	    f_bias_.AddVec(-lr, f_bias_corr_, 1.0);
+        int32 dst_pitch, src_pitch, width,  size;
+        int pos = 0;
+        void *src, *dst;
+        MatrixDim dim;
+        cudaMemcpyKind kind;
+        switch(copykind)
+        {
+            case 0:
+                kind = cudaMemcpyHostToHost;
+                break;
+            case 1:
+                kind = cudaMemcpyHostToDevice;
+                break;
+            case 2:
+                kind = cudaMemcpyDeviceToHost;
+                break;
+            case 3:
+                kind = cudaMemcpyDeviceToDevice;
+                break;
+            default:
+                KALDI_ERR << "Default based unified address space";
+                break;
+        }
 
-	    f_peephole_i_c_.AddVec(-lr, f_peephole_i_c_corr_, 1.0);
-	    f_peephole_f_c_.AddVec(-lr, f_peephole_f_c_corr_, 1.0);
-	    f_peephole_o_c_.AddVec(-lr, f_peephole_o_c_corr_, 1.0);
+        dim = f_w_gifo_x_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)f_w_gifo_x_.Data());
+		src = (void*) (direction==0 ? (char *)f_w_gifo_x_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += f_w_gifo_x_.SizeInBytes();
 
-	    f_w_r_m_.AddMat(-lr, f_w_r_m_corr_);
+		dim = f_w_gifo_r_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)f_w_gifo_r_.Data());
+		src = (void*) (direction==0 ? (char *)f_w_gifo_r_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += f_w_gifo_r_.SizeInBytes();
 
-	    b_w_gifo_x_.AddMat(-lr, b_w_gifo_x_corr_);
-	    b_w_gifo_r_.AddMat(-lr, b_w_gifo_r_corr_);
-	    b_bias_.AddVec(-lr, f_bias_corr_, 1.0);
+		size = f_bias_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)f_bias_.Data());
+		src = (void*) (direction==0 ? (char *)f_bias_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
 
-	    b_peephole_i_c_.AddVec(-lr, b_peephole_i_c_corr_, 1.0);
-	    b_peephole_f_c_.AddVec(-lr, b_peephole_f_c_corr_, 1.0);
-	    b_peephole_o_c_.AddVec(-lr, b_peephole_o_c_corr_, 1.0);
+		size = f_peephole_i_c_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)f_peephole_i_c_.Data());
+		src = (void*) (direction==0 ? (char *)f_peephole_i_c_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
 
-	    b_w_r_m_.AddMat(-lr, b_w_r_m_corr_);
+		size = f_peephole_f_c_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)f_peephole_f_c_.Data());
+		src = (void*) (direction==0 ? (char *)f_peephole_f_c_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
+
+		size = f_peephole_o_c_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)f_peephole_o_c_.Data());
+		src = (void*) (direction==0 ? (char *)f_peephole_o_c_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
+
+		dim = f_w_r_m_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)f_w_r_m_.Data());
+		src = (void*) (direction==0 ? (char *)f_w_r_m_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += f_w_r_m_.SizeInBytes();
+
+		// backword direction
+        dim = b_w_gifo_x_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)b_w_gifo_x_.Data());
+		src = (void*) (direction==0 ? (char *)b_w_gifo_x_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += b_w_gifo_x_.SizeInBytes();
+
+		dim = b_w_gifo_r_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)b_w_gifo_r_.Data());
+		src = (void*) (direction==0 ? (char *)b_w_gifo_r_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += b_w_gifo_r_.SizeInBytes();
+
+		size = b_bias_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)b_bias_.Data());
+		src = (void*) (direction==0 ? (char *)b_bias_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
+
+		size = b_peephole_i_c_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)b_peephole_i_c_.Data());
+		src = (void*) (direction==0 ? (char *)b_peephole_i_c_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
+
+		size = b_peephole_f_c_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)b_peephole_f_c_.Data());
+		src = (void*) (direction==0 ? (char *)b_peephole_f_c_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
+
+		size = b_peephole_o_c_.Dim()*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)b_peephole_o_c_.Data());
+		src = (void*) (direction==0 ? (char *)b_peephole_o_c_.Data() : ((char *)host+pos));
+		cudaMemcpy(dst, src, size, kind);
+		pos += size;
+
+		dim = b_w_r_m_.Dim();
+		src_pitch = dim.stride*sizeof(BaseFloat);
+		dst_pitch = src_pitch;
+		width = dim.cols*sizeof(BaseFloat);
+		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)b_w_r_m_.Data());
+		src = (void*) (direction==0 ? (char *)b_w_r_m_.Data() : ((char *)host+pos));
+		cudaMemcpy2D(dst, dst_pitch, src, src_pitch, width, dim.rows, kind);
+		pos += b_w_r_m_.SizeInBytes();
+
+  	  CU_SAFE_CALL(cudaGetLastError());
+
+  	  CuDevice::Instantiate().AccuProfile(__func__, tim);
+  	  return pos;
+  }else
+#endif
+  	{
+  		// not implemented for CPU yet
+  		return 0;
+  	}
   }
 
   void Update(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
     const BaseFloat lr  = opts_.learn_rate;
-    // forward direction update
-    f_w_gifo_x_.AddMat(-lr, f_w_gifo_x_corr_);
-    f_w_gifo_r_.AddMat(-lr, f_w_gifo_r_corr_);
-    f_bias_.AddVec(-lr, f_bias_corr_, 1.0);
+		// forward direction update
+		f_w_gifo_x_.AddMat(-lr, f_w_gifo_x_corr_);
+		f_w_gifo_r_.AddMat(-lr, f_w_gifo_r_corr_);
+		f_bias_.AddVec(-lr, f_bias_corr_, 1.0);
 
-    f_peephole_i_c_.AddVec(-lr, f_peephole_i_c_corr_, 1.0);
-    f_peephole_f_c_.AddVec(-lr, f_peephole_f_c_corr_, 1.0);
-    f_peephole_o_c_.AddVec(-lr, f_peephole_o_c_corr_, 1.0);
+		f_peephole_i_c_.AddVec(-lr, f_peephole_i_c_corr_, 1.0);
+		f_peephole_f_c_.AddVec(-lr, f_peephole_f_c_corr_, 1.0);
+		f_peephole_o_c_.AddVec(-lr, f_peephole_o_c_corr_, 1.0);
 
-    f_w_r_m_.AddMat(-lr, f_w_r_m_corr_);
+		f_w_r_m_.AddMat(-lr, f_w_r_m_corr_);
 
-    // backward direction update
-    b_w_gifo_x_.AddMat(-lr, b_w_gifo_x_corr_);
-    b_w_gifo_r_.AddMat(-lr, b_w_gifo_r_corr_);
-    b_bias_.AddVec(-lr, b_bias_corr_, 1.0);
+		// backward direction update
+		b_w_gifo_x_.AddMat(-lr, b_w_gifo_x_corr_);
+		b_w_gifo_r_.AddMat(-lr, b_w_gifo_r_corr_);
+		b_bias_.AddVec(-lr, b_bias_corr_, 1.0);
 
-    b_peephole_i_c_.AddVec(-lr, b_peephole_i_c_corr_, 1.0);
-    b_peephole_f_c_.AddVec(-lr, b_peephole_f_c_corr_, 1.0);
-    b_peephole_o_c_.AddVec(-lr, b_peephole_o_c_corr_, 1.0);
+		b_peephole_i_c_.AddVec(-lr, b_peephole_i_c_corr_, 1.0);
+		b_peephole_f_c_.AddVec(-lr, b_peephole_f_c_corr_, 1.0);
+		b_peephole_o_c_.AddVec(-lr, b_peephole_o_c_corr_, 1.0);
 
-    b_w_r_m_.AddMat(-lr, b_w_r_m_corr_);
+		b_w_r_m_.AddMat(-lr, b_w_r_m_corr_);
 
     /* For L2 regularization see "vanishing & exploding difficulties" in nnet-lstm-projected-streams.h */
+  }
+
+  void ResetGradient() {
+	  f_w_gifo_x_corr_.SetZero();
+	  f_w_gifo_r_corr_.SetZero();
+	  f_bias_corr_.SetZero();
+
+	  f_peephole_i_c_corr_.SetZero();
+	  f_peephole_f_c_corr_.SetZero();
+	  f_peephole_o_c_corr_.SetZero();
+
+	  b_w_gifo_x_corr_.SetZero();
+	  b_w_gifo_r_corr_.SetZero();
+	  b_bias_corr_.SetZero();
+
+	  b_peephole_i_c_corr_.SetZero();
+	  b_peephole_f_c_corr_.SetZero();
+	  b_peephole_o_c_corr_.SetZero();
+	  b_w_r_m_corr_.SetZero();
   }
 
  private:
@@ -1245,6 +1427,7 @@ class BLstmProjectedStreams : public UpdatableComponent {
   BaseFloat learn_rate_coef_;
   BaseFloat bias_learn_rate_coef_;
   BaseFloat max_norm_;
+  int32 num_frames_;
 };
 }  // namespace nnet0
 }  // namespace kaldi
