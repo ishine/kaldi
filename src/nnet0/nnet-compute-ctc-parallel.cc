@@ -381,7 +381,7 @@ private:
 			    // lstm
 			    nnet.ResetLstmStreams(new_utt_flags, batch_size);
 			    // bilstm
-			    nnet.SetSeqLengths(num_utt_frame_out);
+			    nnet.SetSeqLengths(num_utt_frame_out, batch_size);
             } else if (opts->network_type == "fsmn") {
 			    // fsmn
 			    nnet.SetFlags(utt_flags);

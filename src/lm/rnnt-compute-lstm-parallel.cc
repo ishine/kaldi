@@ -371,7 +371,7 @@ private:
 
 			// lstm
 			am->ResetLstmStreams(new_utt_flags, am_truncated);
-            am->SetSeqLengths(num_utt_frame_out);
+            am->SetSeqLengths(num_utt_frame_out, am_truncated);
 			lm->ResetLstmStreams(new_utt_flags, lm_truncated);
 			if (join_com != NULL) {
 				join_com->SetRNNTStreamSize(num_utt_frame_out, num_utt_word_in, rnnt_opts.maxT, rnnt_opts.maxU);
