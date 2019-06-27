@@ -313,7 +313,6 @@ private:
 				example = repository_->ProvideExample();
 			}
 
-			targets_delay *=  num_skip;
 			cur_stream_num = s;
             in_frames_pad = cur_stream_num * max_frame_num;
             out_frames_pad = cur_stream_num * ((max_frame_num+num_skip-1)/num_skip);
@@ -339,7 +338,7 @@ private:
 						  if (r < targets_delay) {
 							  frame_mask_host(r*cur_stream_num + s) = 0;
 							  target[r*cur_stream_num + s] = targets_utt[s][r];
-						  } else if (r < num_utt_frame_in[s] + targets_delay) {
+						  } else if (r < num_utt_frame_out[s] + targets_delay) {
 							  frame_mask_host(r*cur_stream_num + s) = 1;
 							  target[r*cur_stream_num + s] = targets_utt[s][r-targets_delay];
 						  } else {
@@ -723,7 +722,7 @@ void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, &targets_reader,
 	    			&weights_reader, &model_sync, stats, opts);
-            example->SetSweepFrames(loop_frames);
+            example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
 	    		for (int i = 0; i < examples.size(); i++) {
 	    			repository.AcceptExample(examples[i]);

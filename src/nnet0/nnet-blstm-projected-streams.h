@@ -564,11 +564,11 @@ class BLstmProjectedStreams : public UpdatableComponent {
       // m -> r
       y_r.AddMatMat(1.0, y_m, kNoTrans, f_w_r_m_, kTrans, 0.0);
 
-      // set zeros
-      // for (int s = 0; s < S; s++) {
-      //   if (t > sequence_lengths_[s])
-      //     y_all.Row(s).SetZero();
-      // }
+      // set zeros to padded frames,
+      for (int s = 0; s < S; s++) {
+         if (t > sequence_lengths_[s])
+           y_all.Row(s).SetZero();
+      }
 
       if (DEBUG) {
         std::cerr << "forward direction forward-pass frame " << t << "\n";
@@ -653,6 +653,7 @@ class BLstmProjectedStreams : public UpdatableComponent {
       // m -> r
       y_r.AddMatMat(1.0, y_m, kNoTrans, b_w_r_m_, kTrans, 0.0);
 
+      // set zeros to padded frames,
       for (int s = 0; s < S; s++) {
          if (t > sequence_lengths_[s])
             y_all.Row(s).SetZero();
@@ -721,11 +722,12 @@ class BLstmProjectedStreams : public UpdatableComponent {
       CuSubMatrix<BaseFloat> y_i(F_YI.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> y_f(F_YF.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> y_o(F_YO.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> y_c(F_YC.RowRange(t*S, S));
+      // CuSubMatrix<BaseFloat> y_c(F_YC.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> y_h(F_YH.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> y_m(F_YM.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> y_r(F_YR.RowRange(t*S, S));
+      // CuSubMatrix<BaseFloat> y_m(F_YM.RowRange(t*S, S));
+      // CuSubMatrix<BaseFloat> y_r(F_YR.RowRange(t*S, S));
 
+      CuSubMatrix<BaseFloat> d_all(f_backpropagate_buf_.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_g(F_DG.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_i(F_DI.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_f(F_DF.RowRange(t*S, S));
@@ -734,7 +736,6 @@ class BLstmProjectedStreams : public UpdatableComponent {
       CuSubMatrix<BaseFloat> d_h(F_DH.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_m(F_DM.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_r(F_DR.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> d_all(f_backpropagate_buf_.RowRange(t*S, S));
       // r
       //   Version 1 (precise gradients):
       //   backprop error from g(t+1), i(t+1), f(t+1), o(t+1) to r(t)
@@ -789,6 +790,24 @@ class BLstmProjectedStreams : public UpdatableComponent {
       d_g.AddMatMatElements(1.0, d_c, y_i, 0.0);
       d_g.DiffTanh(y_g, d_g);
 
+      // Clipping per-frame derivatives for the next `t'.
+      // Clipping applied to gates and input gate (as done in Google).
+      // [ICASSP2015, Sak, Learning acoustic frame labelling...],
+      //
+      // The path from 'out_diff' to 'd_c' via 'd_h' is unclipped,
+      // which is probably important for the 'Constant Error Carousel'
+      // to work well.
+      //
+
+      // set zeros to padded frames,
+      if (sequence_lengths_.size() > 0) {
+        for (int s = 0; s < S; s++) {
+          if (t > sequence_lengths_[s]) {
+            d_all.Row(s).SetZero();
+          }
+        }
+      }
+
       // debug info
       if (DEBUG) {
         std::cerr << "backward-pass frame " << t << "\n";
@@ -835,11 +854,12 @@ class BLstmProjectedStreams : public UpdatableComponent {
       CuSubMatrix<BaseFloat> y_i(B_YI.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> y_f(B_YF.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> y_o(B_YO.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> y_c(B_YC.RowRange(t*S, S));
+      // CuSubMatrix<BaseFloat> y_c(B_YC.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> y_h(B_YH.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> y_m(B_YM.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> y_r(B_YR.RowRange(t*S, S));
+      // CuSubMatrix<BaseFloat> y_m(B_YM.RowRange(t*S, S));
+      // CuSubMatrix<BaseFloat> y_r(B_YR.RowRange(t*S, S));
 
+      CuSubMatrix<BaseFloat> d_all(b_backpropagate_buf_.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_g(B_DG.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_i(B_DI.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_f(B_DF.RowRange(t*S, S));
@@ -848,7 +868,6 @@ class BLstmProjectedStreams : public UpdatableComponent {
       CuSubMatrix<BaseFloat> d_h(B_DH.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_m(B_DM.RowRange(t*S, S));
       CuSubMatrix<BaseFloat> d_r(B_DR.RowRange(t*S, S));
-      CuSubMatrix<BaseFloat> d_all(b_backpropagate_buf_.RowRange(t*S, S));
 
       // r
       //   Version 1 (precise gradients):
@@ -903,6 +922,24 @@ class BLstmProjectedStreams : public UpdatableComponent {
       d_g.AddMatMatElements(1.0, d_c, y_i, 0.0);
       d_g.DiffTanh(y_g, d_g);
 
+      // Clipping per-frame derivatives for the next `t'.
+      // Clipping applied to gates and input gate (as done in Google).
+      // [ICASSP2015, Sak, Learning acoustic frame labelling...],
+      //
+      // The path from 'out_diff' to 'd_c' via 'd_h' is unclipped,
+      // which is probably important for the 'Constant Error Carousel'
+      // to work well.
+      //
+
+      // set zeros to padded frames,
+      if (sequence_lengths_.size() > 0) {
+        for (int s = 0; s < S; s++) {
+          if (t > sequence_lengths_[s]) {
+            d_all.Row(s).SetZero();
+          }
+        }
+      }
+
       // debug info
       if (DEBUG) {
         std::cerr << "backward-pass frame " << t << "\n";
@@ -922,18 +959,16 @@ class BLstmProjectedStreams : public UpdatableComponent {
     in_diff->AddMatMat(1.0, F_DGIFO.RowRange(1*S, T*S), kNoTrans, f_w_gifo_x_, kNoTrans, 0.0);
     // backward direction difference
     in_diff->AddMatMat(1.0, B_DGIFO.RowRange(1*S, T*S), kNoTrans, b_w_gifo_x_, kNoTrans, 1.0);
-
-
   }
 
 
   void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
   {
    	    // we use following hyperparameters from the option class
-   	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
+   	    //const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
    	    //const BaseFloat lr_bias = opts_.learn_rate * bias_learn_rate_coef_;
    	    //const BaseFloat mmt = opts_.momentum;
-   	    const BaseFloat l2 = opts_.l2_penalty;
+   	    //const BaseFloat l2 = opts_.l2_penalty;
    	    //const BaseFloat l1 = opts_.l1_penalty;
    	    // we will also need the number of frames in the mini-batch
    	    num_frames_ = input.NumRows();
