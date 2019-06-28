@@ -407,7 +407,7 @@ private:
 				// backpropagate
 				join->Backpropagate(nnet_diff, &join_in_diff, true);
 				am->Backpropagate(am_out_diff, NULL, true);
-				lm->Backpropagate(lm_out_diff, NULL, true);
+				lm->Backpropagate(lm_out_diff, NULL, !opts->freeze_lm);
 
 				update_frames += num_frames;
 				if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&

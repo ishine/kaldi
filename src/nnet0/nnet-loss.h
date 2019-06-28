@@ -492,8 +492,9 @@ private:
     CuMatrix<BaseFloat> net_out_act_;
 };
 
+
 /*
-/// Alex Graves 2012 RNNT join network
+/// Alex Graves 2013 RNNT join network
 class WarpRNNT : public CtcItf {
 public:
 	WarpRNNT();

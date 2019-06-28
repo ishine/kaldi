@@ -1507,8 +1507,8 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 
 }
 
-// Alex Graves 2013 RNNT join network
 /*
+// Alex Graves 2013 RNNT join network
 WarpRNNT::WarpRNNT(int maxT, int maxU, int blank_label) {
 	options_.blank_label = blank_label;
 	options_.maxT = maxT;
@@ -1614,8 +1614,8 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 
 
 	// Clip loss
-	diff->ApplyFloor(-1.0);
-	diff->ApplyCeiling(1.0);
+	// diff->ApplyFloor(-1.0);
+	// diff->ApplyCeiling(1.0);
 
 	// update registries
     double pzx_sum = -pzx.Sum();
