@@ -27,6 +27,38 @@
 namespace kaldi {
 namespace MACE {
 
+MaceComputer::MaceComputer(MaceModelInfo info) :
+    modulus_(info.modulus),
+    left_context_(info.left_context),
+    right_context_(info.right_context) {
+  std::vector<std::string> input_names;
+  input_names.push_back(info.input_name);
+  int64_t input_frames = info.left_context + info.right_context + info.chunk_size;
+  std::vector<std::vector<int64>> input_shapes;
+  std::vector<int64> input_shape = {1, input_frames, info.input_dim};
+  std::vector<int64> ivector_shape = {1, 1, info.ivector_dim};
+  std::vector<int64> output_shape = {1, info.chunk_size, info.output_dim};
+  input_shapes.push_back(input_shape);
+  if (info.ivector_dim > 0) {
+    input_names.push_back(info.ivector_name);
+    input_shapes.push_back(ivector_shape);
+  }
+  std::vector<std::string> output_names;
+  output_names.push_back(info.output_name);
+  KALDI_LOG << "Start init engine.";
+  InitEngine(info.model_file,
+             info.weight_file,
+             input_names,
+             output_names);
+  KALDI_LOG<< "start init tensors.";
+  InitTensors(input_names,
+              input_shapes,
+              output_names,
+              {output_shape});
+
+}
+
+
 mace::MaceStatus MaceComputer::InitEngine(
     const std::string &model_file,
     const std::string &weight_file,
@@ -42,9 +74,58 @@ mace::MaceStatus MaceComputer::InitEngine(
     KALDI_ERR << "Set openmp or cpu affinity failed.";
   }
 
+  KALDI_ASSERT(!model_file.empty());
+  KALDI_ASSERT(!weight_file.empty());
+
+
+//  unsigned char *model_graph_data;
+//  size_t graph_data_len = 0;
+//
+//  int fd = open(model_file.c_str(), O_RDONLY);
+//  if (fd >= 0) {
+//    struct stat st;
+//    int r = fstat(fd, &st);
+//    if (r < 0) {
+//      KALDI_ERR << "Failed to stat file: " << model_file;
+//    }
+//
+//    KALDI_LOG << "graph data len:" << st.st_size;
+//
+//    graph_data_len = static_cast<size_t>(st.st_size);
+//    model_graph_data = reinterpret_cast<unsigned char *>(malloc(graph_data_len));
+//
+//    ssize_t len = read(fd, model_graph_data, 100);
+//    KALDI_LOG << "graph data read len:" << len;
+//    close(fd);
+//    if (len < 0) {
+//      KALDI_ERR << "Failed to read file: " << model_file;
+//    }
+//  } else {
+//    KALDI_ERR << "Failed to open file: " << model_file;
+//  }
+//
+//  fd = open(weight_file.c_str(), O_RDONLY);
+//  size_t weights_data_len = 0;
+//  if (fd >= 0) {
+//    struct stat st;
+//    fstat(fd, &st);
+//    weights_data_len = static_cast<size_t>(st.st_size);
+//    model_weights_data_ = reinterpret_cast<unsigned char *>(malloc(graph_data_len));
+//
+//    ssize_t len = read(fd, model_weights_data_, weights_data_len);
+//    close(fd);
+//    if (len < 0) {
+//      KALDI_ERR << "Failed to read file: " << weight_file;
+//    }
+//
+//  } else {
+//    KALDI_ERR << "Failed to open file: " << weight_file;
+//  }
+
+
+
   std::unique_ptr<mace::port::ReadOnlyMemoryRegion> model_graph_data =
       mace::make_unique<mace::port::ReadOnlyBufferMemoryRegion>();
-  KALDI_ASSERT(!model_file.empty());
   if (!model_file.empty()) {
     auto fs = mace::GetFileSystem();
     auto status_t = fs->NewReadOnlyMemoryRegionFromFile(model_file.c_str(),
@@ -70,6 +151,9 @@ mace::MaceStatus MaceComputer::InitEngine(
 
   // Only choose one of the two type based on the `model_graph_format`
   // in model deployment file(.yml).
+
+  KALDI_LOG << "Start init engine.";
+
   mace::MaceStatus create_engine_status;
   create_engine_status = mace::CreateMaceEngineFromProto(
       reinterpret_cast<const unsigned char *>(model_graph_data->data()),
@@ -80,6 +164,7 @@ mace::MaceStatus MaceComputer::InitEngine(
       output_nodes,
       config,
       &engine_);
+
 
   if (create_engine_status != mace::MaceStatus::MACE_SUCCESS) {
     KALDI_ERR << "Create engine error, please check the arguments first, "
@@ -93,17 +178,17 @@ mace::MaceStatus MaceComputer::InitEngine(
 
 void MaceComputer::InitTensors(
     const std::vector<std::string> &input_names,
-    const std::vector<std::vector<int64_t>> &input_shapes,
+    const std::vector<std::vector<int64>> &input_shapes,
     const std::vector<std::string> &output_names,
-    const std::vector<std::vector<int64_t>> &output_shapes) {
+    const std::vector<std::vector<int64>> &output_shapes) {
   const size_t input_count = input_names.size();
   const size_t output_count = output_names.size();
 
-  std::map<std::string, int64_t> inputs_size;
+  std::map<std::string, int64> inputs_size;
   for (size_t i = 0; i < input_count; ++i) {
-    int64_t input_size =
+    int64 input_size =
         std::accumulate(input_shapes[i].begin(), input_shapes[i].end(), 1,
-                        std::multiplies<int64_t>());
+                        std::multiplies<int64>());
     inputs_size[input_names[i]] = input_size;
     auto buffer_in = std::shared_ptr<float>(new float[input_size],
                                             std::default_delete<float[]>());
@@ -122,10 +207,10 @@ void MaceComputer::InitTensors(
   }
   KALDI_ASSERT(output_count == 1);
   for (size_t i = 0; i < output_count; ++i) {
-    int64_t output_size =
+    int64 output_size =
         std::accumulate(output_shapes[i].begin(),
                         output_shapes[i].end(), 1,
-                        std::multiplies<int64_t>());
+                        std::multiplies<int64>());
     auto buffer_out = std::shared_ptr<float>(new float[output_size],
                                              std::default_delete<float[]>());
     outputs_[output_names[i]] = mace::MaceTensor(output_shapes[i],
@@ -157,7 +242,7 @@ void MaceComputer::GetOutputDestructive(const std::string &name,
   const std::vector<int64> &output_shape = tensor.shape();
   int64 rows = std::accumulate(output_shape.begin(),
                                output_shape.end() - 1, 1,
-                               std::multiplies<int64_t>());
+                               std::multiplies<int64>());
   output_mat->Resize(rows, output_dim_);
   int64 output_size = rows * output_dim_;
   std::copy_n(tensor.data().get(), output_size, output_mat->Data());

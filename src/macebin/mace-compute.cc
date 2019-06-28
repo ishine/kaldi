@@ -46,6 +46,8 @@ int main(int argc, char *argv[]) {
     ParseOptions po(usage);
     Timer timer;
 
+    MaceModelInfo mace_info;
+
     MaceSimpleComputationOptions opts;
     opts.acoustic_scale = 1.0; // by default do no scaling.
 
@@ -79,6 +81,8 @@ int main(int argc, char *argv[]) {
     po.Register("use-priors", &use_priors, "If true, subtract the logs of the "
                 "priors stored with the model (in this case, "
                 "a .mdl file is expected as input).");
+
+    mace_info.Register(&po);
 
     po.Read(argc, argv);
 
@@ -114,17 +118,6 @@ int main(int argc, char *argv[]) {
 
     int32 num_success = 0, num_fail = 0;
     int64 frame_count = 0;
-
-    MaceModelInfo mace_info;
-    mace_info.model_file = "/home/liutuo/workspace/AI/liutuo/mace/build/cvte/model/cvte.pb";
-    mace_info.weight_file = "/home/liutuo/workspace/AI/liutuo/mace/build/cvte/model/cvte.data";
-
-    mace_info.input_nodes = {"input"};
-    mace_info.output_nodes = {"output"};
-    mace_info.input_shapes = {{1, 72, 40}};
-    mace_info.output_shapes = {{1, 50, 6508}};
-    mace_info.left_context = 13;
-    mace_info.right_context = 9;
 
     MaceComputer computer(mace_info); // output shapes
 

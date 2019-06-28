@@ -6,6 +6,9 @@ include ../kaldi.mk
 LDFLAGS += $(CUDA_LDFLAGS)
 LDLIBS += $(CUDA_LDLIBS)
 
+LDLIBS += $(MACE_LDLIBS)
+LDFLAGS += $(MACE_LDFLAGS)
+
 BINFILES = mace-latgen-faster mace-compute \
            mace-latgen-faster-looped mace-online2-wav-nnet2-am-compute \
            mace-online2-wav-nnet3-latgen-faster mace-online2-wav-nnet2-latgen-faster

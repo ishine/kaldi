@@ -105,6 +105,7 @@ int main(int argc, char *argv[]) {
     MACE::MaceSimpleLoopedComputationOptions decodable_opts;
     LatticeFasterDecoderConfig decoder_opts;
     OnlineEndpointConfig endpoint_opts;
+    MACE::MaceModelInfo model_info;
 
     BaseFloat chunk_length_secs = 0.18;
     bool do_endpointing = false;
@@ -133,7 +134,7 @@ int main(int argc, char *argv[]) {
     decodable_opts.Register(&po);
     decoder_opts.Register(&po);
     endpoint_opts.Register(&po);
-
+    model_info.Register(&po);
 
     po.Read(argc, argv);
 
@@ -156,18 +157,14 @@ int main(int argc, char *argv[]) {
       chunk_length_secs = -1.0;
     }
 
-    MaceModelInfo mace_info;
-    mace_info.model_file = "/home/liutuo/workspace/AI/liutuo/mace/build/cvte/model/cvte.pb";
-    mace_info.weight_file = "/home/liutuo/workspace/AI/liutuo/mace/build/cvte/model/cvte.data";
+    KALDI_LOG << "Mace computer Start Init.";
 
-    mace_info.input_nodes = {"input"};
-    mace_info.output_nodes = {"output"};
-    mace_info.input_shapes = {{1, 72, 40}};
-    mace_info.output_shapes = {{1, 50, 6508}};
-    mace_info.left_context = 13;
-    mace_info.right_context = 9;
+    model_info.left_context = decodable_opts.left_context;
+    model_info.right_context = decodable_opts.right_context;
+    model_info.modulus = decodable_opts.modulus;
+    MaceComputer computer(model_info); // output shapes
 
-    MaceComputer computer(mace_info); // output shapes
+    KALDI_LOG << "Mace computer Init.";
 
     TransitionModel trans_model;
     {
@@ -184,6 +181,8 @@ int main(int argc, char *argv[]) {
 
     
     fst::Fst<fst::StdArc> *decode_fst = ReadFstKaldiGeneric(fst_rxfilename);
+
+    KALDI_LOG << "Decode FST Init.";
 
     fst::SymbolTable *word_syms = NULL;
     if (word_syms_rxfilename != "")
@@ -227,10 +226,11 @@ int main(int argc, char *argv[]) {
             decodable_opts.frame_subsampling_factor);
 
         MaceSingleUtteranceNnet3Decoder decoder(decoder_opts,
-                                           trans_model,
-                                           decodable_info,
-                                           *decode_fst,
-                                           &feature_pipeline);
+                                                trans_model,
+                                                decodable_info,
+                                                *decode_fst,
+                                                &feature_pipeline);
+        KALDI_LOG << "Mace Decoder Init.";
         OnlineTimer decoding_timer(utt);
 
         BaseFloat samp_freq = wave_data.SampFreq();

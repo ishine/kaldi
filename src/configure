@@ -98,6 +98,7 @@ Configuration options:
                         If provided, it is prepended to all toolchain programs.
   --android-incdir=DIR  Android include directory
   --mace-libdir=DIR     MACE library directory
+  --mace-incdir=DIR     MACE include directory
 
 Following environment variables can be used to override the default toolchain.
   CXX         C++ compiler [default=g++]
@@ -712,6 +713,7 @@ function linux_configure_atlas_static {
 function linux_configure_mace {
   # Check whether the user has called tools/extras/install_speex.sh or not
   [ ! -z "$MACELIBDIR" ] || MACELIBDIR=`pwd`/../src/lib
+  [ ! -z "$MACEINCDIR" ] || MACEINCDIR="$MACELIBDIR"/../include
   static_mace=$1
   if [ "foo"$static_mace == "foo" ]; then
     static_mace=false
@@ -722,16 +724,18 @@ function linux_configure_mace {
   else
     mace_type=so
   fi
+  #echo >> kaldi.mk
+  #echo CXXFLAGS += -DHAVE_MACE -I${MACEINCDIR} >> kaldi.mk
 
   if [ ! -f "$MACELIBDIR/libmace.${mace_type}" ]; then
     failure "Could not find the Mace library $MACELIBDIR/libmace.${mace_type}"
   else
     echo >> kaldi.mk
     if $static_mace; then
-      echo LDLIBS += $MACELIBDIR/libmace.a
+      echo MACELIBS = $MACELIBDIR/libmace.a >> kaldi.mk
     else
-      echo LDLIBS += -L${MACELIBDIR} -lmace >> kaldi.mk
-      echo LDFLAGS += -Wl,-rpath=${MACELIBDIR} >> kaldi.mk
+      echo MACE_LDLIBS += "-L${MACELIBDIR} -lmace" >> kaldi.mk
+      echo MACE_LDFLAGS += "-Wl,-rpath=${MACELIBDIR}" >> kaldi.mk
     fi
     echo "Successfully configured with Mace at $MACELIBDIR, (static=[$static_mace])"
   fi
@@ -749,7 +753,7 @@ MKLLIBDIR=
 MKLROOT=
 OPENBLASROOT=
 MACELIBDIR=
-
+MACEINCDIR=
 # This variable identifies the type of system where built programs and
 # libraries will run. It is set by the configure script when cross compiling.
 HOST=
@@ -928,6 +932,9 @@ do
     MATHLIB='OPENBLAS';
     GetSwitchExistingPathOrDie ANDROIDINC "$1"
     shift;;
+  --mace-incdir=*)
+    GetSwitchExistingPathOrDie MACEINCDIR "$1"
+    shift ;;
   --mace-libdir=*)
     use_mace=true
     GetSwitchExistingPathOrDie MACELIBDIR "$1"

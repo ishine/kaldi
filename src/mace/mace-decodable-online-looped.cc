@@ -153,6 +153,7 @@ void MaceDecodableNnetLoopedOnlineBase::AdvanceChunk() {
     KALDI_ERR << "Attempt to access frame past the end of the available input";
   }
   KALDI_LOG << "num_chunks_computed: " << num_chunks_computed_ << "chunk size: " << chunk_size;
+
   int32 subsampled_chunk_size = (chunk_size + sf - 1)/ sf;
   CuMatrix<BaseFloat> feats_chunk;
   { // this block sets 'feats_chunk'.
@@ -170,8 +171,8 @@ void MaceDecodableNnetLoopedOnlineBase::AdvanceChunk() {
     }
     feats_chunk.Swap(&this_feats);
   }
-  computer_->AcceptInput("input", &feats_chunk);
 
+  computer_->AcceptInput("input", &feats_chunk);
   if (info_.has_ivectors) {
     KALDI_ASSERT(ivector_features_ != NULL);
 //    KALDI_ASSERT(info_.request1.inputs.size() == 2);
@@ -220,8 +221,7 @@ void MaceDecodableNnetLoopedOnlineBase::AdvanceChunk() {
     // instead of GetOutputDestructive().  But we don't anticipate this will
     // happen in practice.
     CuMatrix<BaseFloat> output;
-    computer_->GetOutputDestructive("output.affine", &output);
-
+    computer_->GetOutputDestructive("output.log-softmax", &output);
     if (info_.log_priors.Dim() != 0) {
       // subtract log-prior (divide by prior)
       output.AddVecToRows(-1.0, info_.log_priors);

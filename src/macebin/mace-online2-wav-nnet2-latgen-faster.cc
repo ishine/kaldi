@@ -148,15 +148,6 @@ int main(int argc, char *argv[]) {
     OnlineNnet2FeaturePipelineInfo feature_info(feature_config);
 
     MaceModelInfo mace_info;
-    mace_info.model_file = "/home/liutuo/workspace/AI/liutuo/mace/build/cvte/model/cvte.pb";
-    mace_info.weight_file = "/home/liutuo/workspace/AI/liutuo/mace/build/cvte/model/cvte.data";
-
-    mace_info.input_nodes = {"input"};
-    mace_info.output_nodes = {"output"};
-    mace_info.input_shapes = {{1, 72, 40}};
-    mace_info.output_shapes = {{1, 50, 6508}};
-    mace_info.left_context = 13;
-    mace_info.right_context = 9;
 
     MaceComputer computer(mace_info); // output shapes
 

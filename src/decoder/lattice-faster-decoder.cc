@@ -770,7 +770,6 @@ BaseFloat LatticeFasterDecoderTpl<FST, Token>::ProcessEmitting(
       }
     }
   }
-
   // Store the offset on the acoustic likelihoods that we're applying.
   // Could just do cost_offsets_.push_back(cost_offset), but we
   // do it this way as it's more robust to future code changes.

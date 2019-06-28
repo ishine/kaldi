@@ -6,6 +6,9 @@ include ../kaldi.mk
 LDFLAGS += $(CUDA_LDFLAGS)
 LDLIBS += $(CUDA_LDLIBS)
 
+LDLIBS += $(MACE_LDLIBS)
+LDFLAGS += $(MACE_LDFLAGS)
+
 TESTFILES =
 
 OBJFILES = mace-computer.o mace-am-decodable-simple.o mace-decodable-simple-looped.o \

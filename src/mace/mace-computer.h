@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "cudamatrix/cu-matrix-lib.h"
+#include "itf/options-itf.h"
 #include "matrix/matrix-lib.h"
 #include "mace/public/mace.h"
 #include "mace/port/env.h"
@@ -35,65 +36,68 @@ namespace MACE {
 
 class MaceModelInfo {
  public:
+  std::string input_name;
+  std::string ivector_name;
+  std::string output_name;
+  int32 input_dim;
+  int32 ivector_dim;
+  int32 output_dim;
   int32 left_context;
   int32 right_context;
-//  int32 extra_left_context;
-//  int32 extra_right_context;
-  int32 extra_left_context_initial;
-  int32 extra_right_context_final;
-  int32 frame_subsampling_factor;
-  int32 frames_per_chunk;
+  int32 chunk_size;
   int32 modulus;
-  BaseFloat acoustic_scale;
-  std::vector<std::string> input_nodes;
-  std::vector<std::string> output_nodes;
-  std::vector<std::vector<int64_t>> input_shapes;
-  std::vector<std::vector<int64_t>> output_shapes;
+  int32 batch;
 
   std::string model_file;
   std::string weight_file;
 
   MaceModelInfo():
+      input_name("input"),
+      ivector_name("ivector"),
+      output_name("output"),
+      input_dim(0),
+      ivector_dim(0),
+      output_dim(0),
       left_context(0),
       right_context(0),
-      extra_left_context_initial(-1),
-      extra_right_context_final(-1),
-      frame_subsampling_factor(1),
-      frames_per_chunk(50),
+      chunk_size(20),
       modulus(1),
-      acoustic_scale(0.1),
-      input_nodes({"input"}),
-      output_nodes({"output"}),
-      input_shapes({}),
-      output_shapes({}),
+      batch(1),
       model_file(""),
       weight_file("") {}
+
+  void Register(OptionsItf *opts) {
+    opts->Register("input-name", &input_name,
+                   "the input node name of the nnet, default is 'input'.");
+    opts->Register("ivector-name", &ivector_name,
+                   "the ivector node name of nnet, default is 'ivector'.");
+    opts->Register("output-name", &output_name,
+                   "the output node name of nnet, default is 'output'.");
+    opts->Register("input-dim", &input_dim, "input feature's dim.");
+    opts->Register("ivector-dim", &ivector_dim, "ivector's dim.");
+    opts->Register("output-dim", &output_dim, "Nnet's output dim.");
+    opts->Register("chunk-size", &chunk_size,
+                   "Number of output frames for one computation.");
+    opts->Register("modulus", &modulus,
+                   "Modulus of the nnet model.");
+    opts->Register("batch", &batch,
+                   "Batch size for one computation.");
+    opts->Register("model-file", &model_file, "Model graph file path.");
+    opts->Register("weight-file", &weight_file, "Model data file path.");
+  }
 };
 
 
 class MaceComputer {
  public:
-  MaceComputer(MaceModelInfo info) :
-    modulus_(info.modulus),
-    left_context_(info.left_context),
-    right_context_(info.right_context) {
-    InitEngine(info.model_file,
-               info.weight_file,
-               info.input_nodes,
-               info.output_nodes);
-    InitTensors(info.input_nodes,
-                info.input_shapes,
-                info.output_nodes,
-                info.output_shapes);
-
-  }
+  MaceComputer(MaceModelInfo info);
 
   MaceComputer(const std::string &model_file,
                const std::string &weight_file,
                const std::vector<std::string> &input_nodes,
                const std::vector<std::string> &output_nodes,
-               const std::vector<std::vector<int64_t>> &input_shapes,
-               const std::vector<std::vector<int64_t>> &output_shapes):
+               const std::vector<std::vector<int64>> &input_shapes,
+               const std::vector<std::vector<int64>> &output_shapes):
       modulus_(1),
       left_context_(0),
       right_context_(0) {
@@ -119,9 +123,9 @@ class MaceComputer {
                               const std::vector<std::string> &input_nodes,
                               const std::vector<std::string> &output_nodes);
   void InitTensors(const std::vector<std::string> &input_names,
-                   const std::vector<std::vector<int64_t>> &input_shapes,
+                   const std::vector<std::vector<int64>> &input_shapes,
                    const std::vector<std::string> &output_names,
-                   const std::vector<std::vector<int64_t>> &output_shapes);
+                   const std::vector<std::vector<int64>> &output_shapes);
 
   void AcceptInput(const std::string &name,
                    CuMatrix<BaseFloat> *input_mat);

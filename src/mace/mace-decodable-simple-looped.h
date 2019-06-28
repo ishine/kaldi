@@ -46,8 +46,8 @@ struct MaceSimpleLoopedComputationOptions {
   BaseFloat acoustic_scale;
   bool debug_computation;
   MaceSimpleLoopedComputationOptions():
-      left_context(13),
-      right_context(9),
+      left_context(0),
+      right_context(0),
       modulus(1),
       extra_left_context_initial(0),
       frame_subsampling_factor(1),
