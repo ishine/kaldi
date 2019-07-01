@@ -149,7 +149,7 @@ class Nnet {
   void UpdateLstmStreamsState(const std::vector<int32> &stream_update_flag);
 
   /// set sequence length in LSTM multi-stream training
-  void SetSeqLengths(const std::vector<int32> &sequence_lengths);
+  void SetSeqLengths(const std::vector<int32> &sequence_lengths, int32 ntruncated_bptt_size = 0);
 
   /// Initialize MLP from config
   void Init(const std::string &config_file);

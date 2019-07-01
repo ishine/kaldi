@@ -188,26 +188,25 @@ void RNNTDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 	his = MallocHis();
 	len = y_hat->k.size();
 	rnntlm_.Forward(y_hat->k[len-1], *y_hat->lmhis, pred, his);
-	logprob.CopyFromVec(*pred);
 
 	for (int n = 0; n < nframe; n++) {
 		// log probability for each rnnt output k
+	    logprob.CopyFromVec(*pred);
 		logprob.AddVec(1.0, loglikes.Row(n));
 		logprob.ApplyLogSoftMax();
 
 		logp = logprob.Max(&k);
+		y_hat->logp += logp;
 		if (k != config_.blank) {
 			y_hat->k.push_back(k);
 			y_hat->pred.push_back(pred);
 			FreeHis(y_hat->lmhis);
 			y_hat->lmhis = his;
-			y_hat->logp += logp;
 
 			pred = MallocPred();
 			his = MallocHis();
 			len = y_hat->k.size();
 			rnntlm_.Forward(y_hat->k[len-1], *y_hat->lmhis, pred, his);
-			logprob.CopyFromVec(*pred);
 		}
 	}
 }

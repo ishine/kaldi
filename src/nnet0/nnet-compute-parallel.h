@@ -137,8 +137,7 @@ struct NnetStats {
 
     virtual ~NnetStats(){}
 
-    virtual void  MergeStats(NnetUpdateOptions *opts, int root)
-    {
+    virtual void  MergeStats(NnetUpdateOptions *opts, int root) {
     	int myid = opts->parallel_opts->myid;
     	MPI_Barrier(MPI_COMM_WORLD);
 
@@ -155,19 +154,18 @@ struct NnetStats {
     	MPI_Reduce(addr, (void*)(&this->num_other_error), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 
         if (opts->objective_function == "xent") {
-        		xent.Merge(myid, 0);
+        	xent.Merge(myid, 0);
         } else if (opts->objective_function == "mse") {
-        		mse.Merge(myid, 0);
+        	mse.Merge(myid, 0);
         } else if (0 == opts->objective_function.compare(0, 9, "multitask")) {
-        		multitask.Merge(myid, 0);
+        	multitask.Merge(myid, 0);
         } else {
-        		KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
+        	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
 
     }
 
-    virtual void  Print(NnetUpdateOptions *opts, double time_now)
-    {
+    virtual void  Print(NnetUpdateOptions *opts, double time_now) {
         KALDI_LOG << "Done " << num_done << " files, " << num_no_tgt_mat
                   << " with no tgt_mats, " << num_other_error
                   << " with other errors. "

@@ -57,11 +57,13 @@ struct RNNTLstmUpdateOptions : public NnetUpdateOptions {
     int32 lm_truncated;
     int32 blank_label;
     int32 sos_id;
+    bool  freeze_lm;
 
 	RNNTLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts,
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
     	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts),
-		  num_stream(4), max_frames(25000), batch_size(0), am_truncated(0), lm_truncated(0), blank_label(0), sos_id(0) { 
+		  num_stream(4), max_frames(25000), batch_size(0), 
+          am_truncated(0), lm_truncated(0), blank_label(0), sos_id(0), freeze_lm(false) { 
           objective_function = "rnnt";
     }
 
@@ -74,6 +76,7 @@ struct RNNTLstmUpdateOptions : public NnetUpdateOptions {
 	  	po->Register("lm-truncated", &lm_truncated, "predict lstm network bptt truncated size");
 	  	po->Register("blank-label", &blank_label, "CTC output bank label id");
 	  	po->Register("sos-id", &sos_id, "start of utterance(<s>) id in predict model");
+	  	po->Register("freeze-lm", &freeze_lm, "freeze update training predict model");
   	}
 };
 

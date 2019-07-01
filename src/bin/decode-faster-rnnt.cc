@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 			words_writer.Write(key, words);
 			if (word_syms != NULL) {
 				std::cerr << key << ' ';
-				for (size_t i = 0; i < words.size(); i++) {
+				for (size_t i = 1; i < words.size(); i++) {
 					std::string s = word_syms->Find(words[i]);
 					if (s == "")
 						KALDI_ERR << "Word-id " << words[i] <<" not in symbol table.";

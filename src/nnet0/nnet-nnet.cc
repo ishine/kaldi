@@ -607,11 +607,11 @@ void Nnet::UpdateLstmStreamsState(const std::vector<int32> &stream_update_flag) 
   }
 }
 
-void Nnet::SetSeqLengths(const std::vector<int32> &sequence_lengths) {
+void Nnet::SetSeqLengths(const std::vector<int32> &sequence_lengths, int32 ntruncated_bptt_size) {
   for (int32 c=0; c < NumComponents(); c++) {
     if (GetComponent(c).GetType() == Component::kBLstmProjectedStreams) {
       BLstmProjectedStreams& comp = dynamic_cast<BLstmProjectedStreams&>(GetComponent(c));
-      comp.SetSeqLengths(sequence_lengths);
+      comp.SetSeqLengths(sequence_lengths, ntruncated_bptt_size);
     }
     else if (GetComponent(c).GetType() == Component::kBLstmStreams) {
         BLstmStreams& comp = dynamic_cast<BLstmStreams&>(GetComponent(c));

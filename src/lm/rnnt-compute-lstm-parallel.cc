@@ -371,6 +371,7 @@ private:
 
 			// lstm
 			am->ResetLstmStreams(new_utt_flags, am_truncated);
+            am->SetSeqLengths(num_utt_frame_out, am_truncated);
 			lm->ResetLstmStreams(new_utt_flags, lm_truncated);
 			if (join_com != NULL) {
 				join_com->SetRNNTStreamSize(num_utt_frame_out, num_utt_word_in, rnnt_opts.maxT, rnnt_opts.maxU);
@@ -406,7 +407,7 @@ private:
 				// backpropagate
 				join->Backpropagate(nnet_diff, &join_in_diff, true);
 				am->Backpropagate(am_out_diff, NULL, true);
-				lm->Backpropagate(lm_out_diff, NULL, true);
+				lm->Backpropagate(lm_out_diff, NULL, !opts->freeze_lm);
 
 				update_frames += num_frames;
 				if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&
