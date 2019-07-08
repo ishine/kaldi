@@ -30,8 +30,8 @@ extra_right_context_final=0
 . ./path.sh
 . ./utils/parse_options.sh
 
-srcdir=exp/chain/9tdnn_4blstm_65M_7wh_1epoch
-train_data_dir=data/3w8_dialogue2w4_farfield2k_input4k_tra2Record8k_level1_part3
+srcdir=exp/chain/9tdnn_4blstm_65M_7wh_1epoch_smbr_part7
+train_data_dir=data/train_sogou_fbank_trapen2_dt_pinjie1w6_part3
 online_ivector_dir=
 degs_dir=                     # If provided, will skip the degs directory creation
 lats_dir=                     # If provided, will skip denlats creation
@@ -43,7 +43,7 @@ one_silence_class=true
 dir=${srcdir}_${criterion}
 
 ## Egs options
-frames_per_eg=150
+frames_per_eg=600
 frames_overlap_per_eg=30
 
 ## Nnet training options
@@ -52,7 +52,7 @@ max_param_change=1
 num_jobs_nnet=4
 num_epochs=1
 regularization_opts="--xent-regularize=0.1 --l2-regularize=0.00005"          # Applicable for providing --xent-regularize and --l2-regularize options
-minibatch_size=64
+minibatch_size=16
 
 ## Decode options
 decode_start_epoch=1 # can be used to avoid decoding all epochs, e.g. if we decided to run more.
@@ -104,7 +104,7 @@ if [ $frame_subsampling_factor -ne 1 ]; then
 
   train_data_dir=${train_data_dir}_fs
 
-  affix=_fs_part3
+  affix=_fs_pinjie_part3
 fi
 
 ##rm ${online_ivector_dir}_fs/ivector_online.scp 2>/dev/null || true
@@ -182,9 +182,9 @@ if [ $stage -le 4 ]; then
     --regularization-opts "$regularization_opts" --use-frame-shift false \
       ${degs_dir} $dir ;
 fi
-
 testsets="testC1pen_0215eva_0.3m_sogou testC1pen_0215eva_1m_sogou testC1pen_0215eva_2m_sogou testRecordv2-dialog2-represent-long-0.3m_sogou testRecordv2-dialog2-interview-long-1m_sogou testRecordv2-dialog2-meeting-long-2m_sogou"
-decode_suff=0528_level1
+#testsets="testC1pen_0215eva_0.3m_sogou testC1pen_0215eva_1m_sogou testC1pen_0215eva_2m_sogou"
+decode_suff=0528_pinjie
 graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
 if [ $stage -le 5 ]; then
   iter_opts=
@@ -198,12 +198,13 @@ if [ $stage -le 5 ]; then
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
-          --frames-per-chunk 150 \
+          --frames-per-chunk 600 \
          $graph_dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done
 fi
 wait;
+
 if [ $stage -le 6 ]; then
   for decode_set in $testsets; do
     steps/lmrescore_const_arpa.sh --cmd "$decode_cmd" \
@@ -212,7 +213,7 @@ if [ $stage -le 6 ]; then
       $dir/decode_${decode_set}_${decode_suff} $dir/decode_${decode_set}_${decode_suff}_lr || exit 1;
   done
 fi
-
+exit 0;
 if [ $stage -le 7 ] && $cleanup; then
   # if you run with "--cleanup true --stage 6" you can clean up.
   rm ${lats_dir}/lat.*.gz || true

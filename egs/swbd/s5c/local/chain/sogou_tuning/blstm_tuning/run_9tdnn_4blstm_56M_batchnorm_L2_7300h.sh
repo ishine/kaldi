@@ -8,11 +8,11 @@
 set -e
 
 # configs for 'chain'
-stage=12
+stage=13
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/3tdnn_3blstm_56M_7wh # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/9tdnn_4blstm_56M_batchnorm_L2_7300h # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -32,7 +32,7 @@ frames_per_chunk=150,100
 frames_per_chunk_primary=$(echo $frames_per_chunk | cut -d, -f1)
 
 remove_egs=false
-common_egs_dir=
+common_egs_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/9tdnn_4blstm_56M_7300h/egs
 
 affix=
 # End configuration section.
@@ -61,7 +61,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_7w_trapen2
+train_set=train_sogou_fbank_7300h
 ali_dir=exp/tri3b_ali
 treedir=exp/chain/tri5_7000houres_tree$suffix
 lang=data/lang_chain_2y
@@ -127,6 +127,10 @@ if [ $stage -le 12 ]; then
 
   num_targets=$(tree-info $treedir/tree |grep num-pdfs|awk '{print $2}')
   learning_rate_factor=$(echo "print 0.5/$xent_regularize" | python)
+  linear_opts="orthonormal-constraint=-1.0 max-change=0.75"
+  opts="l2-regularize=0.001"
+  lstm_opts="l2-regularize=0.0005"
+  output_opts="l2-regularize=0.0001 output-delay=$label_delay max-change=1.0 dim=$num_targets"
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
@@ -137,31 +141,30 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=1024
-  relu-renorm-layer name=tdnn2 input=Append(-3,0,3) dim=1024 max-change=1.0
-  relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=1024 max-change=1.0
+  relu-batchnorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=1024 $opts
+  relu-batchnorm-layer name=tdnn2 input=Append(-3,0,3) dim=1024 max-change=1.0 $opts
+  relu-batchnorm-layer name=tdnn3 input=Append(-3,0,3) dim=1024 max-change=1.0 $opts
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=blstm1-forward input=tdnn3 cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm1-backward input=tdnn3 cell-dim=1536 recurrent-projection-dim=384 delay=3
-  fast-lstmr-layer name=blstm2-forward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm2-backward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=384 delay=3
-  fast-lstmr-layer name=blstm3-forward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm3-backward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=384 delay=3
+  fast-lstmr-layer name=blstm1-forward input=tdnn3 cell-dim=1280 recurrent-projection-dim=320 delay=-3 $lstm_opts
+  fast-lstmr-layer name=blstm1-backward input=tdnn3 cell-dim=1280 recurrent-projection-dim=320 delay=3 $lstm_opts
+  relu-batchnorm-layer name=tdnn4 input=Append(blstm1-forward, blstm1-backward) dim=1024 max-change=0.75 $opts
+  linear-component name=tdnn5 input=Append(-3,0,3) dim=512 $linear_opts
+  fast-lstmr-layer name=blstm2-forward input=tdnn5 cell-dim=1280 recurrent-projection-dim=320 delay=-3 $lstm_opts
+  fast-lstmr-layer name=blstm2-backward input=tdnn5 cell-dim=1280 recurrent-projection-dim=320 delay=3 $lstm_opts
+  relu-batchnorm-layer name=tdnn6 input=Append(blstm2-forward, blstm2-backward) dim=1024 max-change=0.75 $opts
+  linear-component name=tdnn7 input=Append(-3,0,3) dim=512 $linear_opts
+  fast-lstmr-layer name=blstm3-forward input=tdnn7 cell-dim=1280 recurrent-projection-dim=320 delay=-3 $lstm_opts
+  fast-lstmr-layer name=blstm3-backward input=tdnn7 cell-dim=1280 recurrent-projection-dim=320 delay=3 $lstm_opts
+  relu-batchnorm-layer name=tdnn8 input=Append(blstm3-forward, blstm3-backward) dim=1024 max-change=0.75 $opts
+  linear-component name=tdnn9 input=Append(-3,0,3) dim=512 $linear_opts
+  fast-lstmr-layer name=blstm4-forward input=tdnn9 cell-dim=1280 recurrent-projection-dim=320 delay=-3 $lstm_opts
+  fast-lstmr-layer name=blstm4-backward input=tdnn9 cell-dim=1280 recurrent-projection-dim=320 delay=3 $lstm_opts
 
   ## adding the layers for chain branch
-  output-layer name=output input=Append(blstm3-forward, blstm3-backward) output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.0
+  output-layer name=output input=Append(blstm4-forward, blstm4-backward) include-log-softmax=false $output_opts 
 
-  # adding the layers for xent branch
-  # This block prints the configs for a separate output that will be
-  # trained with a cross-entropy objective in the 'chain' models... this
-  # has the effect of regularizing the hidden parts of the model.  we use
-  # 0.5 / args.xent_regularize as the learning rate factor- the factor of
-  # 0.5 / args.xent_regularize is suitable as it means the xent
-  # final-layer learns at a rate independent of the regularization
-  # constant; and the 0.5 was tuned so as to make the relative progress
-  # similar in the xent and regular final layers.
-  output-layer name=output-xent input=Append(blstm3-forward, blstm3-backward) output-delay=$label_delay dim=$num_targets learning-rate-factor=$learning_rate_factor max-change=1.0
+  output-layer name=output-xent input=Append(blstm4-forward, blstm4-backward) learning-rate-factor=$learning_rate_factor $output_opts
 
 EOF
   steps/nnet3/xconfig_to_configs.py --xconfig-file $dir/configs/network.xconfig --config-dir $dir/configs/
@@ -173,7 +176,7 @@ if [ $stage -le 13 ]; then
     --feat.cmvn-opts "--norm-means=false --norm-vars=false" \
     --chain.xent-regularize $xent_regularize \
     --chain.leaky-hmm-coefficient 0.1 \
-    --chain.l2-regularize 0.00005 \
+    --chain.l2-regularize 0.0 \
     --chain.apply-deriv-weights false \
     --chain.lm-opts="--num-extra-lm-states=2000" \
     --trainer.num-chunk-per-minibatch 64 \
@@ -183,8 +186,8 @@ if [ $stage -le 13 ]; then
     --trainer.optimization.shrink-value 0.99 \
     --trainer.optimization.num-jobs-initial 3 \
     --trainer.optimization.num-jobs-final 8 \
-    --trainer.optimization.initial-effective-lrate 0.0008 \
-    --trainer.optimization.final-effective-lrate 0.00008 \
+    --trainer.optimization.initial-effective-lrate 0.0013 \
+    --trainer.optimization.final-effective-lrate 0.0002 \
     --trainer.optimization.momentum 0.0 \
     --trainer.deriv-truncate-margin 8 \
     --egs.stage $get_egs_stage \
@@ -198,7 +201,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_7w_trapen2 \
+    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_nodup \
     --dir $dir  || exit 1;
 fi
 <<!

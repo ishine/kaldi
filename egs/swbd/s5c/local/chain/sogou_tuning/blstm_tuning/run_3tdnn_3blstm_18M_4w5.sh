@@ -12,7 +12,7 @@ stage=12
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/3tdnn_3blstm_56M_7wh # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/3tdnn_3blstm_18M_4w5h # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -32,7 +32,7 @@ frames_per_chunk=150,100
 frames_per_chunk_primary=$(echo $frames_per_chunk | cut -d, -f1)
 
 remove_egs=false
-common_egs_dir=
+common_egs_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/3tdnn_3blstm_4w5/egs
 
 affix=
 # End configuration section.
@@ -61,7 +61,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_7w_trapen2
+train_set=train_sogou_fbank_4w5_total
 ali_dir=exp/tri3b_ali
 treedir=exp/chain/tri5_7000houres_tree$suffix
 lang=data/lang_chain_2y
@@ -137,17 +137,17 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=1024
-  relu-renorm-layer name=tdnn2 input=Append(-3,0,3) dim=1024 max-change=1.0
-  relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=1024 max-change=1.0
+  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=625
+  relu-renorm-layer name=tdnn2 input=Append(-3,0,3) dim=625 max-change=1.0
+  relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=625 max-change=1.0
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=blstm1-forward input=tdnn3 cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm1-backward input=tdnn3 cell-dim=1536 recurrent-projection-dim=384 delay=3
-  fast-lstmr-layer name=blstm2-forward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm2-backward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=384 delay=3
-  fast-lstmr-layer name=blstm3-forward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm3-backward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=384 delay=3
+  fast-lstmr-layer name=blstm1-forward input=tdnn3 cell-dim=1024 recurrent-projection-dim=192 delay=-3
+  fast-lstmr-layer name=blstm1-backward input=tdnn3 cell-dim=1024 recurrent-projection-dim=192 delay=3
+  fast-lstmr-layer name=blstm2-forward input=Append(blstm1-forward, blstm1-backward) cell-dim=768 recurrent-projection-dim=192 delay=-3
+  fast-lstmr-layer name=blstm2-backward input=Append(blstm1-forward, blstm1-backward) cell-dim=768 recurrent-projection-dim=192 delay=3
+  fast-lstmr-layer name=blstm3-forward input=Append(blstm2-forward, blstm2-backward) cell-dim=768 recurrent-projection-dim=192 delay=-3
+  fast-lstmr-layer name=blstm3-backward input=Append(blstm2-forward, blstm2-backward) cell-dim=768 recurrent-projection-dim=192 delay=3
 
   ## adding the layers for chain branch
   output-layer name=output input=Append(blstm3-forward, blstm3-backward) output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.0
@@ -198,7 +198,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_7w_trapen2 \
+    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_4w5_total \
     --dir $dir  || exit 1;
 fi
 <<!
@@ -209,8 +209,8 @@ if [ $stage -le 14 ]; then
   utils/mkgraph.sh --self-loop-scale 1.0 data/lang_bigG $dir $dir/graph_bigG
 fi
 !
-decode_suff=online
-graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_online
+decode_suff=0528
+graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;

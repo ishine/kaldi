@@ -8,11 +8,11 @@
 set -e
 
 # configs for 'chain'
-stage=12
+stage=13
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/3tdnn_3blstm_56M_7wh # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/3tdnn_3blstm_69M_7300h # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -32,7 +32,7 @@ frames_per_chunk=150,100
 frames_per_chunk_primary=$(echo $frames_per_chunk | cut -d, -f1)
 
 remove_egs=false
-common_egs_dir=
+common_egs_dir=exp/chain/3tdnn_3blstm_43M_7300h/egs
 
 affix=
 # End configuration section.
@@ -61,7 +61,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_7w_trapen2
+train_set=train_sogou_fbank_7300h
 ali_dir=exp/tri3b_ali
 treedir=exp/chain/tri5_7000houres_tree$suffix
 lang=data/lang_chain_2y
@@ -142,12 +142,12 @@ if [ $stage -le 12 ]; then
   relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=1024 max-change=1.0
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=blstm1-forward input=tdnn3 cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm1-backward input=tdnn3 cell-dim=1536 recurrent-projection-dim=384 delay=3
-  fast-lstmr-layer name=blstm2-forward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm2-backward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=384 delay=3
-  fast-lstmr-layer name=blstm3-forward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=384 delay=-3
-  fast-lstmr-layer name=blstm3-backward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=384 delay=3
+  fast-lstmr-layer name=blstm1-forward input=tdnn3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=blstm1-backward input=tdnn3 cell-dim=1536 recurrent-projection-dim=512 delay=3
+  fast-lstmr-layer name=blstm2-forward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=blstm2-backward input=Append(blstm1-forward, blstm1-backward) cell-dim=1536 recurrent-projection-dim=512 delay=3
+  fast-lstmr-layer name=blstm3-forward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  fast-lstmr-layer name=blstm3-backward input=Append(blstm2-forward, blstm2-backward) cell-dim=1536 recurrent-projection-dim=512 delay=3
 
   ## adding the layers for chain branch
   output-layer name=output input=Append(blstm3-forward, blstm3-backward) output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.0
@@ -183,8 +183,8 @@ if [ $stage -le 13 ]; then
     --trainer.optimization.shrink-value 0.99 \
     --trainer.optimization.num-jobs-initial 3 \
     --trainer.optimization.num-jobs-final 8 \
-    --trainer.optimization.initial-effective-lrate 0.0008 \
-    --trainer.optimization.final-effective-lrate 0.00008 \
+    --trainer.optimization.initial-effective-lrate 0.0013 \
+    --trainer.optimization.final-effective-lrate 0.0002 \
     --trainer.optimization.momentum 0.0 \
     --trainer.deriv-truncate-margin 8 \
     --egs.stage $get_egs_stage \
@@ -198,7 +198,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_7w_trapen2 \
+    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_nodup \
     --dir $dir  || exit 1;
 fi
 <<!
