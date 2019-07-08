@@ -35,7 +35,7 @@ sub get_utf8_or_bytestream {
       $is_utf_compatible = $is_utf_compatible && defined($decoded_text);
       push @unicode_lines, $decoded_text;
     } else {
-      #print STDERR "WARNING: the line $raw_text cannot be interpreted as UTF-8: $decoded_text\n";
+      #print STDERR "WARNING: the line($.) $raw_text cannot be interpreted as UTF-8: $decoded_text\n";
       ;
     }
     push @raw_lines, $raw_text;
@@ -56,6 +56,10 @@ sub validate_utf8_whitespaces {
   use feature 'unicode_strings';
   for (my $i = 0; $i < scalar @{$unicode_lines}; $i++) {
     my $current_line = $unicode_lines->[$i];
+    if ((substr $current_line, -1) ne "\n"){
+      print STDERR "$0: The current line (nr. $i) has invalid newline\n";
+      return 1;
+    }
     # we replace TAB, LF, CR, and SPACE
     # this is to simplify the test
     if ($current_line =~ /\x{000d}/) {
