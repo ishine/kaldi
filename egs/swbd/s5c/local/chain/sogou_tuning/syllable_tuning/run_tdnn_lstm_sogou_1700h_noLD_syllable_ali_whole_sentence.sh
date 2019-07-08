@@ -8,18 +8,18 @@
 set -e
 
 # configs for 'chain'
-stage=15
-train_stage=-4
+stage=13
+train_stage=-5
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_nnet3Lats_whole_sentence # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_ali_whole_sentence # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
 # training options
 leftmost_questions_truncate=-1
-chunk_width=$(cat data/train_sogou_fbank_1700h_5s_withoutseg_e2e/allowed_lengths.txt | tr '\n' , | sed 's/,$//')
-minibatch_size=500=16/1000=8/1500=6
+chunk_width=-1
+minibatch_size=1
 chunk_left_context=40
 chunk_right_context=0
 xent_regularize=0.025
@@ -31,7 +31,7 @@ extra_right_context=0
 frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_nnet3Lats_whole_sentence/egs
+common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_ali_whole_sentence/egs
 
 affix=
 # End configuration section.
@@ -60,7 +60,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_1700h_5s_withoutseg_e2e
+train_set=train_sogou_fbank_1700h_5s
 ali_dir=exp/tri3b_ali_syllable_length_1700h_5s
 treedir=exp/chain/tri5_7000houres_mono_tree_syllable
 lang=data/lang_chain_2y
@@ -176,9 +176,6 @@ if [ $stage -le 13 ]; then
     --chain.l2-regularize 0.00005 \
     --chain.apply-deriv-weights false \
     --chain.lm-opts="--num-extra-lm-states=2000" \
-    --chain.right-tolerance 1 \
-    --chain.left-tolerance 1 \
-    --chain.alignment-subsampling-factor 1 \
     --trainer.num-chunk-per-minibatch $minibatch_size \
     --trainer.frames-per-iter 1200000 \
     --trainer.max-param-change 2.0 \
@@ -201,7 +198,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir exp/tdnn_lstm_1700h_syllabel_e2e_lats \
+    --lat-dir exp/tri3b_ali_syllable_length_1700h_5s \
     --dir $dir  || exit 1;
 fi
 
@@ -212,7 +209,7 @@ fi
 #  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_0528_syllable $dir $dir/graph_0528_syllable
 #fi
 
-decode_suff=0528
+decode_suff=0528_decode15s
 graph_dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD_syllable_ali_unconstrain/graph_0528_syllable
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
@@ -229,7 +226,7 @@ if [ $stage -le 15 ]; then
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
-          --frames-per-chunk 500 \
+          --frames-per-chunk 1500 \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done

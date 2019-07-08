@@ -9,17 +9,16 @@ set -e
 
 # configs for 'chain'
 stage=15
-train_stage=-4
+train_stage=-3
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_nnet3Lats_whole_sentence # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD_syllable_ali_unconstrain # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
 # training options
 leftmost_questions_truncate=-1
-chunk_width=$(cat data/train_sogou_fbank_1700h_5s_withoutseg_e2e/allowed_lengths.txt | tr '\n' , | sed 's/,$//')
-minibatch_size=500=16/1000=8/1500=6
+chunk_width=150
 chunk_left_context=40
 chunk_right_context=0
 xent_regularize=0.025
@@ -31,7 +30,7 @@ extra_right_context=0
 frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_nnet3Lats_whole_sentence/egs
+common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD_syllable_ali_unconstrain/egs
 
 affix=
 # End configuration section.
@@ -60,8 +59,8 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_1700h_5s_withoutseg_e2e
-ali_dir=exp/tri3b_ali_syllable_length_1700h_5s
+train_set=train_sogou_fbank_7300h
+ali_dir=exp/tri3b_ali_syllable_length
 treedir=exp/chain/tri5_7000houres_mono_tree_syllable
 lang=data/lang_chain_2y
 mfcc_data=data/train_mfcc
@@ -136,18 +135,18 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=768
-  relu-renorm-layer name=tdnn2 input=Append(-1,0,1) dim=768
-  relu-renorm-layer name=tdnn3 input=Append(-1,0,1) dim=768
+  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=1024
+  relu-renorm-layer name=tdnn2 input=Append(-1,0,1) dim=1024
+  relu-renorm-layer name=tdnn3 input=Append(-1,0,1) dim=1024
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  fast-lstmr-layer name=fastlstm1 cell-dim=1536 recurrent-projection-dim=512 delay=-3
   relu-renorm-layer name=tdnn4 input=Append(-3,0,3) dim=1024
   relu-renorm-layer name=tdnn5 input=Append(-3,0,3) dim=1024
-  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  fast-lstmr-layer name=fastlstm2 cell-dim=1536 recurrent-projection-dim=512 delay=-3
   relu-renorm-layer name=tdnn6 input=Append(-3,0,3) dim=1024
   relu-renorm-layer name=tdnn7 input=Append(-3,0,3) dim=1024
-  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  fast-lstmr-layer name=fastlstm3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -176,10 +175,7 @@ if [ $stage -le 13 ]; then
     --chain.l2-regularize 0.00005 \
     --chain.apply-deriv-weights false \
     --chain.lm-opts="--num-extra-lm-states=2000" \
-    --chain.right-tolerance 1 \
-    --chain.left-tolerance 1 \
-    --chain.alignment-subsampling-factor 1 \
-    --trainer.num-chunk-per-minibatch $minibatch_size \
+    --trainer.num-chunk-per-minibatch 64 \
     --trainer.frames-per-iter 1200000 \
     --trainer.max-param-change 2.0 \
     --trainer.num-epochs 4 \
@@ -199,9 +195,9 @@ if [ $stage -le 13 ]; then
     --egs.chunk-right-context-final 0 \
     --egs.dir "$common_egs_dir" \
     --cleanup.remove-egs $remove_egs \
-    --feat-dir data/${train_set} \
+    --feat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir exp/tdnn_lstm_1700h_syllabel_e2e_lats \
+    --lat-dir exp/tri3b_ali_syllable_length \
     --dir $dir  || exit 1;
 fi
 
@@ -213,7 +209,7 @@ fi
 #fi
 
 decode_suff=0528
-graph_dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD_syllable_ali_unconstrain/graph_0528_syllable
+graph_dir=$dir/graph_0528_syllable
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -229,7 +225,7 @@ if [ $stage -le 15 ]; then
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
-          --frames-per-chunk 500 \
+          --frames-per-chunk "$frames_per_chunk" \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done
