@@ -21,7 +21,7 @@ cleanup=false  # run with --cleanup true --stage 6 to clean up (remove large thi
 
 # Frame chunk options that will be used for blstm models.
 frames_per_chunk=150
-extra_left_context=50
+extra_left_context=0
 extra_right_context=0
 extra_left_context_initial=0
 extra_right_context_final=0
@@ -30,7 +30,7 @@ extra_right_context_final=0
 . ./path.sh
 . ./utils/parse_options.sh
 
-srcdir=exp/chain/lstm_8M_2wh_ld5
+srcdir=exp/chain/dfsmn_7300h_f16_10fsmn_L64R14_subsample3_1536-512_1536_interval_skip_LR0.4_4w5h_6epoch
 train_data_dir=data/train_sogou_fbank_1000h_4dt
 online_ivector_dir=
 degs_dir=                     # If provided, will skip the degs directory creation
@@ -40,7 +40,7 @@ lats_dir=                     # If provided, will skip denlats creation
 criterion=smbr
 one_silence_class=true
 
-dir=${srcdir}_${criterion}_translate2_record_4kh
+dir=${srcdir}_${criterion}
 
 ## Egs options
 frames_per_eg=150
@@ -116,7 +116,7 @@ fi
 if [ $stage -le 1 ]; then
   # hardcode no-GPU for alignment, although you could use GPU [you wouldn't
   # get excellent GPU utilization though.]
-  nj=24 # have a high number of jobs because this could take a while, and we might
+  nj=40 # have a high number of jobs because this could take a while, and we might
          # have some stragglers.
   steps/nnet3/align.sh  --cmd "$decode_cmd" --use-gpu true \
     $context_opts \
@@ -169,7 +169,6 @@ if [ -z "$degs_dir" ]; then
       $train_data_dir $lang ${srcdir}_ali${affix} $lats_dir $srcdir/final.mdl $degs_dir ;
   fi
 fi
-
 ###################  adjust params ##################
 if [ $stage -le 4 ]; then
   steps/nnet3/train_discriminative.sh --cmd "$decode_cmd" \
@@ -182,27 +181,24 @@ if [ $stage -le 4 ]; then
     --regularization-opts "$regularization_opts" --use-frame-shift false \
       ${degs_dir} $dir ;
 fi
+exit 1;
+graph_dir=$srcdir/graph_offline
+if [ $stage -le 5 ]; then
+  for x in `seq $decode_start_epoch $num_epochs`; do
+    for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
+      (
+      iter=epoch$x_adj
 
-decode_suff=online
-graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_online
-if [ $stage -le 15 ]; then
-  iter_opts=
-  if [ ! -z $decode_iter ]; then
-    iter_opts=" --iter $decode_iter "
-  fi
-  for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou ; do
-       steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
-          --nj 8 --cmd "$decode_cmd" $iter_opts \
-          --extra-left-context $extra_left_context  \
-          --extra-right-context $extra_right_context  \
-          --extra-left-context-initial 0 \
-          --extra-right-context-final 0 \
-          --frames-per-chunk $frames_per_chunk \
-         $graph_dir data/${decode_set} \
-         $dir/decode_${decode_set}${decode_dir_affix:+_$decode_dir_affix}_${decode_suff} || exit 1;
+      steps/nnet3/decode_sogou.sh --nj 6 --cmd "$decode_cmd" --iter $iter \
+        --acwt 1.0 --post-decode-acwt 10.0 \
+        $context_opts \
+        $graph_dir data/${decode_set} dir/decode_${decode_set}_$iter ;
+      ) &
+    done
   done
 fi
 wait;
+
 if [ $stage -le 6 ] && $cleanup; then
   # if you run with "--cleanup true --stage 6" you can clean up.
   rm ${lats_dir}/lat.*.gz || true

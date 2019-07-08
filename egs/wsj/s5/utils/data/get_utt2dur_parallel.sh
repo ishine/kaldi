@@ -1,7 +1,5 @@
 #!/bin/bash
-
 # This is sometimes needed by higher-level scripts
-
 
 if [ -f path.sh ]; then . ./path.sh; fi
 . parse_options.sh || exit 1;
@@ -25,5 +23,4 @@ if [ ! -f $data/utt2dur ]; then
     cat $sdata/$n/utt2dur
   done > $data/utt2dur
 fi
-
 

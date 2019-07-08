@@ -12,13 +12,13 @@ stage=12
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_sogoufeat_500hours_bMMI_0.05 # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD_ali_instead_lat # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
 # training options
 leftmost_questions_truncate=-1
-chunk_width=
+chunk_width=150
 chunk_left_context=40
 chunk_right_context=0
 xent_regularize=0.025
@@ -27,11 +27,10 @@ label_delay=0
 # decode options
 extra_left_context=50
 extra_right_context=0
-frames_per_chunk=150,100
-frames_per_chunk_primary=$(echo $frames_per_chunk | cut -d, -f1)
+frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_500hours_bMMI_0.05/egs
+common_egs_dir=
 
 affix=
 # End configuration section.
@@ -60,7 +59,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_500h
+train_set=train_sogou_fbank_7300h
 ali_dir=exp/tri3b_ali
 treedir=exp/chain/tri5_7000houres_tree$suffix
 lang=data/lang_chain_2y
@@ -136,18 +135,18 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=625
-  relu-renorm-layer name=tdnn2 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=625
+  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=1024
+  relu-renorm-layer name=tdnn2 input=Append(-1,0,1) dim=1024
+  relu-renorm-layer name=tdnn3 input=Append(-1,0,1) dim=1024
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  relu-renorm-layer name=tdnn4 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn5 input=Append(-3,0,3) dim=625
-  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  relu-renorm-layer name=tdnn6 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn7 input=Append(-3,0,3) dim=625
-  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm1 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  relu-renorm-layer name=tdnn4 input=Append(-3,0,3) dim=1024
+  relu-renorm-layer name=tdnn5 input=Append(-3,0,3) dim=1024
+  fast-lstmr-layer name=fastlstm2 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  relu-renorm-layer name=tdnn6 input=Append(-3,0,3) dim=1024
+  relu-renorm-layer name=tdnn7 input=Append(-3,0,3) dim=1024
+  fast-lstmr-layer name=fastlstm3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -189,7 +188,7 @@ if [ $stage -le 13 ]; then
     --trainer.deriv-truncate-margin 8 \
     --egs.stage $get_egs_stage \
     --egs.opts "--frames-overlap-per-eg 0" \
-    --egs.chunk-width $frames_per_chunk \
+    --egs.chunk-width $chunk_width \
     --egs.chunk-left-context $chunk_left_context \
     --egs.chunk-right-context $chunk_right_context \
     --egs.chunk-left-context-initial 0 \
@@ -198,7 +197,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_nodup \
+    --lat-dir exp/tri3b_ali \
     --dir $dir  || exit 1;
 fi
 <<!
@@ -226,7 +225,7 @@ if [ $stage -le 15 ]; then
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
-          --frames-per-chunk "$frames_per_chunk_primary" \
+          --frames-per-chunk "$frames_per_chunk" \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done

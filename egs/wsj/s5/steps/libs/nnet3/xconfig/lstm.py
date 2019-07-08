@@ -1200,8 +1200,13 @@ class XconfigFastLstmpLayer(XconfigLayerBase):
 # This class is for lines like
 #   'fast-lstmr-layer name=lstm1 input=[-1] delay=-3'
 # or:
-#   'fast-lstmr-layer name=lstm1 input=[-1] delay=-3 cell-dim=1024 recurrent-projection-dim=512 '
+#   'fast-lstmr-layer name=lstm1 input=[-1] delay=-3 cell-dim=1024 recurrent-projection-dim=512 non-recurrent-projection-dim=512'
+# (you can also use the name 'fast-lstmr-batchnorm-layer' if you want it to be followed
+# by batchnorm).
 # It generates an LSTM sub-graph with output projections (i.e. a projected LSTM, AKA LSTMP).
+# Unlike 'lstmr-layer', the core nonlinearities of the LSTM are done in a special-purpose
+# component (LstmNonlinearityComponent), and most of the affine parts of the LSTM are combined
+# into one.
 #
 # The output dimension of the layer may be specified via 'cell-dim=xxx', but if not specified,
 # the dimension defaults to the same as the input.
@@ -1228,9 +1233,10 @@ class XconfigFastLstmpLayer(XconfigLayerBase):
 #                            than about 20 frames' worth of history,
 #                            i.e. history since about t = t-20, can be
 #                            accumulated in c_t.]
+#  l2-regularize=0.0         Constant controlling l2 regularization for this layer
 class XconfigFastLstmrLayer(XconfigLayerBase):
     def __init__(self, first_token, key_to_value, prev_names = None):
-        assert first_token == "fast-lstmr-layer"
+        assert first_token in ['fast-lstmr-layer', 'fast-lstmr-batchnorm-layer']
         XconfigLayerBase.__init__(self, first_token, key_to_value, prev_names)
 
     def set_default_configs(self):
@@ -1247,6 +1253,7 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
                         # the affine layer contains 4 of our old layers -> use a
                         # larger max-change than the normal value of 0.75.
                         'ng-affine-options' : ' max-change=1.5',
+                        'l2-regularize': 0.0,
                         'decay-time':  -1.0,
                         'zeroing-interval' : 20,
                         'zeroing-threshold' : 15.0,
@@ -1266,7 +1273,7 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
                     key, self.config[key]))
         if self.config['delay'] == 0:
             raise RuntimeError("delay cannot be zero")
-        if (self.config['recurrent-projection-dim'] >
+        if (self.config['recurrent-projection-dim'] > 
             self.config['cell-dim']):
             raise RuntimeError("recurrent projection dim exceeds "
                                 "cell dim")
@@ -1280,7 +1287,8 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
         return ['c_t']
 
     def output_name(self, auxiliary_output = None):
-        node_name = 'rp'
+        node_name = ('rp_batchnorm' if self.layer_type == 'fast-lstmr-batchnorm-layer'
+                     else 'rp')
         if auxiliary_output is not None:
             if auxiliary_output in self.auxiliary_outputs():
                 node_name = auxiliary_output
@@ -1301,7 +1309,7 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
 
     def get_full_config(self):
         ans = []
-        config_lines = self.generate_lstm_config()
+        config_lines = self._generate_lstm_config()
 
         for line in config_lines:
             for config_name in ['ref', 'final']:
@@ -1311,8 +1319,7 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
         return ans
 
     # convenience function to generate the LSTM config
-    def generate_lstm_config(self):
-
+    def _generate_lstm_config(self):
         # assign some variables to reduce verbosity
         name = self.name
         # in the below code we will just call descriptor_strings as descriptors for conciseness
@@ -1340,23 +1347,33 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
 
         lstm_str = self.config['lstm-nonlinearity-options']
         dropout_proportion = self.config['dropout-proportion']
+        l2_regularize = self.config['l2-regularize']
+        l2_regularize_option = ('l2-regularize={0} '.format(l2_regularize)
+                                if l2_regularize != 0.0 else '')
 
         configs = []
 
-        # the equations implemented here are
-        # TODO: write these
+        # the equations implemented here are from Sak et. al. "Long Short-Term
+        # Memory Recurrent Neural Network Architectures for Large Scale Acoustic
+        # Modeling"
+        # https://arxiv.org/pdf/1402.1128.pdf
+        # See equations (7) to (14).
         # naming convention
         # <layer-name>.W_<outputname>.<input_name> e.g. Lstm1.W_i.xr for matrix providing output to gate i and operating on an appended vector [x,r]
         configs.append("##  Begin LTSM layer '{0}'".format(name))
         configs.append("# Gate control: contains W_i, W_f, W_c and W_o matrices as blocks.")
         configs.append("component name={0}.W_all type=NaturalGradientAffineComponent input-dim={1} "
-                       "output-dim={2} {3}".format(name, input_dim + rec_proj_dim, cell_dim * 4, affine_str))
+                       "output-dim={2} {3} {4}".format(
+                           name, input_dim + rec_proj_dim, cell_dim * 4,
+                           affine_str, l2_regularize_option))
         configs.append("# The core LSTM nonlinearity, implemented as a single component.")
         configs.append("# Input = (i_part, f_part, c_part, o_part, c_{t-1}), output = (c_t, m_t)")
         configs.append("# See cu-math.h:ComputeLstmNonlinearity() for details.")
         configs.append("component name={0}.lstm_nonlin type=LstmNonlinearityComponent cell-dim={1} "
-                       "use-dropout={2} {3}"
-                       .format(name, cell_dim, "true" if dropout_proportion != -1.0 else "false", lstm_str))
+                       "use-dropout={2} {3} {4}"
+                       .format(name, cell_dim,
+                               "true" if dropout_proportion != -1.0 else "false",
+                               lstm_str, l2_regularize_option))
         configs.append("# Component for backprop truncation, to avoid gradient blowup in long training examples.")
         configs.append("component name={0}.cr_trunc type=BackpropTruncationComponent "
                        "dim={1} {2}".format(name, cell_dim + rec_proj_dim, bptrunc_str))
@@ -1364,29 +1381,33 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
             configs.append("component name={0}.dropout_mask type=DropoutMaskComponent output-dim=3 "
                            "dropout-proportion={1} "
                            .format(name, dropout_proportion))
-        configs.append("# Component specific to 'projected recurrent' LSTM (LSTMR)");
-        configs.append("component name={0}.W_rp type=NaturalGradientAffineComponent input-dim={1} "
-                       "output-dim={2} {3}".format(
-                           name, cell_dim, rec_proj_dim, affine_str))
+        configs.append("# Component specific to 'projected' LSTM (LSTMR)");
+        configs.append("component name={0}.W_rp type=NaturalGradientAffineComponent "
+                       "input-dim={1} output-dim={2} {3} {4}".format(
+                           name, cell_dim, rec_proj_dim,
+                           affine_str, l2_regularize_option))
         configs.append("###  Nodes for the components above.")
-        configs.append("component-node name={0}.four_parts component={0}.W_all input=Append({1}, "
+        configs.append("component-node name={0}.W_all component={0}.W_all input=Append({1}, "
                        "IfDefined(Offset({0}.r_trunc, {2})))".format(name, input_descriptor, delay))
+
         if dropout_proportion != -1.0:
             # note: the 'input' is a don't-care as the component never uses it; it's required
             # in component-node lines.
             configs.append("component-node name={0}.dropout_mask component={0}.dropout_mask "
                            "input={0}.dropout_mask".format(name))
             configs.append("component-node name={0}.lstm_nonlin component={0}.lstm_nonlin "
-                           "input=Append({0}.four_parts, IfDefined(Offset({0}.c_trunc, {1})), {0}.dropout_mask)"
-                           .format(name, delay))
+                           "input=Append({0}.W_all, IfDefined(Offset({0}.c_trunc, {1})), "
+                           "{0}.dropout_mask)".format(name, delay))
         else:
             configs.append("component-node name={0}.lstm_nonlin component={0}.lstm_nonlin "
-                           "input=Append({0}.four_parts, IfDefined(Offset({0}.c_trunc, {1})))".format(name, delay))
+                           "input=Append({0}.W_all, IfDefined(Offset({0}.c_trunc, {1})))".format(
+                               name, delay))
         configs.append("dim-range-node name={0}.c input-node={0}.lstm_nonlin "
                        "dim-offset=0 dim={1}".format(name, cell_dim))
         configs.append("dim-range-node name={0}.m input-node={0}.lstm_nonlin "
                        "dim-offset={1} dim={1}".format(name, cell_dim))
-        configs.append("# {0}.rp is the output node of this layer:".format(name))
+        configs.append("# {0}.rp is the output node of this layer (if we're not "
+                       "including batchnorm)".format(name))
         configs.append("component-node name={0}.rp component={0}.W_rp input={0}.m".format(name))
         configs.append("# Note: it's not 100% efficient that we have to stitch the c")
         configs.append("# and r back together to truncate them but it probably");
@@ -1397,6 +1418,13 @@ class XconfigFastLstmrLayer(XconfigLayerBase):
                        "dim-offset=0 dim={1}".format(name, cell_dim))
         configs.append("dim-range-node name={0}.r_trunc input-node={0}.cr_trunc "
                        "dim-offset={1} dim={2}".format(name, cell_dim, rec_proj_dim))
+        if self.layer_type == "fast-lstmr-batchnorm-layer":
+            # Add the batchnorm component, if requested to include batchnorm.
+            configs.append("component name={0}.rp_batchnorm type=BatchNormComponent dim={1} ".format(
+                name, rec_proj_dim + nonrec_proj_dim))
+            configs.append("component-node name={0}.rp_batchnorm component={0}.rp_batchnorm "
+                           "input={0}.rp".format(name))
         configs.append("### End LSTM Layer '{0}'".format(name))
 
         return configs
+

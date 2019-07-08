@@ -8,11 +8,11 @@
 set -e
 
 # configs for 'chain'
-stage=12
+stage=15
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_sogoufeat_500hours_bMMI_0.05 # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_6000h_nocms_lda_batchnorm # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
@@ -29,9 +29,8 @@ extra_left_context=50
 extra_right_context=0
 frames_per_chunk=150,100
 frames_per_chunk_primary=$(echo $frames_per_chunk | cut -d, -f1)
-
 remove_egs=false
-common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_500hours_bMMI_0.05/egs
+common_egs_dir=
 
 affix=
 # End configuration section.
@@ -60,7 +59,7 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_500h
+train_set=train_sogou_fbank_dialogue_noCMS_LDA_6000h
 ali_dir=exp/tri3b_ali
 treedir=exp/chain/tri5_7000houres_tree$suffix
 lang=data/lang_chain_2y
@@ -136,18 +135,19 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=625
-  relu-renorm-layer name=tdnn2 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=625
+  fixed-affine-layer name=lda input=Append(-2,-1,0,1,2) affine-transform-file=$dir/configs/lda.mat
+  relu-batchnorm-layer name=tdnn1 dim=1024
+  relu-batchnorm-layer name=tdnn2 input=Append(-1,0,1) dim=1024
+  relu-batchnorm-layer name=tdnn3 input=Append(-1,0,1) dim=1024
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  relu-renorm-layer name=tdnn4 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn5 input=Append(-3,0,3) dim=625
-  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  relu-renorm-layer name=tdnn6 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn7 input=Append(-3,0,3) dim=625
-  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm1 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  relu-batchnorm-layer name=tdnn4 input=Append(-3,0,3) dim=1024
+  relu-batchnorm-layer name=tdnn5 input=Append(-3,0,3) dim=1024
+  fast-lstmr-layer name=fastlstm2 cell-dim=1536 recurrent-projection-dim=512 delay=-3
+  relu-batchnorm-layer name=tdnn6 input=Append(-3,0,3) dim=1024
+  relu-batchnorm-layer name=tdnn7 input=Append(-3,0,3) dim=1024
+  fast-lstmr-layer name=fastlstm3 cell-dim=1536 recurrent-projection-dim=512 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -198,7 +198,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_nodup \
+    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_6000h_dialogue_cms \
     --dir $dir  || exit 1;
 fi
 <<!
@@ -209,6 +209,8 @@ if [ $stage -le 14 ]; then
   utils/mkgraph.sh --self-loop-scale 1.0 data/lang_bigG $dir $dir/graph_bigG
 fi
 !
+#testsets="testC1pen_0215eva_0.3m_nocms_sogou testC1pen_0215eva_1m_nocms_sogou testC1pen_0215eva_2m_nocms_sogou testRecordv2-dialog2-represent-long-0.3m_nocms_sogou testRecordv2-dialog2-interview-long-1m_nocms_sogou testRecordv2-dialog2-meeting-long-2m_nocms_sogou"
+testsets="testset_testND_nocms_sogou not_on_screen_nocms_sogou test8000_nocms_sogou testIOS_nocms_sogou"
 decode_suff=0528
 graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
 if [ $stage -le 15 ]; then
@@ -219,7 +221,7 @@ if [ $stage -le 15 ]; then
   if [ ! -z $decode_iter ]; then
     iter_opts=" --iter $decode_iter "
   fi
-  for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
+  for decode_set in $testsets; do
        steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
           --nj 8 --cmd "$decode_cmd" $iter_opts \
           --extra-left-context $extra_left_context  \
@@ -227,7 +229,7 @@ if [ $stage -le 15 ]; then
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
           --frames-per-chunk "$frames_per_chunk_primary" \
-         $graph_dir data/${decode_set} \
+         $graph_dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done
 fi

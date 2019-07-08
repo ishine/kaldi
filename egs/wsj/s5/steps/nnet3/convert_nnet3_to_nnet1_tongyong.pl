@@ -14,70 +14,122 @@ if(@ARGV!=2)
 #$NumComponents=4;          #for lstm set-up
 #$NumComponents=31;         #for tdnn-lstm set-up
 #$NumComponents=24;         #for FSMN online set-up
-$NumComponents=60;          #for FSMN offline set-up
-################### Deep FSMN offline example ###################
+#$NumComponents=60;          #for FSMN offline set-up
+#$NumComponents=15;          #for 3TDNN-3BLSTM set-up
+$NumComponents=28;          #for 9TDNN-4BLSTM set-up
+
+################## 3TDNN-3BLSTM example ##################
+#system("cat <<EOF > nnet.proto
+#name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1024
+#name=relu1 type=RectifiedLinearComponent 
+#name=renorm1 type=NormalizeComponent
+#name=splice1 type=Splice offset=[-1,0,1] input=1024 output=3072
+#name=tdnn2 type=NaturalGradientAffineComponent input=3072 output=1024
+#name=relu2 type=RectifiedLinearComponent
+#name=renorm2 type=NormalizeComponent
+#name=splice2 type=Splice offset=[-1,0,1] input=1024 output=3072
+#name=tdnn3 type=NaturalGradientAffineComponent input=3072 output=1024
+#name=relu3 type=RectifiedLinearComponent
+#name=renorm3 type=NormalizeComponent
+#name=blstm1 type=Blstm input=1024 cell=1536 output=768 discard=0
+#name=blstm2 type=Blstm input=768 cell=1536 output=768 discard=0
+#name=blstm3 type=Blstm input=768 cell=1536 output=768 discard=0
+#name=output type=NaturalGradientAffineComponent input=768 output=3766
+#EOF");
+################## 3TDNN-3BLSTM example ##################
 system("cat <<EOF > nnet.proto
-name=affine1 type=NaturalGradientAffineComponent input=355 output=1536
+name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1280
 name=relu1 type=RectifiedLinearComponent 
-name=batchnorm1 type=BatchNormComponent
-name=linear1 type=LinearComponent input=1536 output=512
-name=fsmn1 type=Fsmn input=512 output=512 l-order=3 r-order=1 stride=1 depend=0
-name=affine2 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu2 type=RectifiedLinearComponent 
-name=batchnorm2 type=BatchNormComponent
-name=linear2 type=LinearComponent input=1536 output=512
-name=fsmn2 type=Fsmn input=512 output=512 l-order=3 r-order=0 stride=1 depend=0
-name=affine3 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu3 type=RectifiedLinearComponent 
-name=batchnorm3 type=BatchNormComponent
-name=linear3 type=LinearComponent input=1536 output=512
-name=fsmn3 type=Fsmn input=512 output=512 l-order=3 r-order=1 stride=1 depend=-2
-name=affine4 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu4 type=RectifiedLinearComponent 
-name=batchnorm4 type=BatchNormComponent
-name=linear4 type=LinearComponent input=1536 output=512
-name=fsmn4 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
-name=affine5 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu5 type=RectifiedLinearComponent 
-name=batchnorm5 type=BatchNormComponent
-name=linear5 type=LinearComponent input=1536 output=512
-name=fsmn5 type=Fsmn input=512 output=512 l-order=1 r-order=1 stride=1 depend=-2
-name=affine6 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu6 type=RectifiedLinearComponent 
-name=batchnorm6 type=BatchNormComponent
-name=linear6 type=LinearComponent input=1536 output=512
-name=fsmn6 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
-name=affine7 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu7 type=RectifiedLinearComponent 
-name=batchnorm7 type=BatchNormComponent
-name=linear7 type=LinearComponent input=1536 output=512
-name=fsmn7 type=Fsmn input=512 output=512 l-order=1 r-order=1 stride=1 depend=-2
-name=affine8 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu8 type=RectifiedLinearComponent 
-name=batchnorm8 type=BatchNormComponent
-name=linear8 type=LinearComponent input=1536 output=512
-name=fsmn8 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
-name=affine9 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu9 type=RectifiedLinearComponent 
-name=batchnorm9 type=BatchNormComponent
-name=linear9 type=LinearComponent input=1536 output=512
-name=fsmn9 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
-name=affine10 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu10 type=RectifiedLinearComponent 
-name=batchnorm10 type=BatchNormComponent
-name=linear10 type=LinearComponent input=1536 output=512
-name=fsmn10 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
-name=affine11 type=NaturalGradientAffineComponent input=512 output=1536
-name=relu11 type=RectifiedLinearComponent 
-name=batchnorm11 type=BatchNormComponent
-name=linear11 type=LinearComponent input=1536 output=512
-name=prefinal.affine type=NaturalGradientAffineComponent input=512 output=1536
-name=prefinal.relu type=RectifiedLinearComponent
-name=prefinal.batchnorm1 type=BatchNormComponent
-name=prefinal.linear type=LinearComponent input=1536 output=256
-name=prefinal.batchnorm2 type=BatchNormComponent
-name=output type=NaturalGradientAffineComponent input=256 output=3766
+name=renorm1 type=NormalizeComponent
+name=splice1 type=Splice offset=[-1,0,1] input=1280 output=3840
+name=tdnn2 type=NaturalGradientAffineComponent input=3840 output=1280
+name=relu2 type=RectifiedLinearComponent
+name=renorm2 type=NormalizeComponent
+name=splice2 type=Splice offset=[-1,0,1] input=1280 output=3840
+name=tdnn3 type=NaturalGradientAffineComponent input=3840 output=1024
+name=relu3 type=RectifiedLinearComponent
+name=renorm3 type=NormalizeComponent
+name=blstm1 type=Blstm input=1024 cell=1280 output=768 discard=0
+name=tdnn4 type=NaturalGradientAffineComponent input=768 output=1536
+name=relu4 type=RectifiedLinearComponent
+name=splice3 type=Splice offset=[-1,0,1] input=1536 output=4608
+name=tdnn5 type=LinearComponent input=4608 output=512
+name=blstm2 type=Blstm input=512 cell=1280 output=768 discard=0
+name=tdnn6 type=NaturalGradientAffineComponent input=768 output=1536
+name=relu6 type=RectifiedLinearComponent
+name=splice4 type=Splice offset=[-1,0,1] input=1536 output=4608
+name=tdnn7 type=LinearComponent input=4608 output=512
+name=blstm3 type=Blstm input=512 cell=1280 output=768 discard=0
+name=tdnn8 type=NaturalGradientAffineComponent input=768 output=1536
+name=relu8 type=RectifiedLinearComponent
+name=splice5 type=Splice offset=[-1,0,1] input=1536 output=4608
+name=tdnn9 type=LinearComponent input=4608 output=512
+name=blstm4 type=Blstm input=512 cell=1280 output=768 discard=0
+name=output type=NaturalGradientAffineComponent input=768 output=3766
 EOF");
+################### Deep FSMN offline example ###################
+#system("cat <<EOF > nnet.proto
+#name=affine1 type=NaturalGradientAffineComponent input=355 output=1536
+#name=relu1 type=RectifiedLinearComponent 
+#name=batchnorm1 type=BatchNormComponent
+#name=linear1 type=LinearComponent input=1536 output=512
+#name=fsmn1 type=Fsmn input=512 output=512 l-order=3 r-order=1 stride=1 depend=0
+#name=affine2 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu2 type=RectifiedLinearComponent 
+#name=batchnorm2 type=BatchNormComponent
+#name=linear2 type=LinearComponent input=1536 output=512
+#name=fsmn2 type=Fsmn input=512 output=512 l-order=3 r-order=0 stride=1 depend=0
+#name=affine3 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu3 type=RectifiedLinearComponent 
+#name=batchnorm3 type=BatchNormComponent
+#name=linear3 type=LinearComponent input=1536 output=512
+#name=fsmn3 type=Fsmn input=512 output=512 l-order=3 r-order=1 stride=1 depend=-2
+#name=affine4 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu4 type=RectifiedLinearComponent 
+#name=batchnorm4 type=BatchNormComponent
+#name=linear4 type=LinearComponent input=1536 output=512
+#name=fsmn4 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+#name=affine5 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu5 type=RectifiedLinearComponent 
+#name=batchnorm5 type=BatchNormComponent
+#name=linear5 type=LinearComponent input=1536 output=512
+#name=fsmn5 type=Fsmn input=512 output=512 l-order=1 r-order=1 stride=1 depend=-2
+#name=affine6 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu6 type=RectifiedLinearComponent 
+#name=batchnorm6 type=BatchNormComponent
+#name=linear6 type=LinearComponent input=1536 output=512
+#name=fsmn6 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+#name=affine7 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu7 type=RectifiedLinearComponent 
+#name=batchnorm7 type=BatchNormComponent
+#name=linear7 type=LinearComponent input=1536 output=512
+#name=fsmn7 type=Fsmn input=512 output=512 l-order=1 r-order=1 stride=1 depend=-2
+#name=affine8 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu8 type=RectifiedLinearComponent 
+#name=batchnorm8 type=BatchNormComponent
+#name=linear8 type=LinearComponent input=1536 output=512
+#name=fsmn8 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+#name=affine9 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu9 type=RectifiedLinearComponent 
+#name=batchnorm9 type=BatchNormComponent
+#name=linear9 type=LinearComponent input=1536 output=512
+#name=fsmn9 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+#name=affine10 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu10 type=RectifiedLinearComponent 
+#name=batchnorm10 type=BatchNormComponent
+#name=linear10 type=LinearComponent input=1536 output=512
+#name=fsmn10 type=Fsmn input=512 output=512 l-order=2 r-order=0 stride=1 depend=-2
+#name=affine11 type=NaturalGradientAffineComponent input=512 output=1536
+#name=relu11 type=RectifiedLinearComponent 
+#name=batchnorm11 type=BatchNormComponent
+#name=linear11 type=LinearComponent input=1536 output=512
+#name=prefinal.affine type=NaturalGradientAffineComponent input=512 output=1536
+#name=prefinal.relu type=RectifiedLinearComponent
+#name=prefinal.batchnorm1 type=BatchNormComponent
+#name=prefinal.linear type=LinearComponent input=1536 output=256
+#name=prefinal.batchnorm2 type=BatchNormComponent
+#name=output type=NaturalGradientAffineComponent input=256 output=3766
+#EOF");
 
 ################### Deep FSMN online example ###################
 #system("cat <<EOF > nnet.proto
@@ -190,6 +242,9 @@ while($layer_cnt < $NumComponents)
   }
   elsif($component=~/Lstm/) {
     &parse_lstm($component);
+  }
+  elsif($component=~/Blstm/) {
+    &parse_blstm($component);
   }else {
     print "Error: $layer_cnt+1 th Component no support - $component\n";
     exit 1;
@@ -789,12 +844,12 @@ sub parse_lstm {
         $cnt++;
       }
 
-      if ($layer_cnt==3)
-      { 
-	print "@ix[0..$input_dim-1]\n@ir[0..$output_dim-1]\n";
-	print "@ix[$input_dim*($cell_dim-1)..$input_dim*$cell_dim-1]\n@ir[$output_dim*($cell_dim-1)..$output_dim*$cell_dim-1]\n";
-        exit 1; 
-      }
+#      if ($layer_cnt==3)
+#      { 
+#	print "@ix[0..$input_dim-1]\n@ir[0..$output_dim-1]\n";
+#	print "@ix[$input_dim*($cell_dim-1)..$input_dim*$cell_dim-1]\n@ir[$output_dim*($cell_dim-1)..$output_dim*$cell_dim-1]\n";
+#        exit 1; 
+#      }
          
       ######## read ifco_bias and write to nnet1 as cifo_bias #########
       $line=<IN>;
@@ -813,11 +868,11 @@ sub parse_lstm {
       print OUT " [ @c_bias @i_bias @f_bias @o_bias ]\n";
 
   
-      if($layer_cnt == 3)
-      { 
-      print "@i_bias\n@f_bias\n\n@c_bias\n@o_bias\n";    
-      exit 1;
-      }
+#      if($layer_cnt == 3)
+#      { 
+#      print "@i_bias\n@f_bias\n\n@c_bias\n@o_bias\n";    
+#      exit 1;
+#      }
 
       ######### read ifo_c and write to nnet1 #######
       $line=<IN>;      #read useless line;
@@ -882,11 +937,11 @@ sub parse_lstm {
         print OUT "  @r_m[$cnt*$cell_dim..($cnt+1)*$cell_dim-1]\n";
         $cnt++;
       }      
-      if($layer_cnt==3)
-      {
-        print "@r_m[0..$cell_dim-1]\n@r_m[$cell_dim*($output_dim-1)..$cell_dim*$output_dim-1]\n";
-        exit 1;
-      }
+#      if($layer_cnt==3)
+#      {
+#        print "@r_m[0..$cell_dim-1]\n@r_m[$cell_dim*($output_dim-1)..$cell_dim*$output_dim-1]\n";
+#        exit 1;
+#      }
       # read rm_bias
       $line=<IN>;
       chomp $line;
@@ -897,11 +952,11 @@ sub parse_lstm {
 
       print OUT " [ @rm_bias ]\n"; 
 #      print OUT "<!EndOfComponent>\n";
-      if($layer_cnt==3)
-      {
-        print "@rm_bias\n";
-	exit 1;
-      }
+#      if($layer_cnt==3)
+#      {
+#        print "@rm_bias\n";
+#	exit 1;
+#      }
       last;
     }
   }
@@ -911,6 +966,483 @@ sub parse_lstm {
   }
   print "converting  $_[0] finished...\n";
 }
+
+sub parse_blstm {
+  $find=0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $cell_dim = &parse_node($units[3]);
+  $output_dim = &parse_node($units[4]);
+  $output_dim = $output_dim / 2;
+  $discard = &parse_node($units[5]); 
+
+  while($line=<IN>)
+  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/forward.W_all/)
+    {
+      $find=1;	    
+    # read ifco_x and ifco_r
+      @ix=();   # $cell_dim * $input_dim
+      @ir=();   # $cell_dim * $output_dim
+      @fx=();
+      @fr=();
+      @cx=();
+      @cr=();
+      @ox=();
+      @or=();
+      $gate_cnt=0;
+      while($gate_cnt < 4)
+      {
+        $cell_cnt = 0;
+        while($cell_cnt < $cell_dim)
+	{
+	  $line=<IN>;
+	  chomp $line;
+	  @params = split /\s+/, $line;
+	  if($gate_cnt == 0)
+	  {
+	     push @ix, @params[1..$input_dim];
+	     push @ir, @params[$input_dim+1..$input_dim+$output_dim];
+	  }
+	  if($gate_cnt == 1)
+	  {
+             push @fx, @params[1..$input_dim];
+             push @fr, @params[$input_dim+1..$input_dim+$output_dim];
+	  }
+          if($gate_cnt == 2)
+          {
+             push @cx, @params[1..$input_dim];
+             push @cr, @params[$input_dim+1..$input_dim+$output_dim];
+          }
+          if($gate_cnt == 3)
+          {
+             push @ox, @params[1..$input_dim];
+             push @or, @params[$input_dim+1..$input_dim+$output_dim];
+          }
+	  $cell_cnt++;
+	}
+	$gate_cnt++;
+      }
+
+      ########## write nne1 cifo_x ###########
+      $bidirection_output_dim = $output_dim * 2;
+      print OUT "<BlstmProjectedNnet3Streams> $bidirection_output_dim $input_dim\n";
+#      print OUT "<CellDim> $cell_dim <ClipGradient> 5 <DiscardInput> $discard\n";
+      print OUT "<CellDim> $cell_dim <ClipGradient> 5\n";
+      print OUT " [\n";
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+	print OUT "  @cx[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+	print OUT "  @ix[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+	$cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @fx[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+	if ($cnt == ($cell_dim-1))
+	{
+	  print OUT "  @ox[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+	  last;
+	}
+        print OUT "  @ox[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+
+      ######### write nnet1 cifo_r ##########
+      print OUT " [\n";
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @cr[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @ir[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @fr[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        if ($cnt == ($cell_dim-1))
+        {
+          print OUT "  @or[$cnt*$output_dim..($cnt+1)*$output_dim-1] ]\n";
+          last;
+        }
+	print OUT "  @or[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+
+#      if ($layer_cnt==3)
+#      { 
+#	print "@ix[0..$input_dim-1]\n@ir[0..$output_dim-1]\n";
+#	print "@ix[$input_dim*($cell_dim-1)..$input_dim*$cell_dim-1]\n@ir[$output_dim*($cell_dim-1)..$output_dim*$cell_dim-1]\n";
+#        exit 1; 
+#      }
+         
+      ######## read ifco_bias and write to nnet1 as cifo_bias #########
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @i_bias=();   # 1 * $cell_dim
+      @f_bias=();
+      @c_bias=();
+      @o_bias=();
+      push @i_bias, @params[1..$cell_dim];
+      push @f_bias, @params[$cell_dim+1..$cell_dim*2];
+      push @c_bias, @params[$cell_dim*2+1..$cell_dim*3];
+      push @o_bias, @params[$cell_dim*3+1..$cell_dim*4];
+      
+      print OUT " [ @c_bias @i_bias @f_bias @o_bias ]\n";
+
+  
+#      if($layer_cnt == 3)
+#      { 
+#      print "@i_bias\n@f_bias\n\n@c_bias\n@o_bias\n";    
+#      exit 1;
+#      }
+
+      ######### read ifo_c and write to nnet1 #######
+      $line=<IN>;      #read useless line;
+      $line=<IN>;      #read useless line;
+    
+      # read i_c;
+      @i_c=();
+      $line=<IN>;    
+      chomp $line;
+      @params = split /\s+/, $line;
+      push @i_c, @params[1..$cell_dim];  
+ 
+      # read f_c;
+      @f_c=();
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      push @f_c, @params[1..$cell_dim]; 
+
+      # read o_c;
+      @o_c=();
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      push @o_c, @params[1..$cell_dim];
+
+      print OUT " [ @i_c ]\n";
+      print OUT " [ @f_c ]\n";
+      print OUT " [ @o_c ]\n";
+      
+      # read until W_rp (r_m for nnet1)
+      while($line=<IN>)
+      {
+        chomp $line;
+        if ($line=~/ComponentName/ && $line=~/W_rp/)
+        {
+          last;
+        }
+      }
+   
+      ######## read W_rp and rp_bias and write to nnet1 #########
+      $cnt=0;
+      @r_m=();    # $output_dim * $cell_dim
+      while($cnt < $output_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params = split /\s+/, $line;
+        push @r_m, @params[1..$cell_dim];
+        $cnt++;
+      }
+   
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        if ($cnt == ($output_dim-1))
+        {
+          print OUT "  @r_m[$cnt*$cell_dim..($cnt+1)*$cell_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @r_m[$cnt*$cell_dim..($cnt+1)*$cell_dim-1]\n";
+        $cnt++;
+      }      
+#      if($layer_cnt==3)
+#      {
+#        print "@r_m[0..$cell_dim-1]\n@r_m[$cell_dim*($output_dim-1)..$cell_dim*$output_dim-1]\n";
+#        exit 1;
+#      }
+      # read rm_bias
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @rm_bias=();
+      push @rm_bias, @params[1..$output_dim]; 
+
+      print OUT " [ @rm_bias ]\n"; 
+#      print OUT "<!EndOfComponent>\n";
+#      if($layer_cnt==3)
+#      {
+#        print "@rm_bias\n";
+#	exit 1;
+#      }
+    }
+    if($line=~/ComponentName/ && $line=~/backward.W_all/)
+    {
+      $find=1;	    
+    # read ifco_x and ifco_r
+      @ix=();   # $cell_dim * $input_dim
+      @ir=();   # $cell_dim * $output_dim
+      @fx=();
+      @fr=();
+      @cx=();
+      @cr=();
+      @ox=();
+      @or=();
+      $gate_cnt=0;
+      while($gate_cnt < 4)
+      {
+        $cell_cnt = 0;
+        while($cell_cnt < $cell_dim)
+	{
+	  $line=<IN>;
+	  chomp $line;
+	  @params = split /\s+/, $line;
+	  if($gate_cnt == 0)
+	  {
+	     push @ix, @params[1..$input_dim];
+	     push @ir, @params[$input_dim+1..$input_dim+$output_dim];
+	  }
+	  if($gate_cnt == 1)
+	  {
+             push @fx, @params[1..$input_dim];
+             push @fr, @params[$input_dim+1..$input_dim+$output_dim];
+	  }
+          if($gate_cnt == 2)
+          {
+             push @cx, @params[1..$input_dim];
+             push @cr, @params[$input_dim+1..$input_dim+$output_dim];
+          }
+          if($gate_cnt == 3)
+          {
+             push @ox, @params[1..$input_dim];
+             push @or, @params[$input_dim+1..$input_dim+$output_dim];
+          }
+	  $cell_cnt++;
+	}
+	$gate_cnt++;
+      }
+
+      ########## write nne1 cifo_x ###########
+#      print OUT "<LstmProjectedNnet3Streams> $output_dim $input_dim\n";
+#      print OUT "<CellDim> $cell_dim <ClipGradient> 5 <DiscardInput> $discard\n";
+      print OUT " [\n";
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+	print OUT "  @cx[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+	print OUT "  @ix[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+	$cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @fx[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+	if ($cnt == ($cell_dim-1))
+	{
+	  print OUT "  @ox[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+	  last;
+	}
+        print OUT "  @ox[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+
+      ######### write nnet1 cifo_r ##########
+      print OUT " [\n";
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @cr[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @ir[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        print OUT "  @fr[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+      $cnt = 0;
+      while($cnt < $cell_dim)
+      {
+        if ($cnt == ($cell_dim-1))
+        {
+          print OUT "  @or[$cnt*$output_dim..($cnt+1)*$output_dim-1] ]\n";
+          last;
+        }
+	print OUT "  @or[$cnt*$output_dim..($cnt+1)*$output_dim-1]\n";
+        $cnt++;
+      }
+
+#      if ($layer_cnt==3)
+#      { 
+#	print "@ix[0..$input_dim-1]\n@ir[0..$output_dim-1]\n";
+#	print "@ix[$input_dim*($cell_dim-1)..$input_dim*$cell_dim-1]\n@ir[$output_dim*($cell_dim-1)..$output_dim*$cell_dim-1]\n";
+#        exit 1; 
+#      }
+         
+      ######## read ifco_bias and write to nnet1 as cifo_bias #########
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @i_bias=();   # 1 * $cell_dim
+      @f_bias=();
+      @c_bias=();
+      @o_bias=();
+      push @i_bias, @params[1..$cell_dim];
+      push @f_bias, @params[$cell_dim+1..$cell_dim*2];
+      push @c_bias, @params[$cell_dim*2+1..$cell_dim*3];
+      push @o_bias, @params[$cell_dim*3+1..$cell_dim*4];
+      
+      print OUT " [ @c_bias @i_bias @f_bias @o_bias ]\n";
+
+  
+#      if($layer_cnt == 3)
+#      { 
+#      print "@i_bias\n@f_bias\n\n@c_bias\n@o_bias\n";    
+#      exit 1;
+#      }
+
+      ######### read ifo_c and write to nnet1 #######
+      $line=<IN>;      #read useless line;
+      $line=<IN>;      #read useless line;
+    
+      # read i_c;
+      @i_c=();
+      $line=<IN>;    
+      chomp $line;
+      @params = split /\s+/, $line;
+      push @i_c, @params[1..$cell_dim];  
+ 
+      # read f_c;
+      @f_c=();
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      push @f_c, @params[1..$cell_dim]; 
+
+      # read o_c;
+      @o_c=();
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      push @o_c, @params[1..$cell_dim];
+
+      print OUT " [ @i_c ]\n";
+      print OUT " [ @f_c ]\n";
+      print OUT " [ @o_c ]\n";
+      
+      # read until W_rp (r_m for nnet1)
+      while($line=<IN>)
+      {
+        chomp $line;
+        if ($line=~/ComponentName/ && $line=~/W_rp/)
+        {
+          last;
+        }
+      }
+   
+      ######## read W_rp and rp_bias and write to nnet1 #########
+      $cnt=0;
+      @r_m=();    # $output_dim * $cell_dim
+      while($cnt < $output_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params = split /\s+/, $line;
+        push @r_m, @params[1..$cell_dim];
+        $cnt++;
+      }
+   
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        if ($cnt == ($output_dim-1))
+        {
+          print OUT "  @r_m[$cnt*$cell_dim..($cnt+1)*$cell_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @r_m[$cnt*$cell_dim..($cnt+1)*$cell_dim-1]\n";
+        $cnt++;
+      }      
+#      if($layer_cnt==3)
+#      {
+#        print "@r_m[0..$cell_dim-1]\n@r_m[$cell_dim*($output_dim-1)..$cell_dim*$output_dim-1]\n";
+#        exit 1;
+#      }
+      # read rm_bias
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @rm_bias=();
+      push @rm_bias, @params[1..$output_dim]; 
+
+      print OUT " [ @rm_bias ]\n"; 
+#      print OUT "<!EndOfComponent>\n";
+#      if($layer_cnt==3)
+#      {
+#        print "@rm_bias\n";
+#	exit 1;
+#      }
+      last;
+    }
+	
+ }
+  if ($find == 0) {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting  $_[0] finished...\n";
+}
+
 
 close(IN);
 close(OUT);

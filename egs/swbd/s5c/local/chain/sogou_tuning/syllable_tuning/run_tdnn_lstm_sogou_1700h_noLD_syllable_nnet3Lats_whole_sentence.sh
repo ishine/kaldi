@@ -8,17 +8,18 @@
 set -e
 
 # configs for 'chain'
-stage=12
-train_stage=-10
+stage=15
+train_stage=-4
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_sogoufeat_500hours_bMMI_0.05 # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_nnet3Lats_whole_sentence_2epoch # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
 # training options
 leftmost_questions_truncate=-1
-chunk_width=
+chunk_width=$(cat data/train_sogou_fbank_1700h_5s_withoutseg_e2e/allowed_lengths.txt | tr '\n' , | sed 's/,$//')
+minibatch_size=500=16/1000=8/1500=6
 chunk_left_context=40
 chunk_right_context=0
 xent_regularize=0.025
@@ -27,11 +28,10 @@ label_delay=0
 # decode options
 extra_left_context=50
 extra_right_context=0
-frames_per_chunk=150,100
-frames_per_chunk_primary=$(echo $frames_per_chunk | cut -d, -f1)
+frames_per_chunk=
 
 remove_egs=false
-common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_500hours_bMMI_0.05/egs
+common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_nnet3Lats_whole_sentence_2epoch/egs
 
 affix=
 # End configuration section.
@@ -60,9 +60,9 @@ fi
 
 if [ $label_delay -gt 0 ]; then dir=${dir}_ld$label_delay; fi
 dir=${dir}$suffix
-train_set=train_sogou_fbank_500h
-ali_dir=exp/tri3b_ali
-treedir=exp/chain/tri5_7000houres_tree$suffix
+train_set=train_sogou_fbank_1700h_5s_withoutseg_e2e
+ali_dir=exp/tri3b_ali_syllable_length_1700h_5s
+treedir=exp/chain/tri5_7000houres_mono_tree_syllable
 lang=data/lang_chain_2y
 mfcc_data=data/train_mfcc
 
@@ -136,18 +136,18 @@ if [ $stage -le 12 ]; then
   # the use of short notation for the descriptor
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=625
-  relu-renorm-layer name=tdnn2 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=625
+  relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=768
+  relu-renorm-layer name=tdnn2 input=Append(-1,0,1) dim=768
+  relu-renorm-layer name=tdnn3 input=Append(-1,0,1) dim=768
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  relu-renorm-layer name=tdnn4 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn5 input=Append(-3,0,3) dim=625
-  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=256 delay=-3
-  relu-renorm-layer name=tdnn6 input=Append(-3,0,3) dim=625
-  relu-renorm-layer name=tdnn7 input=Append(-3,0,3) dim=625
-  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=256 delay=-3
+  fast-lstmr-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  relu-renorm-layer name=tdnn4 input=Append(-3,0,3) dim=1024
+  relu-renorm-layer name=tdnn5 input=Append(-3,0,3) dim=1024
+  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  relu-renorm-layer name=tdnn6 input=Append(-3,0,3) dim=1024
+  relu-renorm-layer name=tdnn7 input=Append(-3,0,3) dim=1024
+  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=384 delay=-3
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -176,20 +176,23 @@ if [ $stage -le 13 ]; then
     --chain.l2-regularize 0.00005 \
     --chain.apply-deriv-weights false \
     --chain.lm-opts="--num-extra-lm-states=2000" \
-    --trainer.num-chunk-per-minibatch 64 \
+    --chain.right-tolerance 1 \
+    --chain.left-tolerance 1 \
+    --chain.alignment-subsampling-factor 1 \
+    --trainer.num-chunk-per-minibatch $minibatch_size \
     --trainer.frames-per-iter 1200000 \
     --trainer.max-param-change 2.0 \
-    --trainer.num-epochs 4 \
+    --trainer.num-epochs 2 \
     --trainer.optimization.shrink-value 0.99 \
-    --trainer.optimization.num-jobs-initial 3 \
+    --trainer.optimization.num-jobs-initial 6 \
     --trainer.optimization.num-jobs-final 8 \
-    --trainer.optimization.initial-effective-lrate 0.0013 \
-    --trainer.optimization.final-effective-lrate 0.0002 \
+    --trainer.optimization.initial-effective-lrate 0.0001 \
+    --trainer.optimization.final-effective-lrate 0.00005 \
     --trainer.optimization.momentum 0.0 \
     --trainer.deriv-truncate-margin 8 \
     --egs.stage $get_egs_stage \
     --egs.opts "--frames-overlap-per-eg 0" \
-    --egs.chunk-width $frames_per_chunk \
+    --egs.chunk-width $chunk_width \
     --egs.chunk-left-context $chunk_left_context \
     --egs.chunk-right-context $chunk_right_context \
     --egs.chunk-left-context-initial 0 \
@@ -198,19 +201,19 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/tri3b_lats_nodup \
+    --lat-dir exp/tdnn_lstm_1700h_syllabel_e2e_lats \
     --dir $dir  || exit 1;
 fi
-<<!
-if [ $stage -le 14 ]; then
+
+#if [ $stage -le 14 ]; then
   # Note: it might appear that this $lang directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
-  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_bigG $dir $dir/graph_bigG
-fi
-!
+#  utils/mkgraph.sh --self-loop-scale 1.0 data/lang_0528_syllable $dir $dir/graph_0528_syllable
+#fi
+
 decode_suff=0528
-graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
+graph_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_ali_constrain_5s_ngram3_denfst/graph_0528_syllable
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -226,7 +229,7 @@ if [ $stage -le 15 ]; then
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
-          --frames-per-chunk "$frames_per_chunk_primary" \
+          --frames-per-chunk 500 \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done

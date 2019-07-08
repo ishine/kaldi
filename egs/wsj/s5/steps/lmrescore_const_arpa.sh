@@ -62,7 +62,7 @@ fi
 if ! $skip_scoring && [ $stage -le 2 ]; then
   err_msg="Not scoring because local/score.sh does not exist or not executable."
   [ ! -x local/score.sh ] && echo $err_msg && exit 1;
-  local/score.sh --cmd "$cmd" $scoring_opts $data $newlang $outdir
+  local/score_sogou.sh --cmd "$cmd" $scoring_opts $data $newlang $outdir
 else
   echo "Not scoring because requested so..."
 fi

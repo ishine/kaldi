@@ -6,11 +6,11 @@ set -e
 
 # configs for 'chain'
 affix=
-stage=13
+stage=15
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/dfsmn_7300h_f16_10fsmn_L64R14_subsample3_1536-512_1536_interval_skip_LR0.4_4w5h_6epoch  # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/dfsmn_7300h_f16_10fsmn_L64R14_subsample3_1536-512_1536_interval_skip_LR0.4_4w5h_6epoch_smbr  # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 
 # training options
@@ -209,11 +209,9 @@ if [ $stage -le 15 ]; then
     iter_opts=" --iter $decode_iter "
   fi
   for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou ; do
-      (
       steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
-          --nj 10 --cmd "$decode_cmd" $iter_opts \
+          --nj 8 --cmd "$decode_cmd" $iter_opts \
           $graph_dir data/${decode_set} $dir/decode_${decode_set}${decode_iter:+_$decode_iter}_${decode_suff} || exit 1;
-      ) &
   done
 fi
 wait;

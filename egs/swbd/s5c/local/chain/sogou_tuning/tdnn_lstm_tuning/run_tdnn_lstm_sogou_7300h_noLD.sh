@@ -8,7 +8,7 @@
 set -e
 
 # configs for 'chain'
-stage=13
+stage=15
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
@@ -208,8 +208,8 @@ if [ $stage -le 14 ]; then
   utils/mkgraph.sh --self-loop-scale 1.0 data/lang_bigG $dir $dir/graph_bigG
 fi
 !
-decode_suff=online
-graph_dir=exp/chain/lstm_6j_offline_1536_512_sogoufeat_7000h_ld5/graph_online
+decode_suff=0528
+graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -219,9 +219,8 @@ if [ $stage -le 15 ]; then
     iter_opts=" --iter $decode_iter "
   fi
   for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
-      (
        steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
-          --nj 10 --cmd "$decode_cmd" $iter_opts \
+          --nj 8 --cmd "$decode_cmd" $iter_opts \
           --extra-left-context $extra_left_context  \
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \
@@ -229,7 +228,6 @@ if [ $stage -le 15 ]; then
           --frames-per-chunk "$frames_per_chunk" \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
-      ) &
   done
 fi
 wait;
