@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "base/kaldi-common.h"
+#include "fstext/deterministic-fst.h"
 #include "util/common-utils.h"
 #include "nnet0/nnet-nnet.h"
 

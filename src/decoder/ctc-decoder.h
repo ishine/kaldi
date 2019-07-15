@@ -38,7 +38,7 @@ struct CTCDecoderOptions {
   int max_mem;
 
   CTCDecoderOptions(): beam(5), blank(0),
-		  	  	  	   lm_scale(0.0), max_mem(2000)
+		  	  	  	   lm_scale(0.0), max_mem(50000)
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
@@ -77,11 +77,11 @@ class CTCDecoder {
 
 		CTCDecoderOptions &config_;
 		KaldiLstmlmWrapper &lstmlm_;
-		BeamType *beam_;
-		BeamType *next_beam_;
-		HisType *next_his_;
-		LogProbType *next_logprob_;
-		std::list<PrefixSeq*> *pre_seq_list_;
+		BeamType beam_;
+		BeamType next_beam_;
+		HisType next_his_;
+		LogProbType next_logprob_;
+		std::list<PrefixSeq*> pre_seq_list_;
 
 		std::unordered_map<Vector<BaseFloat> *, int> pred_buffer_;
 		std::unordered_map<LstmlmHistroy *, int> his_buffer_;

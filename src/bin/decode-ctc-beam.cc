@@ -37,10 +37,12 @@ int main(int argc, char *argv[]) {
     ParseOptions po(usage);
     bool binary = true;
     std::string search = "beam";
+    float blank_posterior_scale = -1.0;
     std::string word_syms_filename;
     po.Register("binary", &binary, "Write output in binary mode");
     po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
+    po.Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
 
     KaldiLstmlmWrapperOpts lstmlm_opts;
     CTCDecoderOptions decoder_opts;
@@ -88,6 +90,7 @@ int main(int argc, char *argv[]) {
 			num_fail++;
 			continue;
 		}
+
 		// decoding
 		if (search == "beam")
 			decoder.BeamSearch(loglikes);
