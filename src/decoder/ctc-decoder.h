@@ -1,4 +1,4 @@
-// decoder/rnnt-decoder.h
+// decoder/ctc-decoder.h
 
 // Copyright 2018-2019   Alibaba Inc (author: Wei Deng)
 
