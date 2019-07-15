@@ -1,4 +1,4 @@
-// bin/decode-faster-rnnt.cc
+// bin/decode-ctc-beam.cc
 
 // Copyright 2018-2019   Alibaba Inc (author: Wei Deng)
 
@@ -21,7 +21,7 @@
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
 #include "base/timer.h"
-#include "decoder/rnnt-decoder.h"
+#include "decoder/ctc-decoder.h"
 
 int main(int argc, char *argv[]) {
   try {
@@ -29,10 +29,10 @@ int main(int argc, char *argv[]) {
     using fst::SymbolTable;
 
     const char *usage =
-        "Decode, reading log-likelihoods (RNN transducer output)\n"
-        "as matrices.  Note: you'll usually want decode-faster-ctc rather than this program.\n"
+        "Decode, reading log-likelihoods (CTC acoustic model output) as matrices.\n"
+        "Note: you'll usually want decode-faster-ctc rather than this program.\n"
         "\n"
-        "Usage:   decode-faster-rnnt [options] <lstm-language-model> <loglikes-rspecifier> <words-wspecifier>\n";
+        "Usage:   decode-ctc-beam [options] <lstm-language-model> <loglikes-rspecifier> <words-wspecifier>\n";
 
     ParseOptions po(usage);
     bool binary = true;
@@ -42,9 +42,9 @@ int main(int argc, char *argv[]) {
     po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
 
-    KaldiLstmlmWrapperOpts rnntlm_opts;
-    RNNTDecoderOptions decoder_opts;
-    rnntlm_opts.Register(&po);
+    KaldiLstmlmWrapperOpts lstmlm_opts;
+    CTCDecoderOptions decoder_opts;
+    lstmlm_opts.Register(&po);
     decoder_opts.Register(&po);
 
     po.Read(argc, argv);
@@ -69,9 +69,9 @@ int main(int argc, char *argv[]) {
 
     SequentialBaseFloatMatrixReader loglikes_reader(loglikes_rspecifier);
     // Reads the language model.
-	KaldiLstmlmWrapper rnntlm(rnntlm_opts, word_syms_filename, "", lstmlm_rxfilename);
+	KaldiLstmlmWrapper lstmlm(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
 	// decoder
-    RNNTDecoder decoder(rnntlm, decoder_opts);
+	CTCDecoder decoder(lstmlm, decoder_opts);
 
     BaseFloat tot_like = 0.0, logp = 0.0;
     kaldi::int64 frame_count = 0;
