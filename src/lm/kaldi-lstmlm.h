@@ -1,4 +1,4 @@
-// lm/kaldi-rnntlm.h
+// lm/kaldi-lstmlm.h
 
 // Copyright 2018-2019   Alibaba Inc (author: Wei Deng)
 
@@ -24,14 +24,13 @@
 #include <vector>
 
 #include "base/kaldi-common.h"
-#include "fstext/deterministic-fst.h"
 #include "util/common-utils.h"
 #include "nnet0/nnet-nnet.h"
 
 namespace kaldi {
 
-struct LstmLmHistroy {
-    LstmLmHistroy(std::vector<int> &rdim, std::vector<int> &cdim,
+struct LstmlmHistroy {
+	LstmlmHistroy(std::vector<int> &rdim, std::vector<int> &cdim,
                     MatrixResizeType resize_type = kSetZero) {
         his_recurrent.resize(rdim.size());
         for (int i = 0; i < rdim.size(); i++)
@@ -40,14 +39,14 @@ struct LstmLmHistroy {
         for (int i = 0; i < cdim.size(); i++)
             his_cell[i].Resize(cdim[i], resize_type);
     }
-    LstmLmHistroy() {}
+    LstmlmHistroy() {}
 
 	std::vector<Vector<BaseFloat> > his_recurrent; //  each hidden lstm layer recurrent history
 	std::vector<Vector<BaseFloat> > his_cell; //  each hidden lstm layer cell history
 };
 
 struct Sequence {
-	Sequence(LstmLmHistroy *h, int blank = 0) {
+	Sequence(LstmlmHistroy *h, int blank = 0) {
 		pred.clear();
 		k.push_back(blank);
 		lmhis = h;
@@ -56,7 +55,7 @@ struct Sequence {
 
 	std::vector<Vector<BaseFloat>* > pred; 	// rnnt language model output
 	std::vector<int> k;						// decoded word list
-	LstmLmHistroy *lmhis;					// rnnt language model history
+	LstmlmHistroy *lmhis;					// rnnt language model history
 	BaseFloat logp;							// probability of this sequence, in log scale
 
 	std::string tostring() {
@@ -64,7 +63,45 @@ struct Sequence {
 	}
 };
 
-struct RNNTUtil {
+struct PrefixSeq {
+	PrefixSeq(LstmlmHistroy *h, int blank = 0) {
+		prefix.push_back(blank);
+		lmhis = h;
+		logp_blank = kLogZeroFloat;
+		logp_nblank = kLogZeroFloat;
+	}
+
+	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words) {
+		lmhis = h;
+		prefix = words;
+		logp_blank = kLogZeroFloat;
+		logp_nblank = kLogZeroFloat;
+	}
+
+	PrefixSeq(const std::vector<int> &words) {
+		prefix = words;
+		lmhis = NULL;
+		logp_blank = kLogZeroFloat;
+		logp_nblank = kLogZeroFloat;
+	}
+
+	// decoded word list
+	std::vector<int> prefix;
+
+	// rnnt language model history
+	LstmlmHistroy *lmhis;
+
+	// log probabilities for the prefix given that
+	// it ends in a blank and dose not end in a blank at this time step.
+	BaseFloat logp_blank;
+	BaseFloat logp_nblank;
+
+	std::string tostring() {
+		return "";
+	}
+};
+
+struct LstmlmUtil {
 	static bool compare_len(const Sequence *a, const Sequence *b) {
 		return a->k.size() < b->k.size();
 	}
@@ -81,6 +118,10 @@ struct RNNTUtil {
 		return a->logp > b->logp;
 	}
 
+	static bool compare_PrefixSeq_reverse(const PrefixSeq *a, const PrefixSeq *b) {
+		return LogAdd(a->logp_blank,a->logp_nblank) > LogAdd(b->logp_blank,b->logp_nblank);
+	}
+
 	static bool isprefix(const std::vector<int> &a, const std::vector<int> &b) {
 		int lena = a.size();
 		int lenb = b.size();
@@ -92,14 +133,14 @@ struct RNNTUtil {
 
 };
 
-struct KaldiRNNTlmWrapperOpts {
+struct KaldiLstmlmWrapperOpts {
   std::string unk_symbol;
   std::string sos_symbol;
   std::string eos_symbol;
   int num_stream;
   bool remove_head;
 
-  KaldiRNNTlmWrapperOpts() : unk_symbol("<unk>"), sos_symbol("<s>"), eos_symbol("</s>"),
+  KaldiLstmlmWrapperOpts() : unk_symbol("<unk>"), sos_symbol("<s>"), eos_symbol("</s>"),
 		  num_stream(1), remove_head(false) {}
 
   void Register(OptionsItf *opts) {
@@ -114,9 +155,9 @@ struct KaldiRNNTlmWrapperOpts {
   }
 };
 
-class KaldiRNNTlmWrapper {
+class KaldiLstmlmWrapper {
  public:
-  KaldiRNNTlmWrapper(const KaldiRNNTlmWrapperOpts &opts,
+  KaldiLstmlmWrapper(const KaldiLstmlmWrapperOpts &opts,
                     const std::string &word_symbol_table_rxfilename,
 					const std::string &lm_word_symbol_table_rxfilename,
                     const std::string &nnlm_rxfilename);
@@ -130,15 +171,15 @@ class KaldiRNNTlmWrapper {
   int GetVocabSize() { return nnlm_.OutputDim();}
 
   void GetLogProbParallel(const std::vector<int> &curt_words,
-  										 const std::vector<LstmLmHistroy*> &context_in,
-  										 std::vector<LstmLmHistroy*> &context_out,
+  										 const std::vector<LstmlmHistroy*> &context_in,
+  										 std::vector<LstmlmHistroy*> &context_out,
   										 std::vector<BaseFloat> &logprob);
 
-  BaseFloat GetLogProb(int curt_words, LstmLmHistroy* context_in,
-		  	  	  	  	  	  	  	   LstmLmHistroy* context_out);
+  BaseFloat GetLogProb(int curt_words, LstmlmHistroy* context_in,
+		  	  	  	  	  	  	  	  	  LstmlmHistroy* context_out);
 
-  void Forward(int words_in, LstmLmHistroy& context_in,
-		  	   Vector<BaseFloat> *nnet_out, LstmLmHistroy *context_out);
+  void Forward(int words_in, LstmlmHistroy& context_in,
+		  	   Vector<BaseFloat> *nnet_out, LstmlmHistroy *context_out);
 
   inline int GetWordId(int wid) { return label_to_lmwordid_[wid];}
   inline int GetWordId(std::string word) { return word_to_lmwordid_[word];}
@@ -167,7 +208,7 @@ class KaldiRNNTlmWrapper {
 
   std::vector<Matrix<BaseFloat> > his_recurrent_; // current hidden lstm layers recurrent history
   std::vector<Matrix<BaseFloat> > his_cell_;	// current hidden lstm layers cell history
-  KALDI_DISALLOW_COPY_AND_ASSIGN(KaldiRNNTlmWrapper);
+  KALDI_DISALLOW_COPY_AND_ASSIGN(KaldiLstmlmWrapper);
 };
 
 
