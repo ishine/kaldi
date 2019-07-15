@@ -180,6 +180,11 @@ void RNNTDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 	BaseFloat logp;
 
 	InitDecoding();
+    /*
+    if (config_.blank_posterior_scale >= 0) {
+        loglikes.ColRange(0, 1).Scale(config_.blank_posterior_scale);
+    }
+    */
 	// decode one utterance
 	y_hat = B_->front();
 
@@ -193,7 +198,11 @@ void RNNTDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 		// log probability for each rnnt output k
 	    logprob.CopyFromVec(*pred);
 		logprob.AddVec(1.0, loglikes.Row(n));
-		logprob.ApplyLogSoftMax();
+		//logprob.ApplyLogSoftMax();
+        logprob.ApplySoftMax();
+        if (config_.blank_posterior_scale >= 0)
+            logprob(0) *= config_.blank_posterior_scale;
+        logprob.ApplyLog();
 
 		logp = logprob.Max(&k);
 		y_hat->logp += logp;
@@ -246,12 +255,22 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 					logprob.CopyFromVec(*pred);
 					logprob.AddVec(1.0, loglikes.Row(n));
-					logprob.ApplyLogSoftMax();
+					//logprob.ApplyLogSoftMax();
+                    logprob.ApplySoftMax();
+                    if (config_.blank_posterior_scale >= 0)
+                        logprob(0) *= config_.blank_posterior_scale;
+                    logprob.ApplyLog();
+
 					BaseFloat curlogp = seqi->logp + logprob(seqj->k[leni]);
 					for (int m = leni; m < lenj-1; m++) {
 						logprob.CopyFromVec(*seqj->pred[m]);
 						logprob.AddVec(1.0, loglikes.Row(n));
-						logprob.ApplyLogSoftMax();
+						//logprob.ApplyLogSoftMax();
+                        logprob.ApplySoftMax();
+                        if (config_.blank_posterior_scale >= 0)
+                            logprob(0) *= config_.blank_posterior_scale;
+                        logprob.ApplyLog();
+
 						curlogp += seqj->k[m+1];
 					}
 					seqj->logp = LogAdd(seqj->logp, curlogp);
@@ -276,7 +295,11 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			// log probability for each rnnt output k
 			logprob.CopyFromVec(*pred);
 			logprob.AddVec(1.0, loglikes.Row(n));
-			logprob.ApplyLogSoftMax();
+			//logprob.ApplyLogSoftMax();
+            logprob.ApplySoftMax();
+            if (config_.blank_posterior_scale >= 0)
+                logprob(0) *= config_.blank_posterior_scale;
+            logprob.ApplyLog();
 
 			vocab_size = logprob.Dim();
 			for (int k = 0; k < vocab_size; k++) {

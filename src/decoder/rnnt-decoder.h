@@ -34,15 +34,18 @@ struct RNNTDecoderOptions {
   int blank;
   bool use_prefix;
   int max_mem;
+  float blank_posterior_scale;
 
   RNNTDecoderOptions(): beam(5), blank(0),
-		  	  	  	  	use_prefix(false), max_mem(20000)
+		  	  	  	  	use_prefix(false), max_mem(20000),
+                        blank_posterior_scale(-1.0)
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
 	opts->Register("blank", &blank, "RNNT bank id.");
 	opts->Register("use-prefix", &use_prefix, "Process prefix probability.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
+    opts->Register("blank-posterior-scale", &blank_posterior_scale, "For RNNT decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
   }
 };
 
