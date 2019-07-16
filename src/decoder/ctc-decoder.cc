@@ -187,22 +187,43 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	Vector<BaseFloat> *lmlogp;
 	LstmlmHistroy *his;
     std::vector<BaseFloat> next_step(vocab_size);
+    std::vector<int> in_words;
+    std::vector<Vector<BaseFloat>*> nnet_out;
+    std::vector<LstmlmHistroy*> context_in, context_out;
 	float logp, n_p_b, n_p_nb;
-	int end_t;
+	int end_t, idx;
 
 	InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
+
+		// Lstm language model process
 		if (config_.lm_scale > 0.0) {
+			in_words.clear();
+			nnet_out.clear();
+			context_in.clear();
+			context_out.clear();
+
             for (auto &seq : beam_) {
 				preseq = seq.second;
 				lmlogp = MallocPred();
 				his = MallocHis();
-				lstmlm_.Forward(preseq->prefix.back(), *preseq->lmhis, lmlogp, his);
-				lmlogp->ApplyLog();
-				next_his_[preseq->prefix] = his;
-				next_logprob_[preseq->prefix] = lmlogp;
+				in_words.push_back(preseq->prefix.back());
+				context_in.push_back(preseq->lmhis);
+				context_out.push_back(his);
+				nnet_out.push_back(lmlogp);
 			}
+            // parallel process
+            lstmlm_.ForwardMseq(in_words, context_in, nnet_out, context_out);
+            idx = 0;
+            for (auto &seq : beam_) {
+            	preseq = seq.second;
+            	lmlogp = nnet_out[idx];
+            	lmlogp->ApplyLog();
+            	next_his_[preseq->prefix] = context_out[idx];
+            	next_logprob_[preseq->prefix] = lmlogp;
+            	idx++;
+            }
 		}
 
         // Top K pruning, the nth bigest words

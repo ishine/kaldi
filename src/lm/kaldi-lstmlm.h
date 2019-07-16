@@ -182,6 +182,11 @@ class KaldiLstmlmWrapper {
   void Forward(int words_in, LstmlmHistroy& context_in,
 		  	   Vector<BaseFloat> *nnet_out, LstmlmHistroy *context_out);
 
+  void ForwardMseq(const std::vector<int> &in_words,
+		  	  	  	  	  	  	  	  	  const std::vector<LstmlmHistroy*> &context_in,
+										  std::vector<Vector<BaseFloat>*> &nnet_out,
+										  std::vector<LstmlmHistroy*> &context_out);
+
   inline int GetWordId(int wid) { return label_to_lmwordid_[wid];}
   inline int GetWordId(std::string word) { return word_to_lmwordid_[word];}
 
