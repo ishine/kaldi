@@ -126,6 +126,15 @@ void CTCDecoder::CleanBuffer() {
     his_buffer_.clear();
 }
 
+bool CTCDecoder::GetBestPath(std::vector<int> &words, BaseFloat &logp) {
+	PrefixSeq *seq = pre_seq_list_.front();
+	if (seq == NULL) return false;
+
+	logp = -LogAdd(seq->logp_blank, seq->logp_nblank);
+	words = seq->prefix;
+	return true;
+}
+
 void CTCDecoder::InitDecoding() {
 	FreeBeam(&beam_);
 	beam_.clear();
@@ -145,15 +154,6 @@ void CTCDecoder::InitDecoding() {
 	beam_[seq->prefix] = seq;
 }
 
-bool CTCDecoder::GetBestPath(std::vector<int> &words, BaseFloat &logp) {
-	PrefixSeq *seq = pre_seq_list_.front();
-	if (seq == NULL) return false;
-
-	logp = -LogAdd(seq->logp_blank, seq->logp_nblank);
-	words = seq->prefix;
-	return true;
-}
-
 void CTCDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 	int nframe = loglikes.NumRows(), k;
 	PrefixSeq *pre_seq;
@@ -165,7 +165,7 @@ void CTCDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 	pre_seq = beam_.begin()->second;
 	for (int n = 0; n < nframe; n++) {
 		logp = loglikes.Row(n).Max(&k);
-		pre_seq->logp_nblank = LogAdd(logp, pre_seq->logp_nblank);
+		pre_seq->logp_blank += logp;
 		pre_seq->prefix.push_back(k);
 	}
 	std::vector<int> words;
@@ -178,7 +178,7 @@ void CTCDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 	pre_seq_list_.push_back(pre_seq);
 }
 
-void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
+void CTCDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
 	int vocab_size = loglikes.NumCols();
@@ -219,8 +219,9 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
 						CopyHis(preseq->lmhis);
 					} else {
-					    n_preseq->logp_nblank = n_p_nb;
+                        n_preseq  = it->second;
 				    }
+
 					n_p_b = LogAdd(n_preseq->logp_blank,
 							LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp));
 					n_preseq->logp_blank = n_p_b;
@@ -238,7 +239,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				if (it == next_beam_.end()) {
 					n_preseq = new PrefixSeq(n_prefix);
 				} else {
-					n_preseq->logp_nblank = n_p_nb;
+                    n_preseq  = it->second;
 				}
 
 				if (k != end_t) {
