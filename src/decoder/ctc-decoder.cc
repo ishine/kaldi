@@ -191,38 +191,47 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
 	float logp, n_p_b, n_p_nb;
-	int end_t, idx;
+	int end_t, bz;
 
 	InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
 
-		// Lstm language model process
+		// Lstm language model process, beam words parallel.
 		if (config_.lm_scale > 0.0) {
 			in_words.clear();
 			nnet_out.clear();
 			context_in.clear();
 			context_out.clear();
 
-            for (auto &seq : beam_) {
-				preseq = seq.second;
+            bz = 0;
+            auto it = beam_.begin();
+            while (bz < config_.beam) {
+				preseq = it->second;
 				lmlogp = MallocPred();
 				his = MallocHis();
 				in_words.push_back(preseq->prefix.back());
 				context_in.push_back(preseq->lmhis);
 				context_out.push_back(his);
 				nnet_out.push_back(lmlogp);
+                bz++;
+                if (bz < beam_.size()) it++;
 			}
+
             // parallel process
             lstmlm_.ForwardMseq(in_words, context_in, nnet_out, context_out);
-            idx = 0;
-            for (auto &seq : beam_) {
-            	preseq = seq.second;
-            	lmlogp = nnet_out[idx];
-            	lmlogp->ApplyLog();
-            	next_his_[preseq->prefix] = context_out[idx];
-            	next_logprob_[preseq->prefix] = lmlogp;
-            	idx++;
+
+            for (bz = 0, it = beam_.begin(); bz < config_.beam; bz++) {
+                if (bz < beam_.size()) {
+				    preseq = it->second;
+            	    nnet_out[bz]->ApplyLog();
+            	    next_his_[preseq->prefix] = context_out[bz];
+            	    next_logprob_[preseq->prefix] = nnet_out[bz];
+                    it++;
+                } else {
+                    FreePred(nnet_out[bz]);
+                    FreeHis(context_out[bz]);
+                }
             }
 		}
 

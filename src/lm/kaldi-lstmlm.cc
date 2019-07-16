@@ -130,6 +130,15 @@ void KaldiLstmlmWrapper::ForwardMseq(const std::vector<int> &in_words,
 	if (cur_stream != num_stream_) {
 		num_stream_ = cur_stream;
 		KALDI_LOG << "Reset lstm lm with " << num_stream_ << " streams.";
+
+        // init rc context buffer
+        his_recurrent_.resize(recurrent_dim_.size());
+        for (int i = 0; i < recurrent_dim_.size(); i++)
+            his_recurrent_[i].Resize(num_stream_, recurrent_dim_[i], kUndefined);
+        his_cell_.resize(cell_dim_.size());
+        for (int i = 0; i < cell_dim_.size(); i++)
+            his_cell_[i].Resize(num_stream_, cell_dim_[i], kUndefined);
+
 		in_words_.Resize(num_stream_, kUndefined);
 		in_words_mat_.Resize(num_stream_, 1, kUndefined);
 		words_.Resize(num_stream_, kUndefined);
