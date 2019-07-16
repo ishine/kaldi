@@ -1,4 +1,4 @@
-// decoder/rnnt-decoder.h
+// decoder/ctc-decoder.h
 
 // Copyright 2018-2019   Alibaba Inc (author: Wei Deng)
 
@@ -17,12 +17,13 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef KALDI_DECODER_RNNT_DECODER_H_
-#define KALDI_DECODER_RNNT_DECODER_H_
+#ifndef KALDI_DECODER_CTC_DECODER_H_
+#define KALDI_DECODER_CTC_DECODER_H_
 
 #include <list>
 
-#include "../lm/kaldi-lstmlm.h"
+#include "base/kaldi-common.h"
+#include "lm/kaldi-lstmlm.h"
 #include "util/stl-utils.h"
 #include "itf/options-itf.h"
 #include "util/hash-list.h"
@@ -30,52 +31,58 @@
 
 namespace kaldi {
 
-struct RNNTDecoderOptions {
+struct CTCDecoderOptions {
   int beam;
   int blank;
-  bool use_prefix;
+  float lm_scale;
   int max_mem;
-  float blank_posterior_scale;
 
-  RNNTDecoderOptions(): beam(5), blank(0),
-		  	  	  	  	use_prefix(false), max_mem(20000),
-                        blank_posterior_scale(-1.0)
+  CTCDecoderOptions(): beam(5), blank(0),
+		  	  	  	   lm_scale(0.0), max_mem(50000)
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
-	opts->Register("blank", &blank, "RNNT bank id.");
-	opts->Register("use-prefix", &use_prefix, "Process prefix probability.");
+	opts->Register("blank", &blank, "CTC bank id.");
+	opts->Register("lm-scale", &lm_scale, "Process extend language model log probability.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
-    opts->Register("blank-posterior-scale", &blank_posterior_scale, "For RNNT decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
   }
 };
 
-class RNNTDecoder {
+class CTCDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
-		RNNTDecoder(KaldiLstmlmWrapper &rnntlm, RNNTDecoderOptions &config);
+		CTCDecoder(KaldiLstmlmWrapper &rnntlm, CTCDecoderOptions &config);
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp);
 
 	protected:
+        typedef unordered_map<std::vector<int>,
+        		PrefixSeq*, VectorHasher<int> > BeamType;
+        typedef unordered_map<std::vector<int>,
+        		LstmlmHistroy*, VectorHasher<int> > HisType;
+        typedef unordered_map<std::vector<int>,
+        		Vector<BaseFloat>*, VectorHasher<int> > LogProbType;
+
 		void InitDecoding();
-		void FreeList(std::list<Sequence* > *list);
-		void FreeSeq(Sequence *seq);
+		void FreeBeam(BeamType *beam);
+		void FreeSeq(PrefixSeq *seq);
 		void FreePred(Pred *pred);
 		void FreeHis(LstmlmHistroy *his);
 		Pred* MallocPred();
 		LstmlmHistroy* MallocHis();
-		void CopyPredList(std::vector<Pred*> &predlist);
 		void CopyHis(LstmlmHistroy* his);
-		void DeepCopySeq(Sequence *seq);
         void CleanBuffer();
 
 
-		RNNTDecoderOptions &config_;
-		KaldiLstmlmWrapper &rnntlm_;
-		std::list<Sequence* > *A_;
-		std::list<Sequence* > *B_;
+		CTCDecoderOptions &config_;
+		KaldiLstmlmWrapper &lstmlm_;
+		BeamType beam_;
+		BeamType next_beam_;
+		HisType next_his_;
+		LogProbType next_logprob_;
+		std::list<PrefixSeq*> pre_seq_list_;
+
 		std::unordered_map<Vector<BaseFloat> *, int> pred_buffer_;
 		std::unordered_map<LstmlmHistroy *, int> his_buffer_;
 		std::list<Vector<BaseFloat> *> pred_list_;
@@ -83,7 +90,7 @@ class RNNTDecoder {
 		std::vector<int> rd_;
 		std::vector<int> cd_;
 
-	KALDI_DISALLOW_COPY_AND_ASSIGN(RNNTDecoder);
+	KALDI_DISALLOW_COPY_AND_ASSIGN(CTCDecoder);
 };
 
 

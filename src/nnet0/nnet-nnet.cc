@@ -678,7 +678,7 @@ void Nnet::SplitLstmLm(Matrix<BaseFloat> &out_linearity, Vector<BaseFloat> &out_
 		bool remove_head = false) {
 	int32 c, tag;
 	AffineTransform  *affine = NULL;
-	for (c = this->NumComponents()-1; c>=0; c++) {
+	for (c = this->NumComponents()-1; c>=0; c--) {
 		if (this->GetComponent(c).GetType() == Component::kAffineTransform) {
 			// output class affine layer
 			affine = &(dynamic_cast<AffineTransform&>(this->GetComponent(c)));

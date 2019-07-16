@@ -1,4 +1,4 @@
-// decoder/faster-decoder.cc
+// decoder/rnnt-decoder.cc
 
 // Copyright 2018-2019   Alibaba Inc (author: Wei Deng)
 
@@ -20,7 +20,7 @@
 
 namespace kaldi {
 
-RNNTDecoder::RNNTDecoder(KaldiRNNTlmWrapper &rnntlm,
+RNNTDecoder::RNNTDecoder(KaldiLstmlmWrapper &rnntlm,
 						RNNTDecoderOptions &config):
 		config_(config), rnntlm_(rnntlm) {
 	A_ = new std::list<Sequence*>;
@@ -73,7 +73,7 @@ void RNNTDecoder::FreePred(Pred *pred) {
 	}
 }
 
-void RNNTDecoder::FreeHis(LstmLmHistroy *his) {
+void RNNTDecoder::FreeHis(LstmlmHistroy *his) {
 	auto it = his_buffer_.find(his);
 	if (it != his_buffer_.end()) {
 		if (it->second-1 == 0) {
@@ -100,13 +100,13 @@ Vector<BaseFloat>* RNNTDecoder::MallocPred() {
 	return pred;
 }
 
-LstmLmHistroy* RNNTDecoder::MallocHis() {
-	LstmLmHistroy *his = NULL;
+LstmlmHistroy* RNNTDecoder::MallocHis() {
+	LstmlmHistroy *his = NULL;
 	if (his_list_.size() > 0) {
 		his = his_list_.front();
 		his_list_.pop_front();
 	} else {
-		his = new LstmLmHistroy(rd_, cd_, kUndefined);
+		his = new LstmlmHistroy(rd_, cd_, kUndefined);
 	}
 
 	if (his != NULL)
@@ -123,7 +123,7 @@ void RNNTDecoder::CopyPredList(std::vector<Pred*> &predlist) {
 	}
 }
 
-void RNNTDecoder::CopyHis(LstmLmHistroy* his) {
+void RNNTDecoder::CopyHis(LstmlmHistroy* his) {
 	auto it = his_buffer_.find(his);
 	if (it != his_buffer_.end())
 		his_buffer_[his]++;
@@ -157,7 +157,7 @@ void RNNTDecoder::InitDecoding() {
     CleanBuffer();
 
     // first input <s>
-    LstmLmHistroy *sos_h = new LstmLmHistroy(rd_, cd_, kSetZero);
+    LstmlmHistroy *sos_h = new LstmlmHistroy(rd_, cd_, kSetZero);
 	Sequence *seq = new Sequence(sos_h, config_.blank);
 	DeepCopySeq(seq);
 	B_->push_back(seq);
@@ -176,10 +176,15 @@ void RNNTDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 	int len, k;
 	Vector<BaseFloat> *pred, logprob(rnntlm_.GetVocabSize());
 	Sequence *y_hat;
-	LstmLmHistroy *his;
+	LstmlmHistroy *his;
 	BaseFloat logp;
 
 	InitDecoding();
+    /*
+    if (config_.blank_posterior_scale >= 0) {
+        loglikes.ColRange(0, 1).Scale(config_.blank_posterior_scale);
+    }
+    */
 	// decode one utterance
 	y_hat = B_->front();
 
@@ -193,7 +198,11 @@ void RNNTDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 		// log probability for each rnnt output k
 	    logprob.CopyFromVec(*pred);
 		logprob.AddVec(1.0, loglikes.Row(n));
-		logprob.ApplyLogSoftMax();
+		//logprob.ApplyLogSoftMax();
+        logprob.ApplySoftMax();
+        if (config_.blank_posterior_scale >= 0)
+            logprob(0) *= config_.blank_posterior_scale;
+        logprob.ApplyLog();
 
 		logp = logprob.Max(&k);
 		y_hat->logp += logp;
@@ -217,12 +226,12 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	int vocab_size, len;
 	Sequence *seqi, *seqj;
 	Vector<BaseFloat> *pred, logprob(rnntlm_.GetVocabSize());
-	LstmLmHistroy *his;
+	LstmlmHistroy *his;
 
 	InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
-		B_->sort(RNNTUtil::compare_len_reverse);
+		B_->sort(LstmlmUtil::compare_len_reverse);
 		//for (auto &seq : *A_) delete seq;
 		FreeList(A_);
 		delete A_;
@@ -235,7 +244,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				auto iteri = iterj; iteri++;
 				for (; iteri != A_->end(); iteri++) {
 					seqi = *iteri; seqj = *iterj;
-					if (!RNNTUtil::isprefix(seqi->k, seqj->k))
+					if (!LstmlmUtil::isprefix(seqi->k, seqj->k))
 						continue;
 
 					int leni = seqi->k.size();
@@ -246,12 +255,22 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 					logprob.CopyFromVec(*pred);
 					logprob.AddVec(1.0, loglikes.Row(n));
-					logprob.ApplyLogSoftMax();
+					//logprob.ApplyLogSoftMax();
+                    logprob.ApplySoftMax();
+                    if (config_.blank_posterior_scale >= 0)
+                        logprob(0) *= config_.blank_posterior_scale;
+                    logprob.ApplyLog();
+
 					BaseFloat curlogp = seqi->logp + logprob(seqj->k[leni]);
 					for (int m = leni; m < lenj-1; m++) {
 						logprob.CopyFromVec(*seqj->pred[m]);
 						logprob.AddVec(1.0, loglikes.Row(n));
-						logprob.ApplyLogSoftMax();
+						//logprob.ApplyLogSoftMax();
+                        logprob.ApplySoftMax();
+                        if (config_.blank_posterior_scale >= 0)
+                            logprob(0) *= config_.blank_posterior_scale;
+                        logprob.ApplyLog();
+
 						curlogp += seqj->k[m+1];
 					}
 					seqj->logp = LogAdd(seqj->logp, curlogp);
@@ -263,7 +282,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 		while (true) {
 			// y* = most probable in A
 			Sequence *y_hat, *y_a, *y_b;
-			auto it = std::max_element(A_->begin(), A_->end(), RNNTUtil::compare_logp);
+			auto it = std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
 			A_->erase(it);
 			y_hat = *it;
 
@@ -276,7 +295,11 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			// log probability for each rnnt output k
 			logprob.CopyFromVec(*pred);
 			logprob.AddVec(1.0, loglikes.Row(n));
-			logprob.ApplyLogSoftMax();
+			//logprob.ApplyLogSoftMax();
+            logprob.ApplySoftMax();
+            if (config_.blank_posterior_scale >= 0)
+                logprob(0) *= config_.blank_posterior_scale;
+            logprob.ApplyLog();
 
 			vocab_size = logprob.Dim();
 			for (int k = 0; k < vocab_size; k++) {
@@ -304,13 +327,13 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			FreeSeq(y_hat);
 			FreePred(pred);
 			FreeHis(his);
-			y_a = *std::max_element(A_->begin(), A_->end(), RNNTUtil::compare_logp);
-			y_b = *std::max_element(B_->begin(), B_->end(), RNNTUtil::compare_logp);
+			y_a = *std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
+			y_b = *std::max_element(B_->begin(), B_->end(), LstmlmUtil::compare_logp);
 			if (B_->size() >= config_.beam && y_b->logp >= y_a->logp) break;
 		}
 
 		// beam width
-		B_->sort(RNNTUtil::compare_logp_reverse);
+		B_->sort(LstmlmUtil::compare_logp_reverse);
 		// free memory
 		int idx = 0;
 		for (auto it = B_->begin(); it != B_->end(); it++) {

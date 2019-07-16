@@ -1,4 +1,4 @@
-// lm/kaldi-rnntlm.cc
+// lm/kaldi-lstmlm.cc
 
 // Copyright 2018-2019   Alibaba Inc (author: Wei Deng)
 
@@ -17,16 +17,17 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
+#include "kaldi-lstmlm.h"
+
 #include <utility>
 
-#include "lm/kaldi-rnntlm.h"
 #include "util/stl-utils.h"
 #include "util/text-utils.h"
 
 namespace kaldi {
 
-KaldiRNNTlmWrapper::KaldiRNNTlmWrapper(
-    const KaldiRNNTlmWrapperOpts &opts,
+KaldiLstmlmWrapper::KaldiLstmlmWrapper(
+    const KaldiLstmlmWrapperOpts &opts,
     const std::string &word_symbol_table_rxfilename,
 	const std::string &lm_word_symbol_table_rxfilename,
     const std::string &nnlm_rxfilename) {
@@ -85,8 +86,8 @@ KaldiRNNTlmWrapper::KaldiRNNTlmWrapper(
 	hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
 }
 
-void KaldiRNNTlmWrapper::Forward(int words_in, LstmLmHistroy& context_in,
-		  	   Vector<BaseFloat> *nnet_out, LstmLmHistroy *context_out) {
+void KaldiLstmlmWrapper::Forward(int words_in, LstmlmHistroy& context_in,
+		  	   Vector<BaseFloat> *nnet_out, LstmlmHistroy *context_out) {
 	// next produce and save current word rc information (recommend GPU)
 	// restore history
 	int i, num_layers = context_in.his_recurrent.size();
@@ -118,12 +119,12 @@ void KaldiRNNTlmWrapper::Forward(int words_in, LstmLmHistroy& context_in,
 	}
 }
 
-void KaldiRNNTlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
-										 const std::vector<LstmLmHistroy*> &context_in,
-										 std::vector<LstmLmHistroy*> &context_out,
+void KaldiLstmlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
+										 const std::vector<LstmlmHistroy*> &context_in,
+										 std::vector<LstmlmHistroy*> &context_out,
 										 std::vector<BaseFloat> &logprob) {
 	// get current words log probility (CPU done)
-	LstmLmHistroy *his;
+	LstmlmHistroy *his;
 	int i, j, wid;
 	logprob.resize(num_stream_);
 	for (i = 0; i < num_stream_; i++) {
@@ -164,8 +165,8 @@ void KaldiRNNTlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 	}
 }
 
-BaseFloat KaldiRNNTlmWrapper::GetLogProb(int32 curt_word,
-		LstmLmHistroy *context_in, LstmLmHistroy *context_out) {
+BaseFloat KaldiLstmlmWrapper::GetLogProb(int32 curt_word,
+		LstmlmHistroy *context_in, LstmlmHistroy *context_out) {
 	// get current words log probility (CPU done)
 	BaseFloat logprob = 0.0;
 	int i;
