@@ -148,6 +148,10 @@ void CTCDecoder::InitDecoding() {
 
     // first input <s>
     LstmlmHistroy *sos_h = new LstmlmHistroy(rd_, cd_, kSetZero);
+
+    // Elements in the beam are (prefix, (p_blank, p_no_blank))
+    // Initialize the beam with the empty sequence, a probability of
+    // 1 for ending in blank and zero for ending in non-blank (in log space).
 	PrefixSeq *seq = new PrefixSeq(sos_h, config_.blank);
     seq->logp_blank = 0.0;
 	CopyHis(sos_h);
@@ -161,7 +165,6 @@ void CTCDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 
 	InitDecoding();
 	// decode one utterance
-
 	pre_seq = beam_.begin()->second;
 	for (int n = 0; n < nframe; n++) {
 		logp = loglikes.Row(n).Max(&k);
@@ -198,7 +201,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
 
-		// Lstm language model process, beam words parallel.
+		// Lstm language model process, beam streams parallel.
         uselm = false;
         if (config_.lm_scale > 0.0) {
            if (config_.blank_threshold <= 0)
@@ -213,6 +216,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			context_in.clear();
 			context_out.clear();
 
+            // always padding to beam streams
             bz = 0;
             auto it = beam_.begin();
             while (bz < config_.beam) {
@@ -227,9 +231,10 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                 if (bz < beam_.size()) it++;
 			}
 
-            // multi-stream parallel process
+            // beam streams parallel process
             lstmlm_.ForwardMseq(in_words, context_in, nnet_out, context_out);
 
+            // get the valid streams
             for (bz = 0, it = beam_.begin(); bz < config_.beam; bz++) {
                 if (bz < beam_.size()) {
 				    preseq = it->second;
@@ -253,13 +258,17 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
         // For each word
 		for (int k = 0; k < vocab_size; k++) {
 			logp = loglikes(n, k);
+            // blank pruning
             if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank))>config_.blank_threshold && k != config_.blank)
                 continue;
+            // top K pruning
             if (config_.am_topk > 0 && logp <= next_step[config_.am_topk])
                 continue;
 
-			// Loop over beam
-            for (auto &seq : beam_) {
+            // The variables p_b and p_nb are respectively the
+            // probabilities for the prefix given that it ends in a
+            // blank and does not end in a blank at this time step.
+            for (auto &seq : beam_) { // Loop over beam
 				preseq = seq.second;
 
 				// If we propose a blank the prefix doesn't change.
@@ -398,8 +407,10 @@ void CTCDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 		for (int k = 0; k < vocab_size; k++) {
 			logp = loglikes(n, k);
 
-			// Loop over beam
-            for (auto &seq : beam_) {
+            // The variables p_b and p_nb are respectively the
+            // probabilities for the prefix given that it ends in a
+            // blank and does not end in a blank at this time step.
+            for (auto &seq : beam_) { // Loop over beam
 				preseq = seq.second;
 
 				// If we propose a blank the prefix doesn't change.

@@ -56,9 +56,19 @@ class CTCDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
 		CTCDecoder(KaldiLstmlmWrapper &rnntlm, CTCDecoderOptions &config);
+
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
+
+        // loglikes: The output probabilities (e.g. log post-softmax) for each time step.
+        // Should be an array of shape (time x output dim).
+        // beam_size (int): Size of the beam to use during inference.
+        // blank (int): Index of the CTC blank label.
+        // Returns the output label sequence and the corresponding negative
+        // log-likelihood estimated by the decoder.
 		void BeamSearchNaive(const Matrix<BaseFloat> &loglikes);
+
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
+
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp);
 
 	protected:
