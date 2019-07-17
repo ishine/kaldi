@@ -40,7 +40,7 @@ struct CTCDecoderOptions {
   int max_mem;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(-1),
-		  	  	  	   lm_scale(0.0), blank_threshold(0.95), max_mem(50000)
+		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000)
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");

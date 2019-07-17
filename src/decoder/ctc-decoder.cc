@@ -192,13 +192,22 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
     std::vector<LstmlmHistroy*> context_in, context_out;
 	float logp, n_p_b, n_p_nb;
 	int end_t, bz;
+    bool uselm;
 
 	InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
 
 		// Lstm language model process, beam words parallel.
-		if (config_.lm_scale > 0.0) {
+        uselm = false;
+        if (config_.lm_scale > 0.0) {
+           if (config_.blank_threshold <= 0)
+                uselm = true;
+           else if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank))<=config_.blank_threshold)
+                uselm = true;
+        }
+
+		if (uselm) {
 			in_words.clear();
 			nnet_out.clear();
 			context_in.clear();
@@ -218,7 +227,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                 if (bz < beam_.size()) it++;
 			}
 
-            // parallel process
+            // multi-stream parallel process
             lstmlm_.ForwardMseq(in_words, context_in, nnet_out, context_out);
 
             for (bz = 0, it = beam_.begin(); bz < config_.beam; bz++) {
@@ -244,6 +253,8 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
         // For each word
 		for (int k = 0; k < vocab_size; k++) {
 			logp = loglikes(n, k);
+            if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank))>config_.blank_threshold && k != config_.blank)
+                continue;
             if (config_.am_topk > 0 && logp <= next_step[config_.am_topk])
                 continue;
 
