@@ -34,16 +34,20 @@ namespace kaldi {
 struct CTCDecoderOptions {
   int beam;
   int blank;
+  int   am_topk;
   float lm_scale;
+  float blank_threshold;
   int max_mem;
 
-  CTCDecoderOptions(): beam(5), blank(0),
-		  	  	  	   lm_scale(0.0), max_mem(50000)
+  CTCDecoderOptions(): beam(5), blank(0), am_topk(-1),
+		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000)
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
 	opts->Register("blank", &blank, "CTC bank id.");
+	opts->Register("am-topk", &am_topk, "For each time step beam search, keep top K am output probability words.");
 	opts->Register("lm-scale", &lm_scale, "Process extend language model log probability.");
+	opts->Register("blank-threshold", &blank_threshold, "Procee am blank output probability, exceed threshold will be blank directly.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
   }
 };
@@ -53,6 +57,7 @@ class CTCDecoder {
 	public:
 		CTCDecoder(KaldiLstmlmWrapper &rnntlm, CTCDecoderOptions &config);
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
+		void BeamSearchNaive(const Matrix<BaseFloat> &loglikes);
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp);
 

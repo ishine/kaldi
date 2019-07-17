@@ -119,6 +119,70 @@ void KaldiLstmlmWrapper::Forward(int words_in, LstmlmHistroy& context_in,
 	}
 }
 
+void KaldiLstmlmWrapper::ForwardMseq(const std::vector<int> &in_words,
+				const std::vector<LstmlmHistroy*> &context_in,
+				std::vector<Vector<BaseFloat>*> &nnet_out,
+				std::vector<LstmlmHistroy*> &context_out) {
+	int i, j;
+	int num_layers = context_in[0]->his_recurrent.size();
+	int cur_stream = in_words.size();
+
+	if (cur_stream != num_stream_) {
+		num_stream_ = cur_stream;
+		KALDI_LOG << "Reset lstm lm with " << num_stream_ << " streams.";
+
+        // init rc context buffer
+        his_recurrent_.resize(recurrent_dim_.size());
+        for (int i = 0; i < recurrent_dim_.size(); i++)
+            his_recurrent_[i].Resize(num_stream_, recurrent_dim_[i], kUndefined);
+        his_cell_.resize(cell_dim_.size());
+        for (int i = 0; i < cell_dim_.size(); i++)
+            his_cell_[i].Resize(num_stream_, cell_dim_[i], kUndefined);
+
+		in_words_.Resize(num_stream_, kUndefined);
+		in_words_mat_.Resize(num_stream_, 1, kUndefined);
+		words_.Resize(num_stream_, kUndefined);
+		hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
+		std::vector<int> new_utt_flags(num_stream_, 0);
+		nnlm_.ResetLstmStreams(new_utt_flags);
+	}
+
+	// restore history
+	for (i = 0; i < num_layers; i++) {
+		for (j = 0; j < num_stream_; j++) {
+		his_recurrent_[i].Row(j).CopyFromVec(context_in[j]->his_recurrent[i]);
+		his_cell_[i].Row(j).CopyFromVec(context_in[j]->his_cell[i]);
+		}
+	}
+	nnlm_.RestoreContext(his_recurrent_, his_cell_);
+
+	for (i = 0; i < num_stream_; i++)
+		in_words_(i) = in_words[i];
+	in_words_mat_.CopyColFromVec(in_words_, 0);
+	words_.CopyFromMat(in_words_mat_);
+
+	// forward propagate
+	nnlm_.Propagate(words_, &hidden_out_);
+
+	// save current words history
+	nnlm_.SaveContext(his_recurrent_, his_cell_);
+	for (i = 0; i < num_layers; i++) {
+		for (j = 0; j < num_stream_; j++) {
+			if (context_out[j] != NULL) {
+				context_out[j]->his_recurrent[i] = his_recurrent_[i].Row(j);
+				context_out[j]->his_cell[i] = his_cell_[i].Row(j);
+			}
+		}
+	}
+
+	for (j = 0; j < num_stream_; j++) {
+		if (nnet_out[j] != NULL) {
+			nnet_out[j]->Resize(hidden_out_.NumCols(), kUndefined);
+			hidden_out_.Row(j).CopyToVec(nnet_out[j]);
+		}
+	}
+}
+
 void KaldiLstmlmWrapper::GetLogProbParallel(const std::vector<int> &curt_words,
 										 const std::vector<LstmlmHistroy*> &context_in,
 										 std::vector<LstmlmHistroy*> &context_out,
