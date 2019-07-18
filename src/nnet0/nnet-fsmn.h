@@ -208,9 +208,10 @@ namespace nnet0 {
 
      int skip_frames = nframes/inframes; 
      if (skip_frames > 1) {
+        Vector<BaseFloat> tmp(flags_);
         Vector<BaseFloat> flags(inframes, kUndefined);
         for (int i = 0; i < inframes; i++)
-            flags(i) = flags_(skip_frames*i);
+            flags(i) = tmp(skip_frames*i);
         flags_ = flags;
      }
 
