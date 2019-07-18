@@ -199,7 +199,7 @@ private:
 	    MatrixRandomizer feature_randomizer(skip_rand_opts);
 	    PosteriorRandomizer targets_randomizer(*rnd_opts);
 	    VectorRandomizer weights_randomizer(*rnd_opts);
-	    VectorRandomizer flags_randomizer(*rnd_opts);
+	    VectorRandomizer flags_randomizer(skip_rand_opts);
 
 	    Xent xent(*opts->loss_opts);
 	    Mse mse(*opts->loss_opts);
@@ -277,7 +277,8 @@ private:
 		        feature_randomizer.AddData(feats_transf);
 		        targets_randomizer.AddData(targets);
 		        weights_randomizer.AddData(weights);
-		        utt_flags.Resize(targets.size(), kSetZero);
+		        //utt_flags.Resize(targets.size(), kSetZero);
+		        utt_flags.Resize(feats_transf.NumRows(), kSetZero);
 		        utt_flags.Set(BaseFloat(num_done));
 		        flags_randomizer.AddData(utt_flags);
 		        num_done++;
