@@ -108,34 +108,25 @@ namespace nnet0 {
 
    void ReadData(std::istream &is, bool binary) {
      // optional learning-rate coefs
-     if ('<' == Peek(is, binary)) {
-       ExpectToken(is, binary, "<LearnRateCoef>");
-       ReadBasicType(is, binary, &learn_rate_coef_);
+	 std::string token;
+	 while ('<' == Peek(is, binary)) {
+         ReadToken(is, false, &token);
+         if (token == "<LearnRateCoef>")
+           ReadBasicType(is, binary, &learn_rate_coef_);
+         else if (token == "<HidSize>")
+           ReadBasicType(is, binary, &hid_size_);
+         else if (token == "<LOrder>")
+           ReadBasicType(is, binary, &l_order_);
+         else if (token == "<ROrder>")
+           ReadBasicType(is, binary, &r_order_);
+         else if (token == "<LStride>")
+           ReadBasicType(is, binary, &l_stride_);
+         else if (token == "<RStride>")
+           ReadBasicType(is, binary, &r_stride_);
+         else if (token == "<ClipGradient>")
+           ReadBasicType(is, binary, &clip_gradient_);
      }
-     if ('<' == Peek(is, binary)) {
-       ExpectToken(is, binary, "<HidSize>");
-       ReadBasicType(is, binary, &hid_size_);
-     }
-     if ('<' == Peek(is, binary)) {
-       ExpectToken(is, binary, "<LOrder>");
-       ReadBasicType(is, binary, &l_order_);
-     }
-     if ('<' == Peek(is, binary)) {
-       ExpectToken(is, binary, "<ROrder>");
-       ReadBasicType(is, binary, &r_order_);
-     }
-     if ('<' == Peek(is, binary)) {
-       ExpectToken(is, binary, "<LStride>");
-       ReadBasicType(is, binary, &l_stride_);
-     }
-     if ('<' == Peek(is, binary)) {
-       ExpectToken(is, binary, "<RStride>");
-       ReadBasicType(is, binary, &r_stride_);
-     }
-     if ('<' == Peek(is, binary)) {
-    	   ExpectToken(is, binary, "<ClipGradient>");
-       ReadBasicType(is, binary, &clip_gradient_);
-     }
+
      // weights
      l_filter_.Read(is, binary);
      r_filter_.Read(is, binary);
@@ -173,8 +164,11 @@ namespace nnet0 {
      WriteBasicType(os, binary, l_stride_);
      WriteToken(os, binary, "<RStride>");
      WriteBasicType(os, binary, r_stride_);
-     WriteToken(os, binary, "<ClipGradient>");
-     WriteBasicType(os, binary, clip_gradient_);
+     if (clip_gradient_ != 0.0) {
+        WriteToken(os, binary, "<ClipGradient>");
+        WriteBasicType(os, binary, clip_gradient_);
+     }
+
      // weights
      l_filter_.Write(os, binary);
      r_filter_.Write(os, binary);
@@ -286,19 +280,20 @@ namespace nnet0 {
 
    void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
      // skip frames
-     KALDI_ASSERT(in.NumRows()%flags_.Dim() == 0); 
-     /*
-     int skip_frames = in.NumRows()/flags_.Dim(); 
-     if (skip_frames > 1) {
-        Vector<BaseFloat> flags(in.NumRows(), kUndefined);
-        for (int i = 0; i < flags_.Dim(); i++)
-            for (int j = 0; j < skip_frames; j++)
-                flags(skip_frames*i+j) = flags_(i);
-        flags_ = flags;
-     }   
-     */
+     int inframes = in.NumRows();
+     int nframes = flags_.Dim();
+     KALDI_ASSERT(nframes%inframes == 0);
 
-     int nframes = in.NumRows();
+     int skip_frames = nframes/inframes; 
+     if (skip_frames > 1) {
+        Vector<BaseFloat> tmp(flags_);
+        Vector<BaseFloat> flags(inframes, kUndefined);
+        for (int i = 0; i < inframes; i++)
+            flags(i) = tmp(skip_frames*i);
+        flags_ = flags;
+     }
+
+     nframes = in.NumRows();
      //////////////////////////////////////
      //step1. nonlinear affine transform
      hid_out_.Resize(nframes, hid_size_, kUndefined);

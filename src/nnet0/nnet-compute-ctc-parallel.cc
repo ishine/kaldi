@@ -357,15 +357,22 @@ private:
 				}
 
 				feat_mat_host.Resize(in_frames, feat_dim, kUndefined);
-				utt_flags.Resize(out_frames);
 
 				int k = 0, offset = 0;
+				utt_flags.Resize(in_frames);
+				for (int s = 0; s < cur_stream_num; s++) {
+					for (int r = 0; r < num_utt_frame_in[s]; r++) {
+                        utt_flags(k++) = num_done-(cur_stream_num-s);
+                    }
+                }
+
+                k = 0, offset = 0;
                 idx.resize(0);
 				idx.resize(out_frames_pad, -1);
 				reidx.resize(out_frames);
 				for (int s = 0; s < cur_stream_num; s++) {
 					for (int r = 0; r < num_utt_frame_out[s]; r++) {
-						utt_flags(k) = num_done-(cur_stream_num-s);
+						//utt_flags(k) = num_done-(cur_stream_num-s);
 						idx[r*cur_stream_num + s] = k;
 						reidx[k] = r*cur_stream_num + s;
 						k++;
@@ -439,7 +446,7 @@ private:
 	        p_nnet_diff = &nnet_diff;
 	        if (opts->network_type == "fsmn") {
 				indexes = reidx;
-				nnet_diff_rearrange.Resize(utt_flags.Dim(), nnet.OutputDim(), kUndefined);
+				nnet_diff_rearrange.Resize(out_frames, nnet.OutputDim(), kUndefined);
 				nnet_diff_rearrange.CopyRows(nnet_diff, indexes);
 				p_nnet_diff = &nnet_diff_rearrange;
 
