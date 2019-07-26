@@ -351,7 +351,7 @@ private:
 
 	        		curt[s] += batch_size;
 	        	}
-	        	nnet.ResetSubSample(num_stream, skip_frames);
+	        	nnet.ResetSubSample(num_stream, -1);
 	        }
 
 			num_frames = minibatch;
