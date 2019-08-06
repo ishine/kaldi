@@ -38,9 +38,11 @@ struct CTCDecoderOptions {
   float lm_scale;
   float blank_threshold;
   int max_mem;
+  std::string pinyin2words_id_rxfilename;
 
-  CTCDecoderOptions(): beam(5), blank(0), am_topk(-1),
-		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000)
+  CTCDecoderOptions(): beam(5), blank(0), am_topk(30),
+		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000),
+					   pinyin2words_id_rxfilename("")
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
@@ -49,6 +51,7 @@ struct CTCDecoderOptions {
 	opts->Register("lm-scale", &lm_scale, "Process extend language model log probability.");
 	opts->Register("blank-threshold", &blank_threshold, "Procee am blank output probability, exceed threshold will be blank directly.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
+	opts->Register("pinyin2words-table", &pinyin2words_id_rxfilename, "Map from pinyin to words table.");
   }
 };
 
@@ -104,6 +107,8 @@ class CTCDecoder {
 		std::list<LstmlmHistroy *>	his_list_;
 		std::vector<int> rd_;
 		std::vector<int> cd_;
+		std::vector<std::vector<int> > pinyin2words_;
+		bool use_pinyin_;
 
 	KALDI_DISALLOW_COPY_AND_ASSIGN(CTCDecoder);
 };

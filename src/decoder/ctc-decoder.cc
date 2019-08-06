@@ -17,14 +17,24 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 #include "decoder/ctc-decoder.h"
+#include "base/kaldi-common.h"
+#include "util/common-utils.h"
 
 namespace kaldi {
 
 CTCDecoder::CTCDecoder(KaldiLstmlmWrapper &lstmlm,
 						CTCDecoderOptions &config):
-		config_(config), lstmlm_(lstmlm) {
+		config_(config), lstmlm_(lstmlm), use_pinyin_(false) {
 	rd_ = lstmlm.GetRDim();
 	cd_ = lstmlm.GetCDim();
+
+	if (config_.pinyin2words_id_rxfilename != "") {
+		SequentialInt32VectorReader wordid_reader(config.pinyin2words_id_rxfilename);
+		for (; !wordid_reader.Done(); wordid_reader.Next()) {
+			pinyin2words_.push_back(wordid_reader.Value());
+		}
+		use_pinyin_ = true;
+	}
 }
 
 void CTCDecoder::FreeBeam(BeamType *beam) {
@@ -184,17 +194,19 @@ void CTCDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
-	int vocab_size = loglikes.NumCols();
+	int likes_size = loglikes.NumCols();
+	int vocab_size = lstmlm_.GetVocabSize();
 	PrefixSeq *preseq, *n_preseq;
 	std::vector<int> n_prefix;
+	std::vector<float> next_words(vocab_size);
 	Vector<BaseFloat> *lmlogp;
 	LstmlmHistroy *his;
-    std::vector<BaseFloat> next_step(vocab_size);
+    std::vector<BaseFloat> next_step(likes_size);
     std::vector<int> in_words;
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
 	float logp, n_p_b, n_p_nb;
-	int end_t, bz;
+	int end_t, bz, topk, wordid;
     bool uselm;
 
 	InitDecoding();
@@ -206,7 +218,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
         if (config_.lm_scale > 0.0) {
            if (config_.blank_threshold <= 0)
                 uselm = true;
-           else if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank))<=config_.blank_threshold)
+           else if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank)) <= config_.blank_threshold)
                 uselm = true;
         }
 
@@ -249,21 +261,32 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
             }
 		}
 
-        // Top K pruning, the nth bigest words
-        if (config_.am_topk > 0) {
+		std::fill(next_words.begin(), next_words.end(), 0);
+		// blank pruning
+		if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank)) > config_.blank_threshold) {
+			next_words[config_.blank] = loglikes(n, config_.blank);
+		} else if (config_.am_topk > 0) {
+			// Top K pruning, the nth bigest words
             memcpy(&next_step.front(), loglikes.RowData(n), next_step.size()*sizeof(BaseFloat));
             std::nth_element(next_step.begin(), next_step.begin()+config_.am_topk, next_step.end(), std::greater<BaseFloat>());
+            for (int k = 0; k < likes_size; k++) {
+            	logp = loglikes(n, k);
+            	// top K pruning
+            	if (logp > next_step[config_.am_topk]) {
+            		if (!use_pinyin_) {
+            			next_words[k] = logp;
+            		} else {
+            			for (int i = 0; i < pinyin2words_[k].size(); i++)
+            				next_words[pinyin2words_[k][i]] = logp;
+            		}
+            	}
+            }
         }
 
         // For each word
 		for (int k = 0; k < vocab_size; k++) {
-			logp = loglikes(n, k);
-            // blank pruning
-            if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank))>config_.blank_threshold && k != config_.blank)
-                continue;
-            // top K pruning
-            if (config_.am_topk > 0 && logp <= next_step[config_.am_topk])
-                continue;
+			logp = next_words[k];
+            if (logp <= 0) continue;
 
             // The variables p_b and p_nb are respectively the
             // probabilities for the prefix given that it ends in a
