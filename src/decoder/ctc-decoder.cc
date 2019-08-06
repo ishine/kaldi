@@ -206,7 +206,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
 	float logp, n_p_b, n_p_nb;
-	int end_t, bz, topk, wordid;
+	int end_t, bz;
     bool uselm;
 
 	InitDecoding();
@@ -286,7 +286,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
         // For each word
 		for (int k = 0; k < vocab_size; k++) {
 			logp = next_words[k];
-            if (logp <= 0) continue;
+            if (logp == 0) continue;
 
             // The variables p_b and p_nb are respectively the
             // probabilities for the prefix given that it ends in a
