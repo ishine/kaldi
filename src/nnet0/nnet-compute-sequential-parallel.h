@@ -59,6 +59,7 @@ struct NnetSequentialUpdateOptions {
 
   int32 update_frames;
   int32 max_frames; // Allow segments maximum of one minute by default
+  float blank_posterior_scale;
   std::string use_gpu;
   std::string si_model_filename;
   bool use_psgd;
@@ -87,6 +88,7 @@ struct NnetSequentialUpdateOptions {
 		  	  	  	  	  	  	 drop_frames(true), one_silence_class(false), boost(0.0), sweep_frames_str("0"), sweep_frames_filename(""),
 								 update_frames(-1),
 				                 max_frames(6000),
+                                 blank_posterior_scale(-1.0),
   	  	  	  	  	  	  	  	 use_gpu("yes"),
 								 si_model_filename(""),
 								 use_psgd(false),
@@ -156,6 +158,7 @@ struct NnetSequentialUpdateOptions {
       	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
       po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
       po->Register("network-type", &network_type, "the neural network type, (lstm|fsmn)");
+      po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
   }
 };
 

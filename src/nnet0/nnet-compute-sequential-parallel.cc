@@ -211,8 +211,7 @@ private:
 	void inline MPEObj(Matrix<BaseFloat> &nnet_out_h, MatrixBase<BaseFloat> &nnet_diff_h,
 				TransitionModel *trans_model, SequentialNnetExample *example,
 				std::vector<int32> &silence_phones, double &total_frame_acc, int32 num_done,
-				Matrix<BaseFloat> &soft_nnet_out_h, Matrix<BaseFloat> &si_nnet_out_h)
-	{
+				Matrix<BaseFloat> &soft_nnet_out_h, Matrix<BaseFloat> &si_nnet_out_h) {
 		std::string utt = example->utt;
 		const std::vector<int32> &num_ali = example->num_ali;
 		Lattice &den_lat = example->den_lat;
@@ -240,8 +239,7 @@ private:
 			fst::ScaleLattice(fst::LatticeScale(lm_scale, acoustic_scale), &den_lat);
 
 	      kaldi::Posterior post;
-	    if (trans_model != NULL)
-	    {
+	    if (trans_model != NULL) {
 	      if (this->criterion == "smbr") {  // use state-level accuracies, i.e. sMBR estimation
 	        utt_frame_acc = LatticeForwardBackwardMpeVariants(
 	            *trans_model, silence_phones, den_lat, num_ali, "smbr",
@@ -251,9 +249,7 @@ private:
 	            *trans_model, silence_phones, den_lat, num_ali, "mpfe",
 	            one_silence_class, &post);
 	      }
-	    }
-	    else
-	    {
+	    } else {
 		      if (this->criterion == "smbr") {  // use state-level accuracies, i.e. sMBR estimation
 		        utt_frame_acc = LatticeForwardBackwardMpeVariantsCTC(
 		            silence_phones, den_lat, num_ali, "smbr",
@@ -271,42 +267,39 @@ private:
 	    else
 	    	PosteriorToMatrixMappedCTC(post, num_pdfs, &nnet_diff);
 
-	      nnet_diff.Scale(-1.0); // need to flip the sign of derivative,
+        nnet_diff.Scale(-1.0); // need to flip the sign of derivative,
 
-	      nnet_diff.CopyToMat(&nnet_diff_h);
+        nnet_diff.CopyToMat(&nnet_diff_h);
 
-	       // 8) subtract the pdf-Viterbi-path
-	      if (this->frame_smooth > 0)
-	      {
-	    	  for(int32 t=0; t<nnet_diff_h.NumRows(); t++) {
-	    		  int32 pdf = trans_model!=NULL ? trans_model->TransitionIdToPdf(num_ali[t]) : num_ali[t]-1;
-	    	  	  soft_nnet_out_h(t, pdf) -= 1.0;
-	    	  }
-
-	    	   nnet_diff_h.Scale(1-frame_smooth);
-	    	   nnet_diff_h.AddMat(frame_smooth*0.1, soft_nnet_out_h);
-	       }
-
-			if (this->kld_scale > 0)
-	        {
-	        	nnet_diff_h.Scale(1.0-kld_scale);
-	        	//-kld_scale means gradient descent direction.
-				nnet_diff_h.AddMat(-kld_scale, si_nnet_out_h);
+	     // 8) subtract the pdf-Viterbi-path
+	    if (this->frame_smooth > 0) {
+	        for(int32 t=0; t<nnet_diff_h.NumRows(); t++) {
+	      	  int32 pdf = trans_model!=NULL ? trans_model->TransitionIdToPdf(num_ali[t]) : num_ali[t]-1;
+	        	  soft_nnet_out_h(t, pdf) -= 1.0;
 	        }
 
+	         nnet_diff_h.Scale(1-frame_smooth);
+	         nnet_diff_h.AddMat(frame_smooth*0.1, soft_nnet_out_h);
+        }
+        if (this->kld_scale > 0) {
+	      	nnet_diff_h.Scale(1.0-kld_scale);
+	      	//-kld_scale means gradient descent direction.
+		  	nnet_diff_h.AddMat(-kld_scale, si_nnet_out_h);
+	    }
 
 
-	      KALDI_VLOG(1) << "Lattice #" << num_done + 1 << " processed"
+
+	    KALDI_VLOG(1) << "Lattice #" << num_done + 1 << " processed"
 	                    << " (" << utt << "): found " << den_lat.NumStates()
 	                    << " states and " << fst::NumArcs(den_lat) << " arcs.";
 
-	      KALDI_VLOG(1) << "Utterance " << utt << ": Average frame accuracy = "
+	    KALDI_VLOG(1) << "Utterance " << utt << ": Average frame accuracy = "
 	                    << (utt_frame_acc/num_frames) << " over " << num_frames
 	                    << " frames,"
 	                    << " diff-range(" << nnet_diff.Min() << "," << nnet_diff.Max() << ")";
 
-	      // increase time counter
-	      total_frame_acc += utt_frame_acc;
+	    // increase time counter
+	    total_frame_acc += utt_frame_acc;
 	}
 
 
@@ -415,14 +408,12 @@ private:
 	        	 soft_nnet_out_h(t, pdf) -= 1.0;
 	       }
 
-	       if (this->frame_smooth > 0)
-	       {
+	       if (this->frame_smooth > 0) {
 	    	   nnet_diff_h.Scale(1-frame_smooth);
 	    	   nnet_diff_h.AddMat(frame_smooth*0.1, soft_nnet_out_h);
 	       }
 
-			if (this->kld_scale > 0)
-	        {
+			if (this->kld_scale > 0) {
 	        	nnet_diff_h.Scale(1.0-kld_scale);
 	        	//-kld_scale means gradient descent direction.
 				nnet_diff_h.AddMat(-kld_scale, si_nnet_out_h);
@@ -507,6 +498,7 @@ private:
 		int32 batch_size = opts->batch_size;
 		int32 frame_limit = opts->frame_limit;
 		int32 skip_frames = opts->skip_frames;
+        float blank_posterior_scale = opts->blank_posterior_scale;
 
 
 	    int32 num_done = 0, num_frm_drop = 0;
@@ -547,15 +539,19 @@ private:
 	    if (opts->use_psgd)
 	    	nnet.SwitchToOnlinePreconditioning(rank_in, rank_out, update_period, num_samples_history, alpha);
 
+        if (blank_posterior_scale >= 0 && prior_opts->class_frame_counts != "") {
+            KALDI_ERR << "Cannot use both --blank-posterior-scale --class-frame-counts, use only one of the two!";
+        }   
+
 	    nnet.SetTrainOptions(*trn_opts);
 
 	    Nnet si_nnet, softmax;
 	    if (this->kld_scale > 0)
-	    		si_nnet.Read(si_model_filename);
+	    	si_nnet.Read(si_model_filename);
 
 	    if (this->kld_scale > 0 || frame_smooth > 0) {
-	    		KALDI_LOG << "KLD model Appending the softmax ...";
-	    		softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+            KALDI_LOG << "KLD model Appending the softmax ...";
+	        softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
         }
 
 	    std::vector<int32> silence_phones;
@@ -755,10 +751,13 @@ private:
 					}
 					*/
 
-					// subtract the log_prior
-                    if(prior_opts->class_frame_counts != "")
+			        if (blank_posterior_scale >= 0) {
+			            // ctc prior, only scale blank label posterior
+			            nnet_out.ColRange(0, 1).Add(log(blank_posterior_scale));
+                    } else if(prior_opts->class_frame_counts != "") {
+					    // subtract the log_prior
                         log_prior.SubtractOnLogpost(&nnet_out);
-
+                    }
 
 					nnet_out.CopyToMat(&nnet_out_host);
 
