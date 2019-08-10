@@ -704,13 +704,12 @@ private:
 						feat.Resize(in_frames, feat_dim, kUndefined);
 						nnet_out_host.Resize(out_frames, out_dim, kUndefined);
 						nnet_diff_host.Resize(out_frames, out_dim, kSetZero);
-						utt_flags.Resize(out_frames);
+						utt_flags.Resize(in_frames);
 
 						int k = 0, offset = 0;
 						for (int s = 0; s < cur_stream_num; s++) {
-							for (int r = 0; r < num_utt_frame_out[s]; r++) {
-								utt_flags(k) = num_done + s;
-								k++;
+							for (int r = 0; r < num_utt_frame_in[s]; r++) {
+								utt_flags(k++) = num_done + s;
 							}
 							feat.RowRange(offset, num_utt_frame_in[s]).CopyFromMat(feats_utt[s]);
 							offset += num_utt_frame_in[s];
