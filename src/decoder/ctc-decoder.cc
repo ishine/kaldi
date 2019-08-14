@@ -24,10 +24,28 @@ namespace kaldi {
 
 CTCDecoder::CTCDecoder(KaldiLstmlmWrapper &lstmlm,
 						CTCDecoderOptions &config):
-		config_(config), lstmlm_(lstmlm), use_pinyin_(false) {
+		config_(config), lstmlm_(lstmlm), const_arpa_(NULL) {
 	rd_ = lstmlm.GetRDim();
 	cd_ = lstmlm.GetCDim();
 
+	use_pinyin_ = false;
+	if (config_.pinyin2words_id_rxfilename != "") {
+		SequentialInt32VectorReader wordid_reader(config.pinyin2words_id_rxfilename);
+		for (; !wordid_reader.Done(); wordid_reader.Next()) {
+			pinyin2words_.push_back(wordid_reader.Value());
+		}
+		use_pinyin_ = true;
+	}
+}
+
+CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
+						KaldiLstmlmWrapper &lstmlm,
+						ConstArpaLm &const_arpa):
+		config_(config), lstmlm_(lstmlm), const_arpa_(const_arpa) {
+	rd_ = lstmlm.GetRDim();
+	cd_ = lstmlm.GetCDim();
+
+	use_pinyin_ = false;
 	if (config_.pinyin2words_id_rxfilename != "") {
 		SequentialInt32VectorReader wordid_reader(config.pinyin2words_id_rxfilename);
 		for (; !wordid_reader.Done(); wordid_reader.Next()) {
@@ -200,12 +218,12 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	std::vector<int> n_prefix;
 	std::vector<float> next_words(vocab_size);
 	Vector<BaseFloat> *lmlogp;
-	LstmlmHistroy *his;
+	LstmlmHistroy *his = NULL;
     std::vector<BaseFloat> next_step(likes_size);
     std::vector<int> in_words;
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
-	float logp, n_p_b, n_p_nb;
+	float logp, n_p_b, n_p_nb, ngram_logp, rscale = config_.rnnlm_scale;
 	int end_t, bz;
     bool uselm;
 
@@ -222,7 +240,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                 uselm = true;
         }
 
-		if (uselm) {
+		if (uselm && rscale != 0) {
 			in_words.clear();
 			nnet_out.clear();
 			context_in.clear();
@@ -337,11 +355,14 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 				// *NB* this would be a good place to include an LM score.
 				if (config_.lm_scale > 0.0) {
-					lmlogp = next_logprob_[preseq->prefix];
-					his = next_his_[preseq->prefix];
-					n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(*lmlogp)(k);
-					n_preseq->lmhis = his;
-					CopyHis(his);
+					if (rscale != 0) {
+						lmlogp = next_logprob_[preseq->prefix];
+						his = next_his_[preseq->prefix];
+						n_preseq->lmhis = his;
+						CopyHis(his);
+					}
+					ngram_logp = rscale < 1.0 ? const_arpa_.GetNgramLogprob(k, preseq->prefix) : 0;
+					n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*(*lmlogp)(k)+(1.0-rscale)*ngram_logp);
 				} else {
 					n_preseq->logp_nblank = n_p_nb;
 				}

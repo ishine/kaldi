@@ -21,12 +21,12 @@
 #define KALDI_DECODER_CTC_DECODER_H_
 
 #include <list>
-
 #include "base/kaldi-common.h"
-#include "lm/kaldi-lstmlm.h"
 #include "util/stl-utils.h"
 #include "itf/options-itf.h"
 #include "util/hash-list.h"
+#include "lm/kaldi-lstmlm.h"
+#include "lm/const-arpa-lm.h"
 
 
 namespace kaldi {
@@ -38,11 +38,12 @@ struct CTCDecoderOptions {
   float lm_scale;
   float blank_threshold;
   int max_mem;
+  float rnnlm_scale;
   std::string pinyin2words_id_rxfilename;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(30),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000),
-					   pinyin2words_id_rxfilename("")
+					   rnnlm_scale(1.0), pinyin2words_id_rxfilename("")
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
@@ -51,6 +52,7 @@ struct CTCDecoderOptions {
 	opts->Register("lm-scale", &lm_scale, "Process extend language model log probability.");
 	opts->Register("blank-threshold", &blank_threshold, "Procee am blank output probability, exceed threshold will be blank directly.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
+	opts->Register("rnnlm-scale", &rnnlm_scale, "rnnlm ritio (ngramlm 1-ritio) when using rnnlm and ngramlm fusion score.");
 	opts->Register("pinyin2words-table", &pinyin2words_id_rxfilename, "Map from pinyin to words table.");
   }
 };
@@ -59,6 +61,7 @@ class CTCDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
 		CTCDecoder(KaldiLstmlmWrapper &rnntlm, CTCDecoderOptions &config);
+		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &rnntlm, ConstArpaLm &const_arpa);
 
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
 
@@ -95,6 +98,7 @@ class CTCDecoder {
 
 		CTCDecoderOptions &config_;
 		KaldiLstmlmWrapper &lstmlm_;
+		ConstArpaLm &const_arpa_;
 		BeamType beam_;
 		BeamType next_beam_;
 		HisType next_his_;

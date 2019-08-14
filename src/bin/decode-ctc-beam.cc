@@ -39,10 +39,13 @@ int main(int argc, char *argv[]) {
     std::string search = "beam";
     float blank_posterior_scale = -1.0;
     std::string word_syms_filename;
+    std::string const_arpa_filename;
     po.Register("binary", &binary, "Write output in binary mode");
     po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
-    po.Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
+    po.Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, "
+    		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
+    po.Register("--const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
 
     KaldiLstmlmWrapperOpts lstmlm_opts;
     CTCDecoderOptions decoder_opts;
@@ -70,10 +73,17 @@ int main(int argc, char *argv[]) {
     }
 
     SequentialBaseFloatMatrixReader loglikes_reader(loglikes_rspecifier);
+
     // Reads the language model.
 	KaldiLstmlmWrapper lstmlm(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
+	// Reads the language model in ConstArpaLm format.
+	ConstArpaLm const_arpa;
+	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0) {
+		ReadKaldiObject(const_arpa_filename, &const_arpa);
+	}
+
 	// decoder
-	CTCDecoder decoder(lstmlm, decoder_opts);
+	CTCDecoder decoder(decoder_opts, lstmlm, const_arpa);
 
     BaseFloat tot_like = 0.0, logp = 0.0;
     kaldi::int64 frame_count = 0;
