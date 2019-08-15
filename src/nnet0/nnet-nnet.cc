@@ -573,15 +573,15 @@ void Nnet::ResetSubSample(int nstream, int skip_frames) {
 		if (GetComponent(c).GetType() == Component::kSubSample) {
 			SubSample& comp = dynamic_cast<SubSample&>(GetComponent(c));
 			comp.SetStream(nstream);
-			comp.SetSubSampleRate(skip_frames);
+            if (skip_frames >= 0) comp.SetSubSampleRate(skip_frames);
 		} if (GetComponent(c).GetType() == Component::kSpliceSample) {
 			SpliceSample& comp = dynamic_cast<SpliceSample&>(GetComponent(c));
 			comp.SetStream(nstream);
-			comp.SetSubSampleRate(skip_frames);
+			if (skip_frames >= 0) comp.SetSubSampleRate(skip_frames);
 		} else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
 			StatisticsPoolingComponent& comp = dynamic_cast<StatisticsPoolingComponent&>(GetComponent(c));
 			comp.SetStream(nstream);
-			comp.SetSubSampleRate(skip_frames);
+			if (skip_frames >= 0) comp.SetSubSampleRate(skip_frames);
 		}
 	}
 }

@@ -364,12 +364,13 @@ public:
 
 			///only for nnet with fsmn component
 			Vector<BaseFloat> flags;
-			flags.Resize(len/out_skip, kSetZero);
+			//flags.Resize(len/out_skip, kSetZero);
+			flags.Resize(len, kSetZero);
 			flags.Set(1.0);
 			nnet.SetFlags(flags);
 
 			// subsample forward
-			nnet.ResetSubSample(1, skip_frames);
+			// nnet.ResetSubSample(1, skip_frames);
 			nnet.SetSeqLengths(new_utt_flags);
 			// fwd-pass, feature transform,
 			nnet_transf.Feedforward(cufeat, &feats_transf);
@@ -383,6 +384,11 @@ public:
 				int rows = tmp.NumRows() - time_shift;
 				nnet_out.Resize(rows, tmp.NumCols(), kUndefined);
 				nnet_out.CopyFromMat(tmp.RowRange(time_shift, rows));
+			}
+
+			// ctc prior, only scale blank label posterior
+			if (blank_posterior_scale >= 0) {
+			   nnet_out.ColRange(0, 1).Scale(blank_posterior_scale);
 			}
 
 			// convert posteriors to log-posteriors,
