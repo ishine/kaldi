@@ -45,7 +45,7 @@ int main(int argc, char *argv[]) {
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
     po.Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, "
     		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
-    po.Register("--const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
+    po.Register("const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
 
     KaldiLstmlmWrapperOpts lstmlm_opts;
     CTCDecoderOptions decoder_opts;
