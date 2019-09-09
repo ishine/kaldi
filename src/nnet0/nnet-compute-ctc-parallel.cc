@@ -189,7 +189,8 @@ private:
 	        si_nnet.Read(si_model_filename);
 
 	    Nnet frozen_nnet;
-	    if (opts->frozen_model_filename != "") {
+        bool use_frozen = opts->frozen_model_filename != "" ? true : false;
+	    if (use_frozen) {
 	    	frozen_nnet.Read(opts->frozen_model_filename);
 	    }
 
@@ -261,7 +262,7 @@ private:
 
 		int32 cur_stream_num = 0, num_skip, in_rows, out_rows, 
               in_frames, out_frames, in_frames_pad, out_frames_pad;
-		int32 feat_dim = nnet.InputDim();
+		int32 feat_dim = use_frozen ? frozen_nnet.InputDim() : nnet.InputDim();
 		//BaseFloat l2_term;
 	    num_skip = opts->skip_inner ? skip_frames : 1;
         frame_limit *= num_skip;
@@ -395,14 +396,14 @@ private:
 			    nnet.ResetLstmStreams(new_utt_flags, batch_size);
 			    // bilstm
 			    nnet.SetSeqLengths(num_utt_frame_out, batch_size);
-			    if (opts->frozen_model_filename != "") {
+			    if (use_frozen) {
 			    	frozen_nnet.ResetLstmStreams(new_utt_flags, batch_size);
 			    	frozen_nnet.SetSeqLengths(num_utt_frame_out, batch_size);
 			    }
             } else if (opts->network_type == "fsmn") {
 			    // fsmn
 			    nnet.SetFlags(utt_flags);
-			    if (opts->frozen_model_filename != "") {
+			    if (use_frozen) {
 			    	frozen_nnet.SetFlags(utt_flags);
 			    }
             }
