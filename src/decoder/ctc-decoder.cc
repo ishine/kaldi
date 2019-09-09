@@ -355,7 +355,8 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					    ngram_logp = const_arpa_.GetNgramLogprob(k, prefix);
                     }
                     // fusion score
-					n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*rnnlm_logp + (1.0-rscale)*ngram_logp);
+					// n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*rnnlm_logp + (1.0-rscale)*ngram_logp);
+					n_preseq->logp_nblank = n_p_nb + config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
 				} else {
 					n_preseq->logp_nblank = n_p_nb;
 				}
