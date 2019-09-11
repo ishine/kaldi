@@ -57,6 +57,7 @@ struct NnetUpdateOptions {
     std::string use_gpu;
     std::string si_model_filename;
     std::string si_feature_rspecifier;
+    std::string frozen_model_filename;
     std::string sweep_frames_str;
     bool  sweep_loop;
     bool  skip_inner;
@@ -100,6 +101,7 @@ struct NnetUpdateOptions {
 
 	      po->Register("si-model",&si_model_filename, "kld speaker independent model filename");
 	      po->Register("si-feature",&si_feature_rspecifier, "kld speaker independent feature rspecifier");
+	      po->Register("frozen-model",&frozen_model_filename, "frozen model filename");
 
 	      po->Register("kld-scale", &kld_scale, "KLD regularization weight to the original training criterion");
 

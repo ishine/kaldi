@@ -39,11 +39,14 @@ struct CTCDecoderOptions {
   float blank_threshold;
   int max_mem;
   float rnnlm_scale;
+  int sos;
+  int eos;
   std::string pinyin2words_id_rxfilename;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(30),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000),
-					   rnnlm_scale(1.0), pinyin2words_id_rxfilename("")
+					   rnnlm_scale(1.0), sos(0), eos(0),
+                       pinyin2words_id_rxfilename("")
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
@@ -53,6 +56,8 @@ struct CTCDecoderOptions {
 	opts->Register("blank-threshold", &blank_threshold, "Procee am blank output probability, exceed threshold will be blank directly.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
 	opts->Register("rnnlm-scale", &rnnlm_scale, "rnnlm ritio (ngramlm 1-ritio) when using rnnlm and ngramlm fusion score.");
+    opts->Register("sos", &sos, "Integer corresponds to <s>. You must set this to your actual SOS integer.");
+    opts->Register("eos", &eos, "Integer corresponds to </s>. You must set this to your actual EOS integer.");
 	opts->Register("pinyin2words-table", &pinyin2words_id_rxfilename, "Map from pinyin to words table.");
   }
 };
@@ -60,7 +65,6 @@ struct CTCDecoderOptions {
 class CTCDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
-		CTCDecoder(KaldiLstmlmWrapper &rnntlm, CTCDecoderOptions &config);
 		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &rnntlm, ConstArpaLm &const_arpa);
 
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);

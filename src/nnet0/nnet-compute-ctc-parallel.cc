@@ -188,6 +188,12 @@ private:
 	    if (this->kld_scale > 0 && si_model_filename != "")
 	        si_nnet.Read(si_model_filename);
 
+	    Nnet frozen_nnet;
+        bool use_frozen = opts->frozen_model_filename != "" ? true : false;
+	    if (use_frozen) {
+	    	frozen_nnet.Read(opts->frozen_model_filename);
+	    }
+
 	    model_sync->Initialize(&nnet);
 
 	    RandomizerMask randomizer_mask(*rnd_opts);
@@ -216,8 +222,9 @@ private:
         }
 
 
-		CuMatrix<BaseFloat> feats_transf, nnet_out, nnet_diff,
-							nnet_out_rearrange, nnet_diff_rearrange, *p_nnet_out, *p_nnet_diff;
+		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out, nnet_diff, frozen_nnet_out,
+							nnet_out_rearrange, nnet_diff_rearrange,
+							*p_nnet_in, *p_nnet_out, *p_nnet_diff;
 		//CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 
@@ -255,7 +262,7 @@ private:
 
 		int32 cur_stream_num = 0, num_skip, in_rows, out_rows, 
               in_frames, out_frames, in_frames_pad, out_frames_pad;
-		int32 feat_dim = nnet.InputDim();
+		int32 feat_dim = use_frozen ? frozen_nnet.InputDim() : nnet.InputDim();
 		//BaseFloat l2_term;
 	    num_skip = opts->skip_inner ? skip_frames : 1;
         frame_limit *= num_skip;
@@ -389,9 +396,16 @@ private:
 			    nnet.ResetLstmStreams(new_utt_flags, batch_size);
 			    // bilstm
 			    nnet.SetSeqLengths(num_utt_frame_out, batch_size);
+			    if (use_frozen) {
+			    	frozen_nnet.ResetLstmStreams(new_utt_flags, batch_size);
+			    	frozen_nnet.SetSeqLengths(num_utt_frame_out, batch_size);
+			    }
             } else if (opts->network_type == "fsmn") {
 			    // fsmn
 			    nnet.SetFlags(utt_flags);
+			    if (use_frozen) {
+			    	frozen_nnet.SetFlags(utt_flags);
+			    }
             }
 
 	        // report the speed
@@ -402,8 +416,15 @@ private:
 							<< " frames per second.";
 	        }
 
+	        nnet_in = feat_mat_host;
+	        p_nnet_in = &nnet_in;
+	        if (opts->frozen_model_filename != "") {
+				frozen_nnet.Propagate(nnet_in, &frozen_nnet_out);
+				p_nnet_in = &frozen_nnet_out;
+	        }
+
 	        // Propagation and CTC training
-	        nnet.Propagate(CuMatrix<BaseFloat>(feat_mat_host), &nnet_out);
+	        nnet.Propagate(*p_nnet_in, &nnet_out);
 	        p_nnet_out = &nnet_out;
 
             /*

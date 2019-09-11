@@ -182,7 +182,12 @@ private:
 
 	    Nnet si_nnet;
 	    if (this->kld_scale > 0)
-	    		si_nnet.Read(si_model_filename);
+	    	si_nnet.Read(si_model_filename);
+
+	    Nnet frozen_nnet;
+	    if (opts->frozen_model_filename != "") {
+	    	frozen_nnet.Read(opts->frozen_model_filename);
+	    }
 
 	    model_sync->Initialize(&nnet);
 
@@ -216,7 +221,7 @@ private:
 
 	    Timer time, mpi_time;
 
-		CuMatrix<BaseFloat> feats, feats_transf, nnet_out, nnet_diff;
+		CuMatrix<BaseFloat> feats, feats_transf, nnet_out, nnet_diff, frozen_nnet_out;
 		CuMatrix<BaseFloat> si_nnet_out; // *p_si_nnet_out = NULL;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 		Vector<BaseFloat> utt_flags;
@@ -319,15 +324,22 @@ private:
 				const Vector<BaseFloat>& flags = flags_randomizer.Value();
 				num_frames = nnet_in.NumRows();
 
+				const CuMatrixBase<BaseFloat> *p_nnet_in = &nnet_in;
+				if (opts->frozen_model_filename != "") {
+					frozen_nnet.SetFlags(flags);
+					frozen_nnet.Propagate(nnet_in, &frozen_nnet_out);
+					p_nnet_in = &frozen_nnet_out;
+				}
+
 				// fsmn
 				nnet.SetFlags(flags);
 				// forward pass
-				nnet.Propagate(nnet_in, &nnet_out);
+				nnet.Propagate(*p_nnet_in, &nnet_out);
 
 				CuMatrix<BaseFloat> tgt_mat;
 			    if (this->kld_scale > 0) {
 				    si_nnet.SetFlags(flags);
-			      	si_nnet.Propagate(nnet_in, &si_nnet_out);
+			      	si_nnet.Propagate(*p_nnet_in, &si_nnet_out);
 			      	//p_si_nnet_out = &si_nnet_out;
 			        // convert posterior to matrix,
 					PosteriorToMatrix(nnet_tgt, nnet.OutputDim(), &tgt_mat);
