@@ -103,7 +103,7 @@ int32 TypeOneUsage(const ParseOptions &po,
   return (n_success != 0 && n_missing < (n_success - n_missing)) ? 0 : 1;
 }
 
-int32 TypeOneUsageAverage(const ParseOptions &po) {
+int32 TypeOneUsageAverage(const ParseOptions &po, bool apply_log = false) {
   int32 num_args = po.NumArgs();
   std::string matrix_in_fn1 = po.GetArg(1),
       matrix_out_fn = po.GetArg(num_args);
@@ -161,6 +161,8 @@ int32 TypeOneUsageAverage(const ParseOptions &po) {
       }
     }
 
+    if (apply_log)
+        matrix_out.ApplyLog();
     matrix_writer.Write(key, matrix_out);
     n_success++;
   }
@@ -288,6 +290,7 @@ int main(int argc, char *argv[]) {
 
     BaseFloat scale1 = 1.0, scale2 = 1.0;
     bool average = false;
+    bool apply_log = false;
     bool binary = true;
 
     ParseOptions po(usage);
@@ -300,6 +303,8 @@ int main(int argc, char *argv[]) {
                 "relevant for usage types two or three");
     po.Register("average", &average, "If true, compute average instead of "
                 "sum; currently compatible with type 3 or type 1 usage.");
+    po.Register("apply-log", &apply_log, "If true, compute average log instead of "
+                "sum; currently compatible with type 3 or type 1 usage.");
 
     po.Read(argc, argv);
 
@@ -309,7 +314,7 @@ int main(int argc, char *argv[]) {
         ClassifyWspecifier(po.GetArg(N), NULL, NULL, NULL) != kNoWspecifier) {
       if (average)
         // average option with type one usage.";
-	    exit_status = TypeOneUsageAverage(po);
+	    exit_status = TypeOneUsageAverage(po, apply_log);
 	  else
         // output to table.
         exit_status = TypeOneUsage(po, scale1, scale2);
