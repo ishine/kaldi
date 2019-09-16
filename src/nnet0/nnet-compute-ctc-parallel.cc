@@ -418,7 +418,7 @@ private:
 
 	        nnet_in = feat_mat_host;
 	        p_nnet_in = &nnet_in;
-	        if (opts->frozen_model_filename != "") {
+	        if (use_frozen) {
 				frozen_nnet.Propagate(nnet_in, &frozen_nnet_out);
 				p_nnet_in = &frozen_nnet_out;
 	        }

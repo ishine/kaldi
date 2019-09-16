@@ -546,8 +546,14 @@ private:
 	    nnet.SetTrainOptions(*trn_opts);
 
 	    Nnet si_nnet, softmax;
-	    if (this->kld_scale > 0)
+	    if (this->kld_scale > 0 && si_model_filename != "")
 	    	si_nnet.Read(si_model_filename);
+
+	    Nnet frozen_nnet;
+        bool use_frozen = opts->frozen_model_filename != "" ? true : false;
+	    if (use_frozen) {
+	    	frozen_nnet.Read(opts->frozen_model_filename);
+	    }
 
 	    if (this->kld_scale > 0 || frame_smooth > 0) {
             KALDI_LOG << "KLD model Appending the softmax ...";
@@ -568,7 +574,8 @@ private:
 	    Timer time;
 	    double time_now = 0;
 
-		CuMatrix<BaseFloat> cufeat, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out;
+		CuMatrix<BaseFloat> cufeat, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out, frozen_nnet_out,
+								*p_nnet_in;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, tmp_mat, *p_nnet_diff_h = NULL;
 
 
@@ -590,8 +597,8 @@ private:
 	    std::vector<int> diff_curt(num_stream, 0);
 
 	    // bptt batch buffer
-	    int32 feat_dim = nnet.InputDim();
-	    int32 out_dim = nnet.OutputDim();
+	    int32 feat_dim = use_frozen ? frozen_nnet.InputDim() : nnet.InputDim();
+	    int32 out_dim = use_frozen ? frozen_nnet.OutputDim() : nnet.OutputDim();
 
 	    Matrix<BaseFloat> feat;
 	    Matrix<BaseFloat> nnet_diff_host;
@@ -719,13 +726,27 @@ private:
 					// for streams with new utterance, history states need to be reset
 					if (opts->network_type == "lstm") {
 						nnet.ResetLstmStreams(new_utt_flags, batch_size);
+						nnet.SetSeqLengths(num_utt_frame_out, batch_size);
+						if (use_frozen) {
+							frozen_nnet.ResetLstmStreams(new_utt_flags, batch_size);
+							frozen_nnet.SetSeqLengths(num_utt_frame_out, batch_size);
+						}
 					} else if (opts->network_type == "fsmn") {
 					    nnet.SetFlags(utt_flags);
+					    if (use_frozen) {
+					    	frozen_nnet.SetFlags(utt_flags);
+					    }
 		            }
 
 					// forward pass
 					cufeat = feat;
-					nnet.Propagate(cufeat, &nnet_out);
+					p_nnet_in = &cufeat;
+					if (use_frozen) {
+						frozen_nnet.Propagate(cufeat, &frozen_nnet_out);
+						p_nnet_in = &frozen_nnet_out;
+					}
+					// Propagation
+					nnet.Propagate(*p_nnet_in, &nnet_out);
 
 					if (this->kld_scale > 0) {
 						// for streams with new utterance, history states need to be reset
@@ -889,11 +910,19 @@ private:
 					flags.Resize(len/out_skip, kSetZero);
 					flags.Set(1.0);
 					nnet.SetFlags(flags);
+					if (use_frozen)
+						frozen_nnet.SetFlags(flags);
 
 					// possibly apply transform
 					nnet_transf.Feedforward(cufeat, &feats_transf);
 					// propagate through the nnet (assuming w/o softmax)
-					nnet.Propagate(feats_transf, &nnet_out);
+					p_nnet_in = &feats_transf;
+					if (use_frozen) {
+						frozen_nnet.Propagate(feats_transf, &frozen_nnet_out);
+						p_nnet_in = &frozen_nnet_out;
+					}
+					// Propagation
+					nnet.Propagate(*p_nnet_in, &nnet_out);
 
 					if (this->kld_scale > 0) {
 						si_nnet.Propagate(feats_transf, &si_nnet_out);

@@ -56,6 +56,7 @@ struct NnetSequentialUpdateOptions {
   std::string sweep_frames_str;
   std::string sweep_frames_filename;
   std::string si_feature_rspecifier;
+  std::string frozen_model_filename;
 
   int32 update_frames;
   int32 max_frames; // Allow segments maximum of one minute by default
@@ -137,6 +138,7 @@ struct NnetSequentialUpdateOptions {
 
       po->Register("si-model",&si_model_filename, "kld speaker independent model filename");
       po->Register("si-feature",&si_feature_rspecifier, "kld speaker independent feature rspecifier");
+      po->Register("frozen-model",&frozen_model_filename, "frozen model filename");
 
       //<jiayu>
       po->Register("targets-delay", &targets_delay, "---LSTM--- BPTT targets delay");
