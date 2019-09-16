@@ -34,19 +34,23 @@ struct RNNTDecoderOptions {
   int beam;
   int blank;
   bool use_prefix;
+  bool norm_length;
   int max_mem;
   float blank_posterior_scale;
+  int topk;
 
   RNNTDecoderOptions(): beam(5), blank(0),
-		  	  	  	  	use_prefix(false), max_mem(20000),
-                        blank_posterior_scale(-1.0)
+		  	  	  	  	use_prefix(false), norm_length(true), max_mem(20000),
+                        blank_posterior_scale(-1.0), topk(30)
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
 	opts->Register("blank", &blank, "RNNT bank id.");
 	opts->Register("use-prefix", &use_prefix, "Process prefix probability.");
+	opts->Register("norm-length", &norm_length, "Sort beam use log probability with normalized prefix length.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
     opts->Register("blank-posterior-scale", &blank_posterior_scale, "For RNNT decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
+	opts->Register("topk", &topk, "For each time step beam search, keep top K am output probability words.");
   }
 };
 
@@ -55,6 +59,7 @@ class RNNTDecoder {
 	public:
 		RNNTDecoder(KaldiLstmlmWrapper &rnntlm, RNNTDecoderOptions &config);
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
+		void BeamSearchNaive(const Matrix<BaseFloat> &loglikes);
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp);
 

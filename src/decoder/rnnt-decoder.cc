@@ -223,6 +223,112 @@ void RNNTDecoder::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
+	int vocab_size = loglikes.NumCols(), len;
+	Sequence *seqi, *seqj;
+	Vector<BaseFloat> *pred, logprob(rnntlm_.GetVocabSize());
+	LstmlmHistroy *his;
+	std::vector<float> next_words(vocab_size);
+	std::vector<BaseFloat> next_step(vocab_size);
+	float logp = 0;
+
+	InitDecoding();
+	// decode one utterance
+	for (int n = 0; n < nframe; n++) {
+		B_->sort(LstmlmUtil::compare_len_reverse);
+		//for (auto &seq : *A_) delete seq;
+		FreeList(A_);
+		delete A_;
+
+		A_ = B_;
+		B_ = new std::list<Sequence*>;
+
+		while (true) {
+			// y* = most probable in A
+			Sequence *y_hat, *y_a, *y_b;
+			auto it = std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
+			A_->erase(it);
+			y_hat = *it;
+
+			// get rnnt lm current output and hidden state
+			pred = MallocPred();
+			his = MallocHis();
+			len = y_hat->k.size();
+			rnntlm_.Forward(y_hat->k[len-1], *y_hat->lmhis, pred, his);
+
+			// log probability for each rnnt output k
+			logprob.CopyFromVec(*pred);
+			logprob.AddVec(1.0, loglikes.Row(n));
+			logprob.ApplyLogSoftMax();
+			/*
+            logprob.ApplySoftMax();
+            if (config_.blank_posterior_scale >= 0)
+                logprob(0) *= config_.blank_posterior_scale;
+            logprob.ApplyLog();
+            */
+
+			if (config_.topk > 0) {
+				std::fill(next_words.begin(), next_words.end(), 0);
+				// Top K pruning, the nth bigest words
+				memcpy(&next_step.front(), logprob.RowData(n), next_step.size()*sizeof(BaseFloat));
+	            std::nth_element(next_step.begin(), next_step.begin()+config_.topk, next_step.end(), std::greater<BaseFloat>());
+	            for (int k = 0; k < vocab_size; k++) {
+	            	logp = logprob(k);
+	            	if (logp > next_step[config_.topk])
+	            		next_words[k] = logp;
+	            }
+			}
+
+			for (int k = 0; k < vocab_size; k++) {
+				logp = next_words[k];
+				if (k != config_.blank && logp == 0) continue;
+
+				Sequence *y_k = new Sequence(*y_hat);
+
+				y_k->logp += logp;
+				if (k == config_.blank) {
+					DeepCopySeq(y_hat);
+					B_->push_back(y_k);
+					continue;
+				}
+
+				// next t add to A
+				y_k->k.push_back(k);
+				y_k->lmhis = his;
+				CopyHis(his);
+				A_->push_back(y_k);
+			}
+            
+			// free link count
+			FreeSeq(y_hat);
+			FreePred(pred);
+			FreeHis(his);
+			/*
+			y_a = *std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
+			y_b = *std::max_element(B_->begin(), B_->end(), LstmlmUtil::compare_logp);
+			if (B_->size() >= config_.beam && y_b->logp >= y_a->logp) break;
+			*/
+			if (B_->size() >= config_.beam) break;
+		}
+
+		// beam width
+		if (config_.norm_length)
+			B_->sort(LstmlmUtil::compare_normlogp_reverse);
+		else
+			B_->sort(LstmlmUtil::compare_logp_reverse);
+
+		// free memory
+		int idx = 0;
+		for (auto it = B_->begin(); it != B_->end(); it++) {
+			if (idx >= config_.beam) FreeSeq(*it);
+			idx++;
+		}
+		B_->resize(config_.beam);
+	}
+}
+
+void RNNTDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
+	// decode one utterance
+	int nframe = loglikes.NumRows();
 	int vocab_size, len;
 	Sequence *seqi, *seqj;
 	Vector<BaseFloat> *pred, logprob(rnntlm_.GetVocabSize());
@@ -322,7 +428,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				}
 				A_->push_back(y_k);
 			}
-            
+
 			// free link count
 			FreeSeq(y_hat);
 			FreePred(pred);
