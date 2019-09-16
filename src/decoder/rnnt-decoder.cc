@@ -224,7 +224,6 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
 	int vocab_size = loglikes.NumCols(), len;
-	Sequence *seqi, *seqj;
 	Vector<BaseFloat> *pred, logprob(rnntlm_.GetVocabSize());
 	LstmlmHistroy *his;
 	std::vector<float> next_words(vocab_size);
@@ -244,7 +243,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 		while (true) {
 			// y* = most probable in A
-			Sequence *y_hat, *y_a, *y_b;
+			Sequence *y_hat; //*y_a, *y_b;
 			auto it = std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
 			A_->erase(it);
 			y_hat = *it;
@@ -258,18 +257,16 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			// log probability for each rnnt output k
 			logprob.CopyFromVec(*pred);
 			logprob.AddVec(1.0, loglikes.Row(n));
-			logprob.ApplyLogSoftMax();
-			/*
+			//logprob.ApplyLogSoftMax();
             logprob.ApplySoftMax();
             if (config_.blank_posterior_scale >= 0)
                 logprob(0) *= config_.blank_posterior_scale;
             logprob.ApplyLog();
-            */
 
 			if (config_.topk > 0) {
 				std::fill(next_words.begin(), next_words.end(), 0);
 				// Top K pruning, the nth bigest words
-				memcpy(&next_step.front(), logprob.RowData(n), next_step.size()*sizeof(BaseFloat));
+				memcpy(&next_step.front(), logprob.Data(), next_step.size()*sizeof(BaseFloat));
 	            std::nth_element(next_step.begin(), next_step.begin()+config_.topk, next_step.end(), std::greater<BaseFloat>());
 	            for (int k = 0; k < vocab_size; k++) {
 	            	logp = logprob(k);
