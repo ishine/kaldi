@@ -621,15 +621,19 @@ private:
 				}
 			}
 
-			if (last_thread)
+			if (last_thread && parallel_opts->myid == 0)
 			{
 				KALDI_VLOG(1) << "Last thread upload model to host.";
 				// model_sync->CopyToHost(&nnet);
                 // prevent copy local nnet component propagate buffer (e.g. lstm,cnn)
                 // host_nnet_->Read(model_filename);
 				// model_sync->SetWeight(host_nnet_);
-				if(parallel_opts->myid == 0)
-					nnet.Write(target_model_filename, opts->binary);	
+                if (opts->ctc_imp == "warp") {
+                    //add back the softmax
+                    KALDI_LOG << "Appending the softmax " << target_model_filename;
+                    nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+                }
+				nnet.Write(target_model_filename, opts->binary);	
 			}
 
 			model_sync->isfinished_[thread_idx] = true;
