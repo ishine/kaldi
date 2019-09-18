@@ -54,7 +54,10 @@ int main(int argc, char *argv[]) {
     LossOptions loss_opts;
     loss_opts.Register(&po);
 
-    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.Register(&po);
+
+    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);

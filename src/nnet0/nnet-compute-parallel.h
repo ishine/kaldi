@@ -72,12 +72,14 @@ struct NnetUpdateOptions {
     const NnetDataRandomizerOptions *rnd_opts;
     LossOptions *loss_opts;
     const NnetParallelOptions *parallel_opts;
+    const CuAllocatorOptions *cuallocator_opts;
 
-    NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
+    NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
+                        LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	: binary(true),crossvalidate(false),randomize(true),use_psgd(false),kld_scale(-1.0),skip_frames(1),sweep_time(1), dump_time(0), targets_delay(0),
 		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),sweep_loop(false), skip_inner(false),network_type("lstm"),
 		  length_tolerance(5),update_frames(-1),dropout_retention(0.0),
-		  trn_opts(trn_opts),rnd_opts(rnd_opts),loss_opts(loss_opts),parallel_opts(parallel_opts){ }
+		  trn_opts(trn_opts),rnd_opts(rnd_opts),loss_opts(loss_opts),parallel_opts(parallel_opts),cuallocator_opts(cuallocator_opts){ }
 
   	  void Register(OptionsItf *po)
   	  {

@@ -147,6 +147,7 @@ private:
 	    }
 	    else
 	    	CuDevice::Instantiate().SelectGpu();
+        CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
 
 	    //CuDevice::Instantiate().DisableCaching();
 	#endif
