@@ -49,6 +49,7 @@ private:
 
 	std::string feature_transform,
 				model_filename,
+				target_model_filename,
 				si_model_filename,
 				targets_rspecifier;
 
@@ -75,6 +76,7 @@ private:
     TrainCtcParallelClass(const NnetCtcUpdateOptions *opts,
 			NnetModelSync *model_sync,
 			std::string	model_filename,
+			std::string	target_model_filename,
 			std::string targets_rspecifier,
 			ExamplesRepository *repository,
 			Nnet *nnet,
@@ -82,6 +84,7 @@ private:
 				opts(opts),
 				model_sync(model_sync),
 				model_filename(model_filename),
+				target_model_filename(target_model_filename),
 				targets_rspecifier(targets_rspecifier),
 				repository_(repository),
                 host_nnet_(nnet),
@@ -166,12 +169,13 @@ private:
 
 	    nnet.SetTrainOptions(*trn_opts);
 
+        /*
 	    int32 rank_in = 20, rank_out = 80, update_period = 4;
 	   	    BaseFloat num_samples_history = 2000.0;
 	   	    BaseFloat alpha = 4.0;
-	    //if (opts->num_procs > 1 || opts->use_psgd)
 	    if (opts->use_psgd)
-	    	nnet.SwitchToOnlinePreconditioning(rank_in, rank_out, update_period, num_samples_history, alpha);
+	        nnet.SwitchToOnlinePreconditioning(rank_in, rank_out, update_period, num_samples_history, alpha);
+        */
 
 
 	    if (opts->dropout_retention > 0.0) {
@@ -622,8 +626,10 @@ private:
 				KALDI_VLOG(1) << "Last thread upload model to host.";
 				// model_sync->CopyToHost(&nnet);
                 // prevent copy local nnet component propagate buffer (e.g. lstm,cnn)
-                host_nnet_->Read(model_filename);
-				model_sync->SetWeight(host_nnet_);
+                // host_nnet_->Read(model_filename);
+				// model_sync->SetWeight(host_nnet_);
+				if(parallel_opts->myid == 0)
+					nnet.Write(target_model_filename, opts->binary);	
 			}
 
 			model_sync->isfinished_[thread_idx] = true;
@@ -636,6 +642,7 @@ private:
 
 void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 		std::string	model_filename,
+		std::string target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
@@ -645,7 +652,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 		NnetModelSync model_sync(nnet, opts->parallel_opts);
 
 		TrainCtcParallelClass c(opts, &model_sync,
-								model_filename, targets_rspecifier,
+								model_filename, target_model_filename, targets_rspecifier,
 								&repository, nnet, stats);
 
 
@@ -701,6 +708,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 		std::string	model_filename,
+		std::string target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
@@ -710,7 +718,7 @@ void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 		NnetModelSync model_sync(nnet, opts->parallel_opts);
 
 		TrainCtcParallelClass c(opts, &model_sync,
-								model_filename, targets_rspecifier,
+								model_filename, target_model_filename, targets_rspecifier,
 								&repository, nnet, stats);
 
 

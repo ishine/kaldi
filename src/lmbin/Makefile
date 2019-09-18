@@ -19,7 +19,7 @@ OBJFILES =
 
 TESTFILES =
 
-ADDLIBS = ../lm/kaldi-lm.a ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a \
+ADDLIBS = ../lm/kaldi-lm.a ../nnet0/kaldi-nnet0.a ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a \
           ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../util/kaldi-util.a \
           ../matrix/kaldi-matrix.a ../base/kaldi-base.a 
 

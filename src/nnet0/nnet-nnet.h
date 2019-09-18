@@ -92,6 +92,7 @@ class Nnet {
   void RemoveComponent(int32 c);
   void RemoveLastComponent() { RemoveComponent(NumComponents()-1); }
 
+  /*
   /// Replaces any components of type AffineComponent or derived classes, with
   /// components of type AffineComponentPreconditionedOnline.  E.g. rank_in =
   /// 20, rank_out = 80, num_samples_history = 2000.0, alpha = 4.0
@@ -99,6 +100,7 @@ class Nnet {
                                      int32 update_period,
                                      BaseFloat num_samples_history,
                                      BaseFloat alpha);
+  */
 
 
   /// for lstm language model rescore

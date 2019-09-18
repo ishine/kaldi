@@ -56,7 +56,10 @@ int main(int argc, char *argv[]) {
     LossOptions loss_opts;
     loss_opts.Register(&po);
 
-    RNNTLstmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.Register(&po);
+
+    RNNTLstmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -98,6 +101,7 @@ int main(int argc, char *argv[]) {
 
     RNNTLstmUpdateParallel(&opts,
 					model_filename,
+                    target_model_filename,
 					feature_rspecifier,
 					targets_rspecifier,
 								&nnet,
@@ -110,7 +114,7 @@ int main(int argc, char *argv[]) {
         KALDI_LOG << "Appending the softmax " << target_model_filename;
         nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
         */
-        nnet.Write(target_model_filename, opts.binary);
+        //nnet.Write(target_model_filename, opts.binary);
     }
 
     KALDI_LOG << "TRAINING FINISHED; ";

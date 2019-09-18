@@ -126,6 +126,8 @@ public:
 
 	void SetWeight(Nnet *nnet);
 
+    void SaveWeight();
+
 	void Destory();
 
 	int32 Dim(){return this->dim_;};

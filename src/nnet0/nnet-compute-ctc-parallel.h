@@ -20,7 +20,7 @@
 #ifndef KALDI_NNET_NNET_COMPUTE_CTC_PARALLEL_H_
 #define KALDI_NNET_NNET_COMPUTE_CTC_PARALLEL_H_
 
-#include "nnet2/am-nnet.h"
+//#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -135,6 +135,7 @@ struct NnetCtcStats: NnetStats {
 
 void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 		std::string	model_filename,
+		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
@@ -142,6 +143,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 		std::string	model_filename,
+		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,

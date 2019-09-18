@@ -67,6 +67,7 @@ private:
 
 	std::string feature_transform,
 				model_filename,
+                target_model_filename,
 				si_model_filename;
 
 	ExamplesRepository *repository_;
@@ -89,12 +90,14 @@ private:
     TrainRNNTLstmParallelClass(const RNNTLstmUpdateOptions *opts,
     		LmModelSync *model_sync,
 			std::string	model_filename,
+            std::string target_model_filename,
 			ExamplesRepository *repository,
 			Nnet *nnet,
 			RNNTStats *stats):
 				opts(opts),
 				model_sync(model_sync),
 				model_filename(model_filename),
+                target_model_filename(target_model_filename),
 				repository_(repository),
                 host_nnet_(nnet),
 				stats_(stats)
@@ -505,6 +508,7 @@ private:
 
 void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 		std::string	model_filename,
+        std::string target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
@@ -515,6 +519,7 @@ void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 
 		TrainRNNTLstmParallelClass c(opts, &model_sync,
 								model_filename,
+                                target_model_filename,
 								&repository, nnet, stats);
 		{
 

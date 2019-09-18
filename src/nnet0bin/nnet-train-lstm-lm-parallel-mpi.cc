@@ -88,9 +88,7 @@ int main(int argc, char *argv[]) {
 	    feature_rspecifier = util.AddSuffix(feature_rspecifier, parallel_opts.myid);
 	    scpfile = util.GetFilename(feature_rspecifier);
 	    if (parallel_opts.myid == 0)
-	    {
 	    	parallel_opts.num_merge = util.NumofCEMerge(scpfile, parallel_opts.merge_size);
-	    }
 
 		MPI_Barrier(MPI_COMM_WORLD);
 		MPI_Bcast((void*)(&parallel_opts.merge_size), 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -133,14 +131,16 @@ int main(int argc, char *argv[]) {
 
     NnetLstmLmUpdateParallel(&opts,
 					model_filename,
+                    target_model_filename,
 					feature_rspecifier,
 								&nnet,
 								&stats);
 
-
+    /*
     if (parallel_opts.myid == 0 && !opts.crossvalidate) {
       nnet.Write(target_model_filename, opts.binary);
     }
+    */
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

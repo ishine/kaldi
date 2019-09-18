@@ -20,7 +20,6 @@
 #ifndef KALDI_LM_LM_COMPUTE_LSTM_LM_PARALLEL_H_
 #define KALDI_LM_LM_COMPUTE_LSTM_LM_PARALLEL_H_
 
-#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -52,8 +51,8 @@ struct LstmlmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
 	std::string zt_mean_filename;
 
 	LstmlmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
-                        LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), class_boundary(""), num_class(0), var_penalty(0) { }
+                        LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
+    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts, cuallocator_opts), class_boundary(""), num_class(0), var_penalty(0) { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -163,6 +162,7 @@ public:
 
 void LstmlmUpdateParallel(const LstmlmUpdateOptions *opts,
 		std::string	model_filename,
+        std::string target_model_filename,
 		std::string feature_rspecifier,
 		Nnet *nnet,
 		LmStats *stats);

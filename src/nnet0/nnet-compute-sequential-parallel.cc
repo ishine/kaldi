@@ -51,6 +51,7 @@ private:
 
 	std::string feature_transform,
 				model_filename,
+				target_model_filename,
 				si_model_filename,
 				transition_model_filename;
 
@@ -89,6 +90,7 @@ private:
 			NnetModelSync *model_sync,
 			std::string feature_transform,
 			std::string	model_filename,
+			std::string target_model_filename,
 			std::string transition_model_filename,
 			std::string den_lat_rspecifier,
 			std::string num_ali_rspecifier,
@@ -99,6 +101,7 @@ private:
 				model_sync(model_sync),
 				feature_transform(feature_transform),
 				model_filename(model_filename),
+				target_model_filename(target_model_filename),
 				transition_model_filename(transition_model_filename),
 				den_lat_rspecifier(den_lat_rspecifier),
 				num_ali_rspecifier(num_ali_rspecifier),
@@ -503,10 +506,6 @@ private:
 
 	    int32 num_done = 0, num_frm_drop = 0;
 
-	    int32 rank_in = 20, rank_out = 80, update_period = 4;
-	    BaseFloat num_samples_history = 2000.0;
-	    BaseFloat alpha = 4.0;
-
 	    kaldi::int64 total_frames = 0;
 	    double total_mmi_obj = 0.0;
 	    double total_post_on_ali = 0.0;
@@ -535,9 +534,13 @@ private:
 	    } else {
 	      KALDI_LOG << "The nnet was without softmax " << model_filename;
 	    }
-	    //if (opts->num_procs > 1 || opts->use_psgd)
+        /*
+	    int32 rank_in = 20, rank_out = 80, update_period = 4;
+	    BaseFloat num_samples_history = 2000.0;
+	    BaseFloat alpha = 4.0;
 	    if (opts->use_psgd)
 	    	nnet.SwitchToOnlinePreconditioning(rank_in, rank_out, update_period, num_samples_history, alpha);
+        */
 
         if (blank_posterior_scale >= 0 && prior_opts->class_frame_counts != "") {
             KALDI_ERR << "Cannot use both --blank-posterior-scale --class-frame-counts, use only one of the two!";
@@ -1133,7 +1136,13 @@ private:
 		if (last_thread)
 		{
 			KALDI_VLOG(1) << "Last thread upload model to host.";
-				model_sync->CopyToHost(&nnet);
+			//model_sync->CopyToHost(&nnet);
+			if (parallel_opts->myid == 0) {
+                //add back the softmax
+                KALDI_LOG << "Appending the softmax " << target_model_filename;
+                nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+				nnet.Write(target_model_filename, opts->binary);			
+            }
 		}
 
 		model_sync->isfinished_[thread_idx] = true;
@@ -1146,6 +1155,7 @@ private:
 void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		std::string feature_transform,
 		std::string	model_filename,
+        std::string target_model_filename,
 		std::string transition_model_filename,
 		std::string feature_rspecifier,
 		std::string den_lat_rspecifier,
@@ -1158,7 +1168,8 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		NnetModelSync model_sync(nnet, opts->parallel_opts);
 
 		SeqTrainParallelClass c(opts, &model_sync,
-								feature_transform, model_filename, transition_model_filename, den_lat_rspecifier, num_ali_rspecifier,
+								feature_transform, model_filename, target_model_filename,
+                                transition_model_filename, den_lat_rspecifier, num_ali_rspecifier,
 								&repository, nnet, stats);
 
 

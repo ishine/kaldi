@@ -137,20 +137,21 @@ int main(int argc, char *argv[]) {
 
     if (opts.objective_function == "xent") {
     	stats = new NnetStats(loss_opts);
-    	NnetCEUpdateParallel(&opts, model_filename, feature_rspecifier,
+    	NnetCEUpdateParallel(&opts, model_filename, target_model_filename, feature_rspecifier,
     			targets_rspecifier, &nnet, stats);
     } else if (opts.objective_function == "ctc") {
     	stats = new NnetCtcStats(loss_opts);
-    	NnetCtcUpdateParallel(&opts, model_filename, feature_rspecifier,
+    	NnetCtcUpdateParallel(&opts, model_filename, target_model_filename, feature_rspecifier,
     			//targets_rspecifier, &nnet, (NnetCtcStats*)(stats));
     			targets_rspecifier, &nnet, dynamic_cast<NnetCtcStats*>(stats));
     } else
     	KALDI_ERR << "Unknown objective function code : " << opts.objective_function;
 
-
-    if (!opts.crossvalidate) {
+    /*
+    if (parallel_opts.myid == 0 && !opts.crossvalidate) {
         nnet.Write(target_model_filename, opts.binary);
     }
+    */
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

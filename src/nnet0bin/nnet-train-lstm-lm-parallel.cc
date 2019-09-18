@@ -93,14 +93,17 @@ int main(int argc, char *argv[]) {
 
     NnetLstmLmUpdateParallel(&opts,
 					model_filename,
+                    target_model_filename,
 					feature_rspecifier,
 								&nnet,
 								&stats);
 
 
+    /*
     if (!opts.crossvalidate) {
       nnet.Write(target_model_filename, opts.binary);
     }
+    */
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

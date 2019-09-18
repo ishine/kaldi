@@ -288,7 +288,8 @@ class CuDevice {
   // from the main thread.  Background threads will, when spawned and when
   // CuDevice::Instantiate() is called from them the first time, will
   // call cudaSetDevice(device_id))
-  static int32 device_id_;
+  // static int32 device_id_;
+  int32 device_id_;
 
   // This will automatically be set to true if the application has multiple
   // threads that access the GPU device.  It is used to know whether to

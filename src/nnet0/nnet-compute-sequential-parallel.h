@@ -20,7 +20,7 @@
 #ifndef KALDI_NNET_NNET_COMPUTE_SEQUENTIAL_H_
 #define KALDI_NNET_NNET_COMPUTE_SEQUENTIAL_H_
 
-#include "nnet2/am-nnet.h"
+//#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -40,6 +40,7 @@ class SequentialTrainingSync;
 class ModelMergeFunction;
 
 struct NnetSequentialUpdateOptions {
+  bool binary;
   std::string criterion; // "mmi" or "mpfe" or "smbr"
   BaseFloat acoustic_scale,
           	  lm_scale,
@@ -84,8 +85,8 @@ struct NnetSequentialUpdateOptions {
   const NnetParallelOptions *parallel_opts;
 
 
-  NnetSequentialUpdateOptions(const NnetTrainOptions *trn_opts, const PdfPriorOptions *prior_opts, const NnetParallelOptions *parallel_opts): criterion("mmi"),
-		  	  	  	  	  	  	 acoustic_scale(0.1), lm_scale(0.1), old_acoustic_scale(0.0), kld_scale(-1.0), frame_smooth(-1.0),
+  NnetSequentialUpdateOptions(const NnetTrainOptions *trn_opts, const PdfPriorOptions *prior_opts, const NnetParallelOptions *parallel_opts): 
+                                 binary(true), criterion("mmi"), acoustic_scale(0.1), lm_scale(0.1), old_acoustic_scale(0.0), kld_scale(-1.0), frame_smooth(-1.0),
 		  	  	  	  	  	  	 drop_frames(true), one_silence_class(false), boost(0.0), sweep_frames_str("0"), sweep_frames_filename(""),
 								 update_frames(-1),
 				                 max_frames(6000),
@@ -100,11 +101,10 @@ struct NnetSequentialUpdateOptions {
 								 parallel_opts(parallel_opts){ }
 
   void Register(OptionsItf *po) {
-
+      po->Register("binary", &binary, "Write output in binary mode");
 	  po->Register("criterion", &criterion, "Criterion, 'mmi'|'mpfe'|'smbr', "
 	                   "determines the objective function to use.  Should match "
 	                   "option used when we created the examples.");
-
       po->Register("acoustic-scale", &acoustic_scale,
                   "Scaling factor for acoustic likelihoods");
       po->Register("lm-scale", &lm_scale,
@@ -238,6 +238,7 @@ struct NnetSequentialStats {
 void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		std::string feature_transform,
 		std::string	model_filename,
+		std::string target_model_filename,
 		std::string transition_model_filename,
 		std::string feature_rspecifier,
 		std::string den_lat_rspecifier,

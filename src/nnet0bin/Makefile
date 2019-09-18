@@ -23,11 +23,11 @@ BINFILES = nnet-train-frmshuff \
 	nnet-train-sequential-parallel nnet-train-sequential-parallel-mpi \
         nnet-train-frmshuff-parallel nnet-train-frmshuff-parallel-mpi \
         nnet-train-lstm-mpe-sequential nnet-train-lstm-mmi-sequential \
-	nnet-train-lstm-streams-parallel nnet-train-lstm-streams-asgd \
+	nnet-train-lstm-streams-asgd \
 	nnet-forward-parallel nnet-train-ctc-parallel nnet-train-rnnt-parallel nnet-train-lstm-streams-parallel-mpi \
 	nnet-train-lstm-lm-parallel nnet-train-lstm-lm-parallel-mpi nnet-lstm-sentence-ppl \
-	nnet-train-chain-parallel nnet-remove-last nnet-extract nnet-forward-lfmmi \
-	nnet-train-chain-parallel-mpi nnet-train-ctc-parallel-mpi nnet-kws-confidence \
+	nnet-remove-last nnet-extract nnet-forward-lfmmi \
+	nnet-train-ctc-parallel-mpi nnet-kws-confidence \
 	nnet-train-fsmn-streams
 
 OBJFILES =
@@ -36,7 +36,7 @@ OBJFILES =
 
 TESTFILES =
 
-ADDLIBS = ../nnet0/kaldi-nnet0.a ../nnet2/kaldi-nnet2.a ../nnet3/kaldi-nnet3.a ../chain/kaldi-chain.a \
+ADDLIBS = ../nnet0/kaldi-nnet0.a \
 		  ../cudamatrix/kaldi-cudamatrix.a ../lat/kaldi-lat.a ../fstext/kaldi-fstext.a \
           ../hmm/kaldi-hmm.a ../tree/kaldi-tree.a ../util/kaldi-util.a \
           ../matrix/kaldi-matrix.a ../base/kaldi-base.a 

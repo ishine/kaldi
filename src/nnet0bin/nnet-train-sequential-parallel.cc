@@ -62,9 +62,6 @@ int main(int argc, char *argv[]) {
     NnetTrainOptions trn_opts; trn_opts.learn_rate=0.00001;
     trn_opts.Register(&po);
 
-    bool binary = true;
-    po.Register("binary", &binary, "Write output in binary mode");
-
     std::string feature_transform;
     po.Register("feature-transform", &feature_transform, "Feature transform in Nnet format");
 
@@ -133,6 +130,7 @@ int main(int argc, char *argv[]) {
     NnetSequentialUpdateParallel(&opts,
 								feature_transform,
 								model_filename,
+                                target_model_filename,
 								transition_model_filename,
 								feature_rspecifier,
 								den_lat_rspecifier,
@@ -141,11 +139,13 @@ int main(int argc, char *argv[]) {
 								&nnet,
 								&stats);
 
+    /*
     //add back the softmax
     KALDI_LOG << "Appending the softmax " << target_model_filename;
     nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
     //store the nnet
-    nnet.Write(target_model_filename, binary);
+    nnet.Write(target_model_filename, opts.binary);
+    */
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

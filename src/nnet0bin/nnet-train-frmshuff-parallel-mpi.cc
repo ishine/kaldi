@@ -137,15 +137,18 @@ int main(int argc, char *argv[]) {
 
     NnetUpdateParallel(&opts,
 					model_filename,
+                    target_model_filename,
 					feature_rspecifier,
 					targets_rspecifier,
 								&nnet,
 								&stats);
 
 
+    /*
     if (parallel_opts.myid == 0 && !opts.crossvalidate) {
       nnet.Write(target_model_filename, opts.binary);
     }
+    */
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

@@ -20,7 +20,6 @@
 #ifndef KALDI_LM_RNNT_COMPUTE_LSTM_LM_PARALLEL_H_
 #define KALDI_LM_RNNT_COMPUTE_LSTM_LM_PARALLEL_H_
 
-#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -60,8 +59,8 @@ struct RNNTLstmUpdateOptions : public NnetUpdateOptions {
     bool  freeze_lm;
 
 	RNNTLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts,
-                        LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts),
+                        LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
+    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts, cuallocator_opts),
 		  num_stream(4), max_frames(25000), batch_size(0), 
           am_truncated(0), lm_truncated(0), blank_label(0), sos_id(0), freeze_lm(false) { 
           objective_function = "rnnt";
@@ -129,6 +128,7 @@ struct RNNTStats: NnetStats {
 
 void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 		std::string	model_filename,
+        std::string target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
