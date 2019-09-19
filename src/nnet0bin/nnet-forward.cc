@@ -54,6 +54,10 @@ int main(int argc, char *argv[]) {
     std::string use_gpu="no";
     po.Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA"); 
 
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.cache_memory = false;
+    cuallocator_opts.Register(&po);
+
     using namespace kaldi;
     using namespace kaldi::nnet0;
     typedef kaldi::int32 int32;
@@ -75,6 +79,7 @@ int main(int argc, char *argv[]) {
     //Select the GPU
 #if HAVE_CUDA==1
     CuDevice::Instantiate().SelectGpuId(use_gpu);
+    CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
 #endif
 
     Nnet nnet_transf;

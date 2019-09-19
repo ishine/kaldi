@@ -47,8 +47,8 @@ struct NnetLstmLmUpdateOptions : public NnetLstmUpdateOptions {
 	BaseFloat var_penalty;
 
     NnetLstmLmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
-                                LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), class_boundary(""), num_class(0), var_penalty(0) { }
+                                LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
+    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts, cuallocator_opts), class_boundary(""), num_class(0), var_penalty(0) { }
 
   	  void Register(OptionsItf *po)
   	  {

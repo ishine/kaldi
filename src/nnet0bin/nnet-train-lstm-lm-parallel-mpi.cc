@@ -54,6 +54,10 @@ int main(int argc, char *argv[]) {
 
     NnetParallelOptions parallel_opts;
 
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.cache_memory = false;
+    cuallocator_opts.Register(&po);
+
     //multi-machine
     MPI_Init_thread(&argc,&argv, MPI_THREAD_MULTIPLE, &parallel_opts.thread_level);
     MPI_Comm_size(MPI_COMM_WORLD,&parallel_opts.num_procs);
@@ -64,7 +68,7 @@ int main(int argc, char *argv[]) {
     LossOptions loss_opts;
     loss_opts.Register(&po);
 
-    NnetLstmLmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
+    NnetLstmLmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);

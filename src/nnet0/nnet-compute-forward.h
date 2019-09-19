@@ -50,12 +50,13 @@ struct NnetForwardOptions {
     std::string network_type;
 
     const PdfPriorOptions *prior_opts;
+    const CuAllocatorOptions *cuallocator_opts;
 
-    NnetForwardOptions(const PdfPriorOptions *prior_opts)
+    NnetForwardOptions(const PdfPriorOptions *prior_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	:feature_transform(""),no_softmax(false),apply_log(false),copy_posterior(true),use_gpu("no"),num_threads(1),
 		 	 	 	 	 	 	 time_shift(0),batch_size(20),num_stream(0),dump_interval(0), 
                                  skip_frames(1), sweep_time(1), sweep_frames_str("0"), sweep_loop(false), skip_inner(false),
-								 blank_posterior_scale(-1.0), network_type("lstm"), prior_opts(prior_opts)
+								 blank_posterior_scale(-1.0), network_type("lstm"), prior_opts(prior_opts), cuallocator_opts(cuallocator_opts)
     {
 
     }

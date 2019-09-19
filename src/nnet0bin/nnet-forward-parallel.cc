@@ -46,7 +46,11 @@ int main(int argc, char *argv[]) {
     PdfPriorOptions prior_opts;
     prior_opts.Register(&po);
 
-    NnetForwardOptions opts(&prior_opts);
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.cache_memory = false;
+    cuallocator_opts.Register(&po);
+
+    NnetForwardOptions opts(&prior_opts, &cuallocator_opts);
     opts.Register(&po);
 
     std::string model_filename,
