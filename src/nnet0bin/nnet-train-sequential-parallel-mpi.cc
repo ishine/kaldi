@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
         "Perform one iteration of DNN-MMI training by stochastic "
         "gradient descent.\n"
         "The network weights are updated on each utterance.\n"
-        "Usage:  nnet-train-mmi-sequential [options] <model-in> <transition-model-in>(optional) "
+        "Usage:  nnet-compute-sequential-parallel-mpi [options] <model-in> <transition-model-in>(optional) "
         "<feature-rspecifier> <sweep_frames_rspecifier>(optional) <den-lat-rspecifier> <ali-rspecifier> [<model-out>]\n"
         "e.g.: \n"
         " nnet-train-sequential-parallel-mpi nnet.init trans.mdl(optional) scp:train.scp scp:sweep.scp(optional) scp:denlats.scp ark:train.ali "
@@ -70,6 +70,8 @@ int main(int argc, char *argv[]) {
     PdfPriorOptions prior_opts;
     prior_opts.Register(&po);
 
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.Register(&po);
 
     NnetParallelOptions parallel_opts;
 	
@@ -80,7 +82,7 @@ int main(int argc, char *argv[]) {
 
 	parallel_opts.Register(&po);
 
-    NnetSequentialUpdateOptions opts(&trn_opts, &prior_opts, &parallel_opts);
+    NnetSequentialUpdateOptions opts(&trn_opts, &prior_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -90,35 +92,28 @@ int main(int argc, char *argv[]) {
                 num_ali_rspecifier, sweep_frames_rspecifier, target_model_filename;
                 transition_model_filename = "", sweep_frames_rspecifier = "";
 
-    if (po.NumArgs() == 6)
-    {
+    if (po.NumArgs() == 6) {
         model_filename = po.GetArg(1),
         transition_model_filename = po.GetArg(2),
         feature_rspecifier = po.GetArg(3),
         den_lat_rspecifier = po.GetArg(4),
         num_ali_rspecifier = po.GetArg(5);
         target_model_filename = po.GetArg(6);
-    }
-    else if (po.NumArgs() == 7)
-    {   
-            model_filename = po.GetArg(1),
-            transition_model_filename = po.GetArg(2),
-            feature_rspecifier = po.GetArg(3),
-            sweep_frames_rspecifier = po.GetArg(4);
-            den_lat_rspecifier = po.GetArg(5),
-            num_ali_rspecifier = po.GetArg(6);
-            target_model_filename = po.GetArg(7);
-    }   
-    else if (po.NumArgs() == 5)
-    {   
+    } else if (po.NumArgs() == 7) {   
+        model_filename = po.GetArg(1),
+        transition_model_filename = po.GetArg(2),
+        feature_rspecifier = po.GetArg(3),
+        sweep_frames_rspecifier = po.GetArg(4);
+        den_lat_rspecifier = po.GetArg(5),
+        num_ali_rspecifier = po.GetArg(6);
+        target_model_filename = po.GetArg(7);
+    } else if (po.NumArgs() == 5) {   
         model_filename = po.GetArg(1),
         feature_rspecifier = po.GetArg(2),
         den_lat_rspecifier = po.GetArg(3),
         num_ali_rspecifier = po.GetArg(4);
         target_model_filename = po.GetArg(5);
-    }
-    else
-    {
+    } else {
         po.PrintUsage();
         exit(1);
     }
@@ -179,6 +174,7 @@ int main(int argc, char *argv[]) {
 								&nnet,
 								&stats);
 
+    /*
     if (parallel_opts.myid == 0) {
         //add back the softmax
         KALDI_LOG << "Appending the softmax " << target_model_filename;
@@ -186,6 +182,7 @@ int main(int argc, char *argv[]) {
         //store the nnet
         nnet.Write(target_model_filename, opts.binary);
     }
+    */
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

@@ -71,7 +71,10 @@ int main(int argc, char *argv[]) {
     NnetParallelOptions parallel_opts;
     parallel_opts.Register(&po);
 
-    NnetSequentialUpdateOptions opts(&trn_opts, &prior_opts, &parallel_opts);
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.Register(&po);
+
+    NnetSequentialUpdateOptions opts(&trn_opts, &prior_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);

@@ -83,9 +83,10 @@ struct NnetSequentialUpdateOptions {
   const NnetTrainOptions *trn_opts;
   const PdfPriorOptions *prior_opts;
   const NnetParallelOptions *parallel_opts;
+  const CuAllocatorOptions *cuallocator_opts;
 
-
-  NnetSequentialUpdateOptions(const NnetTrainOptions *trn_opts, const PdfPriorOptions *prior_opts, const NnetParallelOptions *parallel_opts): 
+  NnetSequentialUpdateOptions(const NnetTrainOptions *trn_opts, const PdfPriorOptions *prior_opts, 
+                                 const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL): 
                                  binary(true), criterion("mmi"), acoustic_scale(0.1), lm_scale(0.1), old_acoustic_scale(0.0), kld_scale(-1.0), frame_smooth(-1.0),
 		  	  	  	  	  	  	 drop_frames(true), one_silence_class(false), boost(0.0), sweep_frames_str("0"), sweep_frames_filename(""),
 								 update_frames(-1),
@@ -98,7 +99,8 @@ struct NnetSequentialUpdateOptions {
 								 sweep_loop(false), skip_inner(false), network_type("lstm"),
 								 trn_opts(trn_opts),
 								 prior_opts(prior_opts),
-								 parallel_opts(parallel_opts){ }
+								 parallel_opts(parallel_opts), 
+                                 cuallocator_opts(cuallocator_opts){ }
 
   void Register(OptionsItf *po) {
       po->Register("binary", &binary, "Write output in binary mode");
