@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
     //Select the GPU
 #if HAVE_CUDA==1
     CuDevice::Instantiate().SelectGpuId(use_gpu);
-    CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
+    CuDevice::Instantiate().SetCuAllocatorOptions(cuallocator_opts);
 #endif
 
     Nnet nnet_transf;
