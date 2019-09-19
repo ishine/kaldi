@@ -38,12 +38,15 @@ int main(int argc, char *argv[]) {
     bool binary = true;
     std::string search = "beam";
     float blank_posterior_scale = -1.0;
+    float en_penalty = 0.0;
     std::string word_syms_filename;
     std::string const_arpa_filename;
     po.Register("binary", &binary, "Write output in binary mode");
     po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
     po.Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, "
+    		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
+    po.Register("en-penalty", &en_penalty, "For CTC decoding, "
     		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
     po.Register("const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
 
@@ -93,7 +96,9 @@ int main(int argc, char *argv[]) {
     Timer timer;
     for (; !loglikes_reader.Done(); loglikes_reader.Next()) {
 		std::string key = loglikes_reader.Key();
-		const Matrix<BaseFloat> &loglikes (loglikes_reader.Value());
+		Matrix<BaseFloat> &loglikes (loglikes_reader.Value());
+        if (en_penalty > 0)
+        loglikes.ColRange(1, 1050).Add(en_penalty);
 
 		if (loglikes.NumRows() == 0) {
 			KALDI_WARN << "Zero-length utterance: " << key;

@@ -65,6 +65,7 @@ private:
 
 	std::string feature_transform,
 				model_filename,
+                target_model_filename,
 				classboundary_file,
 				si_model_filename,
 				zt_mean_filename;
@@ -91,12 +92,14 @@ private:
     TrainLstmlmParallelClass(const LstmlmUpdateOptions *opts,
     		LmModelSync *model_sync,
 			std::string	model_filename,
+            std::string target_model_filename,
 			ExamplesRepository *repository,
 			Nnet *nnet,
 			LmStats *stats):
 				opts(opts),
 				model_sync(model_sync),
 				model_filename(model_filename),
+                target_model_filename(target_model_filename),
 				repository_(repository),
 				stats_(stats)
  	 		{
@@ -571,6 +574,7 @@ void TrainlmUtil::SetClassBoundary(const Vector<BaseFloat>& classinfo,
 
 void LstmlmUpdateParallel(const LstmlmUpdateOptions *opts,
 		std::string	model_filename,
+        std::string target_model_filename,
 		std::string feature_rspecifier,
 		Nnet *nnet,
 		LmStats *stats)
@@ -580,6 +584,7 @@ void LstmlmUpdateParallel(const LstmlmUpdateOptions *opts,
 
 		TrainLstmlmParallelClass c(opts, &model_sync,
 								model_filename,
+                                target_model_filename,
 								&repository, nnet, stats);
 
 

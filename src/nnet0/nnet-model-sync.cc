@@ -133,6 +133,16 @@ NnetModelSync::SetWeight(Nnet *nnet)
 	nnet->WeightCopy(host_data_, NnetModelSync::kSrcAddress, NnetModelSync::kCudaMemcpyHostToDevice);
 }
 
+void
+NnetModelSync::SaveWeight()
+{
+	KALDI_ASSERT(this->data_ != NULL);
+
+	void *host_data_ = (void*)this->data_;
+	// host_data_ to host nnet
+	this->nnet->WeightCopy(host_data_, NnetModelSync::kSrcAddress, NnetModelSync::kCudaMemcpyHostToHost);
+}
+
 /*
  * 'ark,o:copy-feats scp:exp/tri_dnn_mmi/scplist/train.scp ark:- |'
  */

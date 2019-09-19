@@ -20,7 +20,7 @@
 #ifndef KALDI_NNET_NNET_COMPUTE_LSTM_ASGD_H_
 #define KALDI_NNET_NNET_COMPUTE_LSTM_ASGD_H_
 
-#include "nnet2/am-nnet.h"
+//#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -49,8 +49,8 @@ struct NnetLstmUpdateOptions : public NnetUpdateOptions {
     //lstm
 
     NnetLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
-                            LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), batch_size(20), num_stream(4), dump_interval(0) { }
+                            LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
+    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts, cuallocator_opts), batch_size(20), num_stream(4), dump_interval(0) { }
 
   	  void Register(OptionsItf *po)
   	  {
@@ -136,6 +136,7 @@ struct NnetLstmStats {
 
 void NnetLstmUpdateAsgd(const NnetLstmUpdateOptions *opts,
 		std::string	model_filename,
+		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,

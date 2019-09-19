@@ -20,7 +20,7 @@
 #ifndef KALDI_NNET_NNET_COMPUTE_CTC_PARALLEL_H_
 #define KALDI_NNET_NNET_COMPUTE_CTC_PARALLEL_H_
 
-#include "nnet2/am-nnet.h"
+//#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -56,8 +56,10 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     std::string ctc_imp;
 
 
-    NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
+    NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts,
+                        LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
+    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts, cuallocator_opts), 
+        num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
           clip_loss(1.0), ctc_imp("eesen") { }
 
   	  void Register(OptionsItf *po) {
@@ -133,6 +135,7 @@ struct NnetCtcStats: NnetStats {
 
 void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 		std::string	model_filename,
+		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
@@ -140,6 +143,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 		std::string	model_filename,
+		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,

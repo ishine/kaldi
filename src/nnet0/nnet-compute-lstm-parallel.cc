@@ -146,6 +146,7 @@ private:
 	    }
 	    else
 	    	CuDevice::Instantiate().SelectGpu();
+        CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
 
 	    //CuDevice::Instantiate().DisableCaching();
 	#endif
@@ -164,13 +165,13 @@ private:
 
 	    nnet.SetTrainOptions(*trn_opts);
 
+        /*
 	    int32 rank_in = 20, rank_out = 80, update_period = 4;
 	   	    BaseFloat num_samples_history = 2000.0;
 	   	    BaseFloat alpha = 4.0;
-	    //if (opts->num_procs > 1 || opts->use_psgd)
 	    if (opts->use_psgd)
 	    	nnet.SwitchToOnlinePreconditioning(rank_in, rank_out, update_period, num_samples_history, alpha);
-
+        */
 
 	    if (opts->dropout_retention > 0.0) {
 	      nnet_transf.SetDropoutRetention(opts->dropout_retention);

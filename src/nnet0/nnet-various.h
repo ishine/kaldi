@@ -184,6 +184,7 @@ class SubSample : public Component {
   void WriteData(std::ostream &os, bool binary) const {
 	  WriteToken(os, binary, "<SkipFrames>");
 	  WriteBasicType(os, binary, skip_frames_);
+	  os << "\n";
   }
 
   void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {

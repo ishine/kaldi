@@ -55,6 +55,9 @@ int main(int argc, char *argv[]) {
     LossOptions loss_opts;
     loss_opts.Register(&po);
 
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.Register(&po);
+
     NnetParallelOptions parallel_opts;
 
     //multi-machine
@@ -64,7 +67,7 @@ int main(int argc, char *argv[]) {
 
     parallel_opts.Register(&po);
 
-    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
+    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -133,15 +136,17 @@ int main(int argc, char *argv[]) {
 
     NnetLstmUpdateAsgd(&opts,
 					model_filename,
+                    target_model_filename,
 					feature_rspecifier,
 					targets_rspecifier,
 								&nnet,
 								&stats);
 
-
+    /*
     if (parallel_opts.myid == 0 && !opts.crossvalidate) {
       nnet.Write(target_model_filename, opts.binary);
     }
+    */
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();

@@ -940,6 +940,7 @@ void Nnet::SetTrainOptions(const NnetTrainOptions& opts) {
   }
 }
 
+/*
 void Nnet::SwitchToOnlinePreconditioning(int32 rank_in, int32 rank_out,
                                          int32 update_period,
                                          BaseFloat num_samples_history,
@@ -963,6 +964,7 @@ void Nnet::SwitchToOnlinePreconditioning(int32 rank_in, int32 rank_out,
   //SetIndexes();
   Check();
 }
+*/
 
 void Nnet::SetFlags(const Vector<BaseFloat> &flags) {
   for (int32 c = 0; c < NumComponents(); c++) {

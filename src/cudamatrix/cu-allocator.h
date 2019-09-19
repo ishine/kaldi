@@ -65,7 +65,7 @@ struct CuAllocatorOptions {
   int32 num_subregions;
 
   CuAllocatorOptions():
-      cache_memory(true), memory_proportion(0.5), num_subregions(20) { }
+      cache_memory(true), memory_proportion(0.3), num_subregions(20) { }
 
   void Register(OptionsItf *po) {
     po->Register("cuda-cache-memory", &cache_memory, "True if you want "

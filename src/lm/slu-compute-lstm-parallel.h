@@ -20,7 +20,6 @@
 #ifndef KALDI_LM_LM_COMPUTE_LSTM_SLU_PARALLEL_H_
 #define KALDI_LM_LM_COMPUTE_LSTM_SLU_PARALLEL_H_
 
-#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>

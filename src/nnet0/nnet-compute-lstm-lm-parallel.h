@@ -20,7 +20,7 @@
 #ifndef KALDI_NNET_NNET_COMPUTE_LSTM_LM_PARALLEL_H_
 #define KALDI_NNET_NNET_COMPUTE_LSTM_LM_PARALLEL_H_
 
-#include "nnet2/am-nnet.h"
+//#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -156,6 +156,7 @@ public:
 
 void NnetLstmLmUpdateParallel(const NnetLstmLmUpdateOptions *opts,
 		std::string	model_filename,
+		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		Nnet *nnet,
 		NnetLmStats *stats);

@@ -51,6 +51,7 @@ private:
 
 	std::string feature_transform,
 				model_filename,
+				target_model_filename,
 				si_model_filename,
 				transition_model_filename;
 
@@ -89,6 +90,7 @@ private:
 			NnetModelSync *model_sync,
 			std::string feature_transform,
 			std::string	model_filename,
+			std::string target_model_filename,
 			std::string transition_model_filename,
 			std::string den_lat_rspecifier,
 			std::string num_ali_rspecifier,
@@ -99,6 +101,7 @@ private:
 				model_sync(model_sync),
 				feature_transform(feature_transform),
 				model_filename(model_filename),
+				target_model_filename(target_model_filename),
 				transition_model_filename(transition_model_filename),
 				den_lat_rspecifier(den_lat_rspecifier),
 				num_ali_rspecifier(num_ali_rspecifier),
@@ -503,10 +506,6 @@ private:
 
 	    int32 num_done = 0, num_frm_drop = 0;
 
-	    int32 rank_in = 20, rank_out = 80, update_period = 4;
-	    BaseFloat num_samples_history = 2000.0;
-	    BaseFloat alpha = 4.0;
-
 	    kaldi::int64 total_frames = 0;
 	    double total_mmi_obj = 0.0;
 	    double total_post_on_ali = 0.0;
@@ -535,9 +534,13 @@ private:
 	    } else {
 	      KALDI_LOG << "The nnet was without softmax " << model_filename;
 	    }
-	    //if (opts->num_procs > 1 || opts->use_psgd)
+        /*
+	    int32 rank_in = 20, rank_out = 80, update_period = 4;
+	    BaseFloat num_samples_history = 2000.0;
+	    BaseFloat alpha = 4.0;
 	    if (opts->use_psgd)
 	    	nnet.SwitchToOnlinePreconditioning(rank_in, rank_out, update_period, num_samples_history, alpha);
+        */
 
         if (blank_posterior_scale >= 0 && prior_opts->class_frame_counts != "") {
             KALDI_ERR << "Cannot use both --blank-posterior-scale --class-frame-counts, use only one of the two!";
@@ -546,8 +549,14 @@ private:
 	    nnet.SetTrainOptions(*trn_opts);
 
 	    Nnet si_nnet, softmax;
-	    if (this->kld_scale > 0)
+	    if (this->kld_scale > 0 && si_model_filename != "")
 	    	si_nnet.Read(si_model_filename);
+
+	    Nnet frozen_nnet;
+        bool use_frozen = opts->frozen_model_filename != "" ? true : false;
+	    if (use_frozen) {
+	    	frozen_nnet.Read(opts->frozen_model_filename);
+	    }
 
 	    if (this->kld_scale > 0 || frame_smooth > 0) {
             KALDI_LOG << "KLD model Appending the softmax ...";
@@ -568,7 +577,8 @@ private:
 	    Timer time;
 	    double time_now = 0;
 
-		CuMatrix<BaseFloat> cufeat, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out;
+		CuMatrix<BaseFloat> cufeat, feats_transf, nnet_out, nnet_diff, si_nnet_out, soft_nnet_out, frozen_nnet_out,
+								*p_nnet_in;
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h, si_nnet_out_h, soft_nnet_out_h, tmp_mat, *p_nnet_diff_h = NULL;
 
 
@@ -590,8 +600,8 @@ private:
 	    std::vector<int> diff_curt(num_stream, 0);
 
 	    // bptt batch buffer
-	    int32 feat_dim = nnet.InputDim();
-	    int32 out_dim = nnet.OutputDim();
+	    int32 feat_dim = use_frozen ? frozen_nnet.InputDim() : nnet.InputDim();
+	    int32 out_dim = use_frozen ? frozen_nnet.OutputDim() : nnet.OutputDim();
 
 	    Matrix<BaseFloat> feat;
 	    Matrix<BaseFloat> nnet_diff_host;
@@ -719,13 +729,27 @@ private:
 					// for streams with new utterance, history states need to be reset
 					if (opts->network_type == "lstm") {
 						nnet.ResetLstmStreams(new_utt_flags, batch_size);
+						nnet.SetSeqLengths(num_utt_frame_out, batch_size);
+						if (use_frozen) {
+							frozen_nnet.ResetLstmStreams(new_utt_flags, batch_size);
+							frozen_nnet.SetSeqLengths(num_utt_frame_out, batch_size);
+						}
 					} else if (opts->network_type == "fsmn") {
 					    nnet.SetFlags(utt_flags);
+					    if (use_frozen) {
+					    	frozen_nnet.SetFlags(utt_flags);
+					    }
 		            }
 
 					// forward pass
 					cufeat = feat;
-					nnet.Propagate(cufeat, &nnet_out);
+					p_nnet_in = &cufeat;
+					if (use_frozen) {
+						frozen_nnet.Propagate(cufeat, &frozen_nnet_out);
+						p_nnet_in = &frozen_nnet_out;
+					}
+					// Propagation
+					nnet.Propagate(*p_nnet_in, &nnet_out);
 
 					if (this->kld_scale > 0) {
 						// for streams with new utterance, history states need to be reset
@@ -889,11 +913,19 @@ private:
 					flags.Resize(len/out_skip, kSetZero);
 					flags.Set(1.0);
 					nnet.SetFlags(flags);
+					if (use_frozen)
+						frozen_nnet.SetFlags(flags);
 
 					// possibly apply transform
 					nnet_transf.Feedforward(cufeat, &feats_transf);
 					// propagate through the nnet (assuming w/o softmax)
-					nnet.Propagate(feats_transf, &nnet_out);
+					p_nnet_in = &feats_transf;
+					if (use_frozen) {
+						frozen_nnet.Propagate(feats_transf, &frozen_nnet_out);
+						p_nnet_in = &frozen_nnet_out;
+					}
+					// Propagation
+					nnet.Propagate(*p_nnet_in, &nnet_out);
 
 					if (this->kld_scale > 0) {
 						si_nnet.Propagate(feats_transf, &si_nnet_out);
@@ -1104,7 +1136,13 @@ private:
 		if (last_thread)
 		{
 			KALDI_VLOG(1) << "Last thread upload model to host.";
-				model_sync->CopyToHost(&nnet);
+			//model_sync->CopyToHost(&nnet);
+			if (parallel_opts->myid == 0) {
+                //add back the softmax
+                KALDI_LOG << "Appending the softmax " << target_model_filename;
+                nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+				nnet.Write(target_model_filename, opts->binary);			
+            }
 		}
 
 		model_sync->isfinished_[thread_idx] = true;
@@ -1117,6 +1155,7 @@ private:
 void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		std::string feature_transform,
 		std::string	model_filename,
+        std::string target_model_filename,
 		std::string transition_model_filename,
 		std::string feature_rspecifier,
 		std::string den_lat_rspecifier,
@@ -1129,7 +1168,8 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		NnetModelSync model_sync(nnet, opts->parallel_opts);
 
 		SeqTrainParallelClass c(opts, &model_sync,
-								feature_transform, model_filename, transition_model_filename, den_lat_rspecifier, num_ali_rspecifier,
+								feature_transform, model_filename, target_model_filename,
+                                transition_model_filename, den_lat_rspecifier, num_ali_rspecifier,
 								&repository, nnet, stats);
 
 

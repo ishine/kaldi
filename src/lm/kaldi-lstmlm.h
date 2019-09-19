@@ -119,6 +119,10 @@ struct LstmlmUtil {
 		return a->logp > b->logp;
 	}
 
+	static bool compare_normlogp_reverse(const Sequence *a, const Sequence *b) {
+		return a->logp/a->k.size() > b->logp/b->k.size();
+	}
+
 	static bool compare_PrefixSeq_reverse(const PrefixSeq *a, const PrefixSeq *b) {
 		return LogAdd(a->logp_blank,a->logp_nblank) > LogAdd(b->logp_blank,b->logp_nblank);
 	}

@@ -55,7 +55,10 @@ int main(int argc, char *argv[]) {
     LossOptions loss_opts;
     loss_opts.Register(&po);
 
-    LstmlmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts);
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.Register(&po);
+
+    LstmlmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -96,13 +99,14 @@ int main(int argc, char *argv[]) {
 
     LstmlmUpdateParallel(&opts,
 					model_filename,
+                    target_model_filename,
 					feature_rspecifier,
 								&nnet,
 								&stats);
 
 
     if (!opts.crossvalidate) {
-       nnet.Write(target_model_filename, opts.binary);
+       //nnet.Write(target_model_filename, opts.binary);
        if (opts.zt_mean_filename != "")
        {
            Vector<BaseFloat> class_zt;

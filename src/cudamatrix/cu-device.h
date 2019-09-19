@@ -108,7 +108,8 @@ class CuDevice {
   // CUDA's allocation seems to give for some setups.
   inline void* Malloc(size_t size) {
     if (multi_gpu_)
-        return g_cuda_allocator.MallocLocal(size);
+        //return g_cuda_allocator.MallocLocal(size);
+        return cuda_allocator.Malloc(size);
     else
         return multi_threaded_ ? g_cuda_allocator.MallocLocking(size) :
         g_cuda_allocator.Malloc(size);
@@ -116,7 +117,8 @@ class CuDevice {
 
   inline void* MallocPitch(size_t row_bytes, size_t num_rows, size_t *pitch) {
     if (multi_gpu_) {
-      return g_cuda_allocator.MallocPitchLocal(row_bytes, num_rows, pitch);
+      //return g_cuda_allocator.MallocPitchLocal(row_bytes, num_rows, pitch);
+      return cuda_allocator.MallocPitch(row_bytes, num_rows, pitch);
     } else if (multi_threaded_) {
       return g_cuda_allocator.MallocPitchLocking(row_bytes, num_rows, pitch);
     } else if (debug_stride_mode_) {
@@ -133,9 +135,14 @@ class CuDevice {
   }
 
   inline void Free(void *ptr) {
-    if (multi_gpu_) g_cuda_allocator.FreeLocal(ptr);
+    if (multi_gpu_) cuda_allocator.Free(ptr); //g_cuda_allocator.FreeLocal(ptr);
     else if (multi_threaded_) g_cuda_allocator.FreeLocking(ptr);
     else g_cuda_allocator.Free(ptr);
+  }
+
+  void SetCuAllocatorOptions(const CuAllocatorOptions &opts) {
+    if (multi_gpu_) cuda_allocator.SetOptions(opts);
+    else g_cuda_allocator.SetOptions(opts);
   }
 
   /// Select a GPU for computation.  You are supposed to call this function just
@@ -154,7 +161,6 @@ class CuDevice {
   void SelectGpuId(std::string use_gpu);
 
   /// wd007
-
   void CreateHandle(cublasHandle_t *handle);
   void DestroyHandle(cublasHandle_t handle);
 
@@ -282,7 +288,8 @@ class CuDevice {
   // from the main thread.  Background threads will, when spawned and when
   // CuDevice::Instantiate() is called from them the first time, will
   // call cudaSetDevice(device_id))
-  static int32 device_id_;
+  // static int32 device_id_;
+  int32 device_id_;
 
   // This will automatically be set to true if the application has multiple
   // threads that access the GPU device.  It is used to know whether to
@@ -323,6 +330,8 @@ class CuDevice {
   cublasHandle_t cublas_handle_;
 
   cusparseHandle_t cusparse_handle_;
+
+  CuMemoryAllocator cuda_allocator;
 
 }; // class CuDevice
 

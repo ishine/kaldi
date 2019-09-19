@@ -1037,6 +1037,7 @@ void CuDevice::CreateHandle(cublasHandle_t *handle){ CU_SAFE_CALL(cublasCreate(h
 void CuDevice::DestroyHandle(cublasHandle_t handle){ CU_SAFE_CALL(cublasDestroy(handle));}
 
 CuDevice::CuDevice():
+    device_id_(-1),
     initialized_(false),
     device_id_copy_(-1),
     cublas_handle_(NULL),
@@ -1057,7 +1058,7 @@ thread_local CuDevice CuDevice::this_thread_device_;
 // CuDevice CuDevice::this_thread_device_;
 
 // define and initialize the static members of the CuDevice object.
-int32 CuDevice::device_id_ = -1;
+// int32 CuDevice::device_id_ = -1;
 bool CuDevice::multi_threaded_ = false;
 bool CuDevice::multi_gpu_ = false;
 unordered_map<std::string, double, StringHasher> CuDevice::profile_map_;
