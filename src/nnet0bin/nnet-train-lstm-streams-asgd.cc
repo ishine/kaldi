@@ -55,6 +55,7 @@ int main(int argc, char *argv[]) {
     loss_opts.Register(&po);
 
     CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.cache_memory = false;
     cuallocator_opts.Register(&po);
 
     NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts, &cuallocator_opts);

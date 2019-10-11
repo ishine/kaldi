@@ -58,8 +58,10 @@ public:
 		examples_mutex->Lock();
 		// Select the GPU
 		#if HAVE_CUDA == 1
-			if (opts->use_gpu == "yes")
+			if (opts->use_gpu == "yes") {
 		    	CuDevice::Instantiate().SelectGpu();
+                CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
+            }
 		    //CuDevice::Instantiate().DisableCaching();
 		#endif
 

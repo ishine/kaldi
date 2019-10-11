@@ -30,7 +30,7 @@
 namespace kaldi {
 namespace nnet0 {
 
-struct NnetParallelOptions{
+struct NnetParallelOptions {
 	int32 num_threads;
 	int merge_size;
 	int num_merge;
@@ -64,8 +64,7 @@ struct NnetParallelOptions{
 		  po->Register("global-learnrate", &global_learnrate, "Global learning rate used in multi-machine paralization.");
 		  po->Register("asgd-lock", &asgd_lock, "Apply lock on asgd training.");
 
-	      if (this->num_procs >= 1)
-	      {
+	      if (this->num_procs >= 1) {
 	          po->Register("merge-size",&merge_size, "Multi-machine merge size");
 	          po->Register("merge-function", &merge_func, "Multi-machine merge function");
 	          po->Register("log-file", &log_file, "Each job log.");
@@ -96,14 +95,12 @@ public:
 
 	NnetModelSync(Nnet *nnet, const NnetParallelOptions *opts=NULL):
 		initialized_(false),data_(NULL),free_data_(NULL),dim_(0),nnet(nnet),
-		opts_(opts),p_merge_func_(NULL)
-	{
+		opts_(opts),p_merge_func_(NULL) {
 		//Init(nnet);
 		MultiMachineInit();
 	}
 
-	~NnetModelSync()
-	{
+	~NnetModelSync() {
 		Destory();
 		delete[] isfinished_;
 	}
@@ -111,6 +108,7 @@ public:
 	void LockModel() {
 		model_mutex_.Lock();
 	}
+
 	void UnlockModel(){
 		model_mutex_.Unlock();
 	}
@@ -118,6 +116,7 @@ public:
 	void LockStates() {
 		stats_mutex_.Lock();
 	}
+
 	void UnlockStates(){
 		stats_mutex_.Unlock();
 	}
@@ -126,39 +125,31 @@ public:
 
 	void SetWeight(Nnet *nnet);
 
-    void SaveWeight();
-
 	void Destory();
 
 	int32 Dim(){return this->dim_;};
 
-	void CopyToHost(Nnet *nnet)
-	{
+	void CopyToHost(Nnet *nnet) {
 		*(this->nnet) = *nnet;
 	}
 
-	ModelMergeFunction *GetModelMergeFunction()
-	{
+	ModelMergeFunction *GetModelMergeFunction() {
 		return p_merge_func_;
 	}
 
 	void MultiMachineInit();
 
-    void ResetGradient()
-    {
+    void ResetGradient() {
         for (int i = 0; i < opts_->num_threads; i++)
             reset_gradient_[i] = true;
     }
 
-	void Initialize(Nnet *nnet)
-	{
+	void Initialize(Nnet *nnet) {
 		model_mutex_.Lock();
-		if (!initialized_)
-		{
+		if (!initialized_) {
 			isfinished_ = new bool[opts_->num_threads];
 			reset_gradient_ = new bool[opts_->num_threads];
-			for (int i = 0; i < opts_->num_threads; i++)
-            {
+			for (int i = 0; i < opts_->num_threads; i++) {
 				isfinished_[i] = false;
                 reset_gradient_[i] = false;
             }

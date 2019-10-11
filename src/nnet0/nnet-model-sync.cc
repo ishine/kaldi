@@ -26,8 +26,7 @@ namespace kaldi {
 namespace nnet0 {
 
 void
-NnetModelSync::Init(Nnet *nnet)
-{
+NnetModelSync::Init(Nnet *nnet) {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
 	if (NULL != this->free_data_)
@@ -44,30 +43,24 @@ NnetModelSync::Init(Nnet *nnet)
 	CU_SAFE_CALL(cudaHostAlloc((void**) &free_data, size, cudaHostAllocPortable)); //cudaHostAllocDefault
 	data = (free_data ? (void *)( (((unsigned long)*(&free_data)) + 15) & ~0xFUL ) : NULL) ;
 
-	if (NULL != data)
-	{
+	if (NULL != data) {
 		this->data_ = static_cast<BaseFloat*> (data);
 		this->free_data_ = static_cast<BaseFloat*> (free_data);
 		this->dim_ = dim;
-	}
-	else
-	{
+	} else {
 	    throw std::bad_alloc();
 	}
- }else
+ } else
 #endif
-        {
-                // not implemented for CPU yet
-                // return 0;
-        }
+ {
+    // not implemented for CPU yet
+    // return 0;
+ }
 
 }
 
-void
-NnetModelSync::MultiMachineInit()
-{
-    if (opts_->num_procs > 1)
-    {
+void NnetModelSync::MultiMachineInit() {
+    if (opts_->num_procs > 1) {
         //p_merge_func_ = ModelMergeFunction::Factory(opts_, this);
 
 #if HAVE_CUDA == 1
@@ -77,44 +70,33 @@ NnetModelSync::MultiMachineInit()
     }
 }
 
-void
-NnetModelSync::InitMergeFunction()
-{
+void NnetModelSync::InitMergeFunction() {
 	if (opts_->num_procs > 1 && NULL == p_merge_func_)
-	{
 		p_merge_func_ = ModelMergeFunction::Factory(opts_, this);
-	}
 }
-void
-NnetModelSync::Destory()
-{
+
+void NnetModelSync::Destory() {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
-	if (NULL != this->free_data_)
-	{
+	if (NULL != this->free_data_) {
 		CU_SAFE_CALL(cudaFreeHost(this->free_data_));
 		this->free_data_ = NULL;
 		this->data_ = NULL;
 		this->dim_ = 0;
 	}
- }else
+ } else
 #endif
-        {
-                // not implemented for CPU yet
-                // return 0;
-        }
-
+ {
+    // not implemented for CPU yet
+    // return 0;
+ }
 }
 
-int32
-NnetModelSync::GetDim(Nnet *nnet)
-{
+int32 NnetModelSync::GetDim(Nnet *nnet) {
 	return nnet->GetDim();
 }
 
-void
-NnetModelSync::GetWeight(Nnet *nnet)
-{
+void NnetModelSync::GetWeight(Nnet *nnet) {
 	if (NULL == this->data_)
 		this->Init(nnet);
 
@@ -123,9 +105,7 @@ NnetModelSync::GetWeight(Nnet *nnet)
 	nnet->WeightCopy(host_data_, NnetModelSync::kDstAddress, NnetModelSync::kCudaMemcpyDeviceToHost);
 }
 
-void
-NnetModelSync::SetWeight(Nnet *nnet)
-{
+void NnetModelSync::SetWeight(Nnet *nnet) {
 	KALDI_ASSERT(this->data_ != NULL);
 
 	void *host_data_ = (void*)this->data_;
@@ -133,22 +113,11 @@ NnetModelSync::SetWeight(Nnet *nnet)
 	nnet->WeightCopy(host_data_, NnetModelSync::kSrcAddress, NnetModelSync::kCudaMemcpyHostToDevice);
 }
 
-void
-NnetModelSync::SaveWeight()
-{
-	KALDI_ASSERT(this->data_ != NULL);
-
-	void *host_data_ = (void*)this->data_;
-	// host_data_ to host nnet
-	this->nnet->WeightCopy(host_data_, NnetModelSync::kSrcAddress, NnetModelSync::kCudaMemcpyHostToHost);
-}
-
 /*
  * 'ark,o:copy-feats scp:exp/tri_dnn_mmi/scplist/train.scp ark:- |'
  */
 
-std::string NnetParallelUtil::AddSuffix(std::string filename, int idx)
-{
+std::string NnetParallelUtil::AddSuffix(std::string filename, int idx) {
   char buf[1024];
   char suf[1024], ext[1024], fn[1024];
   int  len;
@@ -179,8 +148,7 @@ std::string NnetParallelUtil::AddSuffix(std::string filename, int idx)
  * 'ark,o:copy-feats scp:exp/tri_dnn_mmi/scplist/train.JOB.scp ark:- |'
  */
 
-std::string NnetParallelUtil::ReplaceJobId(std::string filename, int idx, std::string wildcard)
-{
+std::string NnetParallelUtil::ReplaceJobId(std::string filename, int idx, std::string wildcard) {
   std::string job_id = std::to_string(idx);
   //std::ostringstream oss;
   //std::cout<< "." << idx << std::endl;
@@ -191,8 +159,7 @@ std::string NnetParallelUtil::ReplaceJobId(std::string filename, int idx, std::s
   return newfn;
 }
 
-std::string NnetParallelUtil::FAddSuffix(std::string filename, int idx)
-{
+std::string NnetParallelUtil::FAddSuffix(std::string filename, int idx) {
   char buf[1024];
   char ext[128], fn[128];
   int  len;
@@ -211,8 +178,7 @@ std::string NnetParallelUtil::FAddSuffix(std::string filename, int idx)
   return buf;
 }
 
-std::string NnetParallelUtil::GetFilename(std::string filename)
-{
+std::string NnetParallelUtil::GetFilename(std::string filename) {
   char fn[128];
 
   const char *pfn = filename.c_str();
@@ -226,20 +192,17 @@ std::string NnetParallelUtil::GetFilename(std::string filename)
   return fn;
 }
 
-int NnetParallelUtil::NumofMerge(std::string fn, int merge_size)
-{
+int NnetParallelUtil::NumofMerge(std::string fn, int merge_size) {
 	std::string sfn = fn+".len";
 	std::ifstream in(sfn.c_str());
 	std::string str, featname;
 	int len, piece = 0;
 	size_t frames = 0;
-	while(std::getline(in, str))
-	{
+	while(std::getline(in, str)) {
 		std::istringstream ss(str);
 		ss>>featname>>len;
 
-		if (frames + len > merge_size)
-		{
+		if (frames + len > merge_size) {
 			piece++;
 			frames = 0;
 		}
@@ -252,15 +215,13 @@ int NnetParallelUtil::NumofMerge(std::string fn, int merge_size)
 	return piece;
 }
 
-int NnetParallelUtil::NumofCEMerge(std::string fn, int merge_size)
-{
+int NnetParallelUtil::NumofCEMerge(std::string fn, int merge_size) {
 	std::string sfn = fn+".len";
 	std::ifstream in(sfn.c_str());
 	std::string str, featname;
 	int len, piece = 0;
 	size_t frames = 0;
-	while(std::getline(in, str))
-	{
+	while(std::getline(in, str)) {
 		std::istringstream ss(str);
 		ss>>featname>>len;
 
