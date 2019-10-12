@@ -34,11 +34,13 @@ namespace nnet0 {
 
 struct PdfPriorOptions {
   std::string class_frame_counts;
+  std::string exclude_class;
   BaseFloat prior_scale;
   BaseFloat prior_floor;
   bool      use_count;
 
   PdfPriorOptions() : class_frame_counts(""),
+  					  exclude_class(""),
                       prior_scale(1.0),
                       prior_floor(1e-10),
                       use_count(true) {}
@@ -53,6 +55,7 @@ struct PdfPriorOptions {
     opts->Register("prior-floor", &prior_floor,
                    "Flooring constatnt for prior probability (i.e. label rel. frequency)");
     opts->Register("use-count", &use_count, "Input file is class frame count frequency or prior.");
+    opts->Register("exclude-class", &exclude_class, "Without regard to the class frame count frequency or prior(e.g. blank in ctc)");
   }
 };
 
