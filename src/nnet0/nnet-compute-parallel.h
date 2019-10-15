@@ -56,8 +56,8 @@ struct SpecAugOptions {
 	  po->Register("num-time-mask", &num_time_mask, "Number of mask in time domain.");
 	  po->Register("max-time-mask", &max_time_mask, "Maximum mask frames in time domain.");
 	  po->Register("time-mask-ratio", &time_mask_ratio, "Maximum mask frames ration of utterance in time domain.");
-	  po->Register("num_freq_mask", &num_freq_mask, "Number of mask in frequency domain.");
-	  po->Register("max_freq_mask", &max_freq_mask, "Maximum mask frames in frequency domain.");
+	  po->Register("num-freq-mask", &num_freq_mask, "Number of mask in frequency domain.");
+	  po->Register("max-freq-mask", &max_freq_mask, "Maximum mask frames in frequency domain.");
 	}
 
 };
@@ -139,7 +139,7 @@ struct NnetUpdateOptions {
 	      po->Register("sweep-loop", &sweep_loop, "Sweep all frames indexes for each utterance in skip frames training if true, "
 	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
 	      po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
-	      po->Register("use_specaug", &use_specaug, "Apply spectrum and time augmentation on fbank feature");
+	      po->Register("use-specaug", &use_specaug, "Apply spectrum and time domain augmentation on fbank feature");
 
 	      po->Register("update-frames",&update_frames, "Every update-frames frames each client exchange gradient");
 
