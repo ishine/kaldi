@@ -65,13 +65,12 @@ int main(int argc, char *argv[]) {
     		model_filename = po.GetArg(1);
     		feature_rspecifier = po.GetArg(2);
     		feature_wspecifier = po.GetArg(3);
-    }
-    else if (po.NumArgs() == 4) {
+    } else if (po.NumArgs() == 4) {
 		model_filename = po.GetArg(1);
 		feature_rspecifier = po.GetArg(2);
 		sweep_frames_rspecifier = po.GetArg(3);
 		feature_wspecifier = po.GetArg(4);
-	}else {
+	} else {
     		po.PrintUsage();
     		exit(1);
     }
@@ -100,7 +99,6 @@ int main(int argc, char *argv[]) {
     KALDI_LOG << "Nnet Forward FINISHED; ";
 
     time_now = time.Elapsed();
-
     stats.Print(time_now);
 
 #if HAVE_CUDA==1

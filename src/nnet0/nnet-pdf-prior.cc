@@ -42,14 +42,25 @@ PdfPrior::PdfPrior(const PdfPriorOptions &opts)
   if (opts.use_count) {
   KALDI_LOG << "Computing pdf-priors from : " << opts.class_frame_counts;
 
+  std::vector<int32> exclude;
+  if (opts.exclude_class != "") {
+  	if (!kaldi::SplitStringToIntegers(opts.exclude_class, ":", false, &exclude))
+		KALDI_ERR << "Invalid exclude_class string " << opts.exclude_class;
+  }
+
   // get relative frequencies,
   rel_freq = frame_counts;
-  rel_freq.Scale(1.0/frame_counts.Sum());
+  for(int i = 0; i < exclude.size(); i++)
+  	rel_freq(exclude[i]) = 0;
+  double sum = rel_freq.Sum();
+  rel_freq.Scale(1.0/sum);
   
   // get the log-prior,
   log_priors = rel_freq;
   log_priors.Add(1e-20);
   log_priors.ApplyLog();
+  for(int i = 0; i < exclude.size(); i++)
+  	log_priors(exclude[i]) = 0;
 
   // Make the priors for classes with low counts +inf (i.e. -log(0)) such that
   // the classes have 0 likelihood (i.e. -inf log-likelihood). We use sqrt(FLT_MAX)
@@ -63,9 +74,9 @@ PdfPrior::PdfPrior(const PdfPriorOptions &opts)
   }
   KALDI_LOG << "Floored " << num_floored << " pdf-priors " 
             << "(hard-set to " << sqrt(FLT_MAX) << ", which disables DNN output when decoding)";
-  }
-  else
+  } else {
 	  log_priors = frame_counts;
+  }
 
   // sanity check,
   KALDI_ASSERT(KALDI_ISFINITE(log_priors.Sum()));
