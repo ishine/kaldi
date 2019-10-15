@@ -35,6 +35,7 @@ struct NnetExample{
 
 	SequentialBaseFloatMatrixReader *feature_reader;
 	RandomAccessBaseFloatMatrixReader *si_feature_reader;
+	RandomAccessTokenVectorReader *spec_aug_reader;
 
 	std::string utt;
 	Matrix<BaseFloat> input_frames;
@@ -47,6 +48,7 @@ struct NnetExample{
 	NnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 			RandomAccessBaseFloatMatrixReader *si_feature_reader):
 		feature_reader(feature_reader), si_feature_reader(si_feature_reader),
+		spec_aug_reader(NULL),
 		inner_skipframes(false), use_kld(false) {}
 
     void SetSweepFrames(const std::vector<int32> &frames, bool inner = false) {

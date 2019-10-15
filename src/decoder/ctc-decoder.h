@@ -65,7 +65,7 @@ struct CTCDecoderOptions {
 class CTCDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
-		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &rnntlm, ConstArpaLm &const_arpa);
+		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &lstmlm, ConstArpaLm &const_arpa);
 
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
 

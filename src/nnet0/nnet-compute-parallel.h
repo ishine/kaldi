@@ -38,6 +38,31 @@
 namespace kaldi {
 namespace nnet0 {
 
+struct SpecAugOptions {
+	int32 num_time_mask;
+	int32 max_time_mask;
+	BaseFloat time_mask_ratio;
+	int32 num_freq_mask;
+	int32 max_freq_mask;
+
+	// default values
+	SpecAugOptions() : num_time_mask(2),
+					   max_time_mask(20),
+					   time_mask_ratio(0.2),
+					   num_freq_mask(2),
+					   max_freq_mask(7) { }
+
+	void Register(OptionsItf *po) {
+	  po->Register("num-time-mask", &num_time_mask, "Number of mask in time domain.");
+	  po->Register("max-time-mask", &max_time_mask, "Maximum mask frames in time domain.");
+	  po->Register("time-mask-ratio", &time_mask_ratio, "Maximum mask frames ration of utterance in time domain.");
+	  po->Register("num_freq_mask", &num_freq_mask, "Number of mask in frequency domain.");
+	  po->Register("max_freq_mask", &max_freq_mask, "Maximum mask frames in frequency domain.");
+	}
+
+};
+
+
 struct NnetUpdateOptions {
     bool binary,
          crossvalidate,
@@ -61,6 +86,7 @@ struct NnetUpdateOptions {
     std::string sweep_frames_str;
     bool  sweep_loop;
     bool  skip_inner;
+    bool  use_specaug;
     std::string network_type;
 
 
@@ -70,20 +96,19 @@ struct NnetUpdateOptions {
 
     const NnetTrainOptions *trn_opts;
     const NnetDataRandomizerOptions *rnd_opts;
+    const SpecAugOptions *spec_opts;
     LossOptions *loss_opts;
     const NnetParallelOptions *parallel_opts;
     const CuAllocatorOptions *cuallocator_opts;
 
-    NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
+    NnetUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const SpecAugOptions *spec_opts,
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	: binary(true),crossvalidate(false),randomize(true),use_psgd(false),kld_scale(-1.0),skip_frames(1),sweep_time(1), dump_time(0), targets_delay(0),
-		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),sweep_loop(false), skip_inner(false),network_type("lstm"),
+		  objective_function("xent"),frame_weights(""),use_gpu("yes"),sweep_frames_str("0"),sweep_loop(false), skip_inner(false), use_specaug(false), network_type("lstm"),
 		  length_tolerance(5),update_frames(-1),dropout_retention(0.0),
-		  trn_opts(trn_opts),rnd_opts(rnd_opts),loss_opts(loss_opts),parallel_opts(parallel_opts),cuallocator_opts(cuallocator_opts){ }
+		  trn_opts(trn_opts),rnd_opts(rnd_opts),spec_opts(spec_opts),loss_opts(loss_opts),parallel_opts(parallel_opts),cuallocator_opts(cuallocator_opts){ }
 
-  	  void Register(OptionsItf *po)
-  	  {
-
+  	  void Register(OptionsItf *po) {
   		  po->Register("binary", &binary, "Write output in binary mode");
   		  po->Register("cross-validate", &crossvalidate, "Perform cross-validation (don't backpropagate)");
 	      po->Register("randomize", &randomize, "Perform the frame-level shuffling within the Cache::");
@@ -114,6 +139,7 @@ struct NnetUpdateOptions {
 	      po->Register("sweep-loop", &sweep_loop, "Sweep all frames indexes for each utterance in skip frames training if true, "
 	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
 	      po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
+	      po->Register("use_specaug", &use_specaug, "Apply spectrum and time augmentation on fbank feature");
 
 	      po->Register("update-frames",&update_frames, "Every update-frames frames each client exchange gradient");
 

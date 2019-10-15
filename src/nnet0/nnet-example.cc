@@ -89,7 +89,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	  }
 	}
 
-	examples.resize(1);
+	examples.clear();
 
 	if (sweep_time>skip_frames) {
 		KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
@@ -97,7 +97,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	}
 
 	if (skip_frames <= 1) {
-		examples[0] = this;
+		examples.push_back(this);
 		return true;
 	}
 
@@ -106,8 +106,6 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		for (int i = 0; i < sweep_time; i++)
 			sweep_frames[i] = i;
 	}
-
-	examples.resize(sweep_frames.size());
 
 	DNNNnetExample *example = NULL;
 	int32 lent, feat_lent, cur,
@@ -140,7 +138,18 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 			example->frames_weights(j) = frames_weights(cur);
 			cur += ali_skip ? skip_frames : 0;
 		}
-		examples[i] = example;
+		examples.push_back(example);
+
+    	// spectrum augmentation
+    	if (opts->use_specaug) {
+    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader != NULL->HasKey(utt))) {
+				CTCNnetExample *spec_example = new CTCNnetExample(feature_reader, si_feature_reader, targets_reader, model_sync, stats, opts);
+				*spec_example = *example;
+				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,
+						opts->spec_opts->time_mask_ratio, opts->spec_opts->num_freq_mask, opts->spec_opts->max_freq_mask);
+				examples.push_back(spec_example);
+    		}
+    	}
 	}
 
 	return true;
@@ -164,7 +173,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     targets = targets_reader->Value(utt);
     if (use_kld) si_input_frames = si_feature_reader->Value(utt);
 
-    examples.resize(1);
+    examples.clear();
 
     // split feature
     int32 skip_frames = opts->skip_frames;
@@ -176,7 +185,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     }
 
     if (skip_frames <= 1) {
-    	examples[0] = this;
+    	examples.push_back(this);
     	return true;
     }
 
@@ -185,8 +194,6 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     	for (int i = 0; i < sweep_time; i++)
     		sweep_frames[i] = i;
     }
-
-    examples.resize(sweep_frames.size());
 
     CTCNnetExample *example = NULL;
     int32 lent, feat_lent, cur,
@@ -210,8 +217,18 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     		cur = this->inner_skipframes ? cur+1 : cur+skip_frames;
     		if (cur >= utt_len) cur = utt_len-1;
     	}
+    	examples.push_back(example);
 
-    	examples[i] = example;
+    	// spectrum augmentation
+    	if (opts->use_specaug) {
+    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader != NULL->HasKey(utt))) {
+				CTCNnetExample *spec_example = new CTCNnetExample(feature_reader, si_feature_reader, targets_reader, model_sync, stats, opts);
+				*spec_example = *example;
+				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,
+								opts->spec_opts->time_mask_ratio, opts->spec_opts->num_freq_mask, opts->spec_opts->max_freq_mask);
+				examples.push_back(spec_example);
+    		}
+    	}
     }
 
     return true;
@@ -318,10 +335,10 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
 
 	// split feature
-	examples.resize(1);
+	examples.clear();
 
 	if (skip_frames <= 1) {
-		examples[0] = this;
+		examples.push_back(this);
 		return true;
 	}
 
@@ -351,7 +368,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 			if (cur >= utt_len) cur = utt_len-1;
 		}
 
-		examples[i] = example;
+		examples.push_back(example);
 	}
 
 	return true;
@@ -365,10 +382,10 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 	int32 skip_frames = opts->skip_frames;
 
 	// split feature
-	examples.resize(1);
+	examples.clear();
 
 	if (skip_frames <= 1) {
-		examples[0] = this;
+		examples.push_back(this);
 		return true;
 	}
 
@@ -397,7 +414,7 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 			if (cur >= utt_len) cur = utt_len-1;
 		}
 
-		examples[i] = example;
+		examples.push_back(example);
 	}
 
 	return true;
@@ -419,7 +436,7 @@ bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     input_wordids = wordid_reader->Value(utt);
     if (use_kld) si_input_frames = si_feature_reader->Value(utt);
 
-    examples.resize(1);
+    examples.clear();
 
     // split feature
     int32 skip_frames = opts->skip_frames;
@@ -431,7 +448,7 @@ bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     }
 
     if (skip_frames <= 1) {
-    	examples[0] = this;
+    	examples.push_back(this);
     	return true;
     }
 
@@ -467,7 +484,7 @@ bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     		if (cur >= utt_len) cur = utt_len-1;
     	}
 
-    	examples[i] = example;
+    	examples.push_back(example);
     }
 
     return true;
@@ -493,11 +510,11 @@ bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		sweep_time = skip_frames;
     }
 
-    examples.resize(sweep_time);
+    examples.clear();
 
     if (sweep_time <= 1)
     {
-		examples[0] = this;
+    	examples.push_back(this);
 		return true;
     }
 
@@ -518,7 +535,7 @@ bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 			cur += skip_frames;
 		}
 
-		examples[i] = example;
+		examples.push_back(example);
     }
 
     return true;

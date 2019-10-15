@@ -56,9 +56,9 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
     std::string ctc_imp;
 
 
-    NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts,
+    NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const SpecAugOptions *spec_opts,
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts, cuallocator_opts), 
+    	: NnetUpdateOptions(trn_opts, rnd_opts, spec_opts, loss_opts, parallel_opts, cuallocator_opts),
         num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
           clip_loss(1.0), ctc_imp("eesen") { }
 

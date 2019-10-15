@@ -521,6 +521,9 @@ class MatrixBase {
   /// defined (it's not defined where multiple inputs in the group are equal to the output).
   void GroupMaxDeriv(const MatrixBase<Real> &input, const MatrixBase<Real> &output);
 
+  void SpecAugment(int32 num_time_masks, int32 max_time_mask_len,
+  		Real time_mask_upbound_ratio, int32 num_freq_masks, int32 max_freq_mask_len);
+
   /// Set each element to the tanh of the corresponding element of "src".
   void Tanh(const MatrixBase<Real> &src);
 
