@@ -23,8 +23,7 @@
 namespace kaldi {
 namespace nnet0 {
 
-bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 	utt = feature_reader->Key();
 	KALDI_VLOG(3) << "Reading " << utt;
 	// check that we have targets
@@ -155,8 +154,7 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	return true;
 }
 
-bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     utt = feature_reader->Key();
     KALDI_VLOG(3) << "Reading " << utt;
     // check that we have targets
@@ -235,8 +233,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 }
 
 
-bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 	utt = feature_reader->Key();
 	if (!den_lat_reader->HasKey(utt)) {
 		KALDI_WARN << "Utterance " << utt << ": found no lattice.";
@@ -286,7 +283,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
         utt_frames = ali_frames;
 
 	// check for temporal length of numerator alignments
-	if ((int32)num_ali.size() != utt_frames){
+	if ((int32)num_ali.size() != utt_frames) {
 	    KALDI_WARN << "Utterance " << utt << ": Numerator alignment has wrong length "
 			   << num_ali.size() << " vs. "<< utt_frames;
 		model_sync->LockStates();
@@ -374,8 +371,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 	return true;
 }
 
-bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples) {
 	utt = feature_reader->Key();
 	input_frames = feature_reader->Value();
 
@@ -420,8 +416,7 @@ bool FeatureExample::PrepareData(std::vector<NnetExample*> &examples)
 	return true;
 }
 
-bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     utt = feature_reader->Key();
     KALDI_VLOG(3) << "Reading " << utt;
     // check that we have targets
@@ -491,8 +486,7 @@ bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 }
 
 
-bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     utt = wordid_reader->Key();
     KALDI_VLOG(3) << "Reading " << utt;
 
@@ -504,23 +498,20 @@ bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     int32 sweep_time = opts->sweep_time;
     int32 lent, cur;
 
-    if (sweep_time>skip_frames)
-    {
+    if (sweep_time>skip_frames) {
 		KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
 		sweep_time = skip_frames;
     }
 
     examples.clear();
 
-    if (sweep_time <= 1)
-    {
+    if (sweep_time <= 1) {
     	examples.push_back(this);
 		return true;
     }
 
     LmNnetExample *example = NULL;
-    for (int i = 0; i < sweep_time; i++)
-    {
+    for (int i = 0; i < sweep_time; i++) {
 		example = new LmNnetExample(wordid_reader, opts);
 		example->utt = utt;
 		example->input_wordids = input_wordids;
@@ -529,8 +520,7 @@ bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 		lent += input_wordids.size()%skip_frames > i ? 1 : 0;
 		example->input_wordids.resize(lent);
 		cur = i;
-		for (int j = 0; j < example->input_wordids.size(); j++)
-		{
+		for (int j = 0; j < example->input_wordids.size(); j++) {
 			example->input_wordids[j] = input_wordids[cur];
 			cur += skip_frames;
 		}
@@ -541,8 +531,7 @@ bool LmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     return true;
 }
 
-bool SluNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool SluNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     utt = wordid_reader->Key();
     KALDI_VLOG(3) << "Reading " << utt;
 
@@ -570,23 +559,20 @@ bool SluNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     int32 sweep_time = opts->sweep_time;
     int32 lent, cur;
 
-    if (sweep_time>skip_frames)
-    {
+    if (sweep_time>skip_frames) {
     	KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
     	sweep_time = skip_frames;
     }
 
     examples.resize(sweep_time);
 
-    if (sweep_time <= 1)
-    {
+    if (sweep_time <= 1) {
     	examples[0] = this;
     	return true;
     }
 
     SluNnetExample *example = NULL;
-    for (int i = 0; i < sweep_time; i++)
-    {
+    for (int i = 0; i < sweep_time; i++) {
     	example = new SluNnetExample(opts, wordid_reader, slot_reader, intent_reader);
     	example->utt = utt;
 
@@ -610,8 +596,7 @@ bool SluNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     return true;
 }
 
-bool SeqLabelNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool SeqLabelNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     utt = wordid_reader->Key();
     KALDI_VLOG(3) << "Reading " << utt;
 
@@ -630,23 +615,20 @@ bool SeqLabelNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     int32 sweep_time = opts->sweep_time;
     int32 lent, cur;
 
-    if (sweep_time>skip_frames)
-    {
+    if (sweep_time>skip_frames) {
     	KALDI_WARN << "sweep time for each utterance should less than skip frames (it reset to skip frames)";
     	sweep_time = skip_frames;
     }
 
     examples.resize(sweep_time);
 
-    if (sweep_time <= 1)
-    {
+    if (sweep_time <= 1) {
     	examples[0] = this;
     	return true;
     }
 
     SeqLabelNnetExample *example = NULL;
-    for (int i = 0; i < sweep_time; i++)
-    {
+    for (int i = 0; i < sweep_time; i++) {
     	example = new SeqLabelNnetExample(opts, wordid_reader, label_reader);
     	example->utt = utt;
 
@@ -655,8 +637,7 @@ bool SeqLabelNnetExample::PrepareData(std::vector<NnetExample*> &examples)
     	example->input_wordids.resize(lent);
     	example->input_labelids.resize(lent);
     	cur = i;
-    	for (int j = 0; j < example->input_wordids.size(); j++)
-    	{
+    	for (int j = 0; j < example->input_wordids.size(); j++) {
     		example->input_wordids[j] = input_wordids[cur];
     		example->input_labelids[j] = input_labelids[cur];
     		cur += skip_frames;
@@ -667,6 +648,7 @@ bool SeqLabelNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
     return true;
 }
+
 /*
 bool ChainNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 {
@@ -679,8 +661,7 @@ bool ChainNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 }
 */
 
-bool LstmNnetExample::PrepareData(std::vector<NnetExample*> &examples)
-{
+bool LstmNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 	examples.resize(1);
 	examples[0] = this;
 	return true;
