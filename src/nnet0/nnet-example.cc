@@ -142,8 +142,8 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
     	// spectrum augmentation
     	if (opts->use_specaug) {
-    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader != NULL->HasKey(utt))) {
-				CTCNnetExample *spec_example = new CTCNnetExample(feature_reader, si_feature_reader, targets_reader, model_sync, stats, opts);
+    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader->HasKey(utt))) {
+				DNNNnetExample *spec_example = new DNNNnetExample(feature_reader, si_feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
 				*spec_example = *example;
 				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,
 						opts->spec_opts->time_mask_ratio, opts->spec_opts->num_freq_mask, opts->spec_opts->max_freq_mask);
@@ -221,7 +221,7 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples)
 
     	// spectrum augmentation
     	if (opts->use_specaug) {
-    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader != NULL->HasKey(utt))) {
+    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader->HasKey(utt))) {
 				CTCNnetExample *spec_example = new CTCNnetExample(feature_reader, si_feature_reader, targets_reader, model_sync, stats, opts);
 				*spec_example = *example;
 				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,

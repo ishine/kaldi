@@ -50,8 +50,6 @@ PdfPrior::PdfPrior(const PdfPriorOptions &opts)
 
   // get relative frequencies,
   rel_freq = frame_counts;
-  for(int i = 0; i < exclude.size(); i++)
-  	rel_freq(exclude[i]) = 0;
   double sum = rel_freq.Sum();
   rel_freq.Scale(1.0/sum);
   
