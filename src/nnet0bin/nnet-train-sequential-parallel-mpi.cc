@@ -89,8 +89,8 @@ int main(int argc, char *argv[]) {
 
     std::string model_filename, transition_model_filename,
                 feature_rspecifier, den_lat_rspecifier,
-                num_ali_rspecifier, sweep_frames_rspecifier, target_model_filename;
-                transition_model_filename = "", sweep_frames_rspecifier = "";
+                num_ali_rspecifier, target_model_filename;
+                transition_model_filename = "";
 
     if (po.NumArgs() == 6) {
         model_filename = po.GetArg(1),
@@ -99,15 +99,7 @@ int main(int argc, char *argv[]) {
         den_lat_rspecifier = po.GetArg(4),
         num_ali_rspecifier = po.GetArg(5);
         target_model_filename = po.GetArg(6);
-    } else if (po.NumArgs() == 7) {   
-        model_filename = po.GetArg(1),
-        transition_model_filename = po.GetArg(2),
-        feature_rspecifier = po.GetArg(3),
-        sweep_frames_rspecifier = po.GetArg(4);
-        den_lat_rspecifier = po.GetArg(5),
-        num_ali_rspecifier = po.GetArg(6);
-        target_model_filename = po.GetArg(7);
-    } else if (po.NumArgs() == 5) {   
+    } else if (po.NumArgs() == 5) {
         model_filename = po.GetArg(1),
         feature_rspecifier = po.GetArg(2),
         den_lat_rspecifier = po.GetArg(3),
@@ -170,7 +162,6 @@ int main(int argc, char *argv[]) {
 								feature_rspecifier,
 								den_lat_rspecifier,
 								num_ali_rspecifier,
-                                sweep_frames_rspecifier,
 								&nnet,
 								&stats);
 
@@ -214,6 +205,3 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 }
-
-
-

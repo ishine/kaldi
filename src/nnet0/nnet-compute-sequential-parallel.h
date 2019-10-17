@@ -245,7 +245,6 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		std::string feature_rspecifier,
 		std::string den_lat_rspecifier,
 		std::string num_ali_rspecifier,
-		std::string sweep_frames_rspecifier,
 		Nnet *nnet,
 		NnetSequentialStats *stats);
 
