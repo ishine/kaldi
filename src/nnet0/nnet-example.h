@@ -31,10 +31,10 @@ namespace kaldi {
 namespace nnet0 {
 
 
-struct NnetExample{
-
+struct NnetExample {
 	SequentialBaseFloatMatrixReader *feature_reader;
 	RandomAccessBaseFloatMatrixReader *si_feature_reader;
+	RandomAccessTokenVectorReader *spec_aug_reader;
 
 	std::string utt;
 	Matrix<BaseFloat> input_frames;
@@ -47,22 +47,19 @@ struct NnetExample{
 	NnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 			RandomAccessBaseFloatMatrixReader *si_feature_reader):
 		feature_reader(feature_reader), si_feature_reader(si_feature_reader),
+		spec_aug_reader(NULL),
 		inner_skipframes(false), use_kld(false) {}
 
     void SetSweepFrames(const std::vector<int32> &frames, bool inner = false) {
         sweep_frames = frames;
         inner_skipframes = inner;
     }
-	virtual ~NnetExample(){}
 
+	virtual ~NnetExample() {}
 	virtual bool PrepareData(std::vector<NnetExample*> &examples) = 0;
-
-
 };
 
-struct DNNNnetExample : NnetExample
-{
-
+struct DNNNnetExample : NnetExample {
 	RandomAccessPosteriorReader *targets_reader;
 	RandomAccessBaseFloatVectorReader *weights_reader;
 
@@ -84,16 +81,15 @@ struct DNNNnetExample : NnetExample
 	NnetExample(feature_reader, si_feature_reader), targets_reader(targets_reader), weights_reader(weights_reader),
 	model_sync(model_sync), stats(stats), opts(opts) {
 
-		if (opts->kld_scale > 0 && opts->si_feature_rspecifier != "")
-			use_kld = true;
+	if (opts->kld_scale > 0 && opts->si_feature_rspecifier != "")
+		use_kld = true;
 	}
 
     
 	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
-struct CTCNnetExample : NnetExample
-{
+struct CTCNnetExample : NnetExample {
 	RandomAccessInt32VectorReader *targets_reader;
 
 	NnetModelSync *model_sync;
@@ -114,13 +110,10 @@ struct CTCNnetExample : NnetExample
 		if (opts->kld_scale > 0 && opts->si_feature_rspecifier != "")
 			use_kld = true;
 	}
-
-
 	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
-struct SequentialNnetExample : NnetExample
-{
+struct SequentialNnetExample : NnetExample {
 	RandomAccessLatticeReader *den_lat_reader;
 	RandomAccessInt32VectorReader *num_ali_reader;
 	RandomAccessInt32VectorReader *sweep_frames_reader;
@@ -158,8 +151,7 @@ struct SequentialNnetExample : NnetExample
 	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
-struct FeatureExample: NnetExample
-{
+struct FeatureExample: NnetExample {
 	RandomAccessInt32VectorReader *sweep_frames_reader;
 	const NnetForwardOptions *opts;
 
@@ -179,8 +171,7 @@ struct FeatureExample: NnetExample
 	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
-struct RNNTNnetExample : NnetExample
-{
+struct RNNTNnetExample : NnetExample {
 	RandomAccessInt32VectorReader *wordid_reader;
 	NnetStats *stats;
 	const NnetUpdateOptions *opts;
@@ -193,15 +184,12 @@ struct RNNTNnetExample : NnetExample
 					NnetStats *stats,
 					const NnetUpdateOptions *opts):
 	NnetExample(feature_reader, si_feature_reader), wordid_reader(wordid_reader),
-	stats(stats), opts(opts) {
-
-	}
+	stats(stats), opts(opts) {}
 
 	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
-struct LmNnetExample : NnetExample
-{
+struct LmNnetExample : NnetExample {
     SequentialInt32VectorReader *wordid_reader;
 
     const NnetUpdateOptions *opts;
@@ -216,8 +204,7 @@ struct LmNnetExample : NnetExample
     bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
-struct SluNnetExample : NnetExample
-{
+struct SluNnetExample : NnetExample {
 	const NnetUpdateOptions *opts;
 	SequentialInt32VectorReader *wordid_reader;
 	RandomAccessInt32VectorReader *slot_reader;
@@ -238,8 +225,7 @@ struct SluNnetExample : NnetExample
 	bool PrepareData(std::vector<NnetExample*> &examples);
 };
 
-struct SeqLabelNnetExample : NnetExample
-{
+struct SeqLabelNnetExample : NnetExample {
 	const NnetUpdateOptions *opts;
 	SequentialInt32VectorReader *wordid_reader;
 	RandomAccessInt32VectorReader *label_reader;
@@ -273,8 +259,7 @@ struct ChainNnetExample: NnetExample
 };
 */
 
-struct LstmNnetExample: NnetExample
-{
+struct LstmNnetExample: NnetExample {
     Vector<BaseFloat> frame_mask;
     Posterior target;
     Matrix<BaseFloat> feat;
@@ -312,7 +297,7 @@ class ExamplesRepository {
 
   ExamplesRepository(int32 buffer_size = 128): buffer_size_(buffer_size),
                                       empty_semaphore_(buffer_size_),
-                                      done_(false) { }
+                                      done_(false) {}
  private:
   int32 buffer_size_;
   Semaphore full_semaphore_;

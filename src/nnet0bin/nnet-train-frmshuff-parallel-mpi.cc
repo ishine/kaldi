@@ -52,6 +52,9 @@ int main(int argc, char *argv[]) {
     NnetDataRandomizerOptions rnd_opts;
     rnd_opts.Register(&po);
     
+    SpecAugOptions spec_opts;
+    spec_opts.Register(&po);
+
     LossOptions loss_opts;
     loss_opts.Register(&po);
 
@@ -68,7 +71,8 @@ int main(int argc, char *argv[]) {
 
     parallel_opts.Register(&po);
 
-    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &loss_opts, &parallel_opts, &cuallocator_opts);
+    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &spec_opts,
+    		&loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);

@@ -103,9 +103,11 @@ public:
 	    	KALDI_ERR << "Cannot use both --apply-log=true --no-softmax=true, use only one of the two!";
 	    }
 
+        /*
 	    if (blank_posterior_scale >= 0 && prior_opts->class_frame_counts != "") {
 	    	KALDI_ERR << "Cannot use both --blank-posterior-scale --class-frame-counts, use only one of the two!";
 	    }
+        */
 
 	    // we will subtract log-priors later,
 	    PdfPrior pdf_prior(*opts->prior_opts);

@@ -1363,6 +1363,39 @@ void MatrixBase<Real>::MulColsVec(const VectorBase<Real> &scale) {
 }
 
 template<typename Real>
+void MatrixBase<Real>::SpecAugment(int32 num_time_masks, int32 max_time_mask_len,
+		Real time_mask_upbound_ratio, int32 num_freq_masks, int32 max_freq_mask_len) {
+	srand(time(0));
+	const MatrixIndexT num_rows = num_rows_;
+	const MatrixIndexT num_cols = num_cols_;
+	Vector<Real> mean(num_cols);
+	mean.AddRowSumMat(1.0, *this);
+	mean.Scale(1.0 / num_rows);
+	int32 freq_mask_len = 0, freq_mask_start = 0;
+	int32 time_mask_len = 0, time_mask_start = 0;
+
+	// freq mask for spec agument
+	for(int32 n = 0; n < num_freq_masks; n++) {
+		freq_mask_len = rand()%max_freq_mask_len+1;
+		freq_mask_start = rand()%(num_cols - freq_mask_len);
+
+		SubMatrix<Real> feats_sub_cols(this->ColRange(freq_mask_start, freq_mask_len));
+		SubVector<Real> mean_sub(mean.Range(freq_mask_start, freq_mask_len));
+		feats_sub_cols.CopyRowsFromVec(mean_sub);
+	}
+
+	// time mask for spec agument
+	for(int32 n = 0; n < num_time_masks; n++){
+		time_mask_len = rand() % max_time_mask_len+1;
+		time_mask_len = time_mask_len > time_mask_upbound_ratio*num_rows ?
+				time_mask_upbound_ratio*num_rows : time_mask_len;
+		time_mask_start = rand() % (num_rows - time_mask_len);
+		SubMatrix<Real> feats_sub_rows(this->RowRange(time_mask_start, time_mask_len));
+		feats_sub_rows.CopyRowsFromVec(mean);
+	}
+}
+
+template<typename Real>
 void MatrixBase<Real>::SetZero() {
   if (num_cols_ == stride_)
     memset(data_, 0, sizeof(Real)*num_rows_*num_cols_);
