@@ -603,13 +603,14 @@ void NnetLstmUpdateAsgd(const NnetLstmUpdateOptions *opts,
 		    if (opts->frame_weights != "") {
 		      weights_reader.Open(opts->frame_weights);
 		    }
+	    	RandomAccessTokenReader *spec_aug_reader = NULL;
 			std::string spec_aug_rspecifier = "";
     		if (opts->spec_aug_filename != "") {
     			std::stringstream ss;
     			ss << "ark,t:" << opts->spec_aug_filename;
     			spec_aug_rspecifier = ss.str();
+				spec_aug_reader = new RandomAccessTokenReader(spec_aug_rspecifier);
     		}
-	    	RandomAccessTokenReader spec_aug_reader(spec_aug_rspecifier);
 
             if (opts->objective_function.compare(0, 9, "multitask") == 0)
                 stats->multitask.InitFromString(opts->objective_function);
@@ -640,7 +641,7 @@ void NnetLstmUpdateAsgd(const NnetLstmUpdateOptions *opts,
 	    		idx = (idx+1)%nframes;
 	    	}
 
-	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, &spec_aug_reader,
+	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
 					&targets_reader, &weights_reader, &model_sync, stats, opts);
             example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {

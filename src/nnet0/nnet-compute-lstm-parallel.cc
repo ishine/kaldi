@@ -538,13 +538,14 @@ void NnetLstmUpdateParallel(const NnetLstmUpdateOptions *opts,
 	    	RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 		    RandomAccessPosteriorReader targets_reader(targets_rspecifier);
 		    RandomAccessBaseFloatVectorReader weights_reader;
+	    	RandomAccessTokenReader *spec_aug_reader = NULL;
 			std::string spec_aug_rspecifier = "";
     		if (opts->spec_aug_filename != "") {
     			std::stringstream ss;
     			ss << "ark,t:" << opts->spec_aug_filename;
     			spec_aug_rspecifier = ss.str();
+				spec_aug_reader = new RandomAccessTokenReader(spec_aug_rspecifier);
     		}
-	    	RandomAccessTokenReader spec_aug_reader(spec_aug_rspecifier);
 		    if (opts->frame_weights != "") {
 		      weights_reader.Open(opts->frame_weights);
 		    }
@@ -557,7 +558,7 @@ void NnetLstmUpdateParallel(const NnetLstmUpdateOptions *opts,
 	    NnetExample *example;
 	    std::vector<NnetExample*> examples;
 	    for (; !feature_reader.Done(); feature_reader.Next()) {
-	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, &spec_aug_reader,
+	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
                             &targets_reader, &weights_reader, &model_sync, stats, opts);
 	    	if (example->PrepareData(examples))
 	    	{
