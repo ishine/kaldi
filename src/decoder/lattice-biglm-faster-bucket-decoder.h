@@ -106,7 +106,6 @@ namespace biglmbucketdecoder {
 
 // BackwardLinks are the links from a token to a token on the preceding frame
 // or sometimes on the current frame (for input-epsilon links).
-// TODO: We maybe modify it to bidirectional links.
 template <typename Token>
 struct BackwardLink {
   using Label = fst::StdArc::Label;
@@ -127,6 +126,31 @@ struct BackwardLink {
       graph_cost(graph_cost), acoustic_cost(acoustic_cost),
       graph_cost_ori(graph_cost_ori), next(next) { }
 };
+
+
+// ForwardLinks are the links from a token to a token on the next frame
+// or sometimes on the current frame (for input-epsilon links).
+template <typename Token>
+struct ForwardLink {
+  using Label = fst::StdArc::Label;
+
+  Token *next_tok;  // the previous token
+  Label ilabel;  // ilabel on arc
+  Label olabel;  // olabel on arc
+  BaseFloat graph_cost;  // graph cost of traversing arc (contains LM, etc.)
+  BaseFloat acoustic_cost;  // acoustic cost (pre-scaled) of traversing arc
+  BaseFloat graph_cost_ori;  // graph cost of base HCLG graph, we may don't use
+                             // this item. Just keep it in first.
+  ForwardLink *next;  // next in singly-linked list of forward arcs (arcs
+                       // in the state-level lattice) from a token.
+  inline ForwardLink(Token *next_tok, Label ilabel, Label olabel,
+                      BaseFloat graph_cost, BaseFloat acoustic_cost,
+                      BaseFloat graph_cost_ori, BackwardLink *next):
+      prev_tok(prev_tok), ilabel(ilabel), olabel(olabel),
+      graph_cost(graph_cost), acoustic_cost(acoustic_cost),
+      graph_cost_ori(graph_cost_ori), next(next) { }
+};
+
 
 template <typename Fst>
 struct StdToken {
@@ -197,6 +221,7 @@ struct StdToken {
   }
   inline bool operator > (const Token &other) const { return other < (*this); }
 };
+
 
 template <typename Fst>
 struct BackpointerToken {
@@ -272,6 +297,13 @@ struct BackpointerToken {
 };
 
 
+template <typename Token>
+struct cmp {
+  bool operator() (Token *a, Token *b) {
+    return a->tot_cost < b->tot_cost;
+  }
+}
+
 template <typename FST, typename Token>
 struct TokenBucket {
   using BackwardBucketLinkT = BackwardLink<TokenBucket>;
@@ -279,62 +311,94 @@ struct TokenBucket {
 
   bool expanded;  // indicate the bucket is expanded or non-expanded
   BackwardBucketLinkT bucket_links;  // link currnt bucket to preceding buckets
-  BaseFloat best_forward_cost;  // the best alpha of the bucket
-  StateId base_state;
-  std::vector<Token* > tokens;  // store the top N tokens
+  BaseFloat tot_cost;  // the best alpha of the bucket. compatible with
+                       // BucketQueue code.
+  StateId base_state;  // the tokens which are collected in a bucket will have
+                       // the same "base_state" and different "lm_state"s
+  const int32 length;  // only keep top N best tokens for a bucket. When the
+                       // size of "tokens" beyonds "length", remove the worst
+                       // one from the priority_queue
+  TokenBucket *next;  // 'next' is the next in the singly-linked list of tokens
+                      // for this frame.
+ 
+  // when we insert a token into the queue, we compare the "tot_cost" which is
+  // the smaller the better between them. So this is a max-heap.
+  std::priority_queue<Token*, std::vector<Token*>, cmp> tokens;
+  // when we insert an element into priority queue, it will call the compare
+  // function automatically to compare the new element with the elements from
+  // the leaf to root in queue. If the compare function return false, the new
+  // element will go on. Othewise, it will stop.
 
-  inline TokenBucket(bool expanded, BackwardBucketLinkT bucket_links, 
+  inline TokenBucket(bool expanded, TokenBucket *next,
                      size_t bucket_size):
-    expanded(expanded), bucket_links(bucket_links),
-    best_forward_cost(0), base_state(-1) {
-      tokens.resize(bucket_size, NULL);
+    expanded(expanded), bucket_links(NULL),
+    tot_cost(std::numeric_limits<BaseFloat>::infinity()), base_state(-1),
+    length(bucket_size), next(next) {
+      tokens.reserve(length + 1, NULL);  // reserve "length" + 1 positions to
+                                         // prevent memory re-allocate.
+  }
+
+  // Insert a token into "tokens" priority_queue. When the size of "tokens"
+  // beyonds "length", remove the worst one.
+  Insert(Token *tok) {
+    tokens.push(tok);
+    if (tokens.size() > length) {
+      Token *worst = tokens.top();
+      // set the tot_cost to infinity to mark this token should be pruned. As
+      // we have to delete the Forward/BackwardLinks which are related to this
+      // token.
+      // TODO: optimize
+      worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
+      tokens.pop();
     }
+  }
 };
 
-}  // namespace decoder
+}  // namespace biglmbucketdecoder
 
 
-template<typename Token>
+template<typename Element>
 class BucketQueue {
  public:
-  // Constructor. 'cost_scale' is a scale that we multiply the token costs by
+  // Constructor. 'cost_scale' is a scale that we multiply the costs by
   // before intergerizing; a larger value means more buckets.
   // 'bucket_offset_' is initialized to "15 * cost_scale_". It is an empirical
   // value in case we trigger the re-allocation in normal case, since we do in
   // fact normalize costs to be not far from zero on each frame. 
   BucketQueue(BaseFloat cost_scale = 1.0);
 
-  // Adds Token to the queue; sets the field tok->in_queue to true (it is not
+  // Adds element to the queue; sets the field tok->in_queue to true (it is not
   // an error if it was already true).
-  // If a Token was already in the queue but its cost improves, you should
+  // If an element was already in the queue but its cost improves, you should
   // just Push it again. It will be added to (possibly) a different bucket, but
-  // the old entry will remain. We use "tok->in_queue" to decide
-  // an entry is nonexistent or not. When pop a Token off, the field
-  // 'tok->in_queue' is set to false. So the old entry in the queue will be
+  // the old entry will remain. We use "element->in_queue" to decide
+  // an entry is nonexistent or not. When pop an element off, the field
+  // 'element->in_queue' is set to false. So the old entry in the queue will be
   // considered as nonexistent when we try to pop it.
-  void Push(Token *tok);
+  void Push(Element *elem);
 
-  // Removes and returns the next Token 'tok' in the queue, or NULL if there
-  // were no Tokens left. Sets tok->in_queue to false for the returned Token.
-  Token* Pop();
+  // Removes and returns the next element 'elem' in the queue, or NULL if there
+  // were no elements left. Sets element->in_queue to false for the returned
+  // Element.
+  Element* Pop();
 
   // Clears all the individual buckets. Sets 'first_nonempty_bucket_index_' to
   // the end of buckets_.
   void Clear();
 
  private:
-  // Configuration value that is multiplied by tokens' costs before integerizing
+  // Configuration value that is multiplied by elements' costs before integerizing
   // them to determine the bucket index
   BaseFloat cost_scale_;
 
-  // buckets_ is a list of Tokens 'tok' for each bucket.
-  // If tok->in_queue is false, then the item is considered as not
+  // buckets_ is a list of Elements 'elem' for each bucket.
+  // If elem->in_queue is false, then the item is considered as not
   // existing (this is to avoid having to explicitly remove Tokens when their
   // costs change). The index into buckets_ is determined as follows:
-  // bucket_index = std::floor(tok->cost * cost_scale_);
+  // bucket_index = std::floor(elem->cost * cost_scale_);
   // vec_index = bucket_index - bucket_storage_begin_;
   // then access buckets_[vec_index].
-  std::vector<std::vector<Token*> > buckets_;
+  std::vector<std::vector<Element*> > buckets_;
 
   // An offset that determines how we index into the buckets_ vector;
   // In the constructor this will be initialized to something like
@@ -349,7 +413,7 @@ class BucketQueue {
   int32 first_nonempty_bucket_index_;
 
   // Synchronizes with first_nonempty_bucket_index_.
-  std::vector<Token*> *first_nonempty_bucket_;
+  std::vector<Element*> *first_nonempty_bucket_;
 
   // If the size of the BucketQueue is larger than "bucket_size_tolerance_", we
   // will resize it to "bucket_size_tolerance_" in Clear. A weird long
@@ -380,22 +444,28 @@ class LatticeBiglmFasterBucketDecoderTpl {
   using Label = typename Arc::Label;
   using StateId = typename Arc::StateId;
   using Weight = typename Arc::Weight;
-  using BackwardLinkT = biglmdecodercombine::BackwardLink<Token>;
   using PairId = uint64;  // (StateId in fst) + (StateId in lm_diff_fst) << 32
 
-  using StateIdToTokenMap = typename std::unordered_map<StateId, Token*>;
-  //using StateIdToTokenMap = typename std::unordered_map<StateId, Token*,
-  //      std::hash<StateId>, std::equal_to<StateId>,
-  //      fst::PoolAllocator<std::pair<const StateId, Token*> > >;
+  using TokenBucket =
+    typename kaldi::biglmbucketdecoder::TokenBucket<FST, Token>;
+  using BucketQueue = typename kaldi::BucketQueue<TokenBucket>;
 
-  using IterType = typename StateIdToTokenMap::const_iterator;
+  using BackwardLinkT = typename kaldi::biglmbucketdecoder::BackwardLink<Token>;
+  using BackwardBucketLinkT =
+    typename kaldi::biglmbucketdecoder::BackwardLink<TokenBucket<FST, Token> >;
+  using ForwardLinkT = typename kaldi::biglmbucketdecoder::ForwardLink<Token>;
+  using ForwardBucketLinkT =
+    typename kaldi::biglmbucketdecoder::ForwardLink<TokenBucket<FST, Token> >;
+
+  using StateIdToBucketMap = typename std::unordered_map<StateId, TokenBucket*>;
+  //using StateIdToTokenMap = typename std::unordered_map<StateId, TokenBucket*,
+  //      std::hash<StateId>, std::equal_to<StateId>,
+  //      fst::PoolAllocator<std::pair<const StateId, TokenBucket*> > >;
 
   using PairIdToTokenMap = typename std::unordered_map<PairId, Token*>;
   //using PairIdToTokenMap = typename std::unordered_map<PairId, Token*,
   //      std::hash<PairId>, std::equal_to<PairId>,
   //      fst::PoolAllocator<std::pair<const PairId, Token*> > >;
-
-  using BucketQueue = typename kaldi::BucketQueue<Token>;
 
   // Instantiate this class once for each thing you have to decode.
   // This version of the constructor does not take ownership of
@@ -520,6 +590,9 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // Deletes the elements of the singly linked list tok->links.
   inline static void DeleteBackwardLinks(Token *tok);
 
+  // Deletes the elements of the singly linked list bucket->links.
+  inline static void DeleteBackwardBcuketLinks(TokenBucket *bucket);
+
   // head of per-frame list of Tokens (list is in topological order),
   // and something saying whether we ever pruned it using PruneForwardLinks.
   struct TokenList {
@@ -530,21 +603,27 @@ class LatticeBiglmFasterBucketDecoderTpl {
                  must_prune_tokens(true) { }
   };
 
-  // FindOrAddToken either locates a token in hash map "token_map", or if
-  // necessary inserts a new, empty token (i.e. with no forward links) for the
+  // FindOrAddBucket either locates a bucket in hash map "bucket_map", or if
+  // necessary inserts a new, empty bucket (i.e. with no backward links) for the
   // current frame.
-  // [note: it's inserted if necessary into "token_map", and also into the
+  //
+  // If the destnation bucket is expanded or the olabel isn't 0, we will call
+  // ExpandBucket() to process the 'real' tokens recursively so that
+  // 'source_bucket' can be expanded.
+  //
+  // [note: it's inserted if necessary into "bucket_map", and also into the
   // singly linked list of tokens active on this frame (whose head
-  // is at active_toks_[frame]).  The token_list_index argument is used to index
-  // into the active_toks_ array.
-  // Returns the Token pointer.  Sets "changed" (if non-NULL) to true if the
+  // is at active_buckets_[frame]).  The token_list_index argument is used to index
+  // into the active_buckets_ array.
+  //
+  // Returns the Bucket pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.
-  // If Token == StdToken, the 'backpointer' argument has no purpose (and will
-  // hopefully be optimized out).
-  inline Token *FindOrAddToken(PairId state, int32 token_list_index,
-                               BaseFloat tot_cost, Token *backpointer,
-                               PairIdToTokenMap *token_map,
-                               bool *changed);
+  // If Token == StdToken, the 'backpointer' will be set to source_bucket with
+  // no purpose (and will hopefully be optimized out).
+  inline Token *FindOrAddBucket(const Arc &arc, int32 token_list_index,
+                                BaseFloat tot_cost, TokenBucket *source_bucket,
+                                StateIdToBucketMap *bucket_map,
+                                bool *changed);
 
   // prunes outgoing links for all tokens in active_toks_[frame]
   // it's called by PruneActiveTokens
@@ -688,10 +767,12 @@ class LatticeBiglmFasterBucketDecoderTpl {
 
   // Map (base_state, lm_state) to token
   PairIdToTokenMap *cur_toks_, *next_toks_;
+  StateIdToBucketMap *cur_buckets_, *next_buckets_;
 
   std::vector<TokenList> active_toks_; // Lists of tokens, indexed by
   // frame (members of TokenList are toks, must_prune_forward_links,
   // must_prune_tokens).
+  std::vector<TokenBucket*> active_buckets_;
 
   // fst_ is a pointer to the FST we are decoding from.
   const FST *fst_;

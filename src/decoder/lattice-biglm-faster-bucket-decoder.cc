@@ -23,8 +23,8 @@
 
 namespace kaldi {
 
-template<typename Token>
-BucketQueue<Token>::BucketQueue(BaseFloat cost_scale) :
+template<typename Element>
+BucketQueue<Element>::BucketQueue(BaseFloat cost_scale) :
     cost_scale_(cost_scale) {
   // NOTE: we reserve plenty of elements to avoid expensive reallocations
   // later on. Normally, the size is a little bigger than (adaptive_beam +
@@ -37,9 +37,9 @@ BucketQueue<Token>::BucketQueue(BaseFloat cost_scale) :
   bucket_size_tolerance_ = 1.2 * bucket_size;
 }
 
-template<typename Token>
-void BucketQueue<Token>::Push(Token *tok) {
-  size_t bucket_index = std::floor(tok->tot_cost * cost_scale_) +
+template<typename Element>
+void BucketQueue<Element>::Push(Element *elem) {
+  size_t bucket_index = std::floor(elem->tot_cost * cost_scale_) +
                         bucket_offset_;
   if (bucket_index >= buckets_.size()) {
     int32 margin = 10;  // a margin which is used to reduce re-allocate
@@ -67,11 +67,11 @@ void BucketQueue<Token>::Push(Token *tok) {
   }
 }
 
-template<typename Token>
-Token* BucketQueue<Token>::Pop() {
+template<typename Element>
+Token* BucketQueue<Element>::Pop() {
   while (true) {
     if (!first_nonempty_bucket_->empty()) {
-      Token *ans = first_nonempty_bucket_->back();
+      Element *ans = first_nonempty_bucket_->back();
       first_nonempty_bucket_->pop_back();
       if (ans->in_queue) {  // If ans->in_queue is false, this means it is a
                             // duplicate instance of this Token that was left
@@ -93,8 +93,8 @@ Token* BucketQueue<Token>::Pop() {
   }
 }
 
-template<typename Token>
-void BucketQueue<Token>::Clear() {
+template<typename Element>
+void BucketQueue<Element>::Clear() {
   for (size_t i = first_nonempty_bucket_index_; i < buckets_.size(); i++) {
     buckets_[i].clear();
   }
@@ -357,44 +357,47 @@ bool LatticeBiglmFasterBucketDecoderTpl<FST, Token>::GetLattice(
   only do it every 'config_.prune_interval' frames).
  */
 
-// FindOrAddToken either locates a token in hash map "token_map", or if
-// necessary inserts a new, empty token (i.e. with no BackwardLinks) for the
+
+// FindOrAddBucket either locates a bucket in hash map "bucket_map", or if
+// necessary inserts a new, empty bucket (i.e. with no backward links) for the
 // current frame.
-// [note: it's inserted if necessary into "token_map", and also into the singly
-// linked list of tokens active on this frame (whose head
+//
+// If the destnation bucket is expanded or the olabel isn't 0, we will call
+// ExpandBucket() to process the 'real' tokens recursively so that
+// 'source_bucket' can be expanded.
+//
+// [note: it's inserted if necessary into "bucket_map", and also into the
+// singly linked list of tokens active on this frame (whose head
 // is at active_toks_[frame]).  The token_list_index argument is used to index
 // into the active_toks_ array.
 template <typename FST, typename Token>
-inline Token* LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddToken(
-    PairId state, int32 token_list_index, BaseFloat tot_cost,
-    Token *backpointer, PairIdToTokenMap *token_map, bool *changed) {
-  // Returns the Token pointer.  Sets "changed" (if non-NULL) to true
+inline Token* LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddBucket(
+    const Arc &arc, int32 token_list_index, BaseFloat tot_cost,
+    TokenBucket *source_bucket, StateIdToBucketMap *bucket_map, bool *changed) {
+  // Returns the Bucket pointer.  Sets "changed" (if non-NULL) to true
   // if the token was newly created or the cost changed.
   KALDI_ASSERT(token_list_index < active_toks_.size());
-  Token* &toks = active_toks_[token_list_index].toks;
-  typename PairIdToTokenMap::iterator e_found = token_map->find(state);
- 
-  if (e_found == token_map->end()) {  // no such token presently.
-    const BaseFloat backward_cost = std::numeric_limits<BaseFloat>::infinity();
-    // tokens on the currently final frame have zero extra_cost
-    // as any of them could end up
-    // on the winning path.
-    Token *new_tok = new Token(tot_cost, backward_cost, base_state,
-                               lm_state, NULL, toks, backpointer);
+  TokenBucket* &buckets = active_buckets_[token_list_index];
+  StateId state = arc.nextstate;
+  typename StateIdToBucketMap::iterator e_found = bucket_map->find(state);
+
+  TokenBucket *new_bucket = NULL;
+  if (e_found == bucket_map->end()) {  // no such TokenBucket presently.
+    new_bucket = new TokenBucket(arc.olabel == 0 ? false : true,
+        buckets, config_.bucket_length);
     // NULL: no backward links yet
-    toks = new_tok;
-    num_toks_++;
+    buckets = new_bucket;
     // insert into the map
-    (*token_map)[state] = new_tok;
+    (*bucket_map)[state] = new_bucket;
     if (changed) *changed = true;
-    return new_tok;
   } else {
-    Token *tok = e_found->second;  // There is an existing Token for this state.
-    if (tok->tot_cost > tot_cost) {  // replace old token
-      tok->tot_cost = tot_cost;
+    TokenBucket *new_bucket = e_found->second;  // There is an existing
+                                                // TokenBucket for this state.
+    if (new_bucket->tot_cost > tot_cost) {  // replace old token
+      new_bucket->tot_cost = tot_cost;
       // SetBackpointer() just does tok->backpointer = backpointer in
       // the case where Token == BackpointerToken, else nothing.
-      tok->SetBackpointer(backpointer);
+      tok->SetBackpointer(source_bucket);
       // we don't allocate a new token, the old stays linked in active_toks_
       // we only replace the tot_cost
       // in the current frame, there are no forward links (and no extra_cost)
@@ -406,8 +409,14 @@ inline Token* LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddToken(
     } else {
       if (changed) *changed = false;
     }
-    return tok;
   }
+  // According to the 'expanded' flag, call ExpandBucket() goes along the
+  // backwardlinks of the 'source_bucket' to generate the 'real' tokens
+  // recursively
+  if (new_bucket->expanded && !source_bucket->expanded) {
+    ExpandBucket(source_bucket);
+  }
+  return new_bucket;
 }
 
 // prunes outgoing links for all tokens in active_toks_[frame]
@@ -793,23 +802,23 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
         next_frame = cur_frame + 1;
 
   active_toks_.resize(active_toks_.size() + 1);
-  // swapping prev_toks_ / cur_toks_
-  cur_toks_->clear();
-  PairIdToTokenMap *tmp_toks_ = cur_toks_;
-  cur_toks_ = next_toks_;
-  next_toks_ = tmp_toks_;
+  // swapping prev_buckets_ / cur_buckets_
+  cur_buckets_->clear();
+  StateIdToBcuketMap *tmp_buckets_ = cur_buckets_;
+  cur_buckets_ = next_buckets_;
+  next_buckets_ = tmp_buckets_;
  
-  if (cur_toks_->empty()) {
+  if (cur_buckets_->empty()) {
     if (!warned_) {
-      KALDI_WARN << "Error, no surviving tokens on frame " << cur_frame;
+      KALDI_WARN << "Error, no surviving tokens/buckets on frame " << cur_frame;
       warned_ = true;
     }
   }
 
   cur_queue_.Clear();
   // Add tokens to queue
-  for (typename PairIdToTokenMap::const_iterator iter = cur_toks_->begin();
-       iter != cur_toks_->end(); iter++) {
+  for (typename StateIdToBucketMap::const_iterator iter = cur_buckets_->begin();
+       iter != cur_buckets_->end(); iter++) {
     cur_queue_.Push(iter->second);
   }
 
@@ -829,25 +838,29 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
   BaseFloat cost_offset = cost_offsets_[cur_frame];
 
   // Iterator the "cur_queue_" to process non-emittion and emittion arcs in fst.
-  Token *tok = NULL;
-  int32 num_toks_processed = 0;
+  TokenBucket *bucket = NULL;
+  // TODO: maybe we use num_bucket_processed and num_toks_processed seperately,
+  // I guess the bucket pruning has already got rid of a lot of tokens.
+  // num_toks_processed will increase 1 if bucket is un-expanded or length if
+  // it is expanded.
+  int32 num_processed = 0;
   int32 max_active = config_.max_active;
-  for (; num_toks_processed < max_active && (tok = cur_queue_.Pop()) != NULL;
-       num_toks_processed++) {
-    BaseFloat cur_cost = tok->tot_cost;
-    StateId base_state = tok->base_state,
-            lm_state = tok->lm_state;
+  for (; num_processed < max_active && (bucket = cur_queue_.Pop()) != NULL;
+       num_processed++) {
+    BaseFloat cur_cost = bucket->tot_cost;
+    StateId base_state = bucket->base_state;
+
     if (cur_cost > cur_cutoff &&
-        num_toks_processed > config_.min_active) { // Don't bother processing
+        num_processed > config_.min_active) { // Don't bother processing
                                                      // successors.
       break;  // This is a priority queue. The following tokens will be worse
     } else if (cur_cost + adaptive_beam < cur_cutoff) {
       cur_cutoff = cur_cost + adaptive_beam; // a tighter boundary
     }
-    // If "tok" has any existing forward links, delete them,
+    // If "bucket" has any existing backward links, delete them,
     // because we're about to regenerate them.  This is a kind
     // of non-optimality (remember, this is the simple decoder),
-    DeleteBackwardLinks(tok);  // necessary when re-visiting
+    DeleteBackwardBcuketLinks(bucket);  // necessary when re-visiting
     for (fst::ArcIterator<FST> aiter(*fst_, base_state);
          !aiter.Done();
          aiter.Next()) {
@@ -855,26 +868,26 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
       bool changed;
       Arc arc(arc_ref);
       BaseFloat graph_cost_ori = arc.weight.Value();
-      StateId next_lm_state = PropagateLm(lm_state, &arc);
 
       if (arc.ilabel == 0) {  // propagate nonemitting
         BaseFloat graph_cost = arc.weight.Value();
         BaseFloat tot_cost = cur_cost + graph_cost;
         if (tot_cost < cur_cutoff) {
-          PairId next_pair = ConstructPair(arc.nextstate, next_lm_state);
-          Token *new_tok = FindOrAddToken(next_pair, cur_frame, tot_cost, tok,
-                                          cur_toks_, &changed);
+          TokenBucket *new_bucket = FindOrAddBucket(arc, cur_frame, tot_cost, 
+                                                    bucket, cur_buckets_,
+                                                    &changed);
 
-          // Add BackwardLink from new_tok to tok. Put it on the head of
-          // new_tok's link list
-          new_tok->links = new BackwardLinkT(tok, 0, arc.olabel,
-                                             graph_cost, 0,
-                                             graph_cost_ori, new_tok->links);
+          // Add BackwardLink from new_bucket to bucket. Put it on the head of
+          // new_bucket's link list
+          new_bucket->links = new BackwardBucketLinkT(bucket, 0, arc.olabel,
+                                                      graph_cost, 0,
+                                                      graph_cost_ori,
+                                                      new_bucket->links);
           
           // "changed" tells us whether the new token has a different
           // cost from before, or is new.
           if (changed) {
-            cur_queue_.Push(new_tok);
+            cur_queue_.Push(new_bucket);
           }
         }
       } else {  // propagate emitting
@@ -889,15 +902,16 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
                                                    // emitting
         }
 
-        PairId next_pair = ConstructPair(arc.nextstate, next_lm_state);
         // no change flag is needed
-        Token *next_tok = FindOrAddToken(next_pair, next_frame, tot_cost,
-                                         tok, next_toks_, NULL);
+        TokenBucket *next_bucket = FindOrAddBucket(arc, next_frame, tot_cost,
+                                                   bucket, next_buckets_, NULL);
         // Add BackwardLink from next_tok to tok. Put it on the head of
         // new_tok's link list
-        next_tok->links = new BackwardLinkT(tok, arc.ilabel, arc.olabel,
-                                            graph_cost, ac_cost,
-                                            graph_cost_ori, next_tok->links);
+        next_bucket->links = new BackwardBucketLinkT(bucket,
+                                                     arc.ilabel, arc.olabel,
+                                                     graph_cost, ac_cost,
+                                                     graph_cost_ori,
+                                                     next_bucket->links);
       }
     }  // for all arcs
   }  // end of while loop
@@ -911,15 +925,15 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
 
   {  // This block updates adaptive_beam_
     BaseFloat beam_used_this_frame = adaptive_beam;
-    Token *tok = cur_queue_.Pop();
-    if (tok != NULL) {
+    TokenBucket *bucket = cur_queue_.Pop();
+    if (bucket != NULL) {
       // We hit the max-active contraint, meaning we effectively pruned to a
       // beam tighter than 'beam'. Work out what this was, it will be used to
       // update 'adaptive_beam'.
       BaseFloat best_cost_this_frame = cur_cutoff - adaptive_beam;
-      beam_used_this_frame = tok->tot_cost - best_cost_this_frame;
+      beam_used_this_frame = bucket->tot_cost - best_cost_this_frame;
     }
-    if (num_toks_processed <= config_.min_active) {
+    if (num_processed <= config_.min_active) {
       // num-toks active is dangerously low, increase the beam even if it
       // already exceeds the user-specified beam.
       adaptive_beam_ = std::max<BaseFloat>(
@@ -1034,6 +1048,19 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::DeleteBackwardLinks(Token *
     l = m;
   }
   tok->links = NULL;
+}
+
+
+template <typename FST, typename Token>
+void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::DeleteBackwardBucketLinks(
+    TokenBucket *bucket) {
+  BackwardBucketLinkT *l = bucket->links, *m;
+  while (l != NULL) {
+    m = l->next;
+    delete l;
+    l = m;
+  }
+  bucket->links = NULL;
 }
 
 
