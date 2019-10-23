@@ -45,6 +45,9 @@ struct OnlineNnetDecodingOptions {
 	/// neural network forward config
 	std::string forward_cfg;
 
+	/// vad config
+	std::string vad_cfg;
+
 	/// decoding options
 	BaseFloat acoustic_scale;
 	bool allow_partial;
@@ -56,6 +59,7 @@ struct OnlineNnetDecodingOptions {
     bool skip_inner;
     bool use_ipc;
     bool use_lat;
+    bool use_vad;
     std::string socket_path;
 	std::string silence_phones_str;
 
@@ -67,9 +71,9 @@ struct OnlineNnetDecodingOptions {
 	std::string clat_wspecifier;
 	std::string model_type;  // hybrid, ctc
 
-	OnlineNnetDecodingOptions(): decoder_cfg(""), forward_cfg(""),
+	OnlineNnetDecodingOptions(): decoder_cfg(""), forward_cfg(""), vad_cfg(""),
 							acoustic_scale(0.1), allow_partial(true), chunk_length_secs(0.05), batch_size(18), out_dim(0),
-							skip_frames(1), copy_posterior(true), skip_inner(false), use_ipc(false), use_lat(false),
+							skip_frames(1), copy_posterior(true), skip_inner(false), use_ipc(false), use_lat(false), use_vad(false),
 							socket_path(""), silence_phones_str(""), word_syms_filename(""), fst_rspecifier(""), model_rspecifier(""),
                             words_wspecifier(""), alignment_wspecifier(""), model_type("hybrid")
     { }
@@ -80,6 +84,7 @@ struct OnlineNnetDecodingOptions {
 
 		po->Register("decoder-config", &decoder_cfg, "Configuration file for decoder search");
 		po->Register("forward-config", &forward_cfg, "Configuration file for neural network forward");
+		po->Register("vad-config", &vad_cfg, "Configuration file for vad detection");
 
 		po->Register("acoustic-scale", &acoustic_scale, "Scaling factor for acoustic likelihoods");
 		po->Register("allow-partial", &allow_partial, "Produce output even when final state was not reached");
@@ -94,6 +99,7 @@ struct OnlineNnetDecodingOptions {
 	    po->Register("skip-inner", &skip_inner, "skip frame in neural network inner or input");
 	    po->Register("use-ipc", &use_ipc, "Use ipc neural network forward");
 	    po->Register("use-lat", &use_lat, "Use lattice decoder");
+	    po->Register("use-vad", &use_vad, "Use vad detection utterance start and ending");
 	    po->Register("socket-path", &socket_path, "ipc socket file path");
 		po->Register("silence-phones", &silence_phones_str,
                      "Colon-separated list of integer ids of silence phones, e.g. 1:2:3");

@@ -21,17 +21,17 @@
 
 #include "fstext/fstext-lib.h"
 #include "decoder/decodable-matrix.h"
-#include "online-faster-decoder.h"
 #include "util/kaldi-semaphore.h"
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
 
 #include "online0/online-fst-decoder-cfg.h"
-
+#include "online0/online-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
 #include "online0/online-nnet-decoding.h"
 #include "online0/online-nnet-lattice-decoding.h"
+#include "online0/online-vad.h"
 
 namespace kaldi {
 
@@ -48,7 +48,7 @@ public:
 	int FeedData(void *data, int nbytes, FeatState state);
 
 	// get online decoder result
-	Result* GetResult(FeatState state);
+	Result* GetResult();
 
 	// Reset decoder
 	void Reset();
@@ -68,6 +68,7 @@ private:
 	OnlineNnetForwardOptions *forward_opts_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;
+	OnlineVadOptions *vad_opts_;
 
 	TransitionModel *trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
@@ -85,6 +86,7 @@ private:
 	OnlineLatticeFasterDecoder *lat_decoder_;
 	OnlineNnetLatticeDecodingClass *lat_decoding_;
 	MultiThreader<OnlineNnetLatticeDecodingClass> *lat_decoder_thread_;
+	OnlineVad *vad_;
 
 	// feature pipeline
 	OnlineNnetFeaturePipeline *feature_pipeline_;
@@ -99,6 +101,7 @@ private:
 
 	Result result_;
 	FeatState state_;
+	UttState utt_state_;
 
 	// ipc socket input sample
 	SocketSample *socket_sample_;

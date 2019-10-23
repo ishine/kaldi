@@ -23,7 +23,7 @@ namespace kaldi {
 
 OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 		fast_decoder_opts_(NULL), lat_decoder_opts_(NULL), forward_opts_(NULL),
-		feature_opts_(NULL), decoding_opts_(NULL),
+		feature_opts_(NULL), decoding_opts_(NULL), vad_opts_(NULL),
 		trans_model_(NULL), decode_fst_(NULL), word_syms_(NULL) {
 
 	// main config
@@ -43,6 +43,9 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 
 	if (decoding_opts_->forward_cfg != "")
 		ReadConfigFromFile(decoding_opts_->forward_cfg, forward_opts_);
+
+	if (decoding_opts_->vad_cfg != "")
+		ReadConfigFromFile(decoding_opts_->vad_cfg, vad_opts_);
     
     // load decode resources
     Initialize();
@@ -55,6 +58,7 @@ void OnlineFstDecoderCfg::Destory() {
 		delete forward_opts_;	forward_opts_ = NULL;
 		delete feature_opts_;	feature_opts_ = NULL;
 		delete decoding_opts_;	decoding_opts_ = NULL;
+		delete vad_opts_;		vad_opts_ = NULL;
 	}
 
 	if (decode_fst_ != NULL) {

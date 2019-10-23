@@ -30,6 +30,7 @@
 #include "online0/online-nnet-forward.h"
 #include "online0/online-nnet-decoding.h"
 #include "online0/online-nnet-lattice-decoding.h"
+#include "online0/online-vad.h"
 
 namespace kaldi {
 
@@ -41,6 +42,7 @@ public:
 	OnlineNnetForwardOptions *forward_opts_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;
+	OnlineVadOptions *vad_opts_;
 
 	TransitionModel *trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
