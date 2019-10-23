@@ -155,7 +155,7 @@ void OnlineFstDecoder::InitDecoder() {
 	}
 
 	if (decoding_opts_->use_vad && vad_opts_ != NULL) {
-		vad_ = new OnlineVad;
+		vad_ = new OnlineVad(*vad_opts_);
 		utt_state_ = UTT_END;
 	}
 }
@@ -172,6 +172,7 @@ void OnlineFstDecoder::Reset() {
 	cur_result_idx_ = 0;
 	state_ = FEAT_START;
 	utt_state_ = UTT_END;
+    if (vad_ != NULL) vad_->Reset();
 	wav_buffer_.Resize(VECTOR_INC_STEP, kUndefined); // 16k, 10s
 }
 

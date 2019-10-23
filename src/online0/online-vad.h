@@ -56,10 +56,9 @@ public:
 		opts_(opts), state_(UTT_END), num_end_win_(0) {
 	}
 
-	FeatState FeedData(Matrix<BaseFloat> &post) {
+	UttState FeedData(Matrix<BaseFloat> &post) {
 		int nr, swin, bs;
 		BaseFloat pb = 0.0;
-		bool flag = false;
 		nr = post.NumRows();
 		if (state_ == UTT_END) {
 			swin = opts_.vad_smooth_win > nr ? nr : opts_.vad_smooth_win;
@@ -67,11 +66,12 @@ public:
 			smooth_buffer_.Resize(bs, kSetZero);
 			for (int i = 0; i < bs; i++) {
 				for (int j = 0; j < swin; j++) {
-					smooth_buffer_[i] += post(i+j, 0);
+					smooth_buffer_(i) += post(i+j, 0);
 				}
-				smooth_buffer_[i] /= swin;
-				if (smooth_buffer_[i] >= opts_.vad_start_rate) {
+				smooth_buffer_(i) /= swin;
+				if (smooth_buffer_(i) >= opts_.vad_start_rate) {
 					state_ = UTT_START;
+                    num_end_win_ = 0;
 					break;
 				}
 			}
@@ -90,7 +90,7 @@ public:
 
 private:
 	const OnlineVadOptions &opts_;
-	FeatState state_;
+	UttState state_;
 	Vector<BaseFloat> smooth_buffer_;
 	int num_end_win_;
 };
