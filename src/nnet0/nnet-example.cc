@@ -112,7 +112,8 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 	bool ali_skip = (utt_len+skip_frames-1)/skip_frames == targets.size() ? false : true;
 
 	for (int i = 0; i < sweep_frames.size(); i++) {
-		example = new DNNNnetExample(feature_reader, si_feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
+		example = new DNNNnetExample(feature_reader, si_feature_reader, spec_aug_reader, 
+                                        targets_reader, weights_reader, model_sync, stats, opts);
 		example->utt = utt;
 		lent = utt_len/skip_frames;
 		lent += utt_len%skip_frames > sweep_frames[i] ? 1 : 0;
@@ -142,7 +143,8 @@ bool DNNNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     	// spectrum augmentation
     	if (opts->use_specaug) {
     		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader->HasKey(utt))) {
-				DNNNnetExample *spec_example = new DNNNnetExample(feature_reader, si_feature_reader, targets_reader, weights_reader, model_sync, stats, opts);
+				DNNNnetExample *spec_example = new DNNNnetExample(feature_reader, si_feature_reader, spec_aug_reader, 
+                                                                    targets_reader, weights_reader, model_sync, stats, opts);
 				*spec_example = *example;
 				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,
 						opts->spec_opts->time_mask_ratio, opts->spec_opts->num_freq_mask, opts->spec_opts->max_freq_mask);
@@ -197,7 +199,8 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
     for (int i = 0; i < sweep_frames.size(); i++) {
-    	example = new CTCNnetExample(feature_reader, si_feature_reader, targets_reader, model_sync, stats, opts);
+    	example = new CTCNnetExample(feature_reader, si_feature_reader, spec_aug_reader, 
+                                    targets_reader, model_sync, stats, opts);
     	example->utt = utt;
     	example->targets = targets;
 
@@ -220,7 +223,8 @@ bool CTCNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
     	// spectrum augmentation
     	if (opts->use_specaug) {
     		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader->HasKey(utt))) {
-				CTCNnetExample *spec_example = new CTCNnetExample(feature_reader, si_feature_reader, targets_reader, model_sync, stats, opts);
+				CTCNnetExample *spec_example = new CTCNnetExample(feature_reader, si_feature_reader, spec_aug_reader,
+                                                                    targets_reader, model_sync, stats, opts);
 				*spec_example = *example;
 				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,
 								opts->spec_opts->time_mask_ratio, opts->spec_opts->num_freq_mask, opts->spec_opts->max_freq_mask);
@@ -343,8 +347,8 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
 	for (int i = 0; i < 1; i++) {
-		example = new SequentialNnetExample(feature_reader, si_feature_reader,
-				den_lat_reader, num_ali_reader, sweep_frames_reader, model_sync, stats, opts);
+		example = new SequentialNnetExample(feature_reader, si_feature_reader, den_lat_reader, 
+                                            num_ali_reader, sweep_frames_reader, model_sync, stats, opts);
 		example->utt = utt;
 		example->den_lat = den_lat;
 		example->num_ali = num_ali;
@@ -460,7 +464,7 @@ bool RNNTNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 		utt_len = input_frames.NumRows();
     for (int i = 0; i < sweep_frames.size(); i++) {
     	example = new RNNTNnetExample(feature_reader,
-    			si_feature_reader, wordid_reader, stats, opts);
+    			si_feature_reader, spec_aug_reader, wordid_reader, stats, opts);
     	example->utt = utt;
     	example->input_wordids = input_wordids;
 

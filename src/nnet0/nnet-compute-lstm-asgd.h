@@ -57,13 +57,9 @@ struct NnetLstmUpdateOptions : public NnetUpdateOptions {
   		  NnetUpdateOptions::Register(po);
 
 	      //<jiayu>
-
 	      po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
-
 	      po->Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
-
 	      po->Register("dump-interval", &dump_interval, "---LSTM--- num utts between model dumping [ 0 == disabled ]");
-
 	      //</jiayu>
 
   	  }
