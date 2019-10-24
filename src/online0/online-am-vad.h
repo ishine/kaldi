@@ -1,4 +1,4 @@
-// online0/online-vad.h
+// online0/online-am-vad.h
 // Copyright 2018	Alibaba Inc (author: Wei Deng)
 
 // See ../../COPYING for clarification regarding multiple authors
@@ -16,8 +16,8 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef ONLINE0_ONLINE_VAD_H_
-#define ONLINE0_ONLINE_VAD_H_
+#ifndef ONLINE0_ONLINE_AM_VAD_H_
+#define ONLINE0_ONLINE_AM_VAD_H_
 
 #include "base/kaldi-common.h"
 #include "itf/options-itf.h"
@@ -26,14 +26,14 @@
 namespace kaldi {
 
 
-struct OnlineVadOptions {
+struct OnlineAmVadOptions {
 
 	int32 vad_smooth_win;
 	int32 vad_num_end_win;
 	float vad_start_rate;
 	float vad_end_rate;
 
-	OnlineVadOptions():vad_smooth_win(3), vad_num_end_win(2),
+	OnlineAmVadOptions():vad_smooth_win(3), vad_num_end_win(2),
 			vad_start_rate(0.6), vad_end_rate(0.9) {}
 
 	void Register(OptionsItf *po) {
@@ -50,9 +50,9 @@ typedef enum {
 	UTT_END,
 }UttState;
 
-class OnlineVad {
+class OnlineAmVad {
 public:
-	OnlineVad(const OnlineVadOptions &opts):
+	OnlineAmVad(const OnlineAmVadOptions &opts):
 		opts_(opts), state_(UTT_END), num_end_win_(0) {
 	}
 
@@ -93,7 +93,7 @@ public:
 	}
 
 private:
-	const OnlineVadOptions &opts_;
+	const OnlineAmVadOptions &opts_;
 	UttState state_;
 	Vector<BaseFloat> smooth_buffer_;
     Vector<BaseFloat> blank_post_;
