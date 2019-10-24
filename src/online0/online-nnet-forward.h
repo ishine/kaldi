@@ -134,10 +134,11 @@ public:
             delete pdf_prior_;
     }
 
-	void Forward(const MatrixBase<BaseFloat> &in, Matrix<BaseFloat> *out) {
+	void Forward(const MatrixBase<BaseFloat> &in, Matrix<BaseFloat> *out, Matrix<BaseFloat> *blank_post = NULL) {
 		CuMatrix<BaseFloat> feats_transf;
         feat_.Resize(in.NumRows(), in.NumCols(), kUndefined, kStrideEqualNumCols);
 		feat_.CopyFromMat(in);
+
 		nnet_transf_.Propagate(feat_, &feats_transf); // Feedforward
 		// for streams with new utterance, history states need to be reset
 		if (opts_.network_type == "lstm") {
@@ -145,6 +146,10 @@ public:
 		}
 		// forward pass
 		nnet_.Propagate(feats_transf, &feat_out_);
+        if (blank_post != NULL) {
+            blank_post->Resize(feat_out_.NumRows(), 1, kUndefined);
+            blank_post->CopyFromMat(feat_out_.ColRange(0, 1));
+        }
 
         // ctc prior, only scale blank label posterior
         if (opts_.blank_posterior_scale >= 0) {

@@ -36,7 +36,8 @@ OnlineFstDecoder::OnlineFstDecoder(OnlineFstDecoderCfg *cfg) :
 		words_writer_(NULL), alignment_writer_(NULL), state_(FEAT_START), utt_state_(UTT_END),
 		socket_sample_(NULL), sc_sample_buffer_(NULL), sc_buffer_size_(0),
 		len_(0), sample_offset_(0), frame_offset_(0), frame_ready_(0),
-		in_skip_(0), out_skip_(0), skip_frames_(1), chunk_length_(0), cur_result_idx_(0) {
+		in_skip_(0), out_skip_(0), skip_frames_(1), chunk_length_(0), cur_result_idx_(0), 
+		finish_utt_(false) {
 }
 
 void OnlineFstDecoder::Destory() {
@@ -172,8 +173,14 @@ void OnlineFstDecoder::Reset() {
 	cur_result_idx_ = 0;
 	state_ = FEAT_START;
 	utt_state_ = UTT_END;
+	finish_utt_ = false;
     if (vad_ != NULL) vad_->Reset();
 	wav_buffer_.Resize(VECTOR_INC_STEP, kUndefined); // 16k, 10s
+}
+
+void OnlineFstDecoder::ResetUtt() {
+    if(!decoding_opts_->use_ipc)
+	    forward_->ResetHistory();
 }
 
 int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
@@ -226,11 +233,12 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 			}
 
 			frame_offset_ += frame_ready_;
+			result_.num_frames += frame_ready_;
 
 			if (!decoding_opts_->use_ipc) {
 				// feed forward to neural network
 				if (forward_opts_->network_type == "lstm") {
-					forward_->Forward(feat_in_, &feat_out_);
+					forward_->Forward(feat_in_, &feat_out_, &blank_post_);
 					// copy posterior
 					if (decoding_opts_->copy_posterior) {
 						feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
@@ -244,17 +252,33 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 
 					block_ = NULL;
 					if (vad_ != NULL) {
-						cur_state = vad_->FeedData(feat_out_ready_);
-						if (cur_state != UTT_END || utt_state_ != UTT_END)
-							block_ = new OnlineDecodableBlock(feat_out_ready_, cur_state);
-						utt_state_ = cur_state;
+						cur_state = vad_->FeedData(blank_post_);
+						if (cur_state != UTT_END || utt_state_ != UTT_END || (cur_state != UTT_END && pos_state == FEAT_END)) {
+                            FeatState state = (pos_state==FEAT_END||cur_state==UTT_END) ? FEAT_END : FEAT_APPEND;
+							block_ = new OnlineDecodableBlock(feat_out_ready_, state);
+							// wake up decoder thread
+							if (block_ != NULL) repository_.Accept(block_);
+                            utt_state_ = cur_state;
+                            if (cur_state == UTT_START)
+                                KALDI_LOG << "START: << " << result_.num_frames << " f, "<< 
+                                result_.num_frames/(100*60) << ":" << result_.num_frames%(100*60)/100 << "," << result_.num_frames%100*10;
+                                
+							if (cur_state == UTT_END) {
+								finish_utt_ = true;
+								ResetUtt();
+								// break output an utterance result
+								break;
+							}
+						}
+                        if (cur_state == UTT_END && pos_state == FEAT_END) {
+                           result_.isuttend = true; 
+                           finish_utt_ = true;
+                        }
 					} else {
 						block_ = new OnlineDecodableBlock(feat_out_ready_, pos_state);
+						// wake up decoder thread
+						if (block_ != NULL) repository_.Accept(block_);
 					}
-
-					// wake up decoder thread
-					if (block_ != NULL) repository_.Accept(block_);
-
 				} else if (forward_opts_->network_type == "unifsmn") {
 					int n = 1, nframe = 0, N = pos_state == FEAT_END ? 2 : 1;
 					while (n <= N) {
@@ -263,7 +287,7 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 						valid_input_frames_[0] = (frame_ready_+out_skip_-1)/out_skip_;
 						valid_input_frames_[0] = (n == 2) ? 0 : valid_input_frames_[0];
 						forward_->SetStreamStatus(utt_state_flags_, &valid_input_frames_);
-						forward_->Forward(feat_in_, &feat_out_);
+						forward_->Forward(feat_in_, &feat_out_, &blank_post_);
 						nframe = decoding_opts_->copy_posterior ?
 								valid_input_frames_[0]*skip_frames_ : valid_input_frames_[0];
 						feat_out_ready_.Resize(nframe, feat_out_.NumCols(), kUndefined);
@@ -276,16 +300,25 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 
 						block_ = NULL;
 						if (vad_ != NULL) {
-							cur_state = vad_->FeedData(feat_out_ready_);
-							if (cur_state != UTT_END || utt_state_ != UTT_END)
-								block_ = new OnlineDecodableBlock(feat_out_ready_, cur_state);
-							utt_state_ = cur_state;
+							cur_state = vad_->FeedData(blank_post_);
+							if (cur_state != UTT_END || utt_state_ != UTT_END || (cur_state != UTT_END && pos_state == FEAT_END)) {
+                                FeatState state = (pos_state==FEAT_END||cur_state==UTT_END) ? FEAT_END : FEAT_APPEND;
+								block_ = new OnlineDecodableBlock(feat_out_ready_, state);
+								// wake up decoder thread
+								if (block_ != NULL) repository_.Accept(block_);
+                                utt_state_ = cur_state;
+								if (cur_state == UTT_END) {
+									finish_utt_ = true;
+									ResetUtt();
+									// break output an utterance result
+									break;
+								}
+							}
 						} else {
 							block_ = new OnlineDecodableBlock(feat_out_ready_, utt_state_flags_[0]);
+							// wake up decoder thread
+							if (block_ != NULL) repository_.Accept(block_);
 						}
-
-						// wake up decoder thread
-						if (block_ != NULL) repository_.Accept(block_);
                         n++;
 					}
 				}
@@ -304,7 +337,6 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
                 }
 			}
 
-			result_.num_frames += frame_ready_;
 		}
 	}
 
@@ -313,10 +345,13 @@ int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 }
 
 Result* OnlineFstDecoder::GetResult() {
-	bool newutt = (state_ == FEAT_END || (vad_ != NULL && utt_state_ == UTT_END));
+	bool newutt = (state_ == FEAT_END || (vad_ != NULL && finish_utt_));
     if (newutt) {
-    	while (!result_.isend)
+    	while (!result_.isuttend)
     		sleep(0.02);
+		// reset
+		result_.isuttend = false;
+		finish_utt_ = false;
     }
 
 	std::vector<int32> word_ids;
@@ -324,10 +359,17 @@ Result* OnlineFstDecoder::GetResult() {
 	for (int i = cur_result_idx_; i < size; i++)
 		word_ids.push_back(result_.word_ids_[i]);
 
-	PrintPartialResult(word_ids, word_syms_, newutt);
+    if (word_ids.size() > 0)
+	    PrintPartialResult(word_ids, word_syms_, newutt);
     std::cout.flush();
 
+    if (newutt)
+       KALDI_LOG << "END: << " << result_.num_frames << " f, "<< 
+       result_.num_frames/(100*60) << ":" << result_.num_frames%(100*60)/100 << "," << result_.num_frames%100*10;
+
 	cur_result_idx_ = size;
+	if (state_ == FEAT_END) 
+		result_.isend = true;
 	return &result_;
 }
 

@@ -57,6 +57,7 @@ public:
 	void Abort();
 
 private:
+	void ResetUtt();
 	void Destory();
 	const static int VECTOR_INC_STEP = 16000*10;
 
@@ -108,7 +109,7 @@ private:
 	char *sc_sample_buffer_;
 	int sc_buffer_size_;
 	// decoding buffer
-	Matrix<BaseFloat> feat_in_, feat_out_, feat_out_ready_;
+	Matrix<BaseFloat> feat_in_, feat_out_, feat_out_ready_, blank_post_;
 	// wav buffer
 	Vector<BaseFloat> wav_buffer_;
 	std::vector<int> utt_state_flags_;
@@ -116,6 +117,7 @@ private:
 	// online feed
 	int len_, sample_offset_, frame_offset_, frame_ready_;
 	int in_skip_, out_skip_, skip_frames_, chunk_length_, cur_result_idx_;
+	bool finish_utt_;
 };
 
 }	 // namespace kaldi

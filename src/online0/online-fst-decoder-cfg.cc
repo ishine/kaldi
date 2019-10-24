@@ -35,6 +35,7 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 	lat_decoder_opts_ = new OnlineLatticeFasterDecoderOptions;
 	forward_opts_ = new OnlineNnetForwardOptions;
 	feature_opts_ = new OnlineNnetFeaturePipelineOptions(decoding_opts_->feature_cfg);
+    vad_opts_ = new OnlineVadOptions;
 
 	if (decoding_opts_->use_lat)
 		ReadConfigFromFile(decoding_opts_->decoder_cfg, lat_decoder_opts_);

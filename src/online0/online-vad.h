@@ -60,23 +60,27 @@ public:
 		int nr, swin, bs;
 		BaseFloat pb = 0.0;
 		nr = post.NumRows();
+        blank_post_.Resize(nr, kSetZero);
+        for (int i = 0; i < nr; i++)
+            blank_post_(i) = post(i, 0);
+
 		if (state_ == UTT_END) {
 			swin = opts_.vad_smooth_win > nr ? nr : opts_.vad_smooth_win;
 			bs = nr-swin+1;
 			smooth_buffer_.Resize(bs, kSetZero);
 			for (int i = 0; i < bs; i++) {
 				for (int j = 0; j < swin; j++) {
-					smooth_buffer_(i) += post(i+j, 0);
+					smooth_buffer_(i) += blank_post_(i+j);
 				}
 				smooth_buffer_(i) /= swin;
-				if (smooth_buffer_(i) >= opts_.vad_start_rate) {
+				if (smooth_buffer_(i) <= opts_.vad_start_rate) {
 					state_ = UTT_START;
                     num_end_win_ = 0;
 					break;
 				}
 			}
 		} else if (state_ == UTT_START || state_ == UTT_APPEND) {
-			pb = post.ColRange(0, 1).Sum()/nr;
+			pb = blank_post_.Sum()/nr;
 			num_end_win_ = pb >= opts_.vad_end_rate ? num_end_win_+1 : 0;
 			state_ = num_end_win_ >= opts_.vad_num_end_win ? UTT_END : UTT_APPEND;
 		}
@@ -92,6 +96,7 @@ private:
 	const OnlineVadOptions &opts_;
 	UttState state_;
 	Vector<BaseFloat> smooth_buffer_;
+    Vector<BaseFloat> blank_post_;
 	int num_end_win_;
 };
 

@@ -139,6 +139,7 @@ typedef struct Result_ {
 	int num_frames;
     int post_frames;
 	bool isend;
+	bool isuttend;
 	void clear() {
 		word_ids_.clear();
 		tids_.clear();
@@ -147,6 +148,7 @@ typedef struct Result_ {
         post_frames = 0;
 		utt = "";
 		isend = false;
+		isuttend = false;
 	}
 }Result;
 
@@ -247,7 +249,7 @@ public:
 
 				if (state == DecodeState::kEndFeats) {
 					result_->score_ /= result_->post_frames;
-					result_->isend = true;
+					result_->isuttend = true;
 				}
 			}
 
