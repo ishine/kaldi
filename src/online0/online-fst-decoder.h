@@ -31,7 +31,7 @@
 #include "online0/online-nnet-forward.h"
 #include "online0/online-nnet-decoding.h"
 #include "online0/online-nnet-lattice-decoding.h"
-#include "online0/online-vad.h"
+#include "online0/online-am-vad.h"
 
 namespace kaldi {
 
@@ -69,7 +69,7 @@ private:
 	OnlineNnetForwardOptions *forward_opts_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;
-	OnlineVadOptions *vad_opts_;
+	OnlineAmVadOptions *am_vad_opts_;
 
 	TransitionModel *trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
@@ -87,7 +87,7 @@ private:
 	OnlineLatticeFasterDecoder *lat_decoder_;
 	OnlineNnetLatticeDecodingClass *lat_decoding_;
 	MultiThreader<OnlineNnetLatticeDecodingClass> *lat_decoder_thread_;
-	OnlineVad *vad_;
+	OnlineAmVad *am_vad_;
 
 	// feature pipeline
 	OnlineNnetFeaturePipeline *feature_pipeline_;
