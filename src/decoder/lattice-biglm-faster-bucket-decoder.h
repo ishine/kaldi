@@ -146,7 +146,7 @@ struct ForwardLink {
   inline ForwardLink(Token *next_tok, Label ilabel, Label olabel,
                       BaseFloat graph_cost, BaseFloat acoustic_cost,
                       BaseFloat graph_cost_ori, BackwardLink *next):
-      prev_tok(prev_tok), ilabel(ilabel), olabel(olabel),
+      next_tok(next_tok), ilabel(ilabel), olabel(olabel),
       graph_cost(graph_cost), acoustic_cost(acoustic_cost),
       graph_cost_ori(graph_cost_ori), next(next) { }
 };
@@ -625,6 +625,10 @@ class LatticeBiglmFasterBucketDecoderTpl {
                                 StateIdToBucketMap *bucket_map,
                                 bool *changed);
 
+
+  // fill the 'real' tokens into the bucket
+  void ExpandBucket(int32 frame, TokenBucket* bucket);
+
   // prunes outgoing links for all tokens in active_toks_[frame]
   // it's called by PruneActiveTokens
   // all links, that have link_extra_cost > lattice_beam are pruned
@@ -811,6 +815,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   BaseFloat adaptive_beam_;  // will be set to beam_ when we start
   BucketQueue cur_queue_;  // temp variable used in 
                            // ProcessForFrame/ProcessNonemitting
+  std::vector<BaseFloat> cut_off_;
 };
 
 typedef LatticeBiglmFasterBucketDecoderTpl<fst::StdFst,

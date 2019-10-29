@@ -414,9 +414,69 @@ inline Token* LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddBucket(
   // backwardlinks of the 'source_bucket' to generate the 'real' tokens
   // recursively
   if (new_bucket->expanded && !source_bucket->expanded) {
-    ExpandBucket(source_bucket);
+    // Expand the source bucket
+    int32 frame = arc.olabel == 0 ? token_list_index : token_list_index - 1;
+    ExpandBucket(frame, source_bucket);
+    // build the new_bucket with the tokens from source bucket
+    std::vector<Token*> tmp;
+    while (!source_bucket->tokens.empty()) {
+      tmp.push(source_bucket->tokens.top());
+      source_bucket->tokens.pop();
+    }
+    // expand the 'real' token from source_bucket to new_bucket.
+    for (std::vector<Token*>::iterator it = tmp.begin(); it != tmp.end(); it++) {
+      Arc arc_ref(arc);
+      BaseFloat graph_cost_ori = arc_ref.weight;
+      StateId next_lm_state = PropagateLm(it->lm_state, arc_ref);
+      BaseFloat graph_cost = arc_ref.weight;
+      if (tot_cost + graph_cost > cut_off_[token_list_index]) continue;
+      Token *toks = active_toks_[token_list_index].toks;
+      Token* new_tok = new Token(tot_cost,
+                                 std::numeric_limits<BaseFloat>::infinity(),
+                                 state, next_lm_state, NULL, toks);
+      new_tok->links = new ForwardLinkT(new_tok, arc.ilabel, arc.olabel,
+                                        graph_cost, ac_cost, new_tok->links);
+      source_bucket->Insert(*it);
+    }
   }
   return new_bucket;
+}
+
+
+template <typename FST, typename Token>
+void ExpandBucket(int32 frame, TokenBucket* bucket) {
+  if (bucket->expanded) return;
+  for (BackwardBucketLinkT *link = bucket->bucket_links; link != NULL; ) {
+    // TODO: rename the typename of "Link"
+    BucketToken* prev_bucket = link->prev_tok;
+    if (prev_bucket->expanded) {  // expand the tokens
+      std::vector<Token*> tmp;
+      while (!source_bucket->tokens.empty()) {
+        tmp.push(source_bucket->tokens.top());
+        source_bucket->tokens.pop();
+      }
+      // expand the 'real' token from source_bucket to new_bucket.
+      for (std::vector<Token*>::iterator it = tmp.begin(); it != tmp.end();
+           it++) {
+        Arc arc_ref(arc);
+        BaseFloat graph_cost_ori = arc_ref.weight;
+        StateId next_lm_state = PropagateLm(it->lm_state, arc_ref);
+        BaseFloat graph_cost = arc_ref.weight;
+        if (tot_cost + graph_cost > cut_off_[token_list_index]) continue;
+        Token *toks = active_toks_[token_list_index].toks;
+        Token* new_tok = new Token(tot_cost,
+                                   std::numeric_limits<BaseFloat>::infinity(),
+                                   state, next_lm_state, NULL, toks);
+        new_tok->links = new ForwardLinkT(new_tok, arc.ilabel, arc.olabel,
+                                          graph_cost, ac_cost, new_tok->links);
+        source_bucket->Insert(*it);
+      }
+    }
+  } else {  // goes back to expand the previous buckets
+    int32 prev_frame = link->olabel == 0 ? frame; frame-1;
+    ExpandBucket(prev_frame, prev_bucket);
+  }
+  link = link->next;
 }
 
 // prunes outgoing links for all tokens in active_toks_[frame]
