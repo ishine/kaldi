@@ -82,8 +82,8 @@ int main(int argc, char *argv[]) {
 
     std::string model_filename, transition_model_filename,
 				feature_rspecifier, den_lat_rspecifier,
-				num_ali_rspecifier, sweep_frames_rspecifier, target_model_filename;
-                transition_model_filename = "", sweep_frames_rspecifier = "";
+				num_ali_rspecifier, target_model_filename;
+                transition_model_filename = "";
 
     if (po.NumArgs() == 6) {
 		model_filename = po.GetArg(1),
@@ -101,12 +101,6 @@ int main(int argc, char *argv[]) {
     } else {
         po.PrintUsage();
         exit(1);
-    }
-
-    if (opts.sweep_frames_filename != "") {
-    		std::stringstream ss;
-    		ss << "ark,t:" << opts.sweep_frames_filename;
-    		sweep_frames_rspecifier = ss.str();
     }
 
     using namespace kaldi;
@@ -138,7 +132,6 @@ int main(int argc, char *argv[]) {
 								feature_rspecifier,
 								den_lat_rspecifier,
 								num_ali_rspecifier,
-								sweep_frames_rspecifier,
 								&nnet,
 								&stats);
 

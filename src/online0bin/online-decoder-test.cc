@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
                 */
 				decoder.FeedData((void*)wave_part.Data(), wave_part.Dim()*sizeof(float), state);
 				// get part result
-				result = decoder.GetResult(state);
+				result = decoder.GetResult();
                 if (state == FEAT_END) {
                     result->utt = std::string(fn);
             	    KALDI_LOG << "Finish decode utterance: " << result->utt

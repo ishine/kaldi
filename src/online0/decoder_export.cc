@@ -42,7 +42,7 @@ int GetResult(void *lpDecoder, int * words_id, int state)
 {
     OnlineFstDecoder * decoder = (OnlineFstDecoder *)lpDecoder;
     Result *result;
-    result = decoder->GetResult((kaldi::FeatState)state);
+    result = decoder->GetResult();
     int idx = 0;
     for (auto word_id : result->word_ids_){
         words_id[idx++] = word_id;

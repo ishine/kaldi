@@ -82,6 +82,7 @@ struct NnetUpdateOptions {
     std::string use_gpu;
     std::string si_model_filename;
     std::string si_feature_rspecifier;
+    std::string spec_aug_filename;
     std::string frozen_model_filename;
     std::string sweep_frames_str;
     bool  sweep_loop;
@@ -112,39 +113,26 @@ struct NnetUpdateOptions {
   		  po->Register("binary", &binary, "Write output in binary mode");
   		  po->Register("cross-validate", &crossvalidate, "Perform cross-validation (don't backpropagate)");
 	      po->Register("randomize", &randomize, "Perform the frame-level shuffling within the Cache::");
-
-
 	      po->Register("feature-transform", &feature_transform, "Feature transform in Nnet format");
-
 	      po->Register("objective-function", &objective_function, "Objective function : xent|mse");
-
 	      po->Register("length-tolerance", &length_tolerance, "Allowed length difference of features/targets (frames)");
-
 	      po->Register("frame-weights", &frame_weights, "Per-frame weights to scale gradients (frame selection/weighting).");
-
 	      po->Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA");
-
 	      po->Register("dropout-retention", &dropout_retention, "number between 0..1, saying how many neurons to preserve (0.0 will keep original value");
-
 	      po->Register("si-model",&si_model_filename, "kld speaker independent model filename");
 	      po->Register("si-feature",&si_feature_rspecifier, "kld speaker independent feature rspecifier");
 	      po->Register("frozen-model",&frozen_model_filename, "frozen model filename");
-
 	      po->Register("kld-scale", &kld_scale, "KLD regularization weight to the original training criterion");
-
 	      po->Register("skip-frames", &skip_frames, "Compute model on selected frames(one frame out of every skip frames)");
-
 	      po->Register("sweep-time", &sweep_time, "Sweep times for each utterance in skip frames training(Deprecated, use --sweep-frames instead)");
 	      po->Register("sweep-frames", &sweep_frames_str, "Sweep frames indexes for each utterance in skip frames training, e.g. 0:1 for skip_frames = 2");
 	      po->Register("sweep-loop", &sweep_loop, "Sweep all frames indexes for each utterance in skip frames training if true, "
 	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
 	      po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
 	      po->Register("use-specaug", &use_specaug, "Apply spectrum and time domain augmentation on fbank feature");
-
+	      po->Register("spec-aug-filename", &spec_aug_filename, "Apply spectrum and time domain augmentation fbank list filename");
 	      po->Register("update-frames",&update_frames, "Every update-frames frames each client exchange gradient");
-
 	      po->Register("use-psgd",&use_psgd, "use preconditional sgd instead of sgd, it always true while training with multi-machine");
-
 	      po->Register("dump-time", &dump_time, "num hours frames between model dumping [ 0 == disabled ]");
 	      po->Register("targets-delay", &targets_delay, "targets label delay input feature");
 	      po->Register("network-type", &network_type, "CTC neural network type, (lstm|fsmn)");

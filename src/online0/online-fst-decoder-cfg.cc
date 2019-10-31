@@ -23,7 +23,7 @@ namespace kaldi {
 
 OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 		fast_decoder_opts_(NULL), lat_decoder_opts_(NULL), forward_opts_(NULL),
-		feature_opts_(NULL), decoding_opts_(NULL),
+		feature_opts_(NULL), decoding_opts_(NULL), am_vad_opts_(NULL),
 		trans_model_(NULL), decode_fst_(NULL), word_syms_(NULL) {
 
 	// main config
@@ -35,6 +35,7 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 	lat_decoder_opts_ = new OnlineLatticeFasterDecoderOptions;
 	forward_opts_ = new OnlineNnetForwardOptions;
 	feature_opts_ = new OnlineNnetFeaturePipelineOptions(decoding_opts_->feature_cfg);
+    am_vad_opts_ = new OnlineAmVadOptions;
 
 	if (decoding_opts_->use_lat)
 		ReadConfigFromFile(decoding_opts_->decoder_cfg, lat_decoder_opts_);
@@ -43,6 +44,9 @@ OnlineFstDecoderCfg::OnlineFstDecoderCfg(std::string cfg) :
 
 	if (decoding_opts_->forward_cfg != "")
 		ReadConfigFromFile(decoding_opts_->forward_cfg, forward_opts_);
+
+	if (decoding_opts_->am_vad_cfg != "")
+		ReadConfigFromFile(decoding_opts_->am_vad_cfg, am_vad_opts_);
     
     // load decode resources
     Initialize();
@@ -55,6 +59,7 @@ void OnlineFstDecoderCfg::Destory() {
 		delete forward_opts_;	forward_opts_ = NULL;
 		delete feature_opts_;	feature_opts_ = NULL;
 		delete decoding_opts_;	decoding_opts_ = NULL;
+		delete am_vad_opts_;		am_vad_opts_ = NULL;
 	}
 
 	if (decode_fst_ != NULL) {

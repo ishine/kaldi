@@ -486,8 +486,7 @@ private:
 			if (!crossvalidate) {
 				// backpropagate
 
-				if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient")
-				{
+				if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient") {
 					nnet.ResetGradient();
 					model_sync->reset_gradient_[thread_idx] = false;
 					//KALDI_VLOG(1) << "Reset Gradient";
@@ -665,6 +664,14 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 		    SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
 		    RandomAccessInt32VectorReader targets_reader(targets_rspecifier);
 		    RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
+	    	RandomAccessTokenReader *spec_aug_reader = NULL;
+			std::string spec_aug_rspecifier = "";
+    		if (opts->spec_aug_filename != "") {
+    			std::stringstream ss;
+    			ss << "ark,t:" << opts->spec_aug_filename;
+    			spec_aug_rspecifier = ss.str();
+				spec_aug_reader = new RandomAccessTokenReader(spec_aug_rspecifier);
+    		}
 
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
@@ -692,8 +699,8 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    		idx = (idx+1)%nframes;
 	    	}
 
-	    	example = new CTCNnetExample(&feature_reader, &si_feature_reader, &targets_reader,
-	    			&model_sync, stats, opts);
+	    	example = new CTCNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader, 
+					&targets_reader, &model_sync, stats, opts);
             example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
 	    		for (int i = 0; i < examples.size(); i++) {
@@ -732,6 +739,14 @@ void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 			RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 		    RandomAccessBaseFloatVectorReader weights_reader;
 			RandomAccessPosteriorReader targets_reader(targets_rspecifier);
+			std::string spec_aug_rspecifier = "";
+	    	RandomAccessTokenReader *spec_aug_reader = NULL;
+    		if (opts->spec_aug_filename != "") {
+    			std::stringstream ss;
+    			ss << "ark,t:" << opts->spec_aug_filename;
+    			spec_aug_rspecifier = ss.str();
+				spec_aug_reader = new RandomAccessTokenReader(spec_aug_rspecifier);
+    		}
 
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
@@ -760,8 +775,8 @@ void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    		idx = (idx+1)%nframes;
 	    	}
 
-	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, &targets_reader,
-	    			&weights_reader, &model_sync, stats, opts);
+	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
+					&targets_reader, &weights_reader, &model_sync, stats, opts);
             example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
 	    		for (int i = 0; i < examples.size(); i++) {

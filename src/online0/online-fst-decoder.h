@@ -21,17 +21,17 @@
 
 #include "fstext/fstext-lib.h"
 #include "decoder/decodable-matrix.h"
-#include "online-faster-decoder.h"
 #include "util/kaldi-semaphore.h"
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
 
 #include "online0/online-fst-decoder-cfg.h"
-
+#include "online0/online-faster-decoder.h"
 #include "online0/online-nnet-feature-pipeline.h"
 #include "online0/online-nnet-forward.h"
 #include "online0/online-nnet-decoding.h"
 #include "online0/online-nnet-lattice-decoding.h"
+#include "online0/online-am-vad.h"
 
 namespace kaldi {
 
@@ -48,7 +48,7 @@ public:
 	int FeedData(void *data, int nbytes, FeatState state);
 
 	// get online decoder result
-	Result* GetResult(FeatState state);
+	Result* GetResult();
 
 	// Reset decoder
 	void Reset();
@@ -57,6 +57,7 @@ public:
 	void Abort();
 
 private:
+	void ResetUtt();
 	void Destory();
 	const static int VECTOR_INC_STEP = 16000*10;
 
@@ -68,6 +69,7 @@ private:
 	OnlineNnetForwardOptions *forward_opts_;
 	OnlineNnetFeaturePipelineOptions *feature_opts_;
 	OnlineNnetDecodingOptions *decoding_opts_;
+	OnlineAmVadOptions *am_vad_opts_;
 
 	TransitionModel *trans_model_;
 	fst::Fst<fst::StdArc> *decode_fst_;
@@ -85,6 +87,7 @@ private:
 	OnlineLatticeFasterDecoder *lat_decoder_;
 	OnlineNnetLatticeDecodingClass *lat_decoding_;
 	MultiThreader<OnlineNnetLatticeDecodingClass> *lat_decoder_thread_;
+	OnlineAmVad *am_vad_;
 
 	// feature pipeline
 	OnlineNnetFeaturePipeline *feature_pipeline_;
@@ -99,13 +102,14 @@ private:
 
 	Result result_;
 	FeatState state_;
+	UttState utt_state_;
 
 	// ipc socket input sample
 	SocketSample *socket_sample_;
 	char *sc_sample_buffer_;
 	int sc_buffer_size_;
 	// decoding buffer
-	Matrix<BaseFloat> feat_in_, feat_out_, feat_out_ready_;
+	Matrix<BaseFloat> feat_in_, feat_out_, feat_out_ready_, blank_post_;
 	// wav buffer
 	Vector<BaseFloat> wav_buffer_;
 	std::vector<int> utt_state_flags_;
@@ -113,6 +117,7 @@ private:
 	// online feed
 	int len_, sample_offset_, frame_offset_, frame_ready_;
 	int in_skip_, out_skip_, skip_frames_, chunk_length_, cur_result_idx_;
+	bool finish_utt_;
 };
 
 }	 // namespace kaldi

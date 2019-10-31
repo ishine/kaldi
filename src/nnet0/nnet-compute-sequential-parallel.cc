@@ -1161,7 +1161,6 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 		std::string feature_rspecifier,
 		std::string den_lat_rspecifier,
 		std::string num_ali_rspecifier,
-		std::string sweep_frames_rspecifier,
 		Nnet *nnet,
 		NnetSequentialStats *stats)
 {
@@ -1180,7 +1179,15 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 	    	RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 	    	RandomAccessLatticeReader den_lat_reader(den_lat_rspecifier);
 	    	RandomAccessInt32VectorReader num_ali_reader(num_ali_rspecifier);
+
+			std::string sweep_frames_rspecifier = "";
+    		if (opts->sweep_frames_filename != "") {
+    			std::stringstream ss;
+    			ss << "ark,t:" << opts->sweep_frames_filename;
+    			sweep_frames_rspecifier = ss.str();
+    		}
 	    	RandomAccessInt32VectorReader sweep_frames_reader(sweep_frames_rspecifier);
+
 
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.

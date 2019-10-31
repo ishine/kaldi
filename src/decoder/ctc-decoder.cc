@@ -339,6 +339,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				}
 
 				// *NB* this would be a good place to include an LM score.
+				// if (config_.lm_scale > 0.0 && it == next_beam_.end()) {
 				if (config_.lm_scale > 0.0) {
                     // rnn lm score
 					if (rscale != 0) {
