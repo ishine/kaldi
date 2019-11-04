@@ -54,36 +54,40 @@ struct LatticeBiglmFasterBucketDecoderConfig {
 
   int32 bucket_length; // the capacity of each bucket
 
-  LatticeBiglmFasterBucketDecoderConfig(): beam(16.0),
-                                       max_active(std::numeric_limits<int32>::max()),
-                                       min_active(200),
-                                       lattice_beam(10.0),
-                                       prune_interval(25),
-                                       determinize_lattice(true),
-                                       beam_delta(0.5),
-                                       cost_scale(1.0),
-                                       prune_scale(0.1),
-                                       bucket_length(5) { }
+  LatticeBiglmFasterBucketDecoderConfig():
+    beam(16.0),
+    max_active(std::numeric_limits<int32>::max()),
+    min_active(200),
+    lattice_beam(10.0),
+    prune_interval(25),
+    determinize_lattice(true),
+    beam_delta(0.5),
+    cost_scale(1.0),
+    prune_scale(0.1),
+    bucket_length(5) { }
+
   void Register(OptionsItf *opts) {
     det_opts.Register(opts);
-    opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
-    opts->Register("max-active", &max_active, "Decoder max active states.  Larger->slower; "
-                   "more accurate");
+    opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more "
+                   "accurate.");
+    opts->Register("max-active", &max_active, "Decoder max active states. "
+                   "Larger->slower; more accurate");
     opts->Register("min-active", &min_active, "Decoder minimum #active states.");
-    opts->Register("lattice-beam", &lattice_beam, "Lattice generation beam.  Larger->slower, "
-                   "and deeper lattices");
+    opts->Register("lattice-beam", &lattice_beam, "Lattice generation beam. "
+                   "Larger->slower, and deeper lattices");
     opts->Register("prune-interval", &prune_interval, "Interval (in frames) at "
                    "which to prune tokens");
     opts->Register("determinize-lattice", &determinize_lattice, "If true, "
-                   "determinize the lattice (lattice-determinization, keeping only "
-                   "best pdf-sequence for each word-sequence).");
+                   "determinize the lattice (lattice-determinization, keeping "
+                   "only best pdf-sequence for each word-sequence).");
     opts->Register("beam-delta", &beam_delta, "Increment used in decoding-- this "
                    "parameter is obscure and relates to a speedup in the way the "
                    "max-active constraint is applied.  Larger is more accurate.");
     opts->Register("cost-scale", &cost_scale, "A scale that we multiply the "
                    "token costs by before intergerizing; a larger value means "
                    "more buckets and precise.");
-    opts->Register("bucket-length", &bucket_length, "The capacity of each bucket");
+    opts->Register("bucket-length", &bucket_length, "The capacity of each "
+                   "bucket.");
   }
   void Check() const {
     KALDI_ASSERT(beam > 0.0 && max_active > 1 && lattice_beam > 0.0
@@ -104,57 +108,64 @@ namespace biglmbucketdecoder {
 // those that do not (LatticeFasterDecoder).
 
 
-// BackwardLinks are the links from a token to a token on the preceding frame
-// or sometimes on the current frame (for input-epsilon links).
-template <typename Token>
+// BackwardLinks are the links from an element to another element on the
+// preceding frame or sometimes on the current frame (for input-epsilon links).
+// Note: We call it 'Element' rather than 'Token' since it will be used for
+// both 'TokenBucket' or 'Token'.
+template <typename Element>
 struct BackwardLink {
   using Label = fst::StdArc::Label;
 
-  Token *prev_tok;  // the previous token
+  Element *prev_elem;  // the previous element
   Label ilabel;  // ilabel on arc
   Label olabel;  // olabel on arc
   BaseFloat graph_cost;  // graph cost of traversing arc (contains LM, etc.)
+                         // For 'TokenBucket', it stores the graphcost of
+                         // base HCLG graph.
+                         // For 'Token', it stores the traversing graph cost.
   BaseFloat acoustic_cost;  // acoustic cost (pre-scaled) of traversing arc
-  BaseFloat graph_cost_ori;  // graph cost of base HCLG graph, we may don't use
-                             // this item. Just keep it in first.
   BackwardLink *next;  // next in singly-linked list of backward arcs (arcs
-                       // in the state-level lattice) from a token.
-  inline BackwardLink(Token *prev_tok, Label ilabel, Label olabel,
+                       // in the state-level lattice) from an element.
+  inline BackwardLink(Element *prev_elem, Label ilabel, Label olabel,
                       BaseFloat graph_cost, BaseFloat acoustic_cost,
-                      BaseFloat graph_cost_ori, BackwardLink *next):
-      prev_tok(prev_tok), ilabel(ilabel), olabel(olabel),
+                      BackwardLink *next):
+      prev_elem(prev_elem), ilabel(ilabel), olabel(olabel),
       graph_cost(graph_cost), acoustic_cost(acoustic_cost),
-      graph_cost_ori(graph_cost_ori), next(next) { }
+      next(next) { }
 };
 
 
-// ForwardLinks are the links from a token to a token on the next frame
-// or sometimes on the current frame (for input-epsilon links).
-template <typename Token>
+// ForwardLinks are the links from an element to another element on the next
+// frame or sometimes on the current frame (for input-epsilon links).
+// Note: We call it 'Element' rather than 'Token' since it will be used for
+// both 'TokenBucket' or 'Token'.
+template <typename Element>
 struct ForwardLink {
   using Label = fst::StdArc::Label;
 
-  Token *next_tok;  // the previous token
+  Element *next_elem;  // the next element
   Label ilabel;  // ilabel on arc
   Label olabel;  // olabel on arc
   BaseFloat graph_cost;  // graph cost of traversing arc (contains LM, etc.)
+                         // See 'BackwardLink' for more information.
   BaseFloat acoustic_cost;  // acoustic cost (pre-scaled) of traversing arc
-  BaseFloat graph_cost_ori;  // graph cost of base HCLG graph, we may don't use
-                             // this item. Just keep it in first.
   ForwardLink *next;  // next in singly-linked list of forward arcs (arcs
-                       // in the state-level lattice) from a token.
-  inline ForwardLink(Token *next_tok, Label ilabel, Label olabel,
-                      BaseFloat graph_cost, BaseFloat acoustic_cost,
-                      BaseFloat graph_cost_ori, BackwardLink *next):
-      next_tok(next_tok), ilabel(ilabel), olabel(olabel),
+                      // in the state-level lattice) from an element.
+  inline ForwardLink(Element *next_elem, Label ilabel, Label olabel,
+                     BaseFloat graph_cost, BaseFloat acoustic_cost,
+                     ForwardLink *next):
+      next_elem(next_elem), ilabel(ilabel), olabel(olabel),
       graph_cost(graph_cost), acoustic_cost(acoustic_cost),
-      graph_cost_ori(graph_cost_ori), next(next) { }
+      next(next) { }
 };
 
 
+// For 'Token' (either 'StdToken' or 'BackpointerToken'), we use 'Forwardlink'
+// to connect one token to another. It will be easy for us to compute the
+// back_cost of each token and do pruning.
 template <typename Fst>
 struct StdToken {
-  using BackwardLinkT = BackwardLink<StdToken>;
+  using ForwardLinkT = ForwardLink<StdToken>;
   using Token = StdToken;
   using StateId = typename Fst::Arc::StateId;
 
@@ -169,7 +180,7 @@ struct StdToken {
   // to keep it in a good numerical range).
   BaseFloat tot_cost;
 
-  // tot_cost + back_cost >=0. When calling PruneBackwardLinks, it will be
+  // tot_cost + back_cost >=0. When calling PruneTokenForwardLinks, it will be
   // updated. (tot_cost + back_cost) can describe the minimum difference
   // between the best path including this state and the best overall path,
   // under the assumption that any of the currently active states at the
@@ -182,9 +193,9 @@ struct StdToken {
   StateId base_state;  // the state in base graph (the HCLG)
   StateId lm_state;  // the state in LM-diff FST
 
-  // 'links' is the head of singly-linked list of BackwardLinks, which is what
+  // 'links' is the head of singly-linked list of ForwardLinks, which is what
   // we use for lattice generation.
-  BackwardLinkT *links;
+  ForwardLinkT *links;
 
   //'next' is the next in the singly-linked list of tokens for this frame.
   Token *next;
@@ -204,7 +215,7 @@ struct StdToken {
   // fast way to obtain the best path).
   inline StdToken(BaseFloat tot_cost, BaseFloat back_cost,
                   StateId base_state, StateId lm_state,
-                  BackwardLinkT *links, Token *next, Token *backpointer):
+                  ForwardLinkT *links, Token *next, Token *backpointer):
     tot_cost(tot_cost), back_cost(back_cost),
     base_state(base_state), lm_state(lm_state),
     links(links), next(next), in_queue(false) { }
@@ -225,7 +236,7 @@ struct StdToken {
 
 template <typename Fst>
 struct BackpointerToken {
-  using BackwardLinkT = BackwardLink<BackpointerToken>;
+  using ForwardLinkT = ForwardLink<BackpointerToken>;
   using Token = BackpointerToken;
   using StateId = typename Fst::Arc::StateId;
 
@@ -253,10 +264,10 @@ struct BackpointerToken {
 
   // 'links' is the head of singly-linked list of BackwardLinks, which is what
   // we use for lattice generation.
-  BackwardLinkT *links;
+  ForwardLinkT *links;
 
   //'next' is the next in the singly-linked list of tokens for this frame.
-  BackpointerToken *next;
+  Token *next;
 
   // identitfy the token is in current queue or not to prevent duplication in
   // function ProcessForFrame().
@@ -297,6 +308,8 @@ struct BackpointerToken {
 };
 
 
+// This comparison function will be used in forward passing. So we compare the
+// tot_cost only. It will be used to generate a minimum heap.
 template <typename Token>
 struct cmp {
   bool operator() (Token *a, Token *b) {
@@ -307,10 +320,15 @@ struct cmp {
 template <typename FST, typename Token>
 struct TokenBucket {
   using BackwardBucketLinkT = BackwardLink<TokenBucket>;
+  using ForwardBucketLinkT = ForwardLink<TokenBucket>;
   using StateId = typename Fst::Arc::StateId;
 
   bool expanded;  // indicate the bucket is expanded or non-expanded
-  BackwardBucketLinkT bucket_links;  // link currnt bucket to preceding buckets
+
+  BackwardBucketLinkT bucket_backward_links;  // link current bucket to
+                                              // preceding buckets
+  ForwardBucketLinkT bucket_forward_links;  // link current bucket to
+                                            // next buckets
   BaseFloat tot_cost;  // the best alpha of the bucket. compatible with
                        // BucketQueue code.
   StateId base_state;  // the tokens which are collected in a bucket will have
@@ -320,40 +338,48 @@ struct TokenBucket {
                        // one from the priority_queue
   TokenBucket *next;  // 'next' is the next in the singly-linked list of tokens
                       // for this frame.
+  bool in_queue;  // identitfy the 'TokenBucket' is in current queue or not
+                  // to prevent duplication in function ProcessForFrame().
+
  
-  // when we insert a token into the queue, we compare the "tot_cost" which is
-  // the smaller the better between them. So this is a max-heap.
-  std::priority_queue<Token*, std::vector<Token*>, cmp> tokens;
-  // when we insert an element into priority queue, it will call the compare
+  // We store the 'real' tokens into a vector and orginize it as a maximum heap.
+  // When we insert a token into the heap, we compare the "tot_cost" which is
+  // the smaller the better. So this is a max-heap.
+  std::vector<Token*> tokens;
+  // when we insert an element into max-heap, it will call the compare
   // function automatically to compare the new element with the elements from
-  // the leaf to root in queue. If the compare function return false, the new
+  // the leaf to root in order. If the compare function return false, the new
   // element will go on. Othewise, it will stop.
 
+
+  // Bear in mind, the type of StateId is unsigned int.
   inline TokenBucket(bool expanded, TokenBucket *next,
                      size_t bucket_size):
     expanded(expanded), bucket_links(NULL),
-    tot_cost(std::numeric_limits<BaseFloat>::infinity()), base_state(-1),
+    tot_cost(std::numeric_limits<BaseFloat>::infinity()),
+    base_state(std::numeric_limits<StateId>::infinity()),
     length(bucket_size), next(next) {
       tokens.reserve(length + 1, NULL);  // reserve "length" + 1 positions to
                                          // prevent memory re-allocate.
+      std::make_heap(tokens.begin(), tokens.end(), cmp);
   }
 
-  // Insert a token into "tokens" priority_queue. When the size of "tokens"
+
+  // Insert a token into "tokens" max-heap. When the size of "tokens"
   // beyonds "length", remove the worst one.
   Insert(Token *tok) {
-    tokens.push(tok);
+    tokens.push_back(tok);
+    std::push_heap(tokens.begin(), tokens.end(), cmp);
     if (tokens.size() > length) {
-      Token *worst = tokens.top();
       // set the tot_cost to infinity to mark this token should be pruned. As
-      // we have to delete the Forward/BackwardLinks which are related to this
-      // token.
-      // TODO: optimize
-      worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
-      tokens.pop();
+      // we have to delete the ForwardLinks which are related to this token.
+      std::pop_heap(tokens.begin(), tokens.end(), cmp);
+      // Note: pop_heap function only put the worst element to the end of the
+      // container and then make the rest elements to a heap.
+      tokens.pop_back();
     }
   }
 };
-
 }  // namespace biglmbucketdecoder
 
 
@@ -437,7 +463,7 @@ class BucketQueue {
    will internally cast itself to one that is templated on those more specific
    types; this is an optimization for speed.
  */
-template <typename FST, typename Token = biglmdecodercombine::StdToken<FST> >
+template <typename FST, typename Token = biglmbucketdecoder::StdToken<FST> >
 class LatticeBiglmFasterBucketDecoderTpl {
  public:
   using Arc = typename FST::Arc;
@@ -446,9 +472,9 @@ class LatticeBiglmFasterBucketDecoderTpl {
   using Weight = typename Arc::Weight;
   using PairId = uint64;  // (StateId in fst) + (StateId in lm_diff_fst) << 32
 
-  using TokenBucket =
+  using Bucket =
     typename kaldi::biglmbucketdecoder::TokenBucket<FST, Token>;
-  using BucketQueue = typename kaldi::BucketQueue<TokenBucket>;
+  using BucketQueue = typename kaldi::BucketQueue<Bucket>;
 
   using BackwardLinkT = typename kaldi::biglmbucketdecoder::BackwardLink<Token>;
   using BackwardBucketLinkT =
@@ -815,11 +841,16 @@ class LatticeBiglmFasterBucketDecoderTpl {
   BaseFloat adaptive_beam_;  // will be set to beam_ when we start
   BucketQueue cur_queue_;  // temp variable used in 
                            // ProcessForFrame/ProcessNonemitting
-  std::vector<BaseFloat> cut_off_;
+
+  std::vector<BaseFloat> cut_off_;  // Keep the cut_off_ values for each frame.
+                                    // As we do lazy evaluation, we will trace
+                                    // back and expand those buckets with 
+                                    // pruning.
 };
 
 typedef LatticeBiglmFasterBucketDecoderTpl<fst::StdFst,
-        biglmdecodercombine::StdToken<fst::StdFst> > LatticeBiglmFasterBucketDecoder;
+        biglmdecodercombine::StdToken<fst::StdFst> >
+        LatticeBiglmFasterBucketDecoder;
 
 } // end namespace kaldi.
 
