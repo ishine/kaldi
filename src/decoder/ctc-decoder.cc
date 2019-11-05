@@ -316,22 +316,6 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					continue;
 				}
 
-				// If s is repeated at the end we also update the unchanged
-				// prefix. This is the merging case.
-				if (k == end_t) {
-					auto it = next_beam_.find(preseq->prefix);
-					if (it == next_beam_.end()) {
-						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
-						CopyHis(preseq->lmhis);
-					} else {
-                        n_preseq  = it->second;
-                    }
-
-					n_p_nb = LogAdd(n_preseq->logp_nblank, preseq->logp_nblank+logp);
-					n_preseq->logp_nblank = n_p_nb;
-					next_beam_[n_preseq->prefix] = n_preseq;
-				}
-
 
 				// Extend the prefix by the new character s and add it to
 				// the beam. Only the probability of not ending in blank
@@ -380,6 +364,22 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->logp_nblank = n_p_nb;
 				}
 				next_beam_[n_preseq->prefix] = n_preseq;
+
+				// If s is repeated at the end we also update the unchanged
+				// prefix. This is the merging case.
+				if (k == end_t) {
+					auto it = next_beam_.find(preseq->prefix);
+					if (it == next_beam_.end()) {
+						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
+						CopyHis(preseq->lmhis);
+					} else {
+                        n_preseq  = it->second;
+                    }
+
+					n_p_nb = LogAdd(n_preseq->logp_nblank, preseq->logp_nblank+logp);
+					n_preseq->logp_nblank = n_p_nb;
+					next_beam_[n_preseq->prefix] = n_preseq;
+				}
 			}
 		}
 
