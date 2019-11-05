@@ -207,21 +207,22 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
     std::vector<int> in_words;
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
-	float logp, n_p_b, n_p_nb, ngram_logp = 0, rnnlm_logp = 0,
+	float logp, logp_b, n_p_b, n_p_nb, ngram_logp = 0, rnnlm_logp = 0,
             rscale = config_.rnnlm_scale;
 	int end_t, bz;
     bool uselm;
 
-	InitDecoding();
+    InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
 
+		logp_b = loglikes(n, config_.blank);
 		// Lstm language model process, beam streams parallel.
         uselm = false;
         if (config_.lm_scale > 0.0) {
            if (config_.blank_threshold <= 0)
                 uselm = true;
-           else if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank)) <= config_.blank_threshold)
+           else if (config_.blank_threshold > 0 && Exp(logp_b) <= config_.blank_threshold)
                 uselm = true;
         }
 
@@ -266,8 +267,8 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 		std::fill(next_words.begin(), next_words.end(), 0);
 		// blank pruning
-		if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank)) > config_.blank_threshold) {
-			next_words[config_.blank] = loglikes(n, config_.blank);
+		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
+			next_words[config_.blank] = logp_b;
 		} else if (config_.am_topk > 0) {
 			// Top K pruning, the nth bigest words
             memcpy(&next_step.front(), loglikes.RowData(n), next_step.size()*sizeof(BaseFloat));
@@ -315,6 +316,23 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					continue;
 				}
 
+				// If s is repeated at the end we also update the unchanged
+				// prefix. This is the merging case.
+				if (k == end_t) {
+					auto it = next_beam_.find(preseq->prefix);
+					if (it == next_beam_.end()) {
+						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
+						CopyHis(preseq->lmhis);
+					} else {
+                        n_preseq  = it->second;
+                    }
+
+					n_p_nb = LogAdd(n_preseq->logp_nblank, preseq->logp_nblank+logp);
+					n_preseq->logp_nblank = n_p_nb;
+					next_beam_[n_preseq->prefix] = n_preseq;
+				}
+
+
 				// Extend the prefix by the new character s and add it to
 				// the beam. Only the probability of not ending in blank
 				// gets updated.
@@ -324,6 +342,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				auto it = next_beam_.find(n_prefix);
 				if (it == next_beam_.end()) {
 					n_preseq = new PrefixSeq(n_prefix);
+					n_preseq->time_stamp.push_back(n);
 				} else {
                     n_preseq  = it->second;
 				}
@@ -362,22 +381,6 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->logp_nblank = n_p_nb;
 				}
 				next_beam_[n_preseq->prefix] = n_preseq;
-
-				// If s is repeated at the end we also update the unchanged
-				// prefix. This is the merging case.
-				if (k == end_t) {
-					auto it = next_beam_.find(preseq->prefix);
-					if (it == next_beam_.end()) {
-						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
-						CopyHis(preseq->lmhis);
-					} else {
-                        n_preseq  = it->second;
-                    }
-
-					n_p_nb = LogAdd(n_preseq->logp_nblank, preseq->logp_nblank+logp);
-					n_preseq->logp_nblank = n_p_nb;
-					next_beam_[n_preseq->prefix] = n_preseq;
-				}
 			}
 		}
 

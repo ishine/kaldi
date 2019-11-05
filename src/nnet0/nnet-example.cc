@@ -347,7 +347,7 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 	int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
 	for (int i = 0; i < 1; i++) {
-		example = new SequentialNnetExample(feature_reader, si_feature_reader, den_lat_reader, 
+		example = new SequentialNnetExample(feature_reader, si_feature_reader, spec_aug_reader, den_lat_reader,
                                             num_ali_reader, sweep_frames_reader, model_sync, stats, opts);
 		example->utt = utt;
 		example->den_lat = den_lat;
@@ -370,6 +370,18 @@ bool SequentialNnetExample::PrepareData(std::vector<NnetExample*> &examples) {
 		}
 
 		examples.push_back(example);
+
+    	// spectrum augmentation
+    	if (opts->use_specaug) {
+    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader->HasKey(utt))) {
+    			SequentialNnetExample *spec_example = new SequentialNnetExample(feature_reader, si_feature_reader, spec_aug_reader,
+    											den_lat_reader, num_ali_reader, sweep_frames_reader, model_sync, stats, opts);
+				*spec_example = *example;
+				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,
+								opts->spec_opts->time_mask_ratio, opts->spec_opts->num_freq_mask, opts->spec_opts->max_freq_mask);
+				examples.push_back(spec_example);
+    		}
+    	}
 	}
 
 	return true;

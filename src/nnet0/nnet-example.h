@@ -129,13 +129,14 @@ struct SequentialNnetExample : NnetExample {
 
 	SequentialNnetExample(SequentialBaseFloatMatrixReader *feature_reader,
 							RandomAccessBaseFloatMatrixReader *si_feature_reader,
+							RandomAccessTokenReader *spec_aug_reader,
 							RandomAccessLatticeReader *den_lat_reader,
 							RandomAccessInt32VectorReader *num_ali_reader,
 							RandomAccessInt32VectorReader *sweep_frames_reader,
 							NnetModelSync *model_sync,
 							NnetSequentialStats *stats,
 							const NnetSequentialUpdateOptions *opts):
-								NnetExample(feature_reader, si_feature_reader, NULL), 
+								NnetExample(feature_reader, si_feature_reader, spec_aug_reader),
 								den_lat_reader(den_lat_reader),
 								num_ali_reader(num_ali_reader), 
 								sweep_frames_reader(sweep_frames_reader),
