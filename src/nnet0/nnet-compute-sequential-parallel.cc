@@ -1179,6 +1179,7 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 	    	RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
 	    	RandomAccessLatticeReader den_lat_reader(den_lat_rspecifier);
 	    	RandomAccessInt32VectorReader num_ali_reader(num_ali_rspecifier);
+	    	RandomAccessTokenReader *spec_aug_reader = NULL;
 
 			std::string sweep_frames_rspecifier = "";
     		if (opts->sweep_frames_filename != "") {
@@ -1188,6 +1189,13 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
     		}
 	    	RandomAccessInt32VectorReader sweep_frames_reader(sweep_frames_rspecifier);
 
+	    	std::string spec_aug_rspecifier = "";
+			if (opts->spec_aug_filename != "") {
+				std::stringstream ss;
+				ss << "ark,t:" << opts->spec_aug_filename;
+				spec_aug_rspecifier = ss.str();
+				spec_aug_reader = new RandomAccessTokenReader(spec_aug_rspecifier);
+			}
 
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
@@ -1215,8 +1223,8 @@ void NnetSequentialUpdateParallel(const NnetSequentialUpdateOptions *opts,
 				idx = (idx+1)%nframes;
 			}
 
-			example = new SequentialNnetExample(&feature_reader, &si_feature_reader, &den_lat_reader,
-					&num_ali_reader, &sweep_frames_reader, &model_sync, stats, opts);
+			example = new SequentialNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
+					&den_lat_reader, &num_ali_reader, &sweep_frames_reader, &model_sync, stats, opts);
 			example->SetSweepFrames(loop_frames, opts->skip_inner);
 			if (example->PrepareData(examples)) {
 				for (int i = 0; i < examples.size(); i++) {

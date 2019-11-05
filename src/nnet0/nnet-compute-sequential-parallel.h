@@ -33,6 +33,7 @@
 #include "nnet0/nnet-model-sync.h"
 
 #include "cudamatrix/cu-device.h"
+#include "nnet0/nnet-compute-parallel.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -57,6 +58,7 @@ struct NnetSequentialUpdateOptions {
   std::string sweep_frames_str;
   std::string sweep_frames_filename;
   std::string si_feature_rspecifier;
+  std::string spec_aug_filename;
   std::string frozen_model_filename;
 
   int32 update_frames;
@@ -78,14 +80,16 @@ struct NnetSequentialUpdateOptions {
 
   bool  sweep_loop;
   bool  skip_inner;
+  bool  use_specaug;
   std::string network_type;
 
   const NnetTrainOptions *trn_opts;
   const PdfPriorOptions *prior_opts;
+  const SpecAugOptions *spec_opts;
   const NnetParallelOptions *parallel_opts;
   const CuAllocatorOptions *cuallocator_opts;
 
-  NnetSequentialUpdateOptions(const NnetTrainOptions *trn_opts, const PdfPriorOptions *prior_opts, 
+  NnetSequentialUpdateOptions(const NnetTrainOptions *trn_opts, const PdfPriorOptions *prior_opts, const SpecAugOptions *spec_opts,
                                  const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL): 
                                  binary(true), criterion("mmi"), acoustic_scale(0.1), lm_scale(0.1), old_acoustic_scale(0.0), kld_scale(-1.0), frame_smooth(-1.0),
 		  	  	  	  	  	  	 drop_frames(true), one_silence_class(false), boost(0.0), sweep_frames_str("0"), sweep_frames_filename(""),
@@ -96,9 +100,10 @@ struct NnetSequentialUpdateOptions {
 								 si_model_filename(""),
 								 use_psgd(false),
 								 targets_delay(0), batch_size(0), num_stream(0), dump_interval(0),frame_limit(10000),skip_frames(1),dump_time(0),
-								 sweep_loop(false), skip_inner(false), network_type("lstm"),
+								 sweep_loop(false), skip_inner(false), use_specaug(false), network_type("lstm"),
 								 trn_opts(trn_opts),
 								 prior_opts(prior_opts),
+								 spec_opts(spec_opts),
 								 parallel_opts(parallel_opts), 
                                  cuallocator_opts(cuallocator_opts){ }
 
@@ -140,6 +145,8 @@ struct NnetSequentialUpdateOptions {
 
       po->Register("si-model",&si_model_filename, "kld speaker independent model filename");
       po->Register("si-feature",&si_feature_rspecifier, "kld speaker independent feature rspecifier");
+      po->Register("use-specaug", &use_specaug, "Apply spectrum and time domain augmentation on fbank feature");
+      po->Register("spec-aug-filename", &spec_aug_filename, "Apply spectrum and time domain augmentation fbank list filename");
       po->Register("frozen-model",&frozen_model_filename, "frozen model filename");
 
       //<jiayu>
