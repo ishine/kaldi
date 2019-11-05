@@ -342,7 +342,6 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				auto it = next_beam_.find(n_prefix);
 				if (it == next_beam_.end()) {
 					n_preseq = new PrefixSeq(n_prefix);
-					n_preseq->time_stamp.push_back(n);
 				} else {
                     n_preseq  = it->second;
 				}
