@@ -47,6 +47,10 @@ public:
 	// feed wave data to decoder
 	int FeedData(void *data, int nbytes, FeatState state);
 
+	// feed full utterance wave data to decoder
+	// using for offline decoder
+	int FeedData(void *data, int nbytes);
+
 	// get online decoder result
 	Result* GetResult();
 

@@ -183,6 +183,61 @@ void OnlineFstDecoder::ResetUtt() {
 	    forward_->ResetHistory();
 }
 
+int OnlineFstDecoder::FeedData(void *data, int nbytes) {
+	int in_frames, out_frames, idx;
+	len_ = nbytes/sizeof(float);
+	wav_buffer_.Resize(len_, kUndefined);
+	memcpy((char*)wav_buffer_.Data(), (char*)data, nbytes);
+
+	feature_pipeline_->AcceptWaveform(feature_opts_->samp_freq, wav_buffer_);
+	feature_pipeline_->InputFinished();
+	frame_ready_ = feature_pipeline_->NumFramesReady();
+
+	in_frames = frame_ready_/out_skip_;
+	in_frames += frame_ready_%out_skip_ > 0 ? 1 : 0;
+	in_frames *= out_skip_;
+
+	for (int i = 0; i < in_frames; i += in_skip_) {
+		idx = i < frame_ready_ ? i : frame_ready_-1;
+        SubVector<BaseFloat> row(feat_in_, idx/in_skip_);
+        feature_pipeline_->GetFrame(idx, &row);
+	}
+
+	if (!decoding_opts_->use_ipc) {
+		forward_->Forward(feat_in_, &feat_out_);
+		// copy posterior
+		if (decoding_opts_->copy_posterior) {
+			feat_out_ready_.Resize(frame_ready_, feat_out_.NumCols(), kUndefined);
+			for (int i = 0; i < frame_ready_; i++)
+				feat_out_ready_.Row(i).CopyFromVec(feat_out_.Row(i/skip_frames_));
+		} else {
+			out_frames = (frame_ready_+out_skip_-1)/out_skip_;
+			feat_out_ready_.Resize(out_frames, feat_out_.NumCols(), kUndefined);
+			feat_out_ready_.CopyFromMat(feat_out_.RowRange(0, out_frames));
+		}
+
+		block_ = new OnlineDecodableBlock(feat_out_ready_, FEAT_END);
+		// wake up decoder thread
+		if (block_ != NULL) repository_.Accept(block_);
+	} else { // ipc forward
+		socket_sample_->num_sample = frame_ready_;
+		memcpy((char*)socket_sample_->sample, (char*)feat_in_.RowData(0),
+				frame_ready_*feat_in_.NumCols()*sizeof(BaseFloat));
+		socket_sample_->is_end = true;
+
+		// wake up decoder thread
+		int ret = ipc_socket_->Send(sc_sample_buffer_, sc_buffer_size_, 0);
+		if (ret != sc_buffer_size_) {
+			KALDI_ERR << "Send socket socket_sample: " << ret << " less than " << sc_buffer_size_
+						<< " ipc forward server may offline.";
+			return -1;
+		}
+	}
+
+	state_ = FEAT_END;
+	return nbytes;
+}
+
 int OnlineFstDecoder::FeedData(void *data, int nbytes, FeatState state) {
 	// extend buffer
 	if (wav_buffer_.Dim() < len_+nbytes/sizeof(float)) {

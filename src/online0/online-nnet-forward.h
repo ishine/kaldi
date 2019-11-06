@@ -141,9 +141,15 @@ public:
 
 		nnet_transf_.Propagate(feat_, &feats_transf); // Feedforward
 		// for streams with new utterance, history states need to be reset
-		if (opts_.network_type == "lstm") {
+		if (opts_.network_type == "lstm")
 			nnet_.ResetLstmStreams(new_utt_flags_);
-		}
+
+		///only for nnet with fsmn component
+		Vector<BaseFloat> flags;
+		flags.Resize(feat_.NumRows(), kSetZero);
+		flags.Set(1.0);
+		nnet_.SetFlags(flags);
+
 		// forward pass
 		nnet_.Propagate(feats_transf, &feat_out_);
         if (blank_post != NULL) {

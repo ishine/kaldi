@@ -420,8 +420,7 @@ private:
 				if (!crossvalidate) {
 					// backpropagate
 
-                    if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient")
-                    {
+                    if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient") {
                         nnet.ResetGradient();
                         model_sync->reset_gradient_[thread_idx] = false;
                         //KALDI_VLOG(1) << "Reset Gradient";

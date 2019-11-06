@@ -207,21 +207,22 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
     std::vector<int> in_words;
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
-	float logp, n_p_b, n_p_nb, ngram_logp = 0, rnnlm_logp = 0,
+	float logp, logp_b, n_p_b, n_p_nb, ngram_logp = 0, rnnlm_logp = 0,
             rscale = config_.rnnlm_scale;
 	int end_t, bz;
     bool uselm;
 
-	InitDecoding();
+    InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
 
+		logp_b = loglikes(n, config_.blank);
 		// Lstm language model process, beam streams parallel.
         uselm = false;
         if (config_.lm_scale > 0.0) {
            if (config_.blank_threshold <= 0)
                 uselm = true;
-           else if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank)) <= config_.blank_threshold)
+           else if (config_.blank_threshold > 0 && Exp(logp_b) <= config_.blank_threshold)
                 uselm = true;
         }
 
@@ -266,8 +267,8 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 		std::fill(next_words.begin(), next_words.end(), 0);
 		// blank pruning
-		if (config_.blank_threshold > 0 && Exp(loglikes(n, config_.blank)) > config_.blank_threshold) {
-			next_words[config_.blank] = loglikes(n, config_.blank);
+		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
+			next_words[config_.blank] = logp_b;
 		} else if (config_.am_topk > 0) {
 			// Top K pruning, the nth bigest words
             memcpy(&next_step.front(), loglikes.RowData(n), next_step.size()*sizeof(BaseFloat));
@@ -314,6 +315,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					next_beam_[n_preseq->prefix] = n_preseq;
 					continue;
 				}
+
 
 				// Extend the prefix by the new character s and add it to
 				// the beam. Only the probability of not ending in blank
