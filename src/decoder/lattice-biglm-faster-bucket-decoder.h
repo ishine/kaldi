@@ -200,8 +200,7 @@ struct StdToken {
   //'next' is the next in the singly-linked list of tokens for this frame.
   Token *next;
 
-  // identitfy the token is in current queue or not to prevent duplication in
-  // function ProcessForFrame().
+  // identitfy the token is in bucket or not.
   bool in_queue;
 
   // This function does nothing and should be optimized out; it's needed
@@ -269,8 +268,7 @@ struct BackpointerToken {
   //'next' is the next in the singly-linked list of tokens for this frame.
   Token *next;
 
-  // identitfy the token is in current queue or not to prevent duplication in
-  // function ProcessForFrame().
+  // identitfy the token is in current bucket or not.
   bool in_queue;
 
   // Best preceding BackpointerToken (could be a on this frame, connected to
@@ -331,6 +329,8 @@ struct TokenBucket {
                                             // next buckets
   BaseFloat tot_cost;  // the best alpha of the bucket. compatible with
                        // BucketQueue code.
+  BaseFloat back_cost;  // the beta of the bucket. It will be used when
+                        // prunning
   StateId base_state;  // the tokens which are collected in a bucket will have
                        // the same "base_state" and different "lm_state"s
   const int32 length;  // only keep top N best tokens for a bucket. When the
@@ -353,12 +353,12 @@ struct TokenBucket {
 
 
   // Bear in mind, the type of StateId is unsigned int.
-  inline TokenBucket(bool expanded, TokenBucket *next,
-                     size_t bucket_size):
-    expanded(expanded), bucket_links(NULL),
+  inline TokenBucket(bool expanded, StateId base_state, size_t bucket_size,
+                     TokenBucket *next):
+    expanded(expanded), bucket_backward_links(NULL), bucket_forward_links(NULL),
     tot_cost(std::numeric_limits<BaseFloat>::infinity()),
-    base_state(std::numeric_limits<StateId>::infinity()),
-    length(bucket_size), next(next) {
+    back_cost(std::numeric_limits<BaseFloat>::infinity()),
+    base_state(base_state), length(bucket_size), next(next), in_queue(false) {
       tokens.reserve(length + 1, NULL);  // reserve "length" + 1 positions to
                                          // prevent memory re-allocate.
       std::make_heap(tokens.begin(), tokens.end(), cmp);
@@ -367,17 +367,36 @@ struct TokenBucket {
 
   // Insert a token into "tokens" max-heap. When the size of "tokens"
   // beyonds "length", remove the worst one.
-  Insert(Token *tok) {
+  bool Insert(Token *tok) {
+    Token* worst = tokens.back();
+    // If the token is worse than current worst token. Don't insert.
+    if (tok->tot_cost > worst->tot_cost) {
+      // the token is an invalid token
+      tok->tot_cost = std::numeric_limits<BaseFloat>::infinity();
+      tok->in_queue = false;
+      return false;
+    }
+    // Update the best tot_cost of the bucket
+    if (tok->tot_cost < tot_cost) {
+      tot_cost = tok->tot_cost;
+    }
+    // Insert the 'real' token
+    tok->in_queue = true;
     tokens.push_back(tok);
     std::push_heap(tokens.begin(), tokens.end(), cmp);
     if (tokens.size() > length) {
       // set the tot_cost to infinity to mark this token should be pruned. As
       // we have to delete the ForwardLinks which are related to this token.
       std::pop_heap(tokens.begin(), tokens.end(), cmp);
+      // set the tot_cost to infinity which means the token will be deleted
+      // and in_queue to false
+      worst->in_queue = false;
+      worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
       // Note: pop_heap function only put the worst element to the end of the
       // container and then make the rest elements to a heap.
       tokens.pop_back();
     }
+    return true;
   }
 };
 }  // namespace biglmbucketdecoder
@@ -476,12 +495,15 @@ class LatticeBiglmFasterBucketDecoderTpl {
     typename kaldi::biglmbucketdecoder::TokenBucket<FST, Token>;
   using BucketQueue = typename kaldi::BucketQueue<Bucket>;
 
-  using BackwardLinkT = typename kaldi::biglmbucketdecoder::BackwardLink<Token>;
+  using BackwardLinkT =
+    typename kaldi::biglmbucketdecoder::BackwardLink<Token>;
   using BackwardBucketLinkT =
-    typename kaldi::biglmbucketdecoder::BackwardLink<TokenBucket<FST, Token> >;
-  using ForwardLinkT = typename kaldi::biglmbucketdecoder::ForwardLink<Token>;
+    typename kaldi::biglmbucketdecoder::BackwardLink<Bucket>;
+
+  using ForwardLinkT =
+    typename kaldi::biglmbucketdecoder::ForwardLink<Token>;
   using ForwardBucketLinkT =
-    typename kaldi::biglmbucketdecoder::ForwardLink<TokenBucket<FST, Token> >;
+    typename kaldi::biglmbucketdecoder::ForwardLink<Bucket>;
 
   using StateIdToBucketMap = typename std::unordered_map<StateId, TokenBucket*>;
   //using StateIdToTokenMap = typename std::unordered_map<StateId, TokenBucket*,
@@ -613,21 +635,29 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // LatticeFasterOnlineDecoderTpl, which inherits from this, also uses the
   // internals.
 
-  // Deletes the elements of the singly linked list tok->links.
-  inline static void DeleteBackwardLinks(Token *tok);
-
-  // Deletes the elements of the singly linked list bucket->links.
-  inline static void DeleteBackwardBcuketLinks(TokenBucket *bucket);
-
   // head of per-frame list of Tokens (list is in topological order),
   // and something saying whether we ever pruned it using PruneForwardLinks.
   struct TokenList {
     Token *toks;
-    bool must_prune_backward_links;
+    bool must_prune_forward_links;
     bool must_prune_tokens;
     TokenList(): toks(NULL), must_prune_backward_links(true),
                  must_prune_tokens(true) { }
   };
+  // head of per-frame list of TokenBuckets (list is in topological order),
+  // and something saying whether we ever pruned it using PruneForwardLinks.
+  struct BucketList {
+    Bucket *buckets;
+    bool must_prune_forward_links;
+    bool must_prune_buckets;
+    BucketList(): buckets(NULL), must_prune_forward_links(true),
+                  must_prune_buckets(true) { }
+  };
+
+
+  // Deletes the elements of the singly linked list
+  // of bucket->bucket_forward_links.
+  inline static void DeleteForwardBcuketLinks(Bucket *bucket);
 
   // FindOrAddBucket either locates a bucket in hash map "bucket_map", or if
   // necessary inserts a new, empty bucket (i.e. with no backward links) for the
@@ -639,21 +669,49 @@ class LatticeBiglmFasterBucketDecoderTpl {
   //
   // [note: it's inserted if necessary into "bucket_map", and also into the
   // singly linked list of tokens active on this frame (whose head
-  // is at active_buckets_[frame]).  The token_list_index argument is used to index
-  // into the active_buckets_ array.
+  // is at active_buckets_[frame]).  The token_list_index argument is used to
+  // index into the active_buckets_ array.
   //
   // Returns the Bucket pointer.  Sets "changed" (if non-NULL) to true if the
   // token was newly created or the cost changed.
   // If Token == StdToken, the 'backpointer' will be set to source_bucket with
   // no purpose (and will hopefully be optimized out).
-  inline Token *FindOrAddBucket(const Arc &arc, int32 token_list_index,
-                                BaseFloat tot_cost, TokenBucket *source_bucket,
+  inline Bucket* FindOrAddBucket(const Arc &arc, int32 token_list_index,
+                                BaseFloat tot_cost, Bucket *source_bucket,
                                 StateIdToBucketMap *bucket_map,
                                 bool *changed);
 
+  // Insert a token into a bucket, and update the 'map' if it is needed.
+  // When the token is inserted, return it. Otherwise, return NULL.
+  //
+  // If the target token has been generated, update the tot_cost.
+  // If the target token is a new token, update the tot_cost and map. When the
+  // new token is not be inserted successfully, delete it directly.
+  // Note: the user should keep the 'map' and the 'bucket' is synchronous
+  inline Token* FindOrAddToken(PairId state_pair, int32 frame,
+                               BaseFloat tot_cost,
+                               PairIdToTokenMap *map, Bucket *bucket,
+                               Token *backpointer);
 
-  // fill the 'real' tokens into the bucket
-  void ExpandBucket(int32 frame, TokenBucket* bucket);
+  // Fill the 'real' tokens into the bucket according to the 'Backwardlinks'
+  // of the bucket recursively.
+  // The frame index help to grab the cutoff value and adaptive_beam to do
+  // pruning.
+  void ExpandBucket(int32 frame, Bucket* bucket);
+
+
+  // prunes outgoing links for all buckets in active_buckets_[frame]
+  // it's called by PruneActiveBuckets
+  // all links, that have link_tot_cost + link_back_cost > lattice_beam are
+  // pruned.
+  // delta is the amount by which the back_costs must change before we set
+  // *back_costs_changed = ture.
+  // If delta is larger, we'll tend to go back less far 'back_costs_changed'
+  // is set to true if back_cost was changed for any bucket
+  // link_pruned is set to true if any link in any bucket was pruned.
+  void PruneBucketForwardLinks(int32 frame_plus_one,
+                               bool *back_costs_changed,
+                               bool *links_pruned, BaseFloat delta);
 
   // prunes outgoing links for all tokens in active_toks_[frame]
   // it's called by PruneActiveTokens
@@ -664,7 +722,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   //    toward the beginning of the file.
   // extra_costs_changed is set to true if extra_cost was changed for any token
   // links_pruned is set to true if any link in any token was pruned
-  void PruneBackwardLinks(int32 frame_plus_one, bool *backward_costs_changed,
+  void PruneForwardLinks(int32 frame_plus_one, bool *backward_costs_changed,
                          bool *links_pruned,
                          BaseFloat delta);
 
@@ -693,26 +751,16 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // the final-probs for pruning, otherwise it treats all tokens as final.
   void PruneForwardLinksFinal();
 
-  // PruneForwardLinksWithoutRecompute is a version of PruneForwardLinks that
-  // we call in DoBackfill function. It will use the current cost rather than
-  // re-compute it.
-  // Actually, in DoBackfill, we will update the beta for each token firstly,
-  // and then we use this function to prune the forwardlink whose next_token
-  // will be pruned in case the dangling pointers to the Token on the following
-  // frame.
-  void PruneForwardLinksWithoutRecompute(int32 token_list_index);
-
   // Prune away any tokens on this frame that have no forward links.
   // [we don't do this in PruneForwardLinks because it would give us
   // a problem with dangling pointers].
   // It's called by PruneActiveTokens if any forward links have been pruned
   void PruneTokensForFrame(int32 frame_plus_one);
 
-  // Prune away any tokens on this frame that have no forward links (for
-  // expanded tokens) or will not be expanded (for un-expanded tokens) from the
-  // token list and corresponding maps (token_map_ and best_token_map_)
-  void PruneTokensForFrameFromMap(int32 token_list_index);
-
+  // Prune away any buckets on this frame that have no forward links.
+  // Bear in mind, different from the PruneTokensForFrame, when we delete the
+  // bucket, we have to remove the 'backwardlinks' on the bucket.
+  void PruneBucketsForFrame(int32 frame_plus_one);
 
   // Go backwards through still-alive tokens, pruning them if the
   // forward+backward cost is more than lat_beam away from the best path.  It's
@@ -722,6 +770,11 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // going backward and propagating the change.  larger delta -> will recurse
   // less far.
   void PruneActiveTokens(BaseFloat delta);
+
+  // Go backwards through still-alive tokens, pruning them if the
+  // forward+backward cost is more than lat_beam away from the best path.
+  // It will be conduct each config_.prune_interval for save memory.
+  void PruneActiveBuckets(BaseFloat delat);
 
   /// Processes non-emitting (epsilon) arcs and emitting arcs for one frame
   /// together. It takes the emittion tokens in "cur_toks_" from last frame.
@@ -747,6 +800,14 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // the algorithm to output a list that contains NULLs.
   static void TopSortTokens(Token *tok_list,
                             std::vector<Token*> *topsorted_list);
+
+  // In PruneActiveBuckets, we call this function to set up the 'back_cost' of
+  // each bucket on current frame. Then we can go backward to prune the useless
+  // buckets.
+  // The 'scale' is use to scale the 'back_cost'. Most of time, it is in the
+  // range of (0, 1].
+  void InitBucketBeta(int32 frame, BaseFloat scale = 1.0);
+  void InitBeta(int32 frame, BaseFloat scale);
 
 
   // Update the graph cost according to lm_state and olabel
@@ -802,7 +863,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   std::vector<TokenList> active_toks_; // Lists of tokens, indexed by
   // frame (members of TokenList are toks, must_prune_forward_links,
   // must_prune_tokens).
-  std::vector<TokenBucket*> active_buckets_;
+  std::vector<BucketList> active_buckets_;
 
   // fst_ is a pointer to the FST we are decoding from.
   const FST *fst_;
@@ -818,6 +879,8 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // zero, to reduce roundoff errors.
   // Notice: It will only be added to emitting arcs (i.e. cost_offsets_[t] is
   // added to arcs from "frame t" to "frame t+1").
+
+
   int32 num_toks_; // current total #toks allocated...
   bool warned_;
   bool warned_noarc_;  // Use in PropagateLm to indicate the unusual phenomenon.
@@ -842,7 +905,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   BucketQueue cur_queue_;  // temp variable used in 
                            // ProcessForFrame/ProcessNonemitting
 
-  std::vector<BaseFloat> cut_off_;  // Keep the cut_off_ values for each frame.
+  std::vector<BaseFloat> cutoffs_;  // Keep the cutoffs_ values for each frame.
                                     // As we do lazy evaluation, we will trace
                                     // back and expand those buckets with 
                                     // pruning.
