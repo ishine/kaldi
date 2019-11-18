@@ -214,7 +214,7 @@ private:
 	void inline MPEObj(Matrix<BaseFloat> &nnet_out_h, MatrixBase<BaseFloat> &nnet_diff_h,
 				TransitionModel *trans_model, SequentialNnetExample *example,
 				std::vector<int32> &silence_phones, double &total_frame_acc, int32 num_done,
-				Matrix<BaseFloat> &soft_nnet_out_h, Matrix<BaseFloat> &si_nnet_out_h) {
+				Matrix<BaseFloat> &soft_nnet_out_h, Matrix<BaseFloat> &si_nnet_out_h, bool use_kld) {
 		std::string utt = example->utt;
 		const std::vector<int32> &num_ali = example->num_ali;
 		Lattice &den_lat = example->den_lat;
@@ -228,7 +228,7 @@ private:
 		num_frames = nnet_out_h.NumRows();
 		num_pdfs = nnet_out_h.NumCols();
 
-		if (this->kld_scale > 0)
+		if (use_kld)
 			si_nnet_out_h.AddMat(-1.0, soft_nnet_out_h);
 
 
@@ -284,7 +284,7 @@ private:
 	         nnet_diff_h.Scale(1-frame_smooth);
 	         nnet_diff_h.AddMat(frame_smooth*0.1, soft_nnet_out_h);
         }
-        if (this->kld_scale > 0) {
+        if (use_kld) {
 	      	nnet_diff_h.Scale(1.0-kld_scale);
 	      	//-kld_scale means gradient descent direction.
 		  	nnet_diff_h.AddMat(-kld_scale, si_nnet_out_h);
@@ -310,7 +310,7 @@ private:
 	void inline MMIObj(Matrix<BaseFloat> &nnet_out_h, MatrixBase<BaseFloat> &nnet_diff_h,
 				TransitionModel *trans_model, SequentialNnetExample *example,
 				double &total_mmi_obj, double &total_post_on_ali, int32 &num_frm_drop, int32 num_done,
-				Matrix<BaseFloat> &soft_nnet_out_h, Matrix<BaseFloat> &si_nnet_out_h)
+				Matrix<BaseFloat> &soft_nnet_out_h, Matrix<BaseFloat> &si_nnet_out_h, bool use_kld)
 	{
 		std::string utt = example->utt;
 		const std::vector<int32> &num_ali = example->num_ali;
@@ -326,7 +326,7 @@ private:
 		num_frames = nnet_out_h.NumRows();
 		//num_pdfs = nnet_out_h.NumCols();
 
-		if (this->kld_scale > 0)
+		if (use_kld > 0)
 			si_nnet_out_h.AddMat(-1.0, soft_nnet_out_h);
 
 
@@ -416,7 +416,7 @@ private:
 	    	   nnet_diff_h.AddMat(frame_smooth*0.1, soft_nnet_out_h);
 	       }
 
-			if (this->kld_scale > 0) {
+			if (use_kld) {
 	        	nnet_diff_h.Scale(1.0-kld_scale);
 	        	//-kld_scale means gradient descent direction.
 				nnet_diff_h.AddMat(-kld_scale, si_nnet_out_h);
@@ -515,14 +515,15 @@ private:
 	    // Read transition model
 	    TransitionModel *trans_model = NULL;
 	    if (transition_model_filename != "") {
-	    		trans_model = new TransitionModel();
-	    		ReadKaldiObject(transition_model_filename, trans_model);
+			trans_model = new TransitionModel();
+			ReadKaldiObject(transition_model_filename, trans_model);
+	    } else {
+	    	skip_frames = 1; // for CTC
 	    }
-        else skip_frames = 1; // for CTC
 
 		Nnet nnet_transf;
 	    if (feature_transform != "") {
-	      nnet_transf.Read(feature_transform);
+	    	nnet_transf.Read(feature_transform);
 	    }
 
 	    Nnet nnet;
@@ -530,10 +531,10 @@ private:
 	    // using activations directly: remove softmax, if present
 	    if (nnet.GetComponent(nnet.NumComponents()-1).GetType() ==
 	        kaldi::nnet0::Component::kSoftmax) {
-	      KALDI_LOG << "Removing softmax from the nnet " << model_filename;
-	      nnet.RemoveComponent(nnet.NumComponents()-1);
+	    	KALDI_LOG << "Removing softmax from the nnet " << model_filename;
+	    	nnet.RemoveComponent(nnet.NumComponents()-1);
 	    } else {
-	      KALDI_LOG << "The nnet was without softmax " << model_filename;
+	    	KALDI_LOG << "The nnet was without softmax " << model_filename;
 	    }
         /*
 	    int32 rank_in = 20, rank_out = 80, update_period = 4;
@@ -550,8 +551,10 @@ private:
 	    nnet.SetTrainOptions(*trn_opts);
 
 	    Nnet si_nnet, softmax;
-	    if (this->kld_scale > 0 && si_model_filename != "")
+	    bool use_kld = (this->kld_scale > 0 && si_model_filename != "") ? true : false;
+	    if (use_kld) {
 	    	si_nnet.Read(si_model_filename);
+	    }
 
 	    Nnet frozen_nnet;
         bool use_frozen = opts->frozen_model_filename != "" ? true : false;
@@ -559,7 +562,7 @@ private:
 	    	frozen_nnet.Read(opts->frozen_model_filename);
 	    }
 
-	    if (this->kld_scale > 0 || frame_smooth > 0) {
+	    if (use_kld || frame_smooth > 0) {
             KALDI_LOG << "KLD model Appending the softmax ...";
 	        softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
         }
@@ -567,10 +570,10 @@ private:
 	    std::vector<int32> silence_phones;
 	    if (this->criterion != "mmi") {
 		    if (!kaldi::SplitStringToIntegers(silence_phones_str, ":", false, &silence_phones))
-		      KALDI_ERR << "Invalid silence-phones string " << silence_phones_str;
+		    	KALDI_ERR << "Invalid silence-phones string " << silence_phones_str;
 		    kaldi::SortAndUniq(&silence_phones);
 		    if (silence_phones.empty())
-		      KALDI_LOG << "No silence phones specified.";
+		    	KALDI_LOG << "No silence phones specified.";
 	    }
 
 	    model_sync->Initialize(&nnet);
@@ -666,8 +669,8 @@ private:
 						// skip frames
 						frame_num_utt[s] = example->num_ali.size();
 						utt_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
-					    if (this->kld_scale > 0) utt_si_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
-					    if (this->kld_scale > 0 || frame_smooth > 0) utt_soft_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
+					    if (use_kld) utt_si_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
+					    if (use_kld || frame_smooth > 0) utt_soft_nnet_out_h[s].Resize(frame_num_utt[s], out_dim, kUndefined);
 						diff_utt_feats[s].Resize(frame_num_utt[s], out_dim, kSetZero);
 
 						utt_curt[s] = 0;
@@ -752,7 +755,7 @@ private:
 					// Propagation
 					nnet.Propagate(*p_nnet_in, &nnet_out);
 
-					if (this->kld_scale > 0) {
+					if (use_kld) {
 						// for streams with new utterance, history states need to be reset
 					    if (opts->network_type == "lstm")
 						    si_nnet.ResetLstmStreams(new_utt_flags, batch_size);
@@ -828,16 +831,17 @@ private:
 							KALDI_ERR << "NaN or inf found in final output nnet-host-output for " << utt_examples[s]->utt << " s: " << s;
 						}*/
 
-						if (this->criterion == "mmi")
+						if (this->criterion == "mmi") {
 							MMIObj(utt_nnet_out_h[s], diff_utt_feats[s],
 					      				trans_model, utt_examples[s],
 					      				total_mmi_obj, total_post_on_ali, num_frm_drop, num_done,
-										utt_soft_nnet_out_h[s], utt_si_nnet_out_h[s]);
-						else
+										utt_soft_nnet_out_h[s], utt_si_nnet_out_h[s], use_kld);
+						} else {
 							MPEObj(utt_nnet_out_h[s], diff_utt_feats[s],
 				      				trans_model, utt_examples[s],
 									silence_phones, total_frame_acc, num_done,
-									utt_soft_nnet_out_h[s], utt_si_nnet_out_h[s]);
+									utt_soft_nnet_out_h[s], utt_si_nnet_out_h[s], use_kld);
+						}
 
 						num_done++;
 
@@ -964,16 +968,17 @@ private:
 
 					nnet_diff_h.Resize(nnet_out_h.NumRows(), nnet.OutputDim(), kSetZero);
 
-					if (this->criterion == "mmi")
-					  MMIObj(nnet_out_h, nnet_diff_h,
+					if (this->criterion == "mmi") {
+						MMIObj(nnet_out_h, nnet_diff_h,
 								trans_model, example,
 								total_mmi_obj, total_post_on_ali, num_frm_drop, num_done,
-								soft_nnet_out_h, si_nnet_out_h);
-					else
-					  MPEObj(nnet_out_h, nnet_diff_h,
+								soft_nnet_out_h, si_nnet_out_h, use_kld);
+					} else {
+						MPEObj(nnet_out_h, nnet_diff_h,
 								trans_model, example,
 								silence_phones, total_frame_acc, num_done,
-								soft_nnet_out_h, si_nnet_out_h);
+								soft_nnet_out_h, si_nnet_out_h, use_kld);
+					}
 
 					num_done++;
 
