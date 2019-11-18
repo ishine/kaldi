@@ -275,7 +275,6 @@ private:
 		int32 cur_stream_num = 0, num_skip, in_rows, out_rows, 
               in_frames, out_frames, in_frames_pad, out_frames_pad;
 		int32 feat_dim = use_frozen ? frozen_nnet.InputDim() : nnet.InputDim();
-		int32 out_dim = nnet.OutputDim();
 		//BaseFloat l2_term;
 	    num_skip = opts->skip_inner ? skip_frames : 1;
         frame_limit *= num_skip;
