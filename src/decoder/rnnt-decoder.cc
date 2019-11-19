@@ -233,7 +233,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
-		B_->sort(LstmlmUtil::compare_len_reverse);
+		B_->sort(RNNTDecoderUtil::compare_len_reverse);
 		//for (auto &seq : *A_) delete seq;
 		FreeList(A_);
 		delete A_;
@@ -244,7 +244,7 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 		while (true) {
 			// y* = most probable in A
 			Sequence *y_hat; //*y_a, *y_b;
-			auto it = std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
+			auto it = std::max_element(A_->begin(), A_->end(), RNNTDecoderUtil::compare_logp);
 			A_->erase(it);
 			y_hat = *it;
 
@@ -300,8 +300,8 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			FreePred(pred);
 			FreeHis(his);
 			/*
-			y_a = *std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
-			y_b = *std::max_element(B_->begin(), B_->end(), LstmlmUtil::compare_logp);
+			y_a = *std::max_element(A_->begin(), A_->end(), RNNTDecoderUtil::compare_logp);
+			y_b = *std::max_element(B_->begin(), B_->end(), RNNTDecoderUtil::compare_logp);
 			if (B_->size() >= config_.beam && y_b->logp >= y_a->logp) break;
 			*/
 			if (B_->size() >= config_.beam) break;
@@ -309,9 +309,9 @@ void RNNTDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 		// beam width
 		if (config_.norm_length)
-			B_->sort(LstmlmUtil::compare_normlogp_reverse);
+			B_->sort(RNNTDecoderUtil::compare_normlogp_reverse);
 		else
-			B_->sort(LstmlmUtil::compare_logp_reverse);
+			B_->sort(RNNTDecoderUtil::compare_logp_reverse);
 
 		// free memory
 		int idx = 0;
@@ -334,7 +334,7 @@ void RNNTDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 	InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
-		B_->sort(LstmlmUtil::compare_len_reverse);
+		B_->sort(RNNTDecoderUtil::compare_len_reverse);
 		//for (auto &seq : *A_) delete seq;
 		FreeList(A_);
 		delete A_;
@@ -347,7 +347,7 @@ void RNNTDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 				auto iteri = iterj; iteri++;
 				for (; iteri != A_->end(); iteri++) {
 					seqi = *iteri; seqj = *iterj;
-					if (!LstmlmUtil::isprefix(seqi->k, seqj->k))
+					if (!RNNTDecoderUtil::isprefix(seqi->k, seqj->k))
 						continue;
 
 					int leni = seqi->k.size();
@@ -385,7 +385,7 @@ void RNNTDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 		while (true) {
 			// y* = most probable in A
 			Sequence *y_hat, *y_a, *y_b;
-			auto it = std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
+			auto it = std::max_element(A_->begin(), A_->end(), RNNTDecoderUtil::compare_logp);
 			A_->erase(it);
 			y_hat = *it;
 
@@ -430,13 +430,13 @@ void RNNTDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 			FreeSeq(y_hat);
 			FreePred(pred);
 			FreeHis(his);
-			y_a = *std::max_element(A_->begin(), A_->end(), LstmlmUtil::compare_logp);
-			y_b = *std::max_element(B_->begin(), B_->end(), LstmlmUtil::compare_logp);
+			y_a = *std::max_element(A_->begin(), A_->end(), RNNTDecoderUtil::compare_logp);
+			y_b = *std::max_element(B_->begin(), B_->end(), RNNTDecoderUtil::compare_logp);
 			if (B_->size() >= config_.beam && y_b->logp >= y_a->logp) break;
 		}
 
 		// beam width
-		B_->sort(LstmlmUtil::compare_logp_reverse);
+		B_->sort(RNNTDecoderUtil::compare_logp_reverse);
 		// free memory
 		int idx = 0;
 		for (auto it = B_->begin(); it != B_->end(); it++) {

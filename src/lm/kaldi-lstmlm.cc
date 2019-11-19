@@ -61,7 +61,7 @@ KaldiLstmlmWrapper::KaldiLstmlmWrapper(
 	his_cell_[i].Resize(num_stream_, cell_dim_[i], kUndefined);
 
 	/// symbols
-	label_to_word_.resize(word_symbols->NumSymbols());
+	wordid_to_word_.resize(word_symbols->NumSymbols());
 	for (int32 i = 0; i < word_symbols->NumSymbols(); i++) {
 		label_to_word_[i] = word_symbols->Find(i);
 		if (label_to_word_[i] == "") {
