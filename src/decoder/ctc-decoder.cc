@@ -397,6 +397,8 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                         if (config_.use_kenlm) {
                         	ngram_logp = kenlm_arpa_->Score(preseq->ken_state,
                         			kenlm_vocab_->Index(wordid_to_word_[k]), n_preseq->ken_state);
+							// Convert to natural log.
+							ngram_logp *= M_LN10;
                         } else
 					#endif
                         ngram_logp = const_arpa_->GetNgramLogprob(k, prefix);
