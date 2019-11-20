@@ -99,8 +99,8 @@ struct CTCDecoderUtil {
 		bool use_penalty = true;
 		len_a = use_penalty ? a->prefix.size()-1 : 1;
 		len_b = use_penalty ? b->prefix.size()-1 : 1;
-		score_a = LogAdd(a->logp_blank, a->logp_nblank)/len_a;
-		score_b = LogAdd(b->logp_blank, b->logp_nblank)/len_b;
+		score_a = LogAdd(a->logp_blank, a->logp_nblank)/(len_a*0.1);
+		score_b = LogAdd(b->logp_blank, b->logp_nblank)/(len_b*0.1);
 		return score_a > score_b;
 	}
 };

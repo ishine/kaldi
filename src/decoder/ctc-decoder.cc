@@ -27,6 +27,10 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 						ConstArpaLm *const_arpa):
 		config_(config), lstmlm_(lstmlm), const_arpa_(const_arpa) {
 	Initialize();
+#if HAVE_KENLM == 1
+    kenlm_arpa_ = NULL;
+    kenlm_vocab_ = NULL;
+#endif
 }
 
 #if HAVE_KENLM == 1
@@ -197,7 +201,8 @@ void CTCDecoder::InitDecoding() {
     seq->logp_blank = 0.0;
 	CopyHis(sos_h);
 #if HAVE_KENLM == 1
-	seq->ken_state = kenlm_arpa_->BeginSentenceState();
+    if (kenlm_arpa_ != NULL)
+	    seq->ken_state = kenlm_arpa_->BeginSentenceState();
 #endif
 
 	beam_[seq->prefix] = seq;
