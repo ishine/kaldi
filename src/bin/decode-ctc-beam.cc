@@ -23,6 +23,11 @@
 #include "base/timer.h"
 #include "decoder/ctc-decoder.h"
 
+#if HAVE_KENLM == 1
+#include "lm/model.hh"
+		typedef lm::ngram::Model KenModel;
+#endif
+
 int main(int argc, char *argv[]) {
   try {
     using namespace kaldi;
@@ -80,13 +85,24 @@ int main(int argc, char *argv[]) {
     // Reads the language model.
 	KaldiLstmlmWrapper lstmlm(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
 	// Reads the language model in ConstArpaLm format.
-	ConstArpaLm const_arpa;
-	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0) {
-		ReadKaldiObject(const_arpa_filename, &const_arpa);
-	}
-
+	ConstArpaLm *const_arpa = NULL;
+#if HAVE_KENLM == 1
+	KenModel *ken_arpa = NULL;
+#endif
 	// decoder
-	CTCDecoder decoder(decoder_opts, lstmlm, const_arpa);
+	CTCDecoder *decoder;
+	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && !decoder_opts.use_kenlm) {
+        const_arpa = new ConstArpaLm;
+		ReadKaldiObject(const_arpa_filename, const_arpa);
+		decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
+	} else if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && decoder_opts.use_kenlm) {
+#if HAVE_KENLM == 1
+		ken_arpa = new KenModel(const_arpa_filename.c_str());
+		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa);
+#endif
+	} else {
+        decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
+    }
 
     BaseFloat tot_like = 0.0, logp = 0.0;
     kaldi::int64 frame_count = 0;
@@ -108,13 +124,13 @@ int main(int argc, char *argv[]) {
 
 		// decoding
 		if (search == "beam")
-			decoder.BeamSearch(loglikes);
+			decoder->BeamSearch(loglikes);
 		else if (search == "greedy")
-			decoder.GreedySearch(loglikes);
+			decoder->GreedySearch(loglikes);
 		else
 			KALDI_ERR << "UnSupported search function: " << search;
 
-		if (decoder.GetBestPath(words, logp)) {
+		if (decoder->GetBestPath(words, logp)) {
 			words_writer.Write(key, words);
 			if (word_syms != NULL) {
 				std::cerr << key << ' ';

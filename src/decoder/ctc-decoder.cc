@@ -24,14 +24,47 @@ namespace kaldi {
 
 CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 						KaldiLstmlmWrapper &lstmlm,
-						ConstArpaLm &const_arpa):
+						ConstArpaLm *const_arpa):
 		config_(config), lstmlm_(lstmlm), const_arpa_(const_arpa) {
-	rd_ = lstmlm.GetRDim();
-	cd_ = lstmlm.GetCDim();
+	Initialize();
+#if HAVE_KENLM == 1
+    kenlm_arpa_ = NULL;
+    kenlm_vocab_ = NULL;
+#endif
+}
+
+#if HAVE_KENLM == 1
+CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
+			            KaldiLstmlmWrapper &lstmlm,
+			            KenModel *kenlm_arpa):
+		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa) {
+	Initialize();
+
+    kenlm_vocab_ = &(kenlm_arpa_->GetVocabulary());
+	/// symbols
+	fst::SymbolTable *word_symbols = NULL;
+	if (!(word_symbols = fst::SymbolTable::ReadText(config_.word2wordid_rxfilename))) {
+		KALDI_ERR << "Could not read symbol table from file " << config_.word2wordid_rxfilename;
+	}
+	wordid_to_word_.resize(word_symbols->NumSymbols());
+	for (int32 i = 0; i < word_symbols->NumSymbols(); i++) {
+		wordid_to_word_[i] = word_symbols->Find(i);
+		if (wordid_to_word_[i] == "") {
+		  KALDI_ERR << "Could not find word for integer " << i << "in the word "
+			  << "symbol table, mismatched symbol table or you have discoutinuous "
+			  << "integers in your symbol table?";
+		}
+	}
+}
+#endif
+
+void CTCDecoder::Initialize() {
+	rd_ = lstmlm_.GetRDim();
+	cd_ = lstmlm_.GetCDim();
 
 	use_pinyin_ = false;
 	if (config_.pinyin2words_id_rxfilename != "") {
-		SequentialInt32VectorReader wordid_reader(config.pinyin2words_id_rxfilename);
+		SequentialInt32VectorReader wordid_reader(config_.pinyin2words_id_rxfilename);
 		for (; !wordid_reader.Done(); wordid_reader.Next()) {
 			pinyin2words_.push_back(wordid_reader.Value());
 		}
@@ -167,6 +200,11 @@ void CTCDecoder::InitDecoding() {
 	PrefixSeq *seq = new PrefixSeq(sos_h, config_.blank);
     seq->logp_blank = 0.0;
 	CopyHis(sos_h);
+#if HAVE_KENLM == 1
+    if (kenlm_arpa_ != NULL)
+	    seq->ken_state = kenlm_arpa_->BeginSentenceState();
+#endif
+
 	beam_[seq->prefix] = seq;
 }
 
@@ -303,6 +341,11 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				if (k == config_.blank) {
 					auto it = next_beam_.find(preseq->prefix);
 					if (it == next_beam_.end()) {
+					#if HAVE_KENLM == 1
+						if (config_.use_kenlm) {
+							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix, preseq->ken_state);
+						} else
+					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
 						CopyHis(preseq->lmhis);
 					} else {
@@ -355,7 +398,15 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                     if (rscale < 1.0) {
                         prefix = preseq->prefix;
                         prefix[0] = config_.sos; // <s>
-					    ngram_logp = const_arpa_.GetNgramLogprob(k, prefix);
+					#if HAVE_KENLM == 1
+                        if (config_.use_kenlm) {
+                        	ngram_logp = kenlm_arpa_->Score(preseq->ken_state,
+                        			kenlm_vocab_->Index(wordid_to_word_[k]), n_preseq->ken_state);
+							// Convert to natural log.
+							ngram_logp *= M_LN10;
+                        } else
+					#endif
+                        ngram_logp = const_arpa_->GetNgramLogprob(k, prefix);
                     }
                     // fusion score
 					// n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*rnnlm_logp + (1.0-rscale)*ngram_logp);
@@ -365,11 +416,17 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 				}
 				next_beam_[n_preseq->prefix] = n_preseq;
 
+
 				// If s is repeated at the end we also update the unchanged
 				// prefix. This is the merging case.
 				if (k == end_t) {
 					auto it = next_beam_.find(preseq->prefix);
 					if (it == next_beam_.end()) {
+					#if HAVE_KENLM == 1
+						if (config_.use_kenlm) {
+							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix, preseq->ken_state);
+						} else
+					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
 						CopyHis(preseq->lmhis);
 					} else {
@@ -390,7 +447,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			preseq = it->second;
 			pre_seq_list_.push_back(preseq);
 		}
-		pre_seq_list_.sort(LstmlmUtil::compare_PrefixSeq_reverse);
+		pre_seq_list_.sort(CTCDecoderUtil::compare_PrefixSeq_reverse);
 
 		// free memory
 		FreeBeam(&beam_);
@@ -532,7 +589,7 @@ void CTCDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 			preseq = it->second;
 			pre_seq_list_.push_back(preseq);
 		}
-		pre_seq_list_.sort(LstmlmUtil::compare_PrefixSeq_reverse);
+		pre_seq_list_.sort(CTCDecoderUtil::compare_PrefixSeq_reverse);
 
 		// free memory
 		FreeBeam(&beam_);

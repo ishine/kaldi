@@ -63,7 +63,7 @@ struct SluLstmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
 
 	SluLstmUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, 
                             LossOptions *loss_opts, const NnetParallelOptions *parallel_opts)
-    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, loss_opts, parallel_opts), class_boundary(""), num_class(0),
+    	: NnetLstmUpdateOptions(trn_opts, rnd_opts, NULL, loss_opts, parallel_opts), class_boundary(""), num_class(0),
 		  slot_rspecifier(""), intent_rspecifier(""), slot_delay(0), intent_delay(0), lm_escale(1.0), slot_escale(1.0), intent_escale(1.0) { }
 
   	  void Register(OptionsItf *po)

@@ -526,6 +526,14 @@ void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 			SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
 			RandomAccessInt32VectorReader targets_reader(targets_rspecifier);
 			RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
+	    	RandomAccessTokenReader *spec_aug_reader = NULL;
+			std::string spec_aug_rspecifier = "";
+    		if (opts->spec_aug_filename != "") {
+    			std::stringstream ss;
+    			ss << "ark,t:" << opts->spec_aug_filename;
+    			spec_aug_rspecifier = ss.str();
+				spec_aug_reader = new RandomAccessTokenReader(spec_aug_rspecifier);
+    		}
 
 			// The initialization of the following class spawns the threads that
 			// process the examples.  They get re-joined in its destructor.
@@ -553,7 +561,8 @@ void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 					idx = (idx+1)%nframes;
 				}
 
-				example = new nnet0::RNNTNnetExample(&feature_reader, &si_feature_reader, &targets_reader, stats, opts);
+				example = new nnet0::RNNTNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
+                                                    &targets_reader, stats, opts);
 				example->SetSweepFrames(loop_frames, opts->skip_inner);
 				if (example->PrepareData(examples)) {
 					for (int i = 0; i < examples.size(); i++) {

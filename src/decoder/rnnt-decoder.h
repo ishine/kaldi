@@ -30,6 +30,56 @@
 
 namespace kaldi {
 
+struct Sequence {
+	Sequence(LstmlmHistroy *h, int blank = 0) {
+		pred.clear();
+		k.push_back(blank);
+		lmhis = h;
+		logp = 0;
+	}
+
+	std::vector<Vector<BaseFloat>* > pred; 	// rnnt language model output
+	std::vector<int> k;						// decoded word list
+	LstmlmHistroy *lmhis;					// rnnt language model history
+	BaseFloat logp;							// probability of this sequence, in log scale
+
+	std::string tostring() {
+		return "";
+	}
+};
+
+struct RNNTDecoderUtil {
+	static bool compare_len(const Sequence *a, const Sequence *b) {
+		return a->k.size() < b->k.size();
+	}
+
+	static bool compare_len_reverse(const Sequence *a, const Sequence *b) {
+		return a->k.size() > b->k.size();
+	}
+
+	static bool compare_logp(const Sequence *a, const Sequence *b) {
+		return a->logp < b->logp;
+	}
+
+	static bool compare_logp_reverse(const Sequence *a, const Sequence *b) {
+		return a->logp > b->logp;
+	}
+
+	static bool compare_normlogp_reverse(const Sequence *a, const Sequence *b) {
+		return a->logp/a->k.size() > b->logp/b->k.size();
+	}
+
+	static bool isprefix(const std::vector<int> &a, const std::vector<int> &b) {
+		int lena = a.size();
+		int lenb = b.size();
+		if (lena >= lenb) return false;
+		for (int i = 0; i <= lena; i++)
+			if (a[i] != b[i]) return false;
+		return true;
+	}
+
+};
+
 struct RNNTDecoderOptions {
   int beam;
   int blank;

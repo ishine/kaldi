@@ -188,9 +188,11 @@ private:
 	      nnet.SetDropoutRetention(1.0);
 	    }
 
-	    Nnet si_nnet;
-	    if (this->kld_scale > 0 && si_model_filename != "")
-	        si_nnet.Read(si_model_filename);
+	    Nnet si_nnet, softmax;
+	    bool use_kld = (this->kld_scale > 0 && si_model_filename != "") ? true : false;
+	    if (use_kld) {
+	    	si_nnet.Read(si_model_filename);
+	    }
 
 	    Nnet frozen_nnet;
         bool use_frozen = opts->frozen_model_filename != "" ? true : false;
@@ -225,12 +227,18 @@ private:
                 KALDI_ERR << opts->ctc_imp << " ctc loss not implemented yet.";
         }
 
+	    if (use_kld && opts->ctc_imp == "warp") {
+            KALDI_LOG << "KLD model Appending the softmax ...";
+	        softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+        }
 
 		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out, nnet_diff, frozen_nnet_out,
 							nnet_out_rearrange, nnet_diff_rearrange,
 							*p_nnet_in, *p_nnet_out, *p_nnet_diff;
-		//CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out, *p_si_nnet_out=NULL, *p_soft_nnet_out;
+		CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out;
+
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
+		Matrix<BaseFloat> nnet_out_host, si_nnet_out_host, soft_nnet_out_host;
 
 		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
 
@@ -431,6 +439,23 @@ private:
 	        nnet.Propagate(*p_nnet_in, &nnet_out);
 	        p_nnet_out = &nnet_out;
 
+			if (use_kld) {
+				// for streams with new utterance, history states need to be reset
+			    if (opts->network_type == "lstm")
+				    si_nnet.ResetLstmStreams(new_utt_flags, batch_size);
+                else if (opts->network_type == "fsmn")
+				    si_nnet.SetFlags(utt_flags);
+				si_nnet.Propagate(*p_nnet_in, &si_nnet_out);
+				CuMatrix<BaseFloat> *p_soft_nnet_out = &soft_nnet_out;
+				if (opts->ctc_imp == "warp")
+					softmax.Propagate(*p_nnet_out, &soft_nnet_out);
+				else
+					p_soft_nnet_out = p_nnet_out;
+
+				// si nnet error
+				si_nnet_out.AddMat(-1.0, *p_soft_nnet_out);
+			}
+
             /*
 			// check there's no nan/inf,
 			if (!KALDI_ISFINITE(nnet_out.Sum())) {
@@ -480,6 +505,11 @@ private:
 					//l2_term += -0.5 * opts->l2_regularize * TraceMatMat(nnet_out, nnet_out, kTrans);
 					//p_nnet_diff->AddMat(opts->l2_regularize, nnet_out);
 				}
+	        }
+
+	        if (use_kld) {
+	        	p_nnet_diff->Scale(1.0-kld_scale);
+	        	p_nnet_diff->AddMat(-kld_scale, si_nnet_out);
 	        }
 
 			// backward pass
