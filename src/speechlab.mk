@@ -10,3 +10,6 @@ USE_MPI = false
 
 # Optinal make online part
 USE_ONLINE = false
+
+# Optinal make kenlm ngram language model
+USE_KENLM = true

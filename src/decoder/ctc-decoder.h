@@ -143,10 +143,10 @@ struct CTCDecoderOptions {
 class CTCDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
-		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &lstmlm, ConstArpaLm &const_arpa);
+		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &lstmlm, ConstArpaLm *const_arpa);
 
 #if HAVE_KENLM == 1
-		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &lstmlm, KenModel &kenlm_arpa_);
+		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper &lstmlm, KenModel *kenlm_arpa_);
 #endif
 
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
@@ -185,7 +185,7 @@ class CTCDecoder {
 
 		CTCDecoderOptions &config_;
 		KaldiLstmlmWrapper &lstmlm_;
-		ConstArpaLm &const_arpa_;
+		ConstArpaLm *const_arpa_;
 		BeamType beam_;
 		BeamType next_beam_;
 		HisType next_his_;
@@ -203,8 +203,8 @@ class CTCDecoder {
 		bool use_pinyin_;
 
 #if HAVE_KENLM == 1
-		KenModel &kenlm_arpa_;
-		KenVocab &kenlm_vocab_;
+		KenModel *kenlm_arpa_;
+		const KenVocab *kenlm_vocab_;
 #endif
 
 	KALDI_DISALLOW_COPY_AND_ASSIGN(CTCDecoder);

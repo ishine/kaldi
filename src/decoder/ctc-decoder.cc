@@ -24,20 +24,19 @@ namespace kaldi {
 
 CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 						KaldiLstmlmWrapper &lstmlm,
-						ConstArpaLm &const_arpa):
+						ConstArpaLm *const_arpa):
 		config_(config), lstmlm_(lstmlm), const_arpa_(const_arpa) {
 	Initialize();
 }
 
 #if HAVE_KENLM == 1
-CTCDecoder(CTCDecoderOptions &config,
-			KaldiLstmlmWrapper &lstmlm,
-			KenModel &kenlm_arpa)
-		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa),
-		kenlm_vocab_(kenlm_arpa.GetVocabulary()){
-
+CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
+			            KaldiLstmlmWrapper &lstmlm,
+			            KenModel *kenlm_arpa):
+		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa) {
 	Initialize();
 
+    kenlm_vocab_ = &(kenlm_arpa_->GetVocabulary());
 	/// symbols
 	fst::SymbolTable *word_symbols = NULL;
 	if (!(word_symbols = fst::SymbolTable::ReadText(config_.word2wordid_rxfilename))) {
@@ -198,7 +197,7 @@ void CTCDecoder::InitDecoding() {
     seq->logp_blank = 0.0;
 	CopyHis(sos_h);
 #if HAVE_KENLM == 1
-	seq->ken_state = kenlm_arpa_.BeginSentenceState();
+	seq->ken_state = kenlm_arpa_->BeginSentenceState();
 #endif
 
 	beam_[seq->prefix] = seq;
@@ -396,11 +395,11 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                         prefix[0] = config_.sos; // <s>
 					#if HAVE_KENLM == 1
                         if (config_.use_kenlm) {
-                        	ngram_logp = kenlm_arpa_.Score(preseq->ken_state,
-                        			kenlm_vocab_.Index(wordid_to_word_[k]), n_preseq->ken_state);
+                        	ngram_logp = kenlm_arpa_->Score(preseq->ken_state,
+                        			kenlm_vocab_->Index(wordid_to_word_[k]), n_preseq->ken_state);
                         } else
 					#endif
-                        ngram_logp = const_arpa_.GetNgramLogprob(k, prefix);
+                        ngram_logp = const_arpa_->GetNgramLogprob(k, prefix);
                     }
                     // fusion score
 					// n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*rnnlm_logp + (1.0-rscale)*ngram_logp);

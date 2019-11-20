@@ -85,19 +85,20 @@ int main(int argc, char *argv[]) {
     // Reads the language model.
 	KaldiLstmlmWrapper lstmlm(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
 	// Reads the language model in ConstArpaLm format.
-	ConstArpaLm const_arpa;
+	ConstArpaLm *const_arpa = NULL;
 #if HAVE_KENLM == 1
 	KenModel *ken_arpa = NULL;
 #endif
 	// decoder
 	CTCDecoder *decoder;
 	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && !decoder_opts.use_kenlm) {
-		ReadKaldiObject(const_arpa_filename, &const_arpa);
+        const_arpa = new ConstArpaLm;
+		ReadKaldiObject(const_arpa_filename, const_arpa);
 		decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
 	} else if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && decoder_opts.use_kenlm) {
 #if HAVE_KENLM == 1
-		ken_arpa = new KenModel(const_arpa_filename);
-		decoder = new CTCDecoder(decoder_opts, lstmlm, *ken_arpa);
+		ken_arpa = new KenModel(const_arpa_filename.c_str());
+		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa);
 #endif
 	}
 
