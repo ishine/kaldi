@@ -100,7 +100,9 @@ int main(int argc, char *argv[]) {
 		ken_arpa = new KenModel(const_arpa_filename.c_str());
 		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa);
 #endif
-	}
+	} else {
+        decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
+    }
 
     BaseFloat tot_like = 0.0, logp = 0.0;
     kaldi::int64 frame_count = 0;
