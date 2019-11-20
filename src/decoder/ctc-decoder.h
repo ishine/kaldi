@@ -93,14 +93,18 @@ struct CTCDecoderUtil {
 		return LogAdd(a->logp_blank,a->logp_nblank) > LogAdd(b->logp_blank,b->logp_nblank);
 	}
 
+    static float len_penalty(int len, float alpha) {
+        return pow((5+len), alpha)/pow((5+1), alpha);
+    }
+
 	static bool compare_PrefixSeq_penalty_reverse(const PrefixSeq *a, const PrefixSeq *b) {
 		float score_a, score_b;
 		int len_a, len_b;
 		bool use_penalty = true;
 		len_a = use_penalty ? a->prefix.size()-1 : 1;
 		len_b = use_penalty ? b->prefix.size()-1 : 1;
-		score_a = LogAdd(a->logp_blank, a->logp_nblank)/(len_a*0.1);
-		score_b = LogAdd(b->logp_blank, b->logp_nblank)/(len_b*0.1);
+		score_a = LogAdd(a->logp_blank, a->logp_nblank)/len_penalty(len_a, 0.65);
+		score_b = LogAdd(b->logp_blank, b->logp_nblank)/len_penalty(len_b, 0.65);
 		return score_a > score_b;
 	}
 };
