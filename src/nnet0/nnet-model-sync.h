@@ -64,12 +64,9 @@ struct NnetParallelOptions {
 		  po->Register("global-learnrate", &global_learnrate, "Global learning rate used in multi-machine paralization.");
 		  po->Register("asgd-lock", &asgd_lock, "Apply lock on asgd training.");
 
-	      if (this->num_procs >= 1) {
-	          po->Register("merge-size",&merge_size, "Multi-machine merge size");
-	          po->Register("merge-function", &merge_func, "Multi-machine merge function");
-	          po->Register("log-file", &log_file, "Each job log.");
-	      }
-
+	      po->Register("merge-size",&merge_size, "Multi-machine merge size");
+	      po->Register("merge-function", &merge_func, "Multi-machine merge function");
+	      po->Register("log-file", &log_file, "Each job log.");
 	  }
 };
 
