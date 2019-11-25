@@ -29,9 +29,9 @@
 
 #include "nnet0/nnet-affine-transform.h"
 #include "nnet0/nnet-activation.h"
-#include "nnet0/nnet-example.h"
 #include "nnet0/nnet-utils.h"
 
+#include "lm/example.h"
 #include "lm/am-compute-parallel.h"
 
 namespace kaldi {
@@ -40,9 +40,6 @@ namespace lm {
 typedef nnet0::NnetTrainOptions NnetTrainOptions;
 typedef nnet0::NnetDataRandomizerOptions NnetDataRandomizerOptions;
 typedef nnet0::NnetParallelOptions NnetParallelOptions;
-typedef nnet0::ExamplesRepository  ExamplesRepository;
-typedef nnet0::NnetExample NnetExample;
-typedef nnet0::DNNNnetExample DNNNnetExample;
 typedef nnet0::Component Component;
 typedef nnet0::RandomizerMask RandomizerMask;
 typedef nnet0::MatrixRandomizer MatrixRandomizer;
@@ -236,14 +233,14 @@ private:
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 		Vector<BaseFloat> utt_flags;
 
-		DNNNnetExample *example;
+		DNNExample *example;
 
 		//double t1, t2, t3, t4;
 		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0;
 		kaldi::int64 total_frames = 0;
 
 		while (true) {
-			while (!feature_randomizer.IsFull() && (example = dynamic_cast<DNNNnetExample*>(repository_->ProvideExample())) != NULL) {
+			while (!feature_randomizer.IsFull() && (example = dynamic_cast<DNNExample*>(repository_->ProvideExample())) != NULL) {
 				//time.Reset();
 				std::string utt = example->utt;
 				const Matrix<BaseFloat> &mat = example->input_frames;
@@ -515,8 +512,8 @@ void AmUpdateParallel(const NnetUpdateOptions *opts,
 	    MultiThreader<TrainParallelClass> m(opts->parallel_opts->num_threads, c);
 
 	    // prepare sample
-	    NnetExample *example;
-		std::vector<NnetExample*> examples;
+	    Example *example;
+		std::vector<Example*> examples;
 		std::vector<int> sweep_frames, loop_frames;
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
@@ -536,7 +533,7 @@ void AmUpdateParallel(const NnetUpdateOptions *opts,
 				idx = (idx+1)%nframes;
 			}
 
-			example = new DNNNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
+			example = new DNNExample(&feature_reader, &si_feature_reader, spec_aug_reader,
 					&targets_reader, &weights_reader, &model_sync, stats, opts);
 			example->SetSweepFrames(loop_frames, opts->skip_inner);
 			if (example->PrepareData(examples)) {

@@ -30,8 +30,8 @@
 
 #include "nnet0/nnet-affine-transform.h"
 #include "nnet0/nnet-activation.h"
-#include "nnet0/nnet-example.h"
 
+#include "lm/example.h"
 #include "lm/am-compute-ctc-parallel.h"
 
 namespace kaldi {
@@ -40,10 +40,6 @@ namespace lm {
 typedef nnet0::NnetTrainOptions NnetTrainOptions;
 typedef nnet0::NnetDataRandomizerOptions NnetDataRandomizerOptions;
 typedef nnet0::NnetParallelOptions NnetParallelOptions;
-typedef nnet0::ExamplesRepository  ExamplesRepository;
-typedef nnet0::NnetExample NnetExample;
-typedef nnet0::DNNNnetExample DNNNnetExample;
-typedef nnet0::CTCNnetExample CTCNnetExample;
 typedef nnet0::Component Component;
 typedef nnet0::Softmax Softmax;
 typedef nnet0::RandomizerMask RandomizerMask;
@@ -270,9 +266,9 @@ private:
 	    std::vector<Posterior> targets_utt(num_stream);
         std::string utt;
 
-	    CTCNnetExample *ctc_example = NULL;
-	    DNNNnetExample *dnn_example = NULL;
-	    NnetExample		*example = NULL;
+	    CTCExample *ctc_example = NULL;
+	    DNNExample *dnn_example = NULL;
+	    Example		*example = NULL;
 	    Timer time;
 	    double time_now = 0;
 
@@ -302,10 +298,10 @@ private:
 				Matrix<BaseFloat> &mat = example->input_frames;
 
 				if (objective_function == "xent"){
-					dnn_example = dynamic_cast<DNNNnetExample*>(example);
+					dnn_example = dynamic_cast<DNNExample*>(example);
 					targets_utt[s] = dnn_example->targets;
 				} else if (objective_function == "ctc"){
-					ctc_example = dynamic_cast<CTCNnetExample*>(example);
+					ctc_example = dynamic_cast<CTCExample*>(example);
 					labels_utt[s] = ctc_example->targets;
 				}
 
@@ -647,8 +643,8 @@ void AmCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    MultiThreader<TrainCtcParallelClass> mc(opts->parallel_opts->num_threads, c);
 
 		// prepare sample
-	    NnetExample *example;
-	    std::vector<NnetExample*> examples;
+	    Example *example;
+	    std::vector<Example*> examples;
 	    std::vector<int> sweep_frames, loop_frames;
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
@@ -668,7 +664,7 @@ void AmCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    		idx = (idx+1)%nframes;
 	    	}
 
-	    	example = new CTCNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader, 
+	    	example = new CTCExample(&feature_reader, &si_feature_reader, spec_aug_reader,
 					&targets_reader, &model_sync, stats, opts);
             example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
@@ -723,8 +719,8 @@ void AmCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 
 		// prepare sample
-	    NnetExample *example;
-	    std::vector<NnetExample*> examples;
+	    Example *example;
+	    std::vector<Example*> examples;
 	    std::vector<int> sweep_frames, loop_frames;
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
@@ -744,7 +740,7 @@ void AmCEUpdateParallel(const NnetCtcUpdateOptions *opts,
 	    		idx = (idx+1)%nframes;
 	    	}
 
-	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
+	    	example = new DNNExample(&feature_reader, &si_feature_reader, spec_aug_reader,
 					&targets_reader, &weights_reader, &model_sync, stats, opts);
             example->SetSweepFrames(loop_frames, opts->skip_inner);
 	    	if (example->PrepareData(examples)) {
