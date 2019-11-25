@@ -345,7 +345,7 @@ private:
 			      	si_nnet.Propagate(*p_nnet_in, &si_nnet_out);
 			      	//p_si_nnet_out = &si_nnet_out;
 			        // convert posterior to matrix,
-					PosteriorToMatrix(nnet_tgt, nnet.OutputDim(), &tgt_mat);
+					nnet0::PosteriorToMatrix(nnet_tgt, nnet.OutputDim(), &tgt_mat);
 					tgt_mat.Scale(1-this->kld_scale);
 					tgt_mat.AddMat(this->kld_scale, si_nnet_out);
 			    }
