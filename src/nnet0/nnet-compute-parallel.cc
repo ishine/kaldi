@@ -61,7 +61,7 @@ private:
     const NnetDataRandomizerOptions *rnd_opts;
     const NnetParallelOptions *parallel_opts;
 
-    BaseFloat 	kld_scale;
+    BaseFloat kld_scale;
 
     std::string use_gpu;
     std::string objective_function;
@@ -185,7 +185,8 @@ private:
 	    }
 
 	    Nnet si_nnet;
-	    if (this->kld_scale > 0)
+	    bool use_kld = (this->kld_scale > 0 && si_model_filename != "") ? true : false;
+	    if (use_kld)
 	    	si_nnet.Read(si_model_filename);
 
 	    Nnet frozen_nnet;
@@ -341,7 +342,7 @@ private:
 				nnet.Propagate(*p_nnet_in, &nnet_out);
 
 				CuMatrix<BaseFloat> tgt_mat;
-			    if (this->kld_scale > 0) {
+			    if (use_kld) {
 				    si_nnet.SetFlags(flags);
 			      	si_nnet.Propagate(*p_nnet_in, &si_nnet_out);
 			      	//p_si_nnet_out = &si_nnet_out;
@@ -355,19 +356,19 @@ private:
 				// evaluate objective function we've chosen
 				if (objective_function == "xent") {
 					// gradients re-scaled by weights in Eval,
-					if (this->kld_scale > 0)
+					if (use_kld)
 						xent.Eval(frm_weights, nnet_out, tgt_mat, &nnet_diff);
 					else
 						xent.Eval(frm_weights, nnet_out, nnet_tgt, &nnet_diff);
 				} else if (objective_function == "mse") {
 					// gradients re-scaled by weights in Eval,
-					if (this->kld_scale > 0)
+					if (use_kld)
 						mse.Eval(frm_weights, nnet_out, tgt_mat, &nnet_diff);
 					else
 						mse.Eval(frm_weights, nnet_out, nnet_tgt, &nnet_diff);
 				} else if (0 == objective_function.compare(0, 9, "multitask")) {
 			          // gradients re-scaled by weights in Eval,
-					if (this->kld_scale > 0)
+					if (use_kld)
 						multitask.Eval(frm_weights, nnet_out, tgt_mat, &nnet_diff);
 					else
 						multitask.Eval(frm_weights, nnet_out, nnet_tgt, &nnet_diff);

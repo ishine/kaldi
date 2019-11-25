@@ -400,55 +400,56 @@ private:
 	        } else {
 	            KALDI_ERR << "Unknown objective function code : " << objective_function;
 	        }
-		        // backward pass
-				if (!crossvalidate) {
 
-					// backpropagate
-					nnet.Backpropagate(nnet_diff, NULL, true);
-					update_frames += num_frames;
-					if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&
-							update_frames + num_frames > parallel_opts->merge_size && !model_sync->isLastMerge())
-					{
-						// upload current model
-						model_sync->GetWeight(&nnet, this->thread_id_, this->thread_id_);
+			// backward pass
+			if (!crossvalidate) {
 
-						// model merge
-						model_sync->ThreadSync(this->thread_id_, 1);
-
-						// download last model
-						if (!model_sync->isLastMerge())
-						{
-							model_sync->SetWeight(&nnet, this->thread_id_);
-
-							nnet.ResetGradient();
-
-	                        KALDI_VLOG(1) << "Thread " << thread_id_ << " merge NO."
-	                                        << parallel_opts->num_merge - model_sync->leftMerge()
-	                                            << " Current mergesize = " << update_frames << " frames.";
-							update_frames = 0;
-						}
-					}
-				}
-				monitor(&nnet, total_frames, num_frames);
-
-				// increase time counter
-		        total_frames += num_frames;
-
-		        // track training process
-			    if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0)
+				// backpropagate
+				nnet.Backpropagate(nnet_diff, NULL, true);
+				update_frames += num_frames;
+				if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&
+						update_frames + num_frames > parallel_opts->merge_size && !model_sync->isLastMerge())
 				{
-                    int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
-					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump)
+					// upload current model
+					model_sync->GetWeight(&nnet, this->thread_id_, this->thread_id_);
+
+					// model merge
+					model_sync->ThreadSync(this->thread_id_, 1);
+
+					// download last model
+					if (!model_sync->isLastMerge())
 					{
-						char name[512];
-						num_dump++;
-						sprintf(name, "%s_%d_%ld", model_filename.c_str(), num_dump, total_frames);
-						nnet.Write(string(name), true);
+						model_sync->SetWeight(&nnet, this->thread_id_);
+
+						nnet.ResetGradient();
+
+						KALDI_VLOG(1) << "Thread " << thread_id_ << " merge NO."
+										<< parallel_opts->num_merge - model_sync->leftMerge()
+											<< " Current mergesize = " << update_frames << " frames.";
+						update_frames = 0;
 					}
 				}
+			}
+			monitor(&nnet, total_frames, num_frames);
 
-		        fflush(stderr);
-		        fsync(fileno(stderr));
+			// increase time counter
+			total_frames += num_frames;
+
+			// track training process
+			if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0)
+			{
+				int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
+				if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump)
+				{
+					char name[512];
+					num_dump++;
+					sprintf(name, "%s_%d_%ld", model_filename.c_str(), num_dump, total_frames);
+					nnet.Write(string(name), true);
+				}
+			}
+
+			fflush(stderr);
+			fsync(fileno(stderr));
 		}
 
 		model_sync->LockStates();

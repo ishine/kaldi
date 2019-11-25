@@ -147,8 +147,7 @@ private:
 		model_sync->LockModel();
 	    // Select the GPU
 	#if HAVE_CUDA == 1
-	    if (parallel_opts->num_procs > 1)
-	    {
+	    if (parallel_opts->num_procs > 1) {
 	    	//thread_idx = model_sync->GetThreadIdx();
 	    	KALDI_LOG << "MyId: " << parallel_opts->myid << "  ThreadId: " << thread_idx;
 	    	CuDevice::Instantiate().MPISelectGpu(model_sync->gpuinfo_, model_sync->win, thread_idx, this->num_threads);
@@ -158,8 +157,10 @@ private:
 	    					<< "  gpuid: " << model_sync->gpuinfo_[i].gpuid;
 	    	}
 	    }
-	    else
+	    else {
 	    	CuDevice::Instantiate().SelectGpu();
+	    }
+	    CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
 
 	    //CuDevice::Instantiate().DisableCaching();
 	#endif
