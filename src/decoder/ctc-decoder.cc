@@ -463,6 +463,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			}
 			idx++;
 		}
+
 		next_beam_.clear();
 
 		if (config_.lm_scale > 0.0) {
@@ -474,6 +475,13 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			next_logprob_.clear();
 		}
 	}
+
+    /*
+    int size = pre_seq_list_.size();
+    if (size > config_.beam) size = config_.beam;
+    pre_seq_list_.resize(size);
+    pre_seq_list_.sort(CTCDecoderUtil::compare_PrefixSeq_penalty_reverse);
+    */
 }
 
 void CTCDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
