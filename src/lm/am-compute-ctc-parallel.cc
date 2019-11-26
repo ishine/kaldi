@@ -201,8 +201,6 @@ private:
 	    	frozen_nnet.Read(opts->frozen_model_filename);
 	    }
 
-	    model_sync->Initialize(&nnet, this->thread_id_);
-
 	    RandomizerMask randomizer_mask(*rnd_opts);
 	    MatrixRandomizer feature_randomizer(*rnd_opts);
 	    PosteriorRandomizer targets_randomizer(*rnd_opts);
@@ -227,6 +225,8 @@ private:
         } else {
                 KALDI_ERR << opts->ctc_imp << " ctc loss not implemented yet.";
         }
+
+	    model_sync->Initialize(&nnet, this->thread_id_);
 
 	    if (use_kld && opts->ctc_imp == "warp") {
             KALDI_LOG << "KLD model Appending the softmax ...";
@@ -515,7 +515,7 @@ private:
 			// backward pass
 			if (!crossvalidate) {
 				// backpropagate
-				nnet.Backpropagate(nnet_diff, NULL, true);
+				nnet.Backpropagate(*p_nnet_diff, NULL, true);
 				update_frames += num_frames;
 				if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&
 						update_frames + num_frames > parallel_opts->merge_size && !model_sync->isLastMerge())
