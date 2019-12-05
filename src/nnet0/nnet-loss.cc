@@ -1345,7 +1345,10 @@ void Ctc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBa
 
   diff->AddMat(-1.0, net_out_tmp);
 
-  if (ppzx != NULL) *ppzx = pzx;
+    if (ppzx != NULL) {
+        ppzx->Resize(pzx.Dim(), kUndefined);
+        ppzx->CopyFromVec(pzx);
+    }
 
   // Clip gradient
   diff->ApplyFloor(-1.0);
@@ -1469,7 +1472,10 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
     CU_SAFE_CALL(cudaGetLastError());                
     CuDevice::Instantiate().AccuProfile("compute_ctc_loss", tim);
 
-    if (ppzx != NULL) *ppzx = pzx;
+    if (ppzx != NULL) {
+        ppzx->Resize(pzx.Dim(), kUndefined);
+        ppzx->CopyFromVec(pzx);
+    }
 
 	// Clip loss
 	diff->ApplyFloor(-1.0);
@@ -1696,7 +1702,7 @@ void WarpRNNT::Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<in
 }
 
 void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx) {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
 
@@ -1767,6 +1773,10 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
     CuDevice::Instantiate().AccuProfile("compute_rnnt_loss", tim);
 
 
+    if (ppzx != NULL) {
+        ppzx->Resize(pzx.Dim(), kUndefined);
+        ppzx->CopyFromVec(pzx);
+    }
 	// Clip loss
 	//diff->ApplyFloor(-1.0);
 	//diff->ApplyCeiling(1.0);

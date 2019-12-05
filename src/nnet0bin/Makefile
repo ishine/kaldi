@@ -28,7 +28,7 @@ BINFILES = nnet-train-frmshuff \
 	nnet-train-lstm-lm-parallel nnet-train-lstm-lm-parallel-mpi nnet-lstm-sentence-ppl \
 	nnet-remove-last nnet-extract nnet-forward-lfmmi \
 	nnet-train-ctc-parallel-mpi nnet-kws-confidence \
-	nnet-train-fsmn-streams
+	nnet-train-fsmn-streams nnet-compute-ctc-pzx 
 
 OBJFILES =
 

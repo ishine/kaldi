@@ -37,8 +37,13 @@ int main(int argc, char *argv[]) {
 
     int blank_label = 0;
     po.Register("blank-label", &blank_label, "CTC output bank label id");
+    std::string use_gpu="yes";
 
     po.Read(argc, argv);
+
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.cache_memory = true;
+    cuallocator_opts.Register(&po);
 
     if (po.NumArgs() != 3) {
       po.PrintUsage();
@@ -48,6 +53,13 @@ int main(int argc, char *argv[]) {
     std::string am_posterior_rspecifier = po.GetArg(1),
     			hyps_results_rspecifier = po.GetArg(2),
 				wspecifier = po.GetArg(3);
+
+    //Select the GPU
+#if HAVE_CUDA==1
+    CuDevice::Instantiate().SelectGpuId(use_gpu);
+    CuDevice::Instantiate().SetCuAllocatorOptions(cuallocator_opts);
+#endif
+
 
     SequentialBaseFloatMatrixReader am_posterior_reader(am_posterior_rspecifier);
     RandomAccessInt32VectorReader hyps_reader(hyps_results_rspecifier);
@@ -62,7 +74,7 @@ int main(int argc, char *argv[]) {
 	Vector<BaseFloat> pzx(1);
 	float num_done = 0, pzx_sum = 0;
 
-	WarpCtc ctc = new WarpCtc(0);
+	WarpCtc *ctc = new WarpCtc(0);
 	for (; !am_posterior_reader.Done(); am_posterior_reader.Next()) {
 		const Matrix<BaseFloat> &posterior = am_posterior_reader.Value();
 		std::string utt = am_posterior_reader.Key();
@@ -75,10 +87,10 @@ int main(int argc, char *argv[]) {
 		pzx_writer.Write(utt, pzx);
 
 		num_done++;
-		pzx_sum += pzx[0];
+		pzx_sum += pzx(0);
 	}
 
-	KALDI_LOG << "Computed " << num_done << " utterance."
+	KALDI_LOG << "Computed " << num_done << " utterance, "
 			<< "Obj(log[Pzx]) = " << pzx_sum/num_done;
 	return (num_done != 0 ? 0 : 1);
   } catch(const std::exception &e) {
