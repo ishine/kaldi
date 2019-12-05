@@ -59,8 +59,8 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 #endif
 
 void CTCDecoder::Initialize() {
-	rd_ = lstmlm_.GetRDim();
-	cd_ = lstmlm_.GetCDim();
+	rd_ = lstmlm_->GetRDim();
+	cd_ = lstmlm_->GetCDim();
 
 	use_pinyin_ = false;
 	if (config_.pinyin2words_id_rxfilename != "") {
@@ -235,7 +235,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
 	int likes_size = loglikes.NumCols();
-	int vocab_size = lstmlm_.GetVocabSize();
+	int vocab_size = lstmlm_->GetVocabSize();
 	PrefixSeq *preseq, *n_preseq;
 	std::vector<int> n_prefix, prefix;
 	std::vector<float> next_words(vocab_size);
@@ -286,7 +286,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 			}
 
             // beam streams parallel process
-            lstmlm_.ForwardMseq(in_words, context_in, nnet_out, context_out);
+            lstmlm_->ForwardMseq(in_words, context_in, nnet_out, context_out);
 
             // get the valid streams
             for (bz = 0, it = beam_.begin(); bz < config_.beam; bz++) {
@@ -503,7 +503,7 @@ void CTCDecoder::BeamSearchNaive(const Matrix<BaseFloat> &loglikes) {
 				preseq = seq.second;
 				lmlogp = MallocPred();
 				his = MallocHis();
-				lstmlm_.Forward(preseq->prefix.back(), *preseq->lmhis, lmlogp, his);
+				lstmlm_->Forward(preseq->prefix.back(), *preseq->lmhis, lmlogp, his);
 				lmlogp->ApplyLog();
 				next_his_[preseq->prefix] = his;
 				next_logprob_[preseq->prefix] = lmlogp;

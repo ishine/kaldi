@@ -83,7 +83,10 @@ int main(int argc, char *argv[]) {
     SequentialBaseFloatMatrixReader loglikes_reader(loglikes_rspecifier);
 
     // Reads the language model.
-	KaldiLstmlmWrapper lstmlm(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
+	KaldiLstmlmWrapper *lstmlm = NULL;
+	if (lstmlm_rxfilename != "")
+		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
+
 	// Reads the language model in ConstArpaLm format.
 	ConstArpaLm *const_arpa = NULL;
 #if HAVE_KENLM == 1
