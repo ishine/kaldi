@@ -38,6 +38,8 @@ int main(int argc, char *argv[]) {
     int blank_label = 0;
     po.Register("blank-label", &blank_label, "CTC output bank label id");
     std::string use_gpu="yes";
+    bool sort = true;
+    po.Register("sort", &sort, "Output score sorted");
 
     po.Read(argc, argv);
 
@@ -67,6 +69,7 @@ int main(int argc, char *argv[]) {
 
     std::vector<std::vector<int> > labels_utt(1);
     std::vector<int> num_utt_frame_in(1);
+    std::vector<BaseFloat> pzx_scores;
 
     Matrix<BaseFloat> posterior;
     CuMatrix<BaseFloat> cu_posterior, nnet_diff;
@@ -85,10 +88,15 @@ int main(int argc, char *argv[]) {
 		labels_utt[0] = hpys;
 		ctc->EvalParallel(num_utt_frame_in, cu_posterior, labels_utt, &nnet_diff, &pzx);
 		pzx_writer.Write(utt, pzx);
+        pzx_scores.push_back(pzx(0));
 
 		num_done++;
 		pzx_sum += pzx(0);
 	}
+
+    if (sort) {
+        std::sort(pzx_scores.begin(), pzx_scores.end());
+    }
 
 	KALDI_LOG << "Computed " << num_done << " utterance, "
 			<< "Obj(log[Pzx]) = " << pzx_sum/num_done;
