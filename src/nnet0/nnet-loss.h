@@ -402,7 +402,7 @@ public:
 
 	/// CTC training over multiple sequences. The errors are returned to [diff]
 	virtual void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {};
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL) {};
 
 	/// Compute token error rate from the softmax-layer activations and the given labels. From the softmax activations,
 	/// we get the frame-level labels, by selecting the label with the largest probability at each frame. Then, the frame
@@ -454,7 +454,7 @@ class Ctc : public CtcItf {
 
   /// CTC training over multiple sequences. The errors are returned to [diff]
   void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-                    std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
+                    std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL);
 
  private:
   std::vector<int32> label_expand_;  // expanded version of the label sequence
@@ -474,7 +474,7 @@ public:
 
 	/// CTC training over multiple sequences. The errors are returned to [diff]
 	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL);
 
 	inline void throw_on_error(ctcStatus_t status, const char* message) {
 	    if (status != CTC_STATUS_SUCCESS) {
@@ -539,7 +539,7 @@ public:
 
 	/// RNNT training over multiple sequences. The errors are returned to [diff]
 	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL);
 
 	inline void throw_on_error(rnntStatus_t status, const char* message) {
 	    if (status != RNNT_STATUS_SUCCESS) {
