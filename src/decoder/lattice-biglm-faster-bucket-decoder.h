@@ -41,8 +41,7 @@ struct LatticeBiglmFasterBucketDecoderConfig {
   int32 prune_interval;
   bool determinize_lattice; // not inspected by this class... used in
                             // command-line program.
-  BaseFloat beam_delta; // has nothing to do with beam_ratio
-  BaseFloat hash_ratio;
+  BaseFloat beam_delta; // tune the adaptive_beam_ for each frame
   BaseFloat cost_scale;
   BaseFloat prune_scale;   // Note: we don't make this configurable on the command line,
                            // it's not a very important parameter.  It affects the
@@ -51,7 +50,6 @@ struct LatticeBiglmFasterBucketDecoderConfig {
   // LatticeFasterDecoder class itself, but by the code that calls it, for
   // example in the function DecodeUtteranceLatticeFaster.
   fst::DeterminizeLatticePhonePrunedOptions det_opts;
-
   int32 bucket_length; // the capacity of each bucket
 
   LatticeBiglmFasterBucketDecoderConfig():
@@ -92,7 +90,7 @@ struct LatticeBiglmFasterBucketDecoderConfig {
   void Check() const {
     KALDI_ASSERT(beam > 0.0 && max_active > 1 && lattice_beam > 0.0
                  && min_active <= max_active
-                 && prune_interval > 0 && beam_delta > 0.0 && hash_ratio >= 1.0
+                 && prune_interval > 0 && beam_delta > 0.0
                  && prune_scale > 0.0 && prune_scale < 1.0
                  && bucket_length >= 1);
   }

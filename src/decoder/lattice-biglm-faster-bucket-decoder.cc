@@ -114,7 +114,7 @@ LatticeBiglmFasterBucketDecoderTpl<FST, Token>::LatticeBiglmFasterBucketDecoderT
     fst::DeterministicOnDemandFst<Arc> *lm_diff_fst):
     fst_(&fst), delete_fst_(false), lm_diff_fst_(lm_diff_fst), config_(config),
     num_toks_(0), cur_queue_(config_.cost_scale) {
-  config.Check();
+  config_.Check();
   KALDI_ASSERT(fst_->Start() != fst::kNoStateId &&
                lm_diff_fst_->Start() != fst::kNoStateId);
 }
@@ -126,7 +126,7 @@ LatticeBiglmFasterBucketDecoderTpl<FST, Token>::LatticeBiglmFasterBucketDecoderT
     fst::DeterministicOnDemandFst<Arc> *lm_diff_fst):
     fst_(fst), delete_fst_(true), lm_diff_fst_(lm_diff_fst), config_(config),
     num_toks_(0), cur_queue_(config_.cost_scale) {
-  config.Check();
+  config_.Check();
   KALDI_ASSERT(fst_->Start() != fst::kNoStateId &&
                lm_diff_fst_->Start() != fst::kNoStateId);
 }

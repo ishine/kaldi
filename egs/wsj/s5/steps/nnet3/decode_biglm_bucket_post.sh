@@ -168,8 +168,9 @@ if [ $stage -le 1 ]; then
 
   $cmd JOB=1:$nj $dir/log/decode.JOB.log \
     latgen-biglm-bucket-faster-mapped --acoustic-scale=$acwt \
-      --allow-partial=true --max-active=$maxactive --beam=$beam \
-      --lattice-beam=$lattice_beam --word-symbol-table=$graphdir/words.txt \
+      --allow-partial=true --max-active=$maxactive --min-active=$minactive \
+      --beam=$beam --lattice-beam=$lattice_beam \
+      --word-symbol-table=$graphdir/words.txt \
       $srcdir/final.mdl $graphdir/HCLG.fst "$oldlm_cmd" "$newlm_cmd" \
       "$posteriors_rspecifier" "$lat_wspecifier" || exit 1;
 fi
