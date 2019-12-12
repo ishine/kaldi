@@ -40,6 +40,12 @@ int main(int argc, char *argv[]) {
     std::string use_gpu="yes";
     bool sort = true;
     po.Register("sort", &sort, "Output score sorted");
+    bool use_warpctc = true;
+    po.Register("use-warpctc", &use_warpctc, "Use baidu warpctc");
+    int32 num_report = 500;
+    po.Register("num_report", &num_report, "Number report step.");
+    int32 blankid = 0;
+    po.Register("blankid", &blankid, "Ctc blank id.");
 
     po.Read(argc, argv);
 
@@ -77,7 +83,12 @@ int main(int argc, char *argv[]) {
 	Vector<BaseFloat> pzx(1);
 	float num_done = 0, pzx_sum = 0;
 
-	WarpCtc *ctc = new WarpCtc(0);
+	CtcItf *ctc = NULL;
+	if (use_warpctc)
+		ctc = new WarpCtc(blankid);
+	else
+		ctc = new Ctc;
+
 	for (; !am_posterior_reader.Done(); am_posterior_reader.Next()) {
 		const Matrix<BaseFloat> &posterior = am_posterior_reader.Value();
 		std::string utt = am_posterior_reader.Key();
@@ -86,12 +97,19 @@ int main(int argc, char *argv[]) {
 		num_utt_frame_in[0] = posterior.NumRows();
 		cu_posterior = posterior;
 		labels_utt[0] = hpys;
+        if (num_utt_frame_in[0] <= 0 || hpys.size() <= 0) {
+            KALDI_WARN << utt << " empty posterior or hpys.";
+            continue;
+        }
+        
 		ctc->EvalParallel(num_utt_frame_in, cu_posterior, labels_utt, &nnet_diff, &pzx);
 		pzx_writer.Write(utt, pzx);
         pzx_scores.push_back(pzx(0));
 
 		num_done++;
 		pzx_sum += pzx(0);
+        if (num_done > 0 && (int)num_done % num_report == 0)
+	        KALDI_LOG << "Computed " << num_done << " utterance.";
 	}
 
     if (sort) {
