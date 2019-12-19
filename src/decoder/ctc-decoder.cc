@@ -23,9 +23,10 @@
 namespace kaldi {
 
 CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
-						KaldiLstmlmWrapper &lstmlm,
-						ConstArpaLm *const_arpa):
-		config_(config), lstmlm_(lstmlm), const_arpa_(const_arpa) {
+						KaldiLstmlmWrapper *lstmlm,
+						ConstArpaLm *const_arpa,
+						std::vector<ConstArpaLm *> &sub_const_arpa):
+		config_(config), lstmlm_(lstmlm), const_arpa_(const_arpa), sub_const_arpa_(sub_const_arpa) {
 	Initialize();
 #if HAVE_KENLM == 1
     kenlm_arpa_ = NULL;
@@ -35,9 +36,10 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 
 #if HAVE_KENLM == 1
 CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
-			            KaldiLstmlmWrapper &lstmlm,
-			            KenModel *kenlm_arpa):
-		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa) {
+			            KaldiLstmlmWrapper *lstmlm,
+			            KenModel *kenlm_arpa,
+						std::vector<KenModel *> &subkenlm_apra):
+		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa), subkenlm_apra_(subkenlm_apra) {
 	Initialize();
 
     kenlm_vocab_ = &(kenlm_arpa_->GetVocabulary());
@@ -245,9 +247,10 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
     std::vector<int> in_words;
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
-	float logp, logp_b, n_p_b, n_p_nb, ngram_logp = 0, rnnlm_logp = 0,
+	float logp, logp_b, n_p_b, n_p_nb,
+			ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
             rscale = config_.rnnlm_scale;
-	int end_t, bz;
+	int end_t, bz, index;
     bool uselm;
 
     InitDecoding();
@@ -343,7 +346,8 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					if (it == next_beam_.end()) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
-							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix, preseq->ken_state);
+							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
+									preseq->ken_state, subkenlm_apra_.size());
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
@@ -400,13 +404,21 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                         prefix[0] = config_.sos; // <s>
 					#if HAVE_KENLM == 1
                         if (config_.use_kenlm) {
-                        	ngram_logp = kenlm_arpa_->Score(preseq->ken_state,
-                        			kenlm_vocab_->Index(wordid_to_word_[k]), n_preseq->ken_state);
+                        	index = kenlm_vocab_->Index(wordid_to_word_[k]);
+                        	ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+                        	for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
+                        		sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
+                        		ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+                        	}
 							// Convert to natural log.
 							ngram_logp *= M_LN10;
                         } else
 					#endif
                         ngram_logp = const_arpa_->GetNgramLogprob(k, prefix);
+                        for (int i = 0; i < sub_const_arpa_.size(); i++) {
+                        	sub_ngram_logp = sub_const_arpa_[i]->GetNgramLogprob(k, prefix);
+                        	ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+                        }
                     }
                     // fusion score
 					// n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*rnnlm_logp + (1.0-rscale)*ngram_logp);
@@ -424,7 +436,8 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					if (it == next_beam_.end()) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
-							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix, preseq->ken_state);
+							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
+									preseq->ken_state, subkenlm_apra_.size());
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);

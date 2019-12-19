@@ -46,6 +46,7 @@ int main(int argc, char *argv[]) {
     float en_penalty = 0.0;
     std::string word_syms_filename;
     std::string const_arpa_filename;
+    std::string sub_language_models;
     po.Register("binary", &binary, "Write output in binary mode");
     po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
@@ -54,6 +55,7 @@ int main(int argc, char *argv[]) {
     po.Register("en-penalty", &en_penalty, "For CTC decoding, "
     		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
     po.Register("const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
+    po.Register("sub-language-models", &sub_language_models, "Sub language models(model1:model2:...)");
 
     KaldiLstmlmWrapperOpts lstmlm_opts;
     CTCDecoderOptions decoder_opts;
@@ -87,24 +89,40 @@ int main(int argc, char *argv[]) {
 	if (lstmlm_rxfilename != "")
 		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
 
+	std::vector<std::string> sub_lm_filenames;
+	if (sub_language_models != "") {
+		if (!kaldi::SplitStringToVector(sub_language_models, ":", false, &sub_lm_filenames))
+			KALDI_ERR << "Invalid sub-language-models string " << sub_language_models;
+	}
+
 	// Reads the language model in ConstArpaLm format.
 	ConstArpaLm *const_arpa = NULL;
+	std::vector<ConstArpaLm *> sub_const_arpa;
 #if HAVE_KENLM == 1
 	KenModel *ken_arpa = NULL;
+	std::vector<KenModel *> sub_ken_arpa;
 #endif
+
+	int num_sub = sub_lm_filenames.size();
 	// decoder
 	CTCDecoder *decoder;
 	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && !decoder_opts.use_kenlm) {
         const_arpa = new ConstArpaLm;
 		ReadKaldiObject(const_arpa_filename, const_arpa);
-		decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
+		for (int i = 0; i < num_sub; i++) {
+			sub_const_arpa[i] = new ConstArpaLm;
+			ReadKaldiObject(sub_lm_filenames[i], sub_const_arpa[i]);
+		}
+		decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa, sub_const_arpa);
 	} else if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && decoder_opts.use_kenlm) {
 #if HAVE_KENLM == 1
 		ken_arpa = new KenModel(const_arpa_filename.c_str());
-		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa);
+		for (int i = 0; i < num_sub; i++)
+			sub_ken_arpa[i] = new KenModel(sub_lm_filenames[i].c_str());
+		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa);
 #endif
 	} else {
-        decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
+        decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa, sub_const_arpa);
     }
 
     BaseFloat tot_like = 0.0, logp = 0.0;

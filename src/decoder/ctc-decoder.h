@@ -61,15 +61,17 @@ struct PrefixSeq {
 	}
 
 #if HAVE_KENLM == 1
-	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words, KenState &state) {
+	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words, KenState &state, int num_sub) {
 		lmhis = h;
 		prefix = words;
 		ken_state = state;
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
+		sub_ken_state.resize(num_sub);
 	}
 
 	KenState	ken_state;
+	std::vector<KenState> sub_ken_state;
 #endif
 
 	// decoded word list
@@ -149,10 +151,12 @@ struct CTCDecoderOptions {
 class CTCDecoder {
 	typedef Vector<BaseFloat> Pred;
 	public:
-		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper lstmlm, ConstArpaLm *const_arpa);
+		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper *lstmlm, ConstArpaLm *const_arpa,
+				std::vector<ConstArpaLm *> &sub_const_arpa);
 
 #if HAVE_KENLM == 1
-		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper lstmlm, KenModel *kenlm_arpa_);
+		CTCDecoder(CTCDecoderOptions &config, KaldiLstmlmWrapper *lstmlm, KenModel *kenlm_arpa,
+				std::vector<KenModel *> &sub_kenlm_apra);
 #endif
 
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
@@ -192,6 +196,7 @@ class CTCDecoder {
 		CTCDecoderOptions &config_;
 		KaldiLstmlmWrapper *lstmlm_;
 		ConstArpaLm *const_arpa_;
+		std::vector<ConstArpaLm *> sub_const_arpa_;
 		BeamType beam_;
 		BeamType next_beam_;
 		HisType next_his_;
@@ -209,8 +214,9 @@ class CTCDecoder {
 		bool use_pinyin_;
 
 #if HAVE_KENLM == 1
-		KenModel *kenlm_arpa_;
 		const KenVocab *kenlm_vocab_;
+		KenModel *kenlm_arpa_;
+		std::vector<KenModel *> sub_kenlm_apra_;
 #endif
 
 	KALDI_DISALLOW_COPY_AND_ASSIGN(CTCDecoder);
