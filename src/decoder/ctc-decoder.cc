@@ -38,8 +38,8 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 			            KaldiLstmlmWrapper *lstmlm,
 			            KenModel *kenlm_arpa,
-						std::vector<KenModel *> &subkenlm_apra):
-		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa), subkenlm_apra_(subkenlm_apra) {
+						std::vector<KenModel *> &sub_kenlm_apra):
+		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa), sub_kenlm_apra_(sub_kenlm_apra) {
 	Initialize();
 
     kenlm_vocab_ = &(kenlm_arpa_->GetVocabulary());
@@ -347,7 +347,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
 							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
-									preseq->ken_state, subkenlm_apra_.size());
+									preseq->ken_state, sub_kenlm_apra_.size());
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
@@ -437,7 +437,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
 							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
-									preseq->ken_state, subkenlm_apra_.size());
+									preseq->ken_state, sub_kenlm_apra_.size());
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);

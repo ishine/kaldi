@@ -90,10 +90,8 @@ int main(int argc, char *argv[]) {
 		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
 
 	std::vector<std::string> sub_lm_filenames;
-	if (sub_language_models != "") {
-		if (!kaldi::SplitStringToVector(sub_language_models, ":", false, &sub_lm_filenames))
-			KALDI_ERR << "Invalid sub-language-models string " << sub_language_models;
-	}
+	if (sub_language_models != "")
+		kaldi::SplitStringToVector(sub_language_models, ":", false, &sub_lm_filenames);
 
 	// Reads the language model in ConstArpaLm format.
 	ConstArpaLm *const_arpa = NULL;
