@@ -103,6 +103,9 @@ int main(int argc, char *argv[]) {
         }
         
 		ctc->EvalParallel(num_utt_frame_in, cu_posterior, labels_utt, &nnet_diff, &pzx);
+        for (int i = 0; i < pzx.Dim(); i++)
+            pzx(i) = exp(-pzx(i));
+
 		pzx_writer.Write(utt, pzx);
         pzx_scores.push_back(pzx(0));
 
@@ -117,7 +120,7 @@ int main(int argc, char *argv[]) {
     }
 
 	KALDI_LOG << "Computed " << num_done << " utterance, "
-			<< "Obj(log[Pzx]) = " << pzx_sum/num_done;
+			<< "Obj(Pzx) = " << pzx_sum/num_done;
 	return (num_done != 0 ? 0 : 1);
   } catch(const std::exception &e) {
     std::cerr << e.what();
