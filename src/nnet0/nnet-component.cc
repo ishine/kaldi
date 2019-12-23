@@ -111,6 +111,7 @@ const struct Component::key_value Component::kMarkerMap[] = {
   { Component::kGruProjectedStreams, "<GruProjectedStreams>"},
   { Component::kGruProjectedStreamsFast, "<GruProjectedStreamsFast>"},
   { Component::kSoftmax,"<Softmax>" },
+  { Component::kLogSoftmax,"<LogSoftmax>" },
   { Component::kBlockSoftmax,"<BlockSoftmax>" },
   { Component::kSigmoid,"<Sigmoid>" },
   { Component::kRelu,"<Relu>" },
@@ -257,6 +258,9 @@ Component* Component::NewComponentOfType(ComponentType comp_type,
       break;
     case Component::kSoftmax :
       ans = new Softmax(input_dim, output_dim);
+      break;
+    case Component::kLogSoftmax :
+      ans = new LogSoftmax(input_dim, output_dim);
       break;
     case Component::kBlockSoftmax :
       ans = new BlockSoftmax(input_dim, output_dim);

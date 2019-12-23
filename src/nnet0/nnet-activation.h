@@ -61,6 +61,28 @@ class Softmax : public Component {
   }
 };
 
+class LogSoftmax : public Component {
+ public:
+  LogSoftmax(int32 dim_in, int32 dim_out)
+    : Component(dim_in, dim_out)
+  { }
+  ~LogSoftmax()
+  { }
+
+  Component* Copy() const { return new LogSoftmax(*this); }
+  ComponentType GetType() const { return kLogSoftmax; }
+
+  void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
+    // y = log(e^x_j/sum_j(e^x_j))
+    out->ApplyLogSoftMaxPerRow(in);
+  }
+
+  void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
+                        const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
+	in_diff->DiffLogSoftmaxPerRow(out, out_diff);
+  }
+};
+
 class CBSoftmax : public Component {
  public:
 	CBSoftmax(int32 dim_in, int32 dim_out)

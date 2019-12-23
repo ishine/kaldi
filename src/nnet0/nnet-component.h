@@ -75,7 +75,8 @@ class Component {
     kGruProjectedStreamsFast,
 
     kActivationFunction = 0x0200, 
-    kSoftmax, 
+    kSoftmax,
+	kLogSoftmax,
 	kCBSoftmax,
     kRelu,
     kCudnnRelu,
