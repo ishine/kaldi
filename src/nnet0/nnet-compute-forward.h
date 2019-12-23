@@ -43,6 +43,7 @@ struct NnetForwardOptions {
     int32 dump_interval;
     int32 skip_frames;
     int32 sweep_time;
+    int32 topk;
     std::string sweep_frames_str;
     bool  sweep_loop;
     bool  skip_inner;
@@ -55,7 +56,8 @@ struct NnetForwardOptions {
     NnetForwardOptions(const PdfPriorOptions *prior_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	:feature_transform(""),no_softmax(false),apply_log(false),copy_posterior(true),use_gpu("no"),num_threads(1),
 		 	 	 	 	 	 	 time_shift(0),batch_size(20),num_stream(0),dump_interval(0), 
-                                 skip_frames(1), sweep_time(1), sweep_frames_str("0"), sweep_loop(false), skip_inner(false),
+                                 skip_frames(1), sweep_time(1), topk(0),
+								 sweep_frames_str("0"), sweep_loop(false), skip_inner(false),
 								 blank_posterior_scale(-1.0), network_type("lstm"), prior_opts(prior_opts), cuallocator_opts(cuallocator_opts)
     {
 
@@ -82,6 +84,7 @@ struct NnetForwardOptions {
         	    		  "e.g. utt1:frame1, utt1:frame2, utt1:frame3 ...; otherwise sweep one frames index, e.g. utt1:frame1, utt2:frame2, utt3:frame3 ...");
         po->Register("skip-inner", &skip_inner, "Skip frame in neural network inner or input");
         po->Register("sweep-time", &sweep_time, "Sweep times for each utterance in skip frames training(Deprecated, use --sweep-frames instead)");
+        po->Register("topk", &topk, "output top k posterior");
         po->Register("sweep-frames", &sweep_frames_str, "Sweep frames index for each utterance in skip frames decoding, e.g. 0");
         po->Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, scale blank label posterior by a constant value(e.g. 0.11), other label posteriors are directly used in decoding.");
         po->Register("network-type", &network_type, "multi-stream forward neural network type, (lstm|fsmn)");

@@ -51,6 +51,32 @@ public:
 
 	}
 
+	void TopKPerRow(Matrix<BaseFloat> &nnet_out, Matrix<BaseFloat> &out_topk, int32 topk) {
+		int nr = nnet_out.NumRows(), nc = nnet_out.NumCols(), key;
+		float logp, *row_data, *out_data;
+
+		if (topk <= 0 || topk >= nc) {
+			out_topk = nnet_out;
+			return;
+		}
+
+		out_topk.Resize(nr, topk*2, kUndefined);
+		for (int n = 0; n < nr; n++) {
+			row_data = nnet_out.RowData(n);
+			out_data = out_topk.RowData(n);
+			std::nth_element(row_data, row_data+topk, row_data+nc, std::greater<BaseFloat>());
+			key = 0;
+			for (int k = 0; k < nc; k++) {
+				logp = out_data(n, k);
+				if (logp > row_data[topk]) {
+					out_data[key] = logp;
+					out_data[topk+key] = k;
+					key++;
+				}
+			}
+		}
+	}
+
 	  // This does the main function of the class.
 	void operator ()()
 	{
@@ -138,7 +164,7 @@ public:
 	    // bptt batch buffer
 	    int32 feat_dim = nnet.InputDim();
 	    int32 out_dim = nnet.OutputDim();
-	    Matrix<BaseFloat> feat, nnet_out_host;
+	    Matrix<BaseFloat> feat, nnet_out_host, utt_out_topk;
 	    if (batch_size * num_stream > 0) {
 			feat.Resize(out_skip * batch_size * num_stream, feat_dim, kSetZero);
 			nnet_out_host.Resize(batch_size * num_stream, out_dim, kSetZero);
@@ -167,8 +193,10 @@ public:
 				}
 
 				if (utt_curt[s] > 0 && !utt_copied[s]) {
+					TopKPerRow(utt_nnet_out[s], utt_out_topk, opts->topk);
 					examples_mutex->Lock();
-					feature_writer->Write(keys[s], utt_nnet_out[s]);
+					//feature_writer->Write(keys[s], utt_nnet_out[s]);
+					feature_writer->Write(keys[s], utt_out_topk);
 					examples_mutex->Unlock();
 					utt_copied[s] = true;
 				}
@@ -441,8 +469,9 @@ public:
 			}
 
 			// write,
+			TopKPerRow(nnet_out_host, utt_out_topk, opts->topk);
 			examples_mutex->Lock();
-			feature_writer->Write(utt, nnet_out_host);
+			feature_writer->Write(utt, utt_out_topk);
 			examples_mutex->Unlock();
 
 			// progress log

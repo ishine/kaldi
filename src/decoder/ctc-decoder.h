@@ -126,7 +126,7 @@ struct CTCDecoderOptions {
   std::string pinyin2words_id_rxfilename;
   std::string word2wordid_rxfilename;
 
-  CTCDecoderOptions(): beam(5), blank(0), am_topk(30),
+  CTCDecoderOptions(): beam(5), blank(0), am_topk(0),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000),
 					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531),
                        pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
@@ -170,6 +170,8 @@ class CTCDecoder {
 		void BeamSearchNaive(const Matrix<BaseFloat> &loglikes);
 
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
+
+		void BeamSearchTopk(const Matrix<BaseFloat> &loglikes);
 
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp);
 
