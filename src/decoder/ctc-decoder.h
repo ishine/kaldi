@@ -44,6 +44,7 @@ struct PrefixSeq {
 		lmhis = h;
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
+        logp_lm = 0;
 	}
 
 	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words) {
@@ -51,6 +52,7 @@ struct PrefixSeq {
 		prefix = words;
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
+        logp_lm = 0;
 	}
 
 	PrefixSeq(const std::vector<int> &words) {
@@ -58,16 +60,18 @@ struct PrefixSeq {
 		lmhis = NULL;
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
+        logp_lm = 0;
 	}
 
 #if HAVE_KENLM == 1
-	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words, KenState &state, int num_sub) {
+	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words, KenState &state, std::vector<KenState> &sub_state) {
 		lmhis = h;
 		prefix = words;
 		ken_state = state;
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
-		sub_ken_state.resize(num_sub);
+        logp_lm = 0;
+		sub_ken_state = sub_state;
 	}
 
 	KenState	ken_state;
@@ -84,6 +88,8 @@ struct PrefixSeq {
 	// it ends in a blank and dose not end in a blank at this time step.
 	BaseFloat logp_blank;
 	BaseFloat logp_nblank;
+    BaseFloat logp_am;
+    BaseFloat logp_lm;
 
 	std::string tostring() {
 		return "";
@@ -117,6 +123,7 @@ struct CTCDecoderOptions {
   int   am_topk;
   float lm_scale;
   float blank_threshold;
+  float blank_penalty;
   int max_mem;
   float rnnlm_scale;
   int sos;
@@ -127,7 +134,7 @@ struct CTCDecoderOptions {
   std::string word2wordid_rxfilename;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(0),
-		  	  	  	   lm_scale(0.0), blank_threshold(0.0), max_mem(50000),
+		  	  	  	   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1), max_mem(50000),
 					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531),
                        pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
                         { }
@@ -137,11 +144,11 @@ struct CTCDecoderOptions {
 	opts->Register("am-topk", &am_topk, "For each time step beam search, keep top K am output probability words.");
 	opts->Register("lm-scale", &lm_scale, "Process extend language model log probability.");
 	opts->Register("blank-threshold", &blank_threshold, "Procee am blank output probability, exceed threshold will be blank directly.");
+	opts->Register("blank-penalty", &blank_penalty, "Blank posterior scale penalty.");
 	opts->Register("max-mem", &max_mem, "maximum memory in decoding.");
 	opts->Register("rnnlm-scale", &rnnlm_scale, "rnnlm ritio (ngramlm 1-ritio) when using rnnlm and ngramlm fusion score.");
     opts->Register("sos", &sos, "Integer corresponds to <s>. You must set this to your actual SOS integer.");
     opts->Register("eos", &eos, "Integer corresponds to </s>. You must set this to your actual EOS integer.");
-    opts->Register("use-kenlm", &use_kenlm, "Weather to use ken arpa language wrapper.");
     opts->Register("use-kenlm", &use_kenlm, "Weather to use ken arpa language wrapper.");
 	opts->Register("vocab-size", &vocab_size, "Acoustic model output size.");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
@@ -173,7 +180,7 @@ class CTCDecoder {
 
 		void BeamSearchTopk(const Matrix<BaseFloat> &loglikes);
 
-		bool GetBestPath(std::vector<int> &words, BaseFloat &logp);
+		bool GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat &logp_lm);
 
 	protected:
         typedef unordered_map<std::vector<int>,

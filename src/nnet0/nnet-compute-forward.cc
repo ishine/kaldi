@@ -61,19 +61,32 @@ public:
 		}
 
 		out_topk.Resize(nr, topk*2, kUndefined);
+        std::vector<BaseFloat> row_buffer(nc);
 		for (int n = 0; n < nr; n++) {
 			row_data = nnet_out.RowData(n);
 			out_data = out_topk.RowData(n);
-			std::nth_element(row_data, row_data+topk, row_data+nc, std::greater<BaseFloat>());
+            memcpy(&row_buffer.front(), row_data, nc*sizeof(BaseFloat));
+            std::nth_element(row_buffer.begin(), row_buffer.begin()+topk-1, row_buffer.end(), std::greater<BaseFloat>());
 			key = 0;
+			out_data[key] = nnet_out(n, 0);
+			out_data[topk+key] = 0;
+			key = 1;
 			for (int k = 0; k < nc; k++) {
-				logp = out_data(n, k);
-				if (logp > row_data[topk]) {
+				logp = nnet_out(n, k);
+				if (logp > row_buffer[topk-1] && key < topk) {
 					out_data[key] = logp;
 					out_data[topk+key] = k;
 					key++;
 				}
 			}
+
+            for (; key < topk; key++) {
+                out_data[key] = kLogZeroFloat;
+				out_data[topk+key] = -1;
+            }
+
+		    //if (key != topk)
+	        //	KALDI_WARN << "topk: " << topk << " actually: " << key;
 		}
 	}
 

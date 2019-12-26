@@ -107,6 +107,7 @@ int main(int argc, char *argv[]) {
 	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && !decoder_opts.use_kenlm) {
         const_arpa = new ConstArpaLm;
 		ReadKaldiObject(const_arpa_filename, const_arpa);
+        sub_const_arpa.resize(num_sub);
 		for (int i = 0; i < num_sub; i++) {
 			sub_const_arpa[i] = new ConstArpaLm;
 			ReadKaldiObject(sub_lm_filenames[i], sub_const_arpa[i]);
@@ -115,6 +116,7 @@ int main(int argc, char *argv[]) {
 	} else if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && decoder_opts.use_kenlm) {
 #if HAVE_KENLM == 1
 		ken_arpa = new KenModel(const_arpa_filename.c_str());
+        sub_ken_arpa.resize(num_sub);
 		for (int i = 0; i < num_sub; i++)
 			sub_ken_arpa[i] = new KenModel(sub_lm_filenames[i].c_str());
 		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa);
@@ -123,7 +125,7 @@ int main(int argc, char *argv[]) {
         decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa, sub_const_arpa);
     }
 
-    BaseFloat tot_like = 0.0, logp = 0.0;
+    BaseFloat tot_like = 0.0, logp = 0.0, logp_lm;
     kaldi::int64 frame_count = 0;
     int num_success = 0, num_fail = 0;
     std::vector<int> words;
@@ -151,7 +153,7 @@ int main(int argc, char *argv[]) {
 		else
 			KALDI_ERR << "UnSupported search function: " << search;
 
-		if (decoder->GetBestPath(words, logp)) {
+		if (decoder->GetBestPath(words, logp, logp_lm)) {
 			words_writer.Write(key, words);
 			if (word_syms != NULL) {
 				std::cerr << key << ' ';
@@ -167,8 +169,8 @@ int main(int argc, char *argv[]) {
 			num_success++;
 			frame_count += loglikes.NumRows();
 			tot_like += logp;
-			KALDI_LOG << "Log-like per frame for utterance " << key << " is "
-					  << (logp / loglikes.NumRows()) << " over "
+			KALDI_LOG << "Log-like for utterance " << key << " is "
+					  << "score = " << logp << ", lm_score = " << logp_lm << " over "
 					  << loglikes.NumRows() << " frames.";
 		} else {
 			num_fail++;

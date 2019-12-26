@@ -173,11 +173,12 @@ void CTCDecoder::CleanBuffer() {
     his_buffer_.clear();
 }
 
-bool CTCDecoder::GetBestPath(std::vector<int> &words, BaseFloat &logp) {
+bool CTCDecoder::GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat &logp_lm) {
 	PrefixSeq *seq = pre_seq_list_.front();
 	if (seq == NULL) return false;
 
-	logp = -LogAdd(seq->logp_blank, seq->logp_nblank);
+	logp = LogAdd(seq->logp_blank, seq->logp_nblank);
+    logp_lm = seq->logp_lm;
 	words = seq->prefix;
 	return true;
 }
@@ -205,6 +206,11 @@ void CTCDecoder::InitDecoding() {
 #if HAVE_KENLM == 1
     if (kenlm_arpa_ != NULL)
 	    seq->ken_state = kenlm_arpa_->BeginSentenceState();
+
+    int nsub = sub_kenlm_apra_.size();
+    seq->sub_ken_state.resize(nsub);
+    for (int i = 0; i < nsub; i++)
+        seq->sub_ken_state[i] = sub_kenlm_apra_[i]->BeginSentenceState();
 #endif
 
 	beam_[seq->prefix] = seq;
@@ -309,13 +315,14 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 		std::fill(next_words.begin(), next_words.end(), 0);
 		// blank pruning
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
-			next_words[config_.blank] = logp_b;
+			next_words[config_.blank] = logp_b + log(config_.blank_penalty);
 		} else if (config_.am_topk > 0) {
 			// Top K pruning, the nth bigest words
             memcpy(&next_step.front(), loglikes.RowData(n), next_step.size()*sizeof(BaseFloat));
             std::nth_element(next_step.begin(), next_step.begin()+config_.am_topk, next_step.end(), std::greater<BaseFloat>());
             for (int k = 0; k < likes_size; k++) {
             	logp = loglikes(n, k);
+                if (k == 0) logp += log(config_.blank_penalty); // -2.30259
             	// top K pruning
             	if (logp > next_step[config_.am_topk]) {
             		if (!use_pinyin_) {
@@ -347,7 +354,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
 							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
-									preseq->ken_state, sub_kenlm_apra_.size());
+									preseq->ken_state, preseq->sub_ken_state);
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
@@ -359,6 +366,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					n_p_b = LogAdd(n_preseq->logp_blank,
 							LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp));
 					n_preseq->logp_blank = n_p_b;
+                    n_preseq->logp_lm = preseq->logp_lm;
 					next_beam_[n_preseq->prefix] = n_preseq;
 					continue;
 				}
@@ -422,7 +430,9 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                     }
                     // fusion score
 					// n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*rnnlm_logp + (1.0-rscale)*ngram_logp);
-					n_preseq->logp_nblank = n_p_nb + config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
+                    float logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
+                    n_preseq->logp_lm = preseq->logp_lm + logp_lm;
+					n_preseq->logp_nblank = n_p_nb + logp_lm;
 				} else {
 					n_preseq->logp_nblank = n_p_nb;
 				}
@@ -437,7 +447,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
 							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
-									preseq->ken_state, sub_kenlm_apra_.size());
+									preseq->ken_state, preseq->sub_ken_state);
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
@@ -448,6 +458,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
 
 					n_p_nb = LogAdd(n_preseq->logp_nblank, preseq->logp_nblank+logp);
 					n_preseq->logp_nblank = n_p_nb;
+                    n_preseq->logp_lm = preseq->logp_lm;
 					next_beam_[n_preseq->prefix] = n_preseq;
 				}
 			}
@@ -656,14 +667,16 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 	float logp, logp_b, n_p_b, n_p_nb,
 			ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
             rscale = config_.rnnlm_scale;
-	int end_t, bz, index;
+	int end_t, bz, index, blankid = 0;
     bool uselm;
+    
+    //loglikes.ColRange(0, 1).Add(-2.30259);
 
     InitDecoding();
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
 
-		logp_b = loglikes(n, config_.blank);
+		logp_b = loglikes(n, blankid);
 		// Lstm language model process, beam streams parallel.
         uselm = false;
         if (config_.lm_scale > 0.0) {
@@ -715,19 +728,22 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		std::fill(next_words.begin(), next_words.end(), 0);
 		// blank pruning
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
-			next_words[config_.blank] = logp_b;
-		} else if (config_.am_topk > 0) {
+			next_words[blankid] = logp_b + log(config_.blank_penalty); // -2.30259
+		} else {
 			// Top K pruning, the nth bigest words
 			int topk = likes_size/2, key;
-            for (int k = 0; k < topk; k++) {
+            for (int k = 1; k < topk; k++) {
             	logp = loglikes(n, k);
             	key = loglikes(n, topk+k);
-        		if (!use_pinyin_) {
-        			next_words[k] = logp;
-        		} else {
-        			for (int i = 0; i < pinyin2words_[k].size(); i++)
-        				next_words[pinyin2words_[k][i]] = logp;
-        		}
+                if (key == 0) logp += log(config_.blank_penalty); // -2.30259
+				if (key < vocab_size && key >= 0) {
+        			if (!use_pinyin_) {
+        				next_words[key] = logp;
+        			} else {
+        				for (int i = 0; i < pinyin2words_[key].size(); i++)
+        					next_words[pinyin2words_[key][i]] = logp;
+        			}
+				}
             }
         }
 
@@ -750,7 +766,7 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
 							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
-									preseq->ken_state, sub_kenlm_apra_.size());
+									preseq->ken_state, preseq->sub_ken_state);
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
@@ -762,6 +778,7 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					n_p_b = LogAdd(n_preseq->logp_blank,
 							LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp));
 					n_preseq->logp_blank = n_p_b;
+                    n_preseq->logp_lm = preseq->logp_lm;
 					next_beam_[n_preseq->prefix] = n_preseq;
 					continue;
 				}
@@ -809,6 +826,7 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
                         if (config_.use_kenlm) {
                         	index = kenlm_vocab_->Index(wordid_to_word_[k]);
                         	ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+                            n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
                         	for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
                         		sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
                         		ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
@@ -825,7 +843,9 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
                     }
                     // fusion score
 					// n_preseq->logp_nblank = n_p_nb + config_.lm_scale*(rscale*rnnlm_logp + (1.0-rscale)*ngram_logp);
-					n_preseq->logp_nblank = n_p_nb + config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
+                    float logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
+					n_preseq->logp_nblank = n_p_nb + logp_lm;
+                    n_preseq->logp_lm = preseq->logp_lm + logp_lm;
 				} else {
 					n_preseq->logp_nblank = n_p_nb;
 				}
@@ -840,7 +860,7 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
 							n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix,
-									preseq->ken_state, sub_kenlm_apra_.size());
+									preseq->ken_state, preseq->sub_ken_state);
 						} else
 					#endif
 						n_preseq = new PrefixSeq(preseq->lmhis, preseq->prefix);
@@ -851,6 +871,7 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 
 					n_p_nb = LogAdd(n_preseq->logp_nblank, preseq->logp_nblank+logp);
 					n_preseq->logp_nblank = n_p_nb;
+                    n_preseq->logp_lm = preseq->logp_lm;
 					next_beam_[n_preseq->prefix] = n_preseq;
 				}
 			}
