@@ -468,7 +468,7 @@ private:
 
 	        if (opts->network_type == "fsmn") {
 				indexes = idx;
-				nnet_out_rearrange.Resize(out_frames_pad, nnet.OutputDim(), kSetZero);
+				nnet_out_rearrange.Resize(out_frames_pad, nnet.OutputDim(), kSetZero, kStrideEqualNumCols);
 				nnet_out_rearrange.CopyRows(nnet_out, indexes);
 				p_nnet_out = &nnet_out_rearrange;
 	        }

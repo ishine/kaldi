@@ -60,7 +60,7 @@ struct NnetCtcUpdateOptions : public NnetUpdateOptions {
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	: NnetUpdateOptions(trn_opts, rnd_opts, spec_opts, loss_opts, parallel_opts, cuallocator_opts),
         num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
-          clip_loss(1.0), ctc_imp("eesen") { }
+          clip_loss(1.0), ctc_imp("warp") { }
 
   	  void Register(OptionsItf *po) {
   		  	NnetUpdateOptions::Register(po);
