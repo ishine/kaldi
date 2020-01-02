@@ -30,6 +30,7 @@
 #include "warp-ctc/include/ctc.h"
 //#include "warp-transducer/include/rnnt.h"
 #include "add_network/include/rnnt.h"
+#include "nnet0/nnet-kernels-ansi.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -492,7 +493,6 @@ private:
     CuMatrix<BaseFloat> net_out_act_;
 };
 
-
 /*
 /// Alex Graves 2013 RNNT join network
 class WarpRNNT : public CtcItf {
@@ -559,6 +559,93 @@ private:
 	CuVector<BaseFloat> rnnt_workspace_;
     CuMatrix<BaseFloat> trans_act_;
     CuMatrix<BaseFloat> pred_act_;
+};
+
+
+/// Fst based calculating denominator gradients in log domain
+class Denominator {
+public:
+	Denominator(fst::StdVectorFst *den_fst, bool batch_first = false):
+		frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
+		frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
+		sequences_progress_(0), obj_progress_(0.0), report_step_(1000), num_dropped_(0),
+		den_fst_(den_fst), batch_first_(batch_first) {
+		InitalizeFst();
+		LoadFstToGPU();
+	}
+
+	virtual ~ Denominator() { ReleaseFstFromGPU();}
+
+	/// CRF denominator training over multiple sequences. The errors are returned to [diff]
+	void EvalParallel(const std::vector<int> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+			CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *alpha_llk = NULL);
+
+	/// Set the step of reporting
+	void SetReportStep(int32 report_step) { report_step_ = report_step;  }
+
+	/// Generate string with report
+	virtual std::string Report();
+
+	/// Merge statistic data
+	virtual void Add(Denominator *loss);
+	virtual void Merge(int myid, int root);
+
+protected:
+	void InitalizeFst();
+	void LoadFstToGPU();
+	void ReleaseFstFromGPU();
+
+	double frames_;                    // total frame number
+	int32 sequences_num_;
+	double ref_num_;                   // total number of tokens in label sequences
+	double error_num_;                 // total number of errors (edit distance between hyp and ref)
+	double obj_total_;                       // total optimization objective
+
+	int32 frames_progress_;
+	int32 ref_num_progress_;
+	float error_num_progress_;
+
+	int32 sequences_progress_;         // registry for the number of sequences
+	double obj_progress_;              // registry for the optimization objective
+
+	int32 report_step_;                // report obj and accuracy every so many sequences/utterances
+    int32 num_dropped_;
+
+
+    // den fst
+	fst::StdVectorFst *den_fst_;
+	bool batch_first_;
+
+	// fst
+	int num_states_;
+	int num_arcs_;
+	std::vector<int> alpha_next_;
+	std::vector<int> beta_next_;
+	std::vector<int> alpha_ilabel_;
+	std::vector<int> beta_ilabel_;
+	std::vector<BaseFloat> alpha_weight_;
+	std::vector<BaseFloat> beta_weight_;
+	std::vector<BaseFloat> start_weight_;
+	std::vector<BaseFloat> end_weight_;
+
+    std::vector<Transition> transition_alpha_;
+    std::vector<Transition> transition_beta_;
+    std::vector<IntPair> transition_index_alpha_;
+    std::vector<IntPair> transition_index_beta_;
+
+    Transition* cu_transition_alpha_;
+    Transition* cu_transition_beta_;
+    IntPair* cu_transition_index_alpha_;
+    IntPair* cu_transition_index_beta_;
+    CuVector<BaseFloat> cu_start_weight_;
+    CuVector<BaseFloat> cu_end_weight_;
+
+    CuVector<BaseFloat> costs_alpha_;
+    CuVector<BaseFloat> costs_beta_;
+
+	CuVector<BaseFloat> alpha_;
+	CuVector<BaseFloat> beta_;
+	CuVector<BaseFloat> grad_storage_;
 };
 
 } // namespace nnet0

@@ -24,6 +24,7 @@
 #include "hmm/posterior.h"
 #include "util/edit-distance.h"
 #include "cudamatrix/ctc-utils.h"
+#include "cudamatrix/cu-array.h"
 
 #include <sstream>
 #include <iterator>
@@ -31,6 +32,7 @@
 #include <iomanip>
 
 #include <mpi.h>
+#include <fst/fstlib.h>
 
 namespace kaldi {
 namespace nnet0 {
@@ -1413,9 +1415,9 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx) {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
-    net_out_act_.Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
+    //net_out_act_.Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
 	diff->Resize(net_out.NumRows(), net_out.NumCols(), kSetZero, kStrideEqualNumCols);
-    net_out_act_.CopyFromMat(net_out);
+    //net_out_act_.CopyFromMat(net_out);
 
 	int32 num_sequence = frame_num_utt.size();  // number of sequences
 	int32 num_frames = net_out.NumRows();
@@ -1458,7 +1460,7 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
 
     CuTimer tim;
 	// Compute ctc error
-	throw_on_error(compute_ctc_loss(net_out_act_.Data(), diff->Data(),
+	throw_on_error(compute_ctc_loss(net_out.Data(), diff->Data(),
 									flat_labels.data(),
 									label_lengths.data(),
 									frame_num_utt.data(),
@@ -1561,9 +1563,9 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
-    net_out_act_.Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
+    //net_out_act_.Resize(net_out.NumRows(), net_out.NumCols(), kUndefined, kStrideEqualNumCols);
 	diff->Resize(net_out.NumRows(), net_out.NumCols(), kSetZero, kStrideEqualNumCols);
-    net_out_act_.CopyFromMat(net_out);
+    //net_out_act_.CopyFromMat(net_out);
 
 	int32 num_sequence = frame_num_utt.size();  // number of sequences
 	int32 num_frames = net_out.NumRows();
@@ -1606,7 +1608,7 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
 
     CuTimer tim;
 	// Compute rnnt error
-	throw_on_error(compute_rnnt_loss(net_out_act_.Data(),
+	throw_on_error(compute_rnnt_loss(net_out.Data(),
 									diff->Data(),
 									flat_labels_gpu.Data(),
 									label_lengths_gpu.Data(),
@@ -1813,6 +1815,248 @@ void WarpRNNT::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMat
      // not implemented for CPU yet
      // return 0;
   }
+}
+
+void Denominator::InitalizeFst() {
+	using namespace fst;
+    // assume that they are proper initialized
+    // StdVectorFst *den_fst_ = StdVectorFst::Read(fst_fn.c_str());
+
+    num_states_ = den_fst_->NumStates();
+    num_arcs_ = 0;
+    for (StateIterator<StdVectorFst> siter(*den_fst_); !siter.Done(); siter.Next()) {
+        num_arcs_ += den_fst_->NumArcs(siter.Value());
+    }
+
+    alpha_next_.resize(num_states_);
+    beta_next_.resize(num_states_);
+    alpha_ilabel_.resize(num_states_);
+    beta_ilabel_.resize(num_states_);
+    alpha_weight_.resize(num_states_);
+    beta_weight_.resize(num_states_);
+
+    start_weight_.resize(num_states_, -float(INFINITY));
+    end_weight_.resize(num_states_, -float(INFINITY));
+
+    start_weight_[den_fst_->Start()] = 0.;
+
+    for (StateIterator<StdVectorFst> siter(*den_fst_); !siter.Done(); siter.Next()){
+        if (den_fst_->Final(siter.Value()) != StdArc::Weight::Zero()) {
+            end_weight_[siter.Value()] = -den_fst_->Final(siter.Value()).Value();
+        }
+        int state = siter.Value();
+
+        for (ArcIterator<StdVectorFst> aiter(*den_fst_, siter.Value()); !aiter.Done(); aiter.Next()) {
+            beta_next_[state].push_back(aiter.Value().nextstate);
+            alpha_next_[aiter.Value().nextstate].push_back(state);
+
+            beta_ilabel_[state].push_back(aiter.Value().ilabel-1);
+            alpha_ilabel_[aiter.Value().nextstate].push_back(aiter.Value().ilabel-1);
+
+            beta_weight_[state].push_back(-aiter.Value().weight.Value());
+            alpha_weight_[aiter.Value().nextstate].push_back(-aiter.Value().weight.Value());
+        }
+    }
+}
+
+void Denominator::LoadFstToGPU() {
+	// fst image in cpu memory
+	transition_alpha_.resize(num_arcs_);
+	transition_beta_.resize(num_arcs_);
+	transition_index_alpha_.resize(num_states_);
+	transition_index_beta_.resize(num_states_);
+
+    int count = 0;
+    for (int i = 0; i < num_states_; i++) {
+        if (alpha_next_[i].empty()) {
+            transition_index_alpha_[i].first = 1;
+            transition_index_alpha_[i].second = 0;
+        } else {
+            transition_index_alpha_[i].first = count;
+            for (int j = 0; j < alpha_next_[i].size(); j++) {
+                transition_alpha_[count].state = alpha_next_[i][j];
+                transition_alpha_[count].label = alpha_ilabel_[i][j];
+                transition_alpha_[count].weight = alpha_weight_[i][j];
+                count++;
+            }
+            transition_index_alpha_[i].second = count-1;
+        }
+    }
+
+    if (count != num_arcs_)
+        KALDI_ERR << "count does not equal to num_arcs";
+
+    count = 0;
+    for (int i = 0; i < num_states_; i++) {
+        if (beta_next_[i].empty()) {
+            transition_index_beta_[i].first = 1;
+            transition_index_beta_[i].second = 0;
+        } else {
+            transition_index_beta_[i].first = count;
+            for (int j = 0; j < beta_next_[i].size(); j++) {
+                transition_beta_[count].state = beta_next_[i][j];
+                transition_beta_[count].label = beta_ilabel_[i][j];
+                transition_beta_[count].weight = beta_weight_[i][j];
+                count++;
+            }
+            transition_index_beta_[i].second = count-1;
+        }
+    }
+
+    if (count != num_arcs_)
+    	KALDI_ERR << "count does not equal to num_arcs";
+
+	// malloc fst in gpu
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+	int trans_bytes = sizeof(Transition)*num_arcs_;
+	int state_bytes = sizeof(IntPair)*num_states_;
+
+	cu_start_weight_ = start_weight_;
+	cu_end_weight_ = end_weight_;
+
+	cu_transition_alpha_ = static_cast<Transition*>(CuDevice::Instantiate().Malloc(trans_bytes));
+	cu_transition_beta_ = static_cast<Transition*>(CuDevice::Instantiate().Malloc(trans_bytes));
+	cu_transition_index_alpha_ = static_cast<IntPair*>(CuDevice::Instantiate().Malloc(state_bytes));
+	cu_transition_index_beta_ = static_cast<IntPair*>(CuDevice::Instantiate().Malloc(state_bytes));
+
+	CU_SAFE_CALL(cudaMemcpy(cu_transition_alpha_, transition_alpha_.data(), trans_bytes, cudaMemcpyHostToDevice));
+	CU_SAFE_CALL(cudaMemcpy(cu_transition_beta_, transition_beta_.data(), trans_bytes, cudaMemcpyHostToDevice));
+	CU_SAFE_CALL(cudaMemcpy(cu_transition_index_alpha_, transition_index_alpha_.data(), state_bytes, cudaMemcpyHostToDevice));
+	CU_SAFE_CALL(cudaMemcpy(cu_transition_index_beta_, transition_index_beta_.data(), state_bytes, cudaMemcpyHostToDevice));
+  }
+#endif
+}
+
+void Denominator::ReleaseFstFromGPU() {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+	  if (cu_transition_alpha_ != NULL) {
+		  CuDevice::Instantiate().Free(cu_transition_alpha_);
+		  CuDevice::Instantiate().Free(cu_transition_beta_);
+		  CuDevice::Instantiate().Free(cu_transition_index_alpha_);
+		  CuDevice::Instantiate().Free(cu_transition_index_beta_);
+
+		  cu_transition_alpha_ = NULL;
+		  cu_transition_beta_ = NULL;
+		  cu_transition_index_alpha_ = NULL;
+		  cu_transition_index_beta_ = NULL;
+	  }
+  }
+#endif
+}
+
+std::string Denominator::Report() {
+	std::ostringstream oss;
+	oss << "\nLOG_ALPAHA_LLK >> " << -obj_total_/sequences_num_ << " <<";
+	return oss.str();
+}
+
+void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
+		const CuMatrixBase<BaseFloat> &net_out, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *alpha_llk = NULL) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+	int num_sequence = frame_num_utt.size();  // minibatch
+	int alphabet_size = net_out.NumCols();
+	int num_frames = net_out.NumRows();
+	KALDI_ASSERT(num_frames % num_sequence == 0);  // after padding, number of frames is a multiple of number of sequences
+	int T = num_frames / num_sequence;
+
+	diff->Resize(net_out.NumRows(), net_out.NumCols(), kSetZero, kStrideEqualNumCols);
+
+	// malloc workspace
+	costs_alpha_.Resize(num_sequence, kSetZero);
+	costs_beta_.Resize(num_sequence, kSetZero);
+
+	alpha_.Resize((T+1)*num_sequence*num_states_, kSetZero);
+	beta_.Resize(2*num_sequence*num_states_, kSetZero);
+	grad_storage_.Resize(ATOMIC_CONST*num_sequence*alphabet_size, kSetZero);
+
+	CuTimer tim;
+	dim3 dimBlock(1, CU1DBLOCK*4);
+	dim3 dimGrid(1, num_sequence);
+	CuArray<int> input_lengths_gpu(frame_num_utt);
+	cuda_compute_alpha(dimGrid, dimBlock, alpha_.Data(), net_out.Data(), num_sequence, T, num_states_,
+						alphabet_size, input_lengths_gpu.Data(), costs_alpha_.Data(),
+						cu_start_weight_, cu_end_weight_,
+						cu_transition_index_alpha_, cu_transition_alpha_, batch_first_);
+
+	CU_SAFE_CALL(cudaGetLastError());
+	CuDevice::Instantiate().AccuProfile("cuda_compute_alpha", tim);
+
+	tim.Reset();
+	cuda_compute_beta_and_grad(dimGrid, dimBlock, beta_.Data(), alpha_.Data(), net_out.Data(),
+						costs_alpha->Data(), grad_storage_.Data(), diff->Data(), num_sequence, T, num_states_,
+						alphabet_size, input_lengths_gpu.Data(), costs_beta_.Data(),
+						cu_start_weight_, cu_end_weight_,
+						cu_transition_index_beta_, cu_transition_beta_, batch_first_);
+
+	CU_SAFE_CALL(cudaGetLastError());
+	CuDevice::Instantiate().AccuProfile("cuda_compute_beta_and_grad", tim);
+
+    if (alpha_llk != NULL) {
+    	alpha_llk->Resize(costs_alpha_.Dim(), kUndefined);
+    	alpha_llk->CopyFromVec(costs_alpha_);
+    }
+
+	// update registries
+	double alpha_llk_sum = -costs_alpha_.Sum();
+	obj_progress_ += alpha_llk_sum;
+	obj_total_ += alpha_llk_sum;
+	sequences_progress_ += num_sequence;
+	sequences_num_ += num_sequence;
+	for (int s = 0; s < num_sequence; s++) {
+		frames_progress_ += frame_num_utt[s];
+		frames_ += frame_num_utt[s];
+	}
+
+	// progressive reporting
+	{
+		if (sequences_progress_ > report_step_) {
+		  KALDI_VLOG(1) << "After " << sequences_num_ << " sequences (" << frames_/(100.0 * 3600) << "Hr): "
+						<< "Obj(log[alpha_den]) = " << obj_progress_/sequences_progress_;
+		  // reset
+		  sequences_progress_ = 0;
+		  frames_progress_ = 0;
+		  obj_progress_ = 0.0;
+		  error_num_progress_ = 0;
+		  ref_num_progress_ = 0;
+		}
+	}
+  }
+#endif
+}
+
+/// Merge lost
+void Denominator::Add(Denominator *den) {
+	this->error_num_ += den->error_num_;
+	this->sequences_num_ += den->sequences_num_;
+	this->ref_num_ += den->ref_num_;
+	this->frames_ += den->frames_;
+	this->obj_total_ += den->obj_total_;
+
+	// partial results during training
+	this->error_num_progress_ += den->error_num_progress_;
+	this->ref_num_progress_ += den->ref_num_progress_;
+	this->obj_progress_ += den->obj_progress_;
+	this->sequences_progress_ += den->sequences_progress_;
+	this->frames_progress_ += den->frames_progress_;
+}
+
+void Denominator::Merge(int myid, int root) {
+	MPI_Barrier(MPI_COMM_WORLD);
+
+	void *addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->error_num_));
+	MPI_Reduce(addr, (void*)(&this->error_num_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->ref_num_));
+	MPI_Reduce(addr, (void*)(&this->ref_num_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+	addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->obj_total_));
+	MPI_Reduce(addr, (void*)(&this->obj_total_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
+
+    addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->sequences_num_));
+    MPI_Reduce(addr, (void*)(&this->sequences_num_), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 }
 
 } // namespace nnet0
