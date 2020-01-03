@@ -18,7 +18,11 @@ OBJFILES = nnet-nnet.o nnet-component.o nnet-loss.o \
            nnet-model-merge-function.o \
 	       nnet-compute-lstm-parallel.o nnet-compute-lstm-asgd.o \
 	       nnet-compute-forward.o nnet-compute-ctc-parallel.o  \
-		   nnet-compute-lstm-lm-parallel.o 
+		   nnet-compute-crfctc-parallel.o nnet-compute-lstm-lm-parallel.o 
+
+ifeq ($(CUDA), true)
+  OBJFILES += nnet-kernels.o
+endif
 
 LIBNAME = kaldi-nnet0
 
@@ -32,5 +36,8 @@ ifeq ($(USE_WARP_TRANSDUCER), true)
     ADDLIBS += ../lib/warprnnt.so
 endif
 
-include ../makefiles/default_rules.mk
+# Implicit rule for kernel compilation,
+%.o : %.cu
+	$(CUDATKDIR)/bin/nvcc -c $< -o $@ $(CUDA_INCLUDE) $(CUDA_FLAGS) $(CUDA_ARCH) -I../
 
+include ../makefiles/default_rules.mk

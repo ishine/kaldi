@@ -1911,19 +1911,21 @@ void Denominator::LoadFstToGPU() {
   if (CuDevice::Instantiate().Enabled()) {
 	int trans_bytes = sizeof(Transition)*num_arcs_;
 	int state_bytes = sizeof(IntPair)*num_states_;
-
-	cu_start_weight_ = start_weight_;
-	cu_end_weight_ = end_weight_;
+	int float_bytes = sizeof(BaseFloat)*num_states_;
 
 	cu_transition_alpha_ = static_cast<Transition*>(CuDevice::Instantiate().Malloc(trans_bytes));
 	cu_transition_beta_ = static_cast<Transition*>(CuDevice::Instantiate().Malloc(trans_bytes));
 	cu_transition_index_alpha_ = static_cast<IntPair*>(CuDevice::Instantiate().Malloc(state_bytes));
 	cu_transition_index_beta_ = static_cast<IntPair*>(CuDevice::Instantiate().Malloc(state_bytes));
+	cu_start_weight_.Resize(num_states_, kUndefined);
+	cu_end_weight_.Resize(num_states_, kUndefined);
 
 	CU_SAFE_CALL(cudaMemcpy(cu_transition_alpha_, transition_alpha_.data(), trans_bytes, cudaMemcpyHostToDevice));
 	CU_SAFE_CALL(cudaMemcpy(cu_transition_beta_, transition_beta_.data(), trans_bytes, cudaMemcpyHostToDevice));
 	CU_SAFE_CALL(cudaMemcpy(cu_transition_index_alpha_, transition_index_alpha_.data(), state_bytes, cudaMemcpyHostToDevice));
 	CU_SAFE_CALL(cudaMemcpy(cu_transition_index_beta_, transition_index_beta_.data(), state_bytes, cudaMemcpyHostToDevice));
+	CU_SAFE_CALL(cudaMemcpy(cu_start_weight_.Data(), start_weight_.data(), float_bytes, cudaMemcpyHostToDevice));
+	CU_SAFE_CALL(cudaMemcpy(cu_end_weight_.Data(), end_weight_.data(), float_bytes, cudaMemcpyHostToDevice));
   }
 #endif
 }
@@ -1953,7 +1955,7 @@ std::string Denominator::Report() {
 }
 
 void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
-		const CuMatrixBase<BaseFloat> &net_out, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *alpha_llk = NULL) {
+		const CuMatrixBase<BaseFloat> &net_out, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *alpha_llk) {
 #if HAVE_CUDA == 1
   if (CuDevice::Instantiate().Enabled()) {
 	int num_sequence = frame_num_utt.size();  // minibatch
@@ -1978,7 +1980,7 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
 	CuArray<int> input_lengths_gpu(frame_num_utt);
 	cuda_compute_alpha(dimGrid, dimBlock, alpha_.Data(), net_out.Data(), num_sequence, T, num_states_,
 						alphabet_size, input_lengths_gpu.Data(), costs_alpha_.Data(),
-						cu_start_weight_, cu_end_weight_,
+						cu_start_weight_.Data(), cu_end_weight_.Data(),
 						cu_transition_index_alpha_, cu_transition_alpha_, batch_first_);
 
 	CU_SAFE_CALL(cudaGetLastError());
@@ -1986,9 +1988,9 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
 
 	tim.Reset();
 	cuda_compute_beta_and_grad(dimGrid, dimBlock, beta_.Data(), alpha_.Data(), net_out.Data(),
-						costs_alpha->Data(), grad_storage_.Data(), diff->Data(), num_sequence, T, num_states_,
+						costs_alpha_.Data(), grad_storage_.Data(), diff->Data(), num_sequence, T, num_states_,
 						alphabet_size, input_lengths_gpu.Data(), costs_beta_.Data(),
-						cu_start_weight_, cu_end_weight_,
+						cu_start_weight_.Data(), cu_end_weight_.Data(),
 						cu_transition_index_beta_, cu_transition_beta_, batch_first_);
 
 	CU_SAFE_CALL(cudaGetLastError());

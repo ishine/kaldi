@@ -24,7 +24,8 @@ BINFILES = nnet-train-frmshuff \
         nnet-train-frmshuff-parallel nnet-train-frmshuff-parallel-mpi \
         nnet-train-lstm-mpe-sequential nnet-train-lstm-mmi-sequential \
 	nnet-train-lstm-streams-asgd \
-	nnet-forward-parallel nnet-train-ctc-parallel nnet-train-rnnt-parallel nnet-train-lstm-streams-parallel-mpi \
+	nnet-forward-parallel nnet-train-ctc-parallel nnet-train-test-parallel \
+	nnet-train-rnnt-parallel nnet-train-lstm-streams-parallel-mpi \
 	nnet-train-lstm-lm-parallel nnet-train-lstm-lm-parallel-mpi nnet-lstm-sentence-ppl \
 	nnet-remove-last nnet-extract nnet-forward-lfmmi \
 	nnet-train-ctc-parallel-mpi nnet-kws-confidence \

@@ -565,6 +565,12 @@ private:
 /// Fst based calculating denominator gradients in log domain
 class Denominator {
 public:
+	Denominator():
+		frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
+		frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
+		sequences_progress_(0), obj_progress_(0.0), report_step_(1000), num_dropped_(0),
+		den_fst_(NULL), batch_first_(false) {}
+
 	Denominator(fst::StdVectorFst *den_fst, bool batch_first = false):
 		frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
 		frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
@@ -619,12 +625,12 @@ protected:
 	// fst
 	int num_states_;
 	int num_arcs_;
-	std::vector<int> alpha_next_;
-	std::vector<int> beta_next_;
-	std::vector<int> alpha_ilabel_;
-	std::vector<int> beta_ilabel_;
-	std::vector<BaseFloat> alpha_weight_;
-	std::vector<BaseFloat> beta_weight_;
+	std::vector<std::vector<int> > alpha_next_;
+	std::vector<std::vector<int> > beta_next_;
+	std::vector<std::vector<int> > alpha_ilabel_;
+	std::vector<std::vector<int> > beta_ilabel_;
+	std::vector<std::vector<BaseFloat> > alpha_weight_;
+	std::vector<std::vector<BaseFloat> > beta_weight_;
 	std::vector<BaseFloat> start_weight_;
 	std::vector<BaseFloat> end_weight_;
 

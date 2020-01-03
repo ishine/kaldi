@@ -17,14 +17,16 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/kaldi-common.h"
+#include "base/timer.h"
+#include "util/common-utils.h"
+#include "cudamatrix/cu-device.h"
+#include "fstext/fstext-lib.h"
+
 #include "nnet0/nnet-trnopts.h"
 #include "nnet0/nnet-nnet.h"
 #include "nnet0/nnet-loss.h"
 #include "nnet0/nnet-randomizer.h"
-#include "base/kaldi-common.h"
-#include "util/common-utils.h"
-#include "base/timer.h"
-#include "cudamatrix/cu-device.h"
 #include "nnet0/nnet-compute-crfctc-parallel.h"
 
 int main(int argc, char *argv[]) {
@@ -95,7 +97,7 @@ int main(int argc, char *argv[]) {
 
 
     Nnet nnet;
-    NnetCrfCtcStats *stats;
+    NnetCrfCtcStats stats(loss_opts);
 
     fst::StdVectorFst den_fst;
     ReadFstKaldi(den_fst_rxfilename, &den_fst);
@@ -109,6 +111,7 @@ int main(int argc, char *argv[]) {
 			model_filename,
 			target_model_filename,
 			feature_rspecifier,
+            targets_rspecifier,
 			&nnet,
 			&stats);
 
@@ -122,7 +125,7 @@ int main(int argc, char *argv[]) {
     time_now = time.Elapsed();
 
 
-    stats->Print(&opts, time_now);
+    stats.Print(&opts, time_now);
 
 #if HAVE_CUDA==1
     CuDevice::Instantiate().PrintProfile();

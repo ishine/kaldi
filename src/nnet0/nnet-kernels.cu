@@ -288,7 +288,7 @@ static void beta_lld_kernal(const Real * const beta,
 
 void cuda_compute_alpha(dim3 Gr, dim3 Bl,
 				   BaseFloat *alpha,
-                   BaseFloat *logits,                   
+                   const BaseFloat *logits,                   
                    const int batch_size,
                    int T,
                    const int alpha_size,
@@ -315,16 +315,16 @@ void cuda_compute_alpha(dim3 Gr, dim3 Bl,
 
 void cuda_compute_beta_and_grad(dim3 Gr, dim3 Bl,
 					   BaseFloat *beta,
-					   const BaseFloat * const alpha,
-					   const BaseFloat * const logits,
-					   const BaseFloat * const alpha_lld,
+					   const BaseFloat * alpha,
+					   const BaseFloat * logits,
+					   const BaseFloat * alpha_lld,
 					   BaseFloat *grad_storage,
 					   BaseFloat *grad_net,
 					   const int batch_size,
 					   const int T,
 					   const int beta_size,
 					   const int logits_size,
-					   const int * const input_lengths,
+					   const int * input_lengths,
 					   BaseFloat * loglikelihood,
 					   const BaseFloat *start_weight,
 					   const BaseFloat *end_weight,
@@ -334,7 +334,7 @@ void cuda_compute_beta_and_grad(dim3 Gr, dim3 Bl,
     // set grad_storage
     copy_grad<<<Gr, Bl>>>(grad_storage, grad_net, alpha_lld, input_lengths, batch_size, logits_size, T, 0, batch_first);
 
-    beta_last_kernel<<<Gr, Bl>>(beta, beta_size, batch_size, input_lengths, end_weight);
+    beta_last_kernel<<<Gr, Bl>>>(beta, beta_size, batch_size, input_lengths, end_weight);
     
     for (int t = T-1; t >= 0; t--) {
         beta_kernel<<<Gr, Bl>>>(beta, alpha, logits, grad_storage, batch_size, T, t, input_lengths, beta_size, logits_size,

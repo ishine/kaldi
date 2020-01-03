@@ -20,28 +20,35 @@
 
 #ifndef KALDI_NNET_NNET_KERNELS_ANSI_H_
 #define KALDI_NNET_NNET_KERNELS_ANSI_H_
-#include "base/kaldi-common.h"
+#include "cudamatrix/cu-matrixdim.h" 
 
 #undef ATOMIC_CONST
 #define ATOMIC_CONST 32
 
+#if HAVE_CUDA == 1
+extern "C" {
+  // "C" version of the BaseFloat typedef-- this saves us having to write
+  // multiple versions of these kernels.
+#if (KALDI_DOUBLEPRECISION != 0)
+  typedef double  BaseFloat;
+#else
+  typedef float   BaseFloat;
+#endif
+
 struct Transition {
-    float weight = -float(INFINITY);
-    int label = 0;
-    int state = 0;
+    float weight;
+    int label;
+    int state;
 };
 
 struct IntPair {
-    int first = 1;
-    int second = 0;
+    int first;
+    int second;
 };
-
-#if HAVE_CUDA == 1
-extern "C" {
 
 	void cuda_compute_alpha(dim3 Gr, dim3 Bl,
 					   BaseFloat *alpha,
-					   BaseFloat *logits,
+					   const BaseFloat *logits,
 					   const int batch_size,
 					   int T,
 					   const int alpha_size,

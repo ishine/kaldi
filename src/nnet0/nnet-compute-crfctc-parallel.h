@@ -45,21 +45,21 @@ struct NnetCrfCtcUpdateOptions : public NnetCtcUpdateOptions {
     NnetCrfCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const SpecAugOptions *spec_opts,
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	: NnetCtcUpdateOptions(trn_opts, rnd_opts, spec_opts, loss_opts, parallel_opts, cuallocator_opts),
-		  ctc_imp("warp"), objective_function("crfctc"), lambda(0.1){ }
+		  lambda(0.1){ }
 
   	  void Register(OptionsItf *po) {
   		  NnetCtcUpdateOptions::Register(po);
   		  po->Register("lambda", &lambda, "ctc objective function ratio in crfctc.");
+		  this->objective_function = "crfctc";
   	  }
 };
 
 
-struct NnetCrfCtcStats: NnetStats {
+struct NnetCrfCtcStats: NnetCtcStats {
 
-    CtcItf ctc;
     Denominator den;
 
-    NnetCrfCtcStats(LossOptions &loss_opts): NnetStats(loss_opts) { }
+    NnetCrfCtcStats(LossOptions &loss_opts): NnetCtcStats(loss_opts) { }
 
     void MergeStats(NnetUpdateOptions *opts, int root) {
         int myid = opts->parallel_opts->myid;
@@ -106,6 +106,7 @@ struct NnetCrfCtcStats: NnetStats {
 
 void NnetCrfCtcUpdateParallel(const NnetCrfCtcUpdateOptions *opts,
 		fst::StdVectorFst *den_fst,
+		std::string	model_filename,
 		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
