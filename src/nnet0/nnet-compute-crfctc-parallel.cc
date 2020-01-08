@@ -51,8 +51,7 @@ private:
 	std::string feature_transform,
 				model_filename,
 				target_model_filename,
-				si_model_filename,
-				targets_rspecifier;
+				si_model_filename;
 
 	ExamplesRepository *repository_;
 	Nnet *host_nnet_;
@@ -79,7 +78,6 @@ private:
 			fst::StdVectorFst *den_fst,
 			std::string	model_filename,
 			std::string	target_model_filename,
-			std::string targets_rspecifier,
 			ExamplesRepository *repository,
 			Nnet *nnet,
 			NnetStats *stats):
@@ -88,7 +86,6 @@ private:
 				den_fst(den_fst),
 				model_filename(model_filename),
 				target_model_filename(target_model_filename),
-				targets_rspecifier(targets_rspecifier),
 				repository_(repository),
                 host_nnet_(nnet),
 				stats_(stats)
@@ -435,7 +432,7 @@ private:
 				den_graph.EvalParallel(num_utt_frame_out, *p_nnet_out, &den_diff);
 				// obj(ctc_crf) + lamdba*obj(ctc)
 				nnet_diff.Scale(1 + opts->lambda);
-				nnet_diff.AddMat(-1.0, den_diff);
+				nnet_diff.AddMat(1.0, den_diff);
 	        } else
 	        	KALDI_ERR<< "Unknown objective function code : " << objective_function;
 
@@ -633,7 +630,7 @@ void NnetCrfCtcUpdateParallel(const NnetCrfCtcUpdateOptions *opts,
 		NnetModelSync model_sync(nnet, opts->parallel_opts);
 
 		TrainCrfCtcParallelClass c(opts, &model_sync, den_fst,
-								model_filename, target_model_filename, targets_rspecifier,
+								model_filename, target_model_filename,
 								&repository, nnet, stats);
 
 

@@ -569,13 +569,20 @@ public:
 		frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
 		frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
 		sequences_progress_(0), obj_progress_(0.0), report_step_(1000), num_dropped_(0),
-		den_fst_(NULL), batch_first_(false) {}
+		den_fst_(NULL), batch_first_(false) {
+#if HAVE_CUDA == 1
+        stream_ = NULL;
+#endif
+        }
 
 	Denominator(fst::StdVectorFst *den_fst, bool batch_first = false):
 		frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
 		frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
 		sequences_progress_(0), obj_progress_(0.0), report_step_(1000), num_dropped_(0),
 		den_fst_(den_fst), batch_first_(batch_first) {
+#if HAVE_CUDA == 1
+        stream_ = NULL;
+#endif
 		InitalizeFst();
 		LoadFstToGPU();
 	}
@@ -597,6 +604,9 @@ public:
 	virtual void Merge(int myid, int root);
 
 protected:
+#if HAVE_CUDA == 1
+    cudaStream_t stream_;
+#endif
 	void InitalizeFst();
 	void LoadFstToGPU();
 	void ReleaseFstFromGPU();

@@ -42,14 +42,16 @@ namespace nnet0 {
 struct NnetCrfCtcUpdateOptions : public NnetCtcUpdateOptions {
 
 	BaseFloat lambda;
+	std::string weight_filename;
     NnetCrfCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const SpecAugOptions *spec_opts,
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	: NnetCtcUpdateOptions(trn_opts, rnd_opts, spec_opts, loss_opts, parallel_opts, cuallocator_opts),
-		  lambda(0.1){ }
+		  lambda(0.1), weight_filename(""){ }
 
   	  void Register(OptionsItf *po) {
   		  NnetCtcUpdateOptions::Register(po);
   		  po->Register("lambda", &lambda, "ctc objective function ratio in crfctc.");
+  		  po->Register("weight", &weight_filename, "denominator fst path weight.");
 		  this->objective_function = "crfctc";
   	  }
 };

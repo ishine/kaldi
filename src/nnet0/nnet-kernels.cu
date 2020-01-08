@@ -299,17 +299,18 @@ void cuda_compute_alpha(dim3 Gr, dim3 Bl,
                    const BaseFloat *end_weight,
                    const IntPair *transition_index_alpha,
                    const Transition *transition_alpha,
+                   cudaStream_t stream,
                    const bool batch_first) {
     int alpha_lld_dim = 128;
-    alpha_first_kernel<<<Gr, Bl>>>(alpha, alpha_size, batch_size, T, start_weight);
+    alpha_first_kernel<<<Gr, Bl, 0, stream>>>(alpha, alpha_size, batch_size, T, start_weight);
 
     for (int t = 1; t <= T; t++) {
-        alpha_kernel<<<Gr, Bl>>>(alpha, logits, batch_size, T, t, input_lengths, 
+        alpha_kernel<<<Gr, Bl, 0, stream>>>(alpha, logits, batch_size, T, t, input_lengths, 
             alpha_size, logits_size, transition_index_alpha, transition_alpha, batch_first);
     }
 
-    alpha_last_kernel<<<Gr, Bl>>>(alpha, alpha_size, batch_size, T, input_lengths, end_weight);
-    alpha_lld_kernal<<<Gr, alpha_lld_dim, sizeof(float)*alpha_lld_dim>>>(alpha, alpha_size, T, input_lengths, loglikelihood);
+    alpha_last_kernel<<<Gr, Bl, 0, stream>>>(alpha, alpha_size, batch_size, T, input_lengths, end_weight);
+    alpha_lld_kernal<<<Gr, alpha_lld_dim, sizeof(float)*alpha_lld_dim, stream>>>(alpha, alpha_size, T, input_lengths, loglikelihood);
     // cudaDeviceSynchronize();
 }
 
@@ -330,18 +331,18 @@ void cuda_compute_beta_and_grad(dim3 Gr, dim3 Bl,
 					   const BaseFloat *end_weight,
 					   const IntPair *transition_index_beta,
 					   const Transition *transition_beta,
+                       cudaStream_t stream,
 					   const bool batch_first) {
     // set grad_storage
-    copy_grad<<<Gr, Bl>>>(grad_storage, grad_net, alpha_lld, input_lengths, batch_size, logits_size, T, 0, batch_first);
+    copy_grad<<<Gr, Bl, 0, stream>>>(grad_storage, grad_net, alpha_lld, input_lengths, batch_size, logits_size, T, 0, batch_first);
 
-    beta_last_kernel<<<Gr, Bl>>>(beta, beta_size, batch_size, input_lengths, end_weight);
-    
+    beta_last_kernel<<<Gr, Bl, 0, stream>>>(beta, beta_size, batch_size, input_lengths, end_weight);
     for (int t = T-1; t >= 0; t--) {
-        beta_kernel<<<Gr, Bl>>>(beta, alpha, logits, grad_storage, batch_size, T, t, input_lengths, beta_size, logits_size,
+        beta_kernel<<<Gr, Bl, 0, stream>>>(beta, alpha, logits, grad_storage, batch_size, T, t, input_lengths, beta_size, logits_size,
             transition_index_beta, transition_beta, batch_first);
-        copy_grad<<<Gr, Bl>>>(grad_storage, grad_net, alpha_lld, input_lengths, batch_size, logits_size, T, t, batch_first);
+        copy_grad<<<Gr, Bl, 0, stream>>>(grad_storage, grad_net, alpha_lld, input_lengths, batch_size, logits_size, T, t, batch_first);
     }
 
-    beta_first_kernel<<<Gr, Bl>>>(beta, beta_size, batch_size, start_weight);
+    beta_first_kernel<<<Gr, Bl, 0, stream>>>(beta, beta_size, batch_size, start_weight);
     beta_lld_kernal<<<1, Gr>>>(beta, beta_size, loglikelihood);
 }

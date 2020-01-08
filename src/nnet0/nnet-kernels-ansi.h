@@ -59,6 +59,7 @@ struct IntPair {
 					   const BaseFloat *end_weight,
 					   const IntPair *transition_index_alpha,
 					   const Transition *transition_alpha,
+                       cudaStream_t stream,
 					   bool batch_first = true);
 
 	void cuda_compute_beta_and_grad(dim3 Gr, dim3 Bl,
@@ -78,6 +79,7 @@ struct IntPair {
 					   const BaseFloat *end_weight,
 					   const IntPair *transition_index_beta,
 					   const Transition *transition_beta,
+                       cudaStream_t stream,
 					   bool batch_first = true);
 
 } // extern "C"

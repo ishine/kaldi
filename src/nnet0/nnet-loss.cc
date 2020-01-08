@@ -1480,8 +1480,8 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
     }
 
 	// Clip loss
-	diff->ApplyFloor(-1.0);
-	diff->ApplyCeiling(1.0);
+	// diff->ApplyFloor(-1.0);
+	// diff->ApplyCeiling(1.0);
 
 	// update registries
     double pzx_sum = -pzx.Sum();
@@ -1926,6 +1926,8 @@ void Denominator::LoadFstToGPU() {
 	CU_SAFE_CALL(cudaMemcpy(cu_transition_index_beta_, transition_index_beta_.data(), state_bytes, cudaMemcpyHostToDevice));
 	CU_SAFE_CALL(cudaMemcpy(cu_start_weight_.Data(), start_weight_.data(), float_bytes, cudaMemcpyHostToDevice));
 	CU_SAFE_CALL(cudaMemcpy(cu_end_weight_.Data(), end_weight_.data(), float_bytes, cudaMemcpyHostToDevice));
+
+    KALDI_VLOG(1) << "Finished loading denominator fst to gpu.";
   }
 #endif
 }
@@ -1970,18 +1972,18 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
 	costs_alpha_.Resize(num_sequence, kSetZero);
 	costs_beta_.Resize(num_sequence, kSetZero);
 
-	alpha_.Resize((T+1)*num_sequence*num_states_, kSetZero);
-	beta_.Resize(2*num_sequence*num_states_, kSetZero);
-	grad_storage_.Resize(ATOMIC_CONST*num_sequence*alphabet_size, kSetZero);
+	alpha_.Resize((T+1)*num_sequence*num_states_, kUndefined);
+	beta_.Resize(2*num_sequence*num_states_, kUndefined);
+	grad_storage_.Resize(ATOMIC_CONST*num_sequence*alphabet_size, kUndefined);
 
 	CuTimer tim;
-	dim3 dimBlock(1, CU1DBLOCK*4);
-	dim3 dimGrid(1, num_sequence);
+	dim3 dimBlock(CU1DBLOCK);
+	dim3 dimGrid(num_sequence);
 	CuArray<int> input_lengths_gpu(frame_num_utt);
 	cuda_compute_alpha(dimGrid, dimBlock, alpha_.Data(), net_out.Data(), num_sequence, T, num_states_,
 						alphabet_size, input_lengths_gpu.Data(), costs_alpha_.Data(),
 						cu_start_weight_.Data(), cu_end_weight_.Data(),
-						cu_transition_index_alpha_, cu_transition_alpha_, batch_first_);
+						cu_transition_index_alpha_, cu_transition_alpha_, stream_, batch_first_);
 
 	CU_SAFE_CALL(cudaGetLastError());
 	CuDevice::Instantiate().AccuProfile("cuda_compute_alpha", tim);
@@ -1991,7 +1993,7 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
 						costs_alpha_.Data(), grad_storage_.Data(), diff->Data(), num_sequence, T, num_states_,
 						alphabet_size, input_lengths_gpu.Data(), costs_beta_.Data(),
 						cu_start_weight_.Data(), cu_end_weight_.Data(),
-						cu_transition_index_beta_, cu_transition_beta_, batch_first_);
+						cu_transition_index_beta_, cu_transition_beta_, stream_, batch_first_);
 
 	CU_SAFE_CALL(cudaGetLastError());
 	CuDevice::Instantiate().AccuProfile("cuda_compute_beta_and_grad", tim);
@@ -2002,7 +2004,7 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
     }
 
 	// update registries
-	double alpha_llk_sum = -costs_alpha_.Sum();
+	double alpha_llk_sum = costs_alpha_.Sum();
 	obj_progress_ += alpha_llk_sum;
 	obj_total_ += alpha_llk_sum;
 	sequences_progress_ += num_sequence;
@@ -2016,7 +2018,7 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
 	{
 		if (sequences_progress_ > report_step_) {
 		  KALDI_VLOG(1) << "After " << sequences_num_ << " sequences (" << frames_/(100.0 * 3600) << "Hr): "
-						<< "Obj(log[alpha_den]) = " << obj_progress_/sequences_progress_;
+						<< "Obj(log[Alpha_den]) = " << obj_progress_/sequences_progress_;
 		  // reset
 		  sequences_progress_ = 0;
 		  frames_progress_ = 0;
