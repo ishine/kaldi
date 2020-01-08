@@ -664,6 +664,42 @@ protected:
 	CuVector<BaseFloat> grad_storage_;
 };
 
+class CrfCtc : public CtcItf {
+public:
+	CrfCtc(fst::StdVectorFst *den_fst, BaseFloat lambda, int blank_label, bool batch_first = false);
+	virtual CrfCtc() { Destroy(); }
+
+	/// CRFCTC training over a single sequence from the labels. The errors are returned to [diff]
+	void Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff);
+
+	/// CRFCTC training over multiple sequences. The errors are returned to [diff]
+	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+					std::vector< std::vector<int32> > &label, Vector<BaseFloat> &path_weight,
+					CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *objs = NULL);
+
+	/// Generate string with report
+	virtual std::string Report();
+
+	/// Merge statistic data
+	virtual void Add(CrfCtc *loss);
+	virtual void Merge(int myid, int root);
+
+private:
+	void Destroy();
+
+	BaseFloat lambda_;
+	BaseFloat real_obj_progress_;
+	BaseFloat real_obj_total_;
+
+	Vector<BaseFloat> ctc_objs_;
+	Vector<BaseFloat> den_objs_;
+	Vector<BaseFloat> objs_;
+
+	CtcItf *ctc_;
+	Denominator *den_;
+	CuMatrix<BaseFloat> dendiff_;
+};
+
 } // namespace nnet0
 } // namespace kaldi
 

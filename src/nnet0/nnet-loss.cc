@@ -2063,5 +2063,99 @@ void Denominator::Merge(int myid, int root) {
     MPI_Reduce(addr, (void*)(&this->sequences_num_), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 }
 
+void CrfCtc::CrfCtc(fst::StdVectorFst *den_fst, BaseFloat lambda,
+		int blank_label, bool batch_first = false):
+		lambda_(lambda), real_obj_progress_(0), real_obj_total_(0) {
+	ctc_ = new WarpCtc(blank_label);
+	den_ = new Denominator(den_fst, batch_first);
+}
+
+void CrfCtc::Destroy() {
+	if (ctc_ != NULL) {
+		delete ctc_; ctc_ = NULL;
+	}
+	if (den_ != NULL) {
+		delete den_; den_ = NULL;
+	}
+}
+
+void CrfCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+					std::vector< std::vector<int32> > &label, Vector<BaseFloat> &path_weight,
+					CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *objs = NULL) {
+	int num_sequence = frame_num_utt.size();  // minibatch
+
+	// ctc error
+	ctc_->EvalParallel(frame_num_utt, net_out, label, diff, &ctc_objs_);
+	// Error rates
+	ctc_->ErrorRateMSeq(frame_num_utt, net_out, label);
+	// denominator error
+	den_.EvalParallel(frame_num_utt, net_out, &dendiff_, &den_objs_);
+
+	// obj(ctc_crf) + lamdba*obj(ctc)
+	diff->Scale(1 + lambda_);
+	diff->AddMat(1.0, dendiff_);
+
+	objs_ = ctc_objs_;
+	objs_.Scale(1 + lambda_);
+	objs_.AddVec(1.0, den_objs_);
+
+   if (objs != NULL) {
+	   objs->Resize(objs_.Dim(), kUndefined);
+	   objs->CopyFromVec(objs_);
+	}
+
+	// update registries
+	double objs_sum = objs_.Sum();
+	double weight_sum = path_weight.Sum();
+	obj_progress_ += objs_sum;
+	obj_total_ += objs_sum;
+	real_obj_progress_ =  obj_progress_ - weight_sum;
+	real_obj_total_ = obj_total_ - weight_sum;
+
+	sequences_progress_ += num_sequence;
+	sequences_num_ += num_sequence;
+	for (int s = 0; s < num_sequence; s++) {
+		frames_progress_ += frame_num_utt[s];
+		frames_ += frame_num_utt[s];
+	}
+
+	// progressive reporting
+	{
+		if (sequences_progress_ > report_step_) {
+		  KALDI_VLOG(1) << "After " << sequences_num_ << " sequences (" << frames_/(100.0 * 3600) << "Hr): "
+						<< "Obj(log[CrfCtc]) = " << "Obj(log[RealCrfCtc]) = " << real_obj_progress_/sequences_progress_;
+		  // reset
+		  sequences_progress_ = 0;
+		  frames_progress_ = 0;
+		  obj_progress_ = 0.0;
+		  real_obj_progress_ = 0.0;
+		  error_num_progress_ = 0;
+		  ref_num_progress_ = 0;
+		}
+	}
+}
+
+/// Merge lost
+void CrfCtc::Add(CrfCtc *loss) {
+	this->Add(loss);
+	this->real_obj_total_ += loss->real_obj_total_;
+
+	// partial results during training
+	this->real_obj_progress_ += loss->real_obj_progress_;
+}
+
+void CrfCtc::Merge(int myid, int root) {
+	this->ctc_->Merge(myid, root);
+	this->den_->Merge(myid, root);
+}
+
+std::string CrfCtc::Report() {
+	std::ostringstream oss;
+	ctc_->Report();
+	den_->Report();
+	oss << "\nLOG_CRFCTC >> " << -real_obj_total_/sequences_num_ << " <<";
+	return oss.str();
+}
+
 } // namespace nnet0
 } // namespace kaldi

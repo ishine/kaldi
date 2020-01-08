@@ -201,11 +201,9 @@ private:
 
 	    model_sync->Initialize(&nnet);
 
-	    Denominator den_graph(this->den_fst, false);
-	    CtcItf *ctc;
+	    CrfCtc crfctc(this->den_fst, opts->lambda, opts->blank_label, false);
 	    // Initialize CTC optimizer
-	    if (opts->ctc_imp == "warp") {
-			ctc = new WarpCtc(opts->blank_label);
+	    if (opts->objective_function == "crfctc") {
             // using activations directly: remove softmax, if present
             if (nnet.GetComponent(nnet.NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
                 KALDI_LOG << "Removing softmax from the nnet " << model_filename << ", Appending logsoftmax";
@@ -223,7 +221,16 @@ private:
 	        softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
         }
 
-		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out, den_diff,
+	    RandomAccessBaseFloatReader *weight_reader = NULL;
+	    std::string weight_rspecifier = "";
+		if (opts->weight_filename != "") {
+			std::stringstream ss;
+			ss << "ark,t:" << opts->weight_filename;
+			weight_rspecifier = ss.str();
+			weight_reader = new RandomAccessBaseFloatReader(weight_rspecifier);
+		}
+
+		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out,
 							nnet_diff, frozen_nnet_out,
 							nnet_out_rearrange, nnet_diff_rearrange,
 							*p_nnet_in, *p_nnet_out, *p_nnet_diff;
@@ -247,12 +254,13 @@ private:
 	    std::vector< std::vector<int> > labels_utt(num_stream);  // Label vector of every utterance
 	    std::vector<int> num_utt_frame_in, num_utt_frame_out;
         std::vector<int> new_utt_flags;
-		Vector<BaseFloat> utt_flags;
 		std::vector<int> idx, reidx;
+		std::vector<std::string> utts;
 		CuArray<MatrixIndexT> indexes;
 
 	    Matrix<BaseFloat> feat_mat_host;
 	    Vector<BaseFloat> frame_mask_host;
+		Vector<BaseFloat> utt_flags, path_weight;
         std::string utt;
 
 	    CTCNnetExample *ctc_example = NULL;
@@ -273,6 +281,7 @@ private:
 			cur_stream_num = 0; num_frames = 0;
 			num_utt_frame_in.clear();
 			num_utt_frame_out.clear();
+			utts.clear();
 
 			if (NULL == example)
 				example = repository_->ProvideExample();
@@ -306,6 +315,7 @@ private:
 		        out_rows = in_rows/num_skip;
 		        out_rows += in_rows%num_skip > 0 ? 1:0;
 		        num_utt_frame_out.push_back(out_rows);
+		        utts.push_back(utt);
 
 				s++;
 				num_done++;
@@ -319,6 +329,13 @@ private:
             in_frames_pad = cur_stream_num * max_frame_num;
             out_frames_pad = cur_stream_num * ((max_frame_num+num_skip-1)/num_skip);
 			new_utt_flags.resize(cur_stream_num, 1);
+
+			// den path weight
+			if (weight_reader != NULL) {
+				path_weight.Resize(cur_stream_num);
+				for (int s = 0; s < cur_stream_num; s++)
+					path_weight(s) = weight_reader->Value(utt[s]);
+			}
 
 			if (opts->network_type == "lstm") {
 				// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
@@ -423,28 +440,7 @@ private:
 				p_nnet_out = &nnet_out_rearrange;
 	        }
 
-	        if (objective_function == "crfctc") {
-				//ctc error
-				ctc->EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, &nnet_diff);
-				// Error rates
-				ctc->ErrorRateMSeq(num_utt_frame_out, *p_nnet_out, labels_utt);
-				// denominator error
-				den_graph.EvalParallel(num_utt_frame_out, *p_nnet_out, &den_diff);
-				// obj(ctc_crf) + lamdba*obj(ctc)
-				nnet_diff.Scale(1 + opts->lambda);
-				nnet_diff.AddMat(1.0, den_diff);
-	        } else
-	        	KALDI_ERR<< "Unknown objective function code : " << objective_function;
-
-            /*
-			// check there's no nan/inf,
-			if (!KALDI_ISFINITE(nnet_diff.Sum())) {
-			    KALDI_LOG << "NaN or inf found in final nnet diff for " << utt;
-                KALDI_VLOG(1) << nnet.Info();
-				monitor(&nnet, 0, num_frames);
-                break;
-			}
-            */
+	        crfctc.EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, path_weight, &nnet_diff);
 
 	        p_nnet_diff = &nnet_diff;
 	        if (opts->network_type == "fsmn") {
@@ -560,8 +556,7 @@ private:
 		stats_->total_frames += total_frames;
 		stats_->num_done += num_done;
 		if (objective_function == "crfctc") {
-			dynamic_cast<NnetCrfCtcStats*>(stats_)->ctc.Add(ctc);
-			dynamic_cast<NnetCrfCtcStats*>(stats_)->den.Add(&den_graph);
+			dynamic_cast<NnetCrfCtcStats*>(stats_)->crfctc.Add(crfctc);
 		} else {
 			KALDI_ERR<< "Unknown objective function code : " << objective_function;
 		}

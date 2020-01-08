@@ -59,7 +59,7 @@ struct NnetCrfCtcUpdateOptions : public NnetCtcUpdateOptions {
 
 struct NnetCrfCtcStats: NnetCtcStats {
 
-    Denominator den;
+    CrfCtc crfctc;
 
     NnetCrfCtcStats(LossOptions &loss_opts): NnetCtcStats(loss_opts) { }
 
@@ -80,8 +80,7 @@ struct NnetCrfCtcStats: NnetCtcStats {
         MPI_Reduce(addr, (void*)(&this->num_other_error), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 
         if (opts->objective_function == "crfctc") {
-        	ctc.Merge(myid, 0);
-        	den.Merge(myid, 0);
+        	crfctc.Merge(myid, 0);
         } else {
         	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
@@ -97,8 +96,7 @@ struct NnetCrfCtcStats: NnetCtcStats {
                   << "]";
 
         if (opts->objective_function == "crfctc") {
-        	KALDI_LOG << ctc.Report();
-        	KALDI_LOG << den.Report();
+        	KALDI_LOG << crfctc.Report();
         } else {
         	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
