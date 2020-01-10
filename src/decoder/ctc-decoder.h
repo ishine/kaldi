@@ -224,6 +224,7 @@ class CTCDecoder {
 
 #if HAVE_KENLM == 1
 		const KenVocab *kenlm_vocab_;
+		std::vector<const KenVocab *> sub_kenlm_vocab_;
 		KenModel *kenlm_arpa_;
 		std::vector<KenModel *> sub_kenlm_apra_;
 #endif

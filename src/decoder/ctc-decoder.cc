@@ -43,6 +43,12 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 	Initialize();
 
     kenlm_vocab_ = &(kenlm_arpa_->GetVocabulary());
+	// sub language lmodel vocab
+    int nsub = sub_kenlm_apra.size();
+    sub_kenlm_vocab_.resize(nsub);
+    for (int i = 0; i < nsub; i++)
+        sub_kenlm_vocab_[i] = &(sub_kenlm_apra[i]->GetVocabulary());
+
 	/// symbols
 	fst::SymbolTable *word_symbols = NULL;
 	if (!(word_symbols = fst::SymbolTable::ReadText(config_.word2wordid_rxfilename))) {
@@ -414,7 +420,9 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                         if (config_.use_kenlm) {
                         	index = kenlm_vocab_->Index(wordid_to_word_[k]);
                         	ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+                            n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
                         	for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
+                        		index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[k]);
                         		sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
                         		ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
                         	}
@@ -828,6 +836,7 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
                         	ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
                             n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
                         	for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
+                        		index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[k]);
                         		sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
                         		ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
                         	}
