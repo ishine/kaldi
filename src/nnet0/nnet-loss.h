@@ -666,11 +666,14 @@ protected:
 
 class CrfCtc : public CtcItf {
 public:
-	CrfCtc(fst::StdVectorFst *den_fst, BaseFloat lambda, int blank_label, bool batch_first = false);
-	virtual CrfCtc() { Destroy(); }
+    CrfCtc() {
+        ctc_ = new WarpCtc;
+        den_ = new Denominator;
+    }
 
-	/// CRFCTC training over a single sequence from the labels. The errors are returned to [diff]
-	void Eval(const CuMatrixBase<BaseFloat> &net_out, const std::vector<int32> &label, CuMatrix<BaseFloat> *diff);
+	CrfCtc(fst::StdVectorFst *den_fst, BaseFloat lambda, int blank_label, bool batch_first = false);
+
+	virtual ~ CrfCtc() { Destroy(); }
 
 	/// CRFCTC training over multiple sequences. The errors are returned to [diff]
 	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
@@ -681,7 +684,7 @@ public:
 	virtual std::string Report();
 
 	/// Merge statistic data
-	virtual void Add(CrfCtc *loss);
+	virtual void Add(CtcItf *loss);
 	virtual void Merge(int myid, int root);
 
 private:
@@ -695,7 +698,7 @@ private:
 	Vector<BaseFloat> den_objs_;
 	Vector<BaseFloat> objs_;
 
-	CtcItf *ctc_;
+	WarpCtc *ctc_;
 	Denominator *den_;
 	CuMatrix<BaseFloat> dendiff_;
 };

@@ -201,7 +201,7 @@ private:
 
 	    model_sync->Initialize(&nnet);
 
-	    CrfCtc crfctc(this->den_fst, opts->lambda, opts->blank_label, false);
+	    CrfCtc *crfctc = new CrfCtc(this->den_fst, opts->lambda, opts->blank_label, false);
 	    // Initialize CTC optimizer
 	    if (opts->objective_function == "crfctc") {
             // using activations directly: remove softmax, if present
@@ -334,7 +334,7 @@ private:
 			if (weight_reader != NULL) {
 				path_weight.Resize(cur_stream_num);
 				for (int s = 0; s < cur_stream_num; s++)
-					path_weight(s) = weight_reader->Value(utt[s]);
+					path_weight(s) = weight_reader->Value(utts[s]);
 			}
 
 			if (opts->network_type == "lstm") {
@@ -440,7 +440,7 @@ private:
 				p_nnet_out = &nnet_out_rearrange;
 	        }
 
-	        crfctc.EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, path_weight, &nnet_diff);
+	        crfctc->EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, path_weight, &nnet_diff);
 
 	        p_nnet_diff = &nnet_diff;
 	        if (opts->network_type == "fsmn") {
@@ -556,7 +556,7 @@ private:
 		stats_->total_frames += total_frames;
 		stats_->num_done += num_done;
 		if (objective_function == "crfctc") {
-			dynamic_cast<NnetCrfCtcStats*>(stats_)->crfctc.Add(crfctc);
+			dynamic_cast<NnetCrfCtcStats*>(stats_)->crfctc->Add(crfctc);
 		} else {
 			KALDI_ERR<< "Unknown objective function code : " << objective_function;
 		}

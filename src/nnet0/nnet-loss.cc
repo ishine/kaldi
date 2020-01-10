@@ -2063,11 +2063,10 @@ void Denominator::Merge(int myid, int root) {
     MPI_Reduce(addr, (void*)(&this->sequences_num_), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 }
 
-void CrfCtc::CrfCtc(fst::StdVectorFst *den_fst, BaseFloat lambda,
-		int blank_label, bool batch_first = false):
-		lambda_(lambda), real_obj_progress_(0), real_obj_total_(0) {
-	ctc_ = new WarpCtc(blank_label);
-	den_ = new Denominator(den_fst, batch_first);
+CrfCtc::CrfCtc(fst::StdVectorFst *den_fst, BaseFloat lambda, int blank_label, bool batch_first) :
+	lambda_(lambda), real_obj_progress_(0), real_obj_total_(0) {
+    ctc_ = new WarpCtc(blank_label);
+    den_ = new Denominator(den_fst, batch_first);
 }
 
 void CrfCtc::Destroy() {
@@ -2081,7 +2080,7 @@ void CrfCtc::Destroy() {
 
 void CrfCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
 					std::vector< std::vector<int32> > &label, Vector<BaseFloat> &path_weight,
-					CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *objs = NULL) {
+					CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *objs) {
 	int num_sequence = frame_num_utt.size();  // minibatch
 
 	// ctc error
@@ -2089,15 +2088,17 @@ void CrfCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatri
 	// Error rates
 	ctc_->ErrorRateMSeq(frame_num_utt, net_out, label);
 	// denominator error
-	den_.EvalParallel(frame_num_utt, net_out, &dendiff_, &den_objs_);
+	den_->EvalParallel(frame_num_utt, net_out, &dendiff_, &den_objs_);
 
 	// obj(ctc_crf) + lamdba*obj(ctc)
 	diff->Scale(1 + lambda_);
 	diff->AddMat(1.0, dendiff_);
+    //diff->AddMat(lambda_, dendiff_);
 
 	objs_ = ctc_objs_;
 	objs_.Scale(1 + lambda_);
 	objs_.AddVec(1.0, den_objs_);
+	//objs_.AddVec(lambda_, den_objs_);
 
    if (objs != NULL) {
 	   objs->Resize(objs_.Dim(), kUndefined);
@@ -2109,8 +2110,8 @@ void CrfCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatri
 	double weight_sum = path_weight.Sum();
 	obj_progress_ += objs_sum;
 	obj_total_ += objs_sum;
-	real_obj_progress_ =  obj_progress_ - weight_sum;
-	real_obj_total_ = obj_total_ - weight_sum;
+	real_obj_progress_ += (objs_sum - weight_sum);
+	real_obj_total_ += (objs_sum - weight_sum);
 
 	sequences_progress_ += num_sequence;
 	sequences_num_ += num_sequence;
@@ -2123,7 +2124,7 @@ void CrfCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatri
 	{
 		if (sequences_progress_ > report_step_) {
 		  KALDI_VLOG(1) << "After " << sequences_num_ << " sequences (" << frames_/(100.0 * 3600) << "Hr): "
-						<< "Obj(log[CrfCtc]) = " << "Obj(log[RealCrfCtc]) = " << real_obj_progress_/sequences_progress_;
+						<< "CrfCtc = " << obj_progress_/sequences_progress_ <<  " RealCrfCtc = " << real_obj_progress_/sequences_progress_;
 		  // reset
 		  sequences_progress_ = 0;
 		  frames_progress_ = 0;
@@ -2136,24 +2137,31 @@ void CrfCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatri
 }
 
 /// Merge lost
-void CrfCtc::Add(CrfCtc *loss) {
-	this->Add(loss);
-	this->real_obj_total_ += loss->real_obj_total_;
+void CrfCtc::Add(CtcItf *loss) {
+	CtcItf::Add(loss);
+    CrfCtc *crfctc = dynamic_cast<CrfCtc*>(loss);
+    ctc_->Add(crfctc->ctc_);
+    den_->Add(crfctc->den_);
+	this->real_obj_total_ += crfctc->real_obj_total_;
 
 	// partial results during training
-	this->real_obj_progress_ += loss->real_obj_progress_;
+	this->real_obj_progress_ += crfctc->real_obj_progress_;
 }
 
 void CrfCtc::Merge(int myid, int root) {
 	this->ctc_->Merge(myid, root);
 	this->den_->Merge(myid, root);
+
+	MPI_Barrier(MPI_COMM_WORLD);
+	void *addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->real_obj_total_));
+	MPI_Reduce(addr, (void*)(&this->real_obj_total_), 1, MPI_DOUBLE, MPI_SUM, root, MPI_COMM_WORLD);
 }
 
 std::string CrfCtc::Report() {
 	std::ostringstream oss;
-	ctc_->Report();
-	den_->Report();
-	oss << "\nLOG_CRFCTC >> " << -real_obj_total_/sequences_num_ << " <<";
+	oss << ctc_->Report();
+	oss << den_->Report();
+	oss << "\nLOG_CRFCTC >> " << real_obj_total_/sequences_num_ << " <<";
 	return oss.str();
 }
 

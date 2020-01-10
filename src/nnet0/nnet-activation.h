@@ -80,6 +80,10 @@ class LogSoftmax : public Component {
   void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
                         const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
 	in_diff->DiffLogSoftmaxPerRow(out, out_diff);
+
+    // Clip gradient
+    //in_diff->ApplyFloor(-1.0);
+    //in_diff->ApplyCeiling(1.0);
   }
 };
 

@@ -51,7 +51,7 @@ struct NnetCrfCtcUpdateOptions : public NnetCtcUpdateOptions {
   	  void Register(OptionsItf *po) {
   		  NnetCtcUpdateOptions::Register(po);
   		  po->Register("lambda", &lambda, "ctc objective function ratio in crfctc.");
-  		  po->Register("weight", &weight_filename, "denominator fst path weight.");
+  		  po->Register("path-weight", &weight_filename, "denominator fst path weight.");
 		  this->objective_function = "crfctc";
   	  }
 };
@@ -59,9 +59,11 @@ struct NnetCrfCtcUpdateOptions : public NnetCtcUpdateOptions {
 
 struct NnetCrfCtcStats: NnetCtcStats {
 
-    CrfCtc crfctc;
+    CrfCtc *crfctc;
 
-    NnetCrfCtcStats(LossOptions &loss_opts): NnetCtcStats(loss_opts) { }
+    NnetCrfCtcStats(LossOptions &loss_opts): NnetCtcStats(loss_opts) { 
+        crfctc = new CrfCtc; 
+    }
 
     void MergeStats(NnetUpdateOptions *opts, int root) {
         int myid = opts->parallel_opts->myid;
@@ -80,7 +82,7 @@ struct NnetCrfCtcStats: NnetCtcStats {
         MPI_Reduce(addr, (void*)(&this->num_other_error), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 
         if (opts->objective_function == "crfctc") {
-        	crfctc.Merge(myid, 0);
+        	crfctc->Merge(myid, 0);
         } else {
         	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
@@ -96,7 +98,7 @@ struct NnetCrfCtcStats: NnetCtcStats {
                   << "]";
 
         if (opts->objective_function == "crfctc") {
-        	KALDI_LOG << crfctc.Report();
+        	KALDI_LOG << crfctc->Report();
         } else {
         	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
