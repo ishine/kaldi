@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
         "Decode, reading log-likelihoods (CTC acoustic model output) as matrices.\n"
         "Note: you'll usually want decode-faster-ctc rather than this program.\n"
         "\n"
-        "Usage:   decode-ctc-beam [options] <lstm-language-model> <loglikes-rspecifier> <words-wspecifier>\n";
+        "Usage:   decode-ctc-beam [options] <lstm-language-model(optional)> <loglikes-rspecifier> <words-wspecifier>\n";
 
     ParseOptions po(usage);
     bool binary = true;
@@ -64,14 +64,21 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 3) {
+    std::string  lstmlm_rxfilename = "",
+    			loglikes_rspecifier,
+				words_wspecifier;
+
+    if (po.NumArgs() == 3) {
+        lstmlm_rxfilename = po.GetArg(1);
+        loglikes_rspecifier = po.GetArg(2);
+        words_wspecifier = po.GetArg(3);
+    } else if (po.NumArgs() == 2) {
+        loglikes_rspecifier = po.GetArg(1);
+        words_wspecifier = po.GetArg(2);
+    } else { 
 		po.PrintUsage();
 		exit(1);
     }
-
-    std::string  lstmlm_rxfilename = po.GetArg(1),
-    			loglikes_rspecifier = po.GetArg(2),
-				words_wspecifier = po.GetArg(3);
 
     Int32VectorWriter words_writer(words_wspecifier);
 

@@ -67,8 +67,10 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 #endif
 
 void CTCDecoder::Initialize() {
-	rd_ = lstmlm_->GetRDim();
-	cd_ = lstmlm_->GetCDim();
+	if (lstmlm_ != NULL) {
+		rd_ = lstmlm_->GetRDim();
+		cd_ = lstmlm_->GetCDim();
+	}
 
 	use_pinyin_ = false;
 	if (config_.pinyin2words_id_rxfilename != "") {
