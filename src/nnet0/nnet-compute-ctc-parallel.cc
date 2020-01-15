@@ -218,8 +218,10 @@ private:
 			ctc = new WarpCtc(opts->blank_label);
             // using activations directly: remove softmax, if present
             if (nnet.GetComponent(nnet.NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
-                KALDI_LOG << "Removing softmax from the nnet " << model_filename;
+                //KALDI_LOG << "Removing softmax from the nnet " << model_filename;
+                KALDI_LOG << "Removing softmax from the nnet " << model_filename << ", Appending logsoftmax";
                 nnet.RemoveComponent(nnet.NumComponents()-1);
+                nnet.AppendComponent(new LogSoftmax(nnet.OutputDim(),nnet.OutputDim()));
             } else {
                 KALDI_LOG << "The nnet was without softmax " << model_filename;
             }    
@@ -659,8 +661,11 @@ private:
 				// model_sync->SetWeight(host_nnet_);
                 if (opts->ctc_imp == "warp") {
                     //add back the softmax
-                    KALDI_LOG << "Appending the softmax " << target_model_filename;
+                    KALDI_LOG << "Removing logsoftmax, Appending the softmax " << target_model_filename;
+                    nnet.RemoveComponent(nnet.NumComponents()-1);
                     nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
+                    //KALDI_LOG << "Appending the softmax " << target_model_filename;
+                    //nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
                 }
 				nnet.Write(target_model_filename, opts->binary);	
 			}

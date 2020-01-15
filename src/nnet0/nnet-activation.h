@@ -82,8 +82,8 @@ class LogSoftmax : public Component {
 	in_diff->DiffLogSoftmaxPerRow(out, out_diff);
 
     // Clip gradient
-    //in_diff->ApplyFloor(-1.0);
-    //in_diff->ApplyCeiling(1.0);
+    in_diff->ApplyFloor(-1.0);
+    in_diff->ApplyCeiling(1.0);
   }
 };
 
