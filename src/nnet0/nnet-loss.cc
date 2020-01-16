@@ -1487,7 +1487,7 @@ void WarpCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatr
     double pzx_sum = -pzx.Sum();
     obj_progress_ += pzx_sum;
 
-	pzx_sum = pzx_sum > -100*num_sequence ? pzx_sum : -100*num_sequence;
+	pzx_sum = pzx_sum > -10000*num_sequence ? pzx_sum : -10000*num_sequence;
     obj_total_ += pzx_sum;
 	sequences_progress_ += num_sequence;
 	sequences_num_ += num_sequence;
@@ -2009,7 +2009,7 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
 	double alpha_llk_sum = costs_alpha_.Sum();
 	obj_progress_ += alpha_llk_sum;
 
-	alpha_llk_sum = alpha_llk_sum > -100*num_sequence ? alpha_llk_sum : -100*num_sequence;
+	alpha_llk_sum = alpha_llk_sum > -10000*num_sequence ? alpha_llk_sum : -10000*num_sequence;
 	obj_total_ += alpha_llk_sum;
 	sequences_progress_ += num_sequence;
 	sequences_num_ += num_sequence;
@@ -2115,7 +2115,7 @@ void CrfCtc::EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatri
 	obj_progress_ += objs_sum;
 	real_obj_progress_ += (objs_sum - weight_sum);
 
-	objs_sum = objs_sum > -100*num_sequence ? objs_sum : 0;
+	objs_sum = objs_sum > -10000*num_sequence ? objs_sum : 0;
 	obj_total_ += objs_sum;
 	real_obj_total_ += (objs_sum - weight_sum);
 
