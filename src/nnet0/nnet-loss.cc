@@ -1979,7 +1979,7 @@ void Denominator::EvalParallel(const std::vector<int> &frame_num_utt,
 	grad_storage_.Resize(ATOMIC_CONST*num_sequence*alphabet_size, kUndefined);
 
 	CuTimer tim;
-	dim3 dimBlock(CU1DBLOCK);
+	dim3 dimBlock(CU1DBLOCK*4);
 	dim3 dimGrid(num_sequence);
 	CuArray<int> input_lengths_gpu(frame_num_utt);
 	cuda_compute_alpha(dimGrid, dimBlock, alpha_.Data(), net_out.Data(), num_sequence, T, num_states_,
