@@ -35,6 +35,7 @@
 		typedef lm::ngram::Vocabulary KenVocab;
 #endif
 
+#define PREFIX_MAX_LEN 30
 
 namespace kaldi {
 
@@ -45,6 +46,8 @@ struct PrefixSeq {
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
         logp_lm = 0;
+        prefix_len = 1;
+        logp = 0;
 	}
 
 	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words) {
@@ -53,6 +56,8 @@ struct PrefixSeq {
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
         logp_lm = 0;
+        prefix_len = prefix.size();
+        logp = 0;
 	}
 
 	PrefixSeq(const std::vector<int> &words) {
@@ -61,6 +66,34 @@ struct PrefixSeq {
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
         logp_lm = 0;
+        prefix_len = prefix.size();
+        logp = 0;
+	}
+
+	PrefixSeq() {
+		Reset();
+	}
+
+	void Reset() {
+		prefix.resize(PREFIX_MAX_LEN, 0);
+		prefix_len = 0;
+		lmhis = NULL;
+		logp_blank = kLogZeroFloat;
+		logp_nblank = kLogZeroFloat;
+		logp_lm = 0;
+		logp = 0;
+	}
+
+	void PrefixAppend(int word) {
+		if (prefix_len > prefix.size()) {
+			prefix.resize(prefix.size()+PREFIX_MAX_LEN, 0);
+		}
+		prefix[prefix_len] = word;
+		prefix_len++;
+	}
+
+	bool operator < (const PrefixSeq& preseq) const {
+		return logp > preseq.logp;
 	}
 
 #if HAVE_KENLM == 1
@@ -88,8 +121,9 @@ struct PrefixSeq {
 	// it ends in a blank and dose not end in a blank at this time step.
 	BaseFloat logp_blank;
 	BaseFloat logp_nblank;
-    BaseFloat logp_am;
     BaseFloat logp_lm;
+    BaseFloat logp;
+    int prefix_len;
 
 	std::string tostring() {
 		return "";
@@ -98,7 +132,7 @@ struct PrefixSeq {
 
 struct CTCDecoderUtil {
 	static bool compare_PrefixSeq_reverse(const PrefixSeq *a, const PrefixSeq *b) {
-		return LogAdd(a->logp_blank,a->logp_nblank) > LogAdd(b->logp_blank,b->logp_nblank);
+		return a->logp > b->logp;
 	}
 
     static float len_penalty(int len, float alpha) {
@@ -111,8 +145,8 @@ struct CTCDecoderUtil {
 		bool use_penalty = true;
 		len_a = use_penalty ? a->prefix.size()-1 : 1;
 		len_b = use_penalty ? b->prefix.size()-1 : 1;
-		score_a = LogAdd(a->logp_blank, a->logp_nblank)/len_penalty(len_a, 0.65);
-		score_b = LogAdd(b->logp_blank, b->logp_nblank)/len_penalty(len_b, 0.65);
+		score_a = a->logp/len_penalty(len_a, 0.65);
+		score_b = b->logp/len_penalty(len_b, 0.65);
 		return score_a > score_b;
 	}
 };
@@ -129,13 +163,14 @@ struct CTCDecoderOptions {
   int sos;
   int eos;
   bool use_kenlm;
+  bool use_mode;
   int vocab_size;
   std::string pinyin2words_id_rxfilename;
   std::string word2wordid_rxfilename;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(0),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1), max_mem(50000),
-					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531),
+					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), use_mode("normal"), vocab_size(7531),
                        pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
                         { }
   void Register(OptionsItf *opts) {
@@ -150,6 +185,7 @@ struct CTCDecoderOptions {
     opts->Register("sos", &sos, "Integer corresponds to <s>. You must set this to your actual SOS integer.");
     opts->Register("eos", &eos, "Integer corresponds to </s>. You must set this to your actual EOS integer.");
     opts->Register("use-kenlm", &use_kenlm, "Weather to use ken arpa language wrapper.");
+    opts->Register("use-mode", &use_mode, "Select beam search algorithm mode(normal|easy).");
 	opts->Register("vocab-size", &vocab_size, "Acoustic model output size.");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
   }
@@ -180,6 +216,8 @@ class CTCDecoder {
 
 		void BeamSearchTopk(const Matrix<BaseFloat> &loglikes);
 
+		void BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes);
+
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat &logp_lm);
 
 	protected:
@@ -192,6 +230,7 @@ class CTCDecoder {
 
         void Initialize();
 		void InitDecoding();
+		void InitEasyDecoding(int topk);
 		void FreeBeam(BeamType *beam);
 		void FreeSeq(PrefixSeq *seq);
 		void FreePred(Pred *pred);
@@ -200,6 +239,8 @@ class CTCDecoder {
 		LstmlmHistroy* MallocHis();
 		void CopyHis(LstmlmHistroy* his);
         void CleanBuffer();
+
+        void BeamMerge(std::vector<PrefixSeq*> &merge_beam);
 
 
 		CTCDecoderOptions &config_;
@@ -221,6 +262,11 @@ class CTCDecoder {
 		std::vector<std::vector<int> > pinyin2words_;
 		std::vector<std::string> wordid_to_word_;
 		bool use_pinyin_;
+
+		int cur_beam_size_;
+		int next_beam_size_;
+		std::vector<PrefixSeq> beam_easy_;
+		std::vector<PrefixSeq> next_beam_easy_;
 
 #if HAVE_KENLM == 1
 		const KenVocab *kenlm_vocab_;

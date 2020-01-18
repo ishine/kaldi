@@ -153,9 +153,12 @@ int main(int argc, char *argv[]) {
 		// decoding
 		if (search == "beam" && decoder_opts.am_topk > 0)
 			decoder->BeamSearch(loglikes);
-		else if (search == "beam")
-			decoder->BeamSearchTopk(loglikes);
-		else if (search == "greedy")
+		else if (search == "beam") {
+			if (decoder_opts.use_mode == "easy")
+				decoder->BeamSearchEasyTopk(loglikes);
+			else
+				decoder->BeamSearchTopk(loglikes);
+		} else if (search == "greedy")
 			decoder->GreedySearch(loglikes);
 		else
 			KALDI_ERR << "UnSupported search function: " << search;
