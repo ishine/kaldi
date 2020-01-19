@@ -1,3 +1,7 @@
+#!/bin/bash
+for x in exp/chain*/tdnn*/decode*; do [ -d $x ] && [[ $x =~ "$1" ]] && grep WER $x/wer_* | utils/best_wer.sh; done
+exit 0
+
 # In the results below, "tgsmall" is the pruned 3-gram LM, which is used for lattice generation.
 # The following language models are then used for rescoring:
 # a) tgmed- slightly less pruned 3-gram LM  

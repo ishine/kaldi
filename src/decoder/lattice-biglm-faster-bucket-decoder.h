@@ -365,33 +365,41 @@ struct TokenBucket {
   // Insert a token into "tokens" max-heap. When the size of "tokens"
   // beyonds "length", remove the worst one.
   bool Insert(Token *tok) {
-    Token* worst = tokens.back();
-    // If the token is worse than current worst token. Don't insert.
-    if (tok->tot_cost > worst->tot_cost) {
-      // the token is an invalid token
-      tok->tot_cost = std::numeric_limits<BaseFloat>::infinity();
-      tok->in_queue = false;
-      return false;
-    }
-    // Update the best tot_cost of the bucket
-    if (tok->tot_cost < tot_cost) {
-      tot_cost = tok->tot_cost;
-    }
-    // Insert the 'real' token
-    tok->in_queue = true;
-    tokens.push_back(tok);
-    std::push_heap(tokens.begin(), tokens.end(), cmp<Token>());
-    if (tokens.size() > length) {
-      // set the tot_cost to infinity to mark this token should be pruned. As
-      // we have to delete the ForwardLinks which are related to this token.
-      std::pop_heap(tokens.begin(), tokens.end(), cmp<Token>());
-      // set the tot_cost to infinity which means the token will be deleted
-      // and in_queue to false
-      worst->in_queue = false;
-      worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
-      // Note: pop_heap function only put the worst element to the end of the
-      // container and then make the rest elements to a heap.
-      tokens.pop_back();
+    if (tokens.empty()) {
+      tokens.push_back(tok);
+      tok->in_queue = true;
+      if (tok->tot_cost < tot_cost) {
+        tot_cost = tok->tot_cost;
+      }
+    } else {
+      Token* worst = tokens.back();
+      // If the token is worse than current worst token. Don't insert.
+      if (tok->tot_cost > worst->tot_cost) {
+        // the token is an invalid token
+        tok->tot_cost = std::numeric_limits<BaseFloat>::infinity();
+        tok->in_queue = false;
+        return false;
+      }
+      // Update the best tot_cost of the bucket
+      if (tok->tot_cost < tot_cost) {
+        tot_cost = tok->tot_cost;
+      }
+      // Insert the 'real' token
+      tok->in_queue = true;
+      tokens.push_back(tok);
+      std::push_heap(tokens.begin(), tokens.end(), cmp<Token>());
+      if (tokens.size() > length) {
+        // set the tot_cost to infinity to mark this token should be pruned. As
+        // we have to delete the ForwardLinks which are related to this token.
+        std::pop_heap(tokens.begin(), tokens.end(), cmp<Token>());
+        // set the tot_cost to infinity which means the token will be deleted
+        // and in_queue to false
+        worst->in_queue = false;
+        worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
+        // Note: pop_heap function only put the worst element to the end of the
+        // container and then make the rest elements to a heap.
+        tokens.pop_back();
+      }
     }
     return true;
   }

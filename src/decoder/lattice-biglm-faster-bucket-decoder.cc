@@ -163,9 +163,11 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
   PairId start_state = ConstructPair(base_start_state, lm_start_state);
   Token *start_tok = new Token(0.0, std::numeric_limits<BaseFloat>::infinity(),
       base_start_state, lm_start_state, NULL, NULL, NULL);
+
   // Initialize the first bucket and push the start_tok into it.
   Bucket *start_bucket = new Bucket(true, base_start_state,
                                     config_.bucket_length, NULL);
+  start_bucket->Insert(start_tok);
 
   active_toks_.resize(1);
   active_toks_[0].toks = start_tok;
@@ -173,11 +175,11 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
   active_buckets_[0].buckets = start_bucket;
 
 
-  (*cur_buckets_)[base_start_state] = start_bucket;  // initialize current
+  (*next_buckets_)[base_start_state] = start_bucket;  // initialize current
                                                      // buckets map
 
   cost_offsets_.resize(1);
-  cost_offsets_[0] = 0.0;
+  cost_offsets_[0] = std::numeric_limits<BaseFloat>::infinity();
   
   cutoffs_.resize(2);
   cutoffs_[0] = std::numeric_limits<BaseFloat>::infinity();
@@ -200,6 +202,7 @@ bool LatticeBiglmFasterBucketDecoderTpl<FST, Token>::Decode(
       PruneActiveBuckets(config_.lattice_beam * config_.prune_scale);
     }
     ProcessForFrame(decodable);
+    KALDI_LOG << "Debug: At the end of frame " << NumFramesDecoded();
   }
   // A complete token list of the last frame will be generated in FinalizeDecoding()
   FinalizeDecoding();
@@ -371,6 +374,8 @@ typename LatticeBiglmFasterBucketDecoderTpl<FST, Token>::Bucket*
     new_bucket = new Bucket(arc.olabel == 0 ? false : true,
                             state, config_.bucket_length,
                             buckets);
+    // Initialize the alpha value of bucket
+    new_bucket->tot_cost = tot_cost;
     // The new_bucket doesn't have any links or costs.
     buckets = new_bucket;  // update the head of active_buckets_[index]
     
@@ -378,8 +383,8 @@ typename LatticeBiglmFasterBucketDecoderTpl<FST, Token>::Bucket*
     (*bucket_map)[state] = new_bucket;
     if (changed) *changed = true;
   } else {
-    Bucket *new_bucket = e_found->second;  // There is an existing
-                                           // TokenBucket for this state.
+    new_bucket = e_found->second;  // There is an existing
+                                   // TokenBucket for this state.
     if (new_bucket->tot_cost > tot_cost) {  // replace old token
       new_bucket->tot_cost = tot_cost;
       // we don't allocate a new bucket, the old stays linked in active_toks_
@@ -593,6 +598,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::PruneBucketForwardLinks(
     }
   }
 
+  KALDI_LOG << "On frame " << frame_plus_one;
   // We have to iterate until there is no more change, because the links
   // are not guaranteed to be in topological order.
   bool changed = true;  // difference new minus old extra cost >= delta ?
@@ -608,6 +614,14 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::PruneBucketForwardLinks(
         BaseFloat link_back_cost = link->acoustic_cost + link->graph_cost +
           next_bucket->back_cost;
         BaseFloat link_cost = link_back_cost + bucket->tot_cost;
+        
+        KALDI_LOG << "Current state " << bucket->base_state
+                  << " and Next state " << next_bucket->base_state
+                  << " ilabel " << link->ilabel
+                  << " . The cost is " << link->acoustic_cost << " + "
+                  << link->graph_cost << " + " << next_bucket->back_cost
+                  << " + " << bucket->tot_cost << " = " << link_cost;
+        
         // link_cost is the difference in score between the best paths
         // through link source state and through link destination state
         KALDI_ASSERT(link_cost == link_cost);  // check for NaN
@@ -1136,7 +1150,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
   StateIdToBucketMap *tmp_buckets = cur_buckets_;
   cur_buckets_ = next_buckets_;
   next_buckets_ = tmp_buckets;
- 
+
   if (cur_buckets_->empty()) {
     if (!warned_) {
       KALDI_WARN << "Error, no surviving tokens/buckets on frame " << cur_frame;
@@ -1156,12 +1170,12 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
   BaseFloat adaptive_beam = adaptive_beam_;
   // "cur_cutoff" will be kept to the best-seen-so-far token on this frame
   // + adaptive_beam
-  BaseFloat &cur_cutoff = cutoffs_[cur_frame];
+  BaseFloat cur_cutoff = std::numeric_limits<BaseFloat>::infinity();
   // "next_cutoff" is used to limit a new token in next frame should be handle
   // or not. It will be updated along with the further processing.
   // this will be kept updated to the best-seen-so-far token "on next frame"
   // + adaptive_beam
-  BaseFloat &next_cutoff = cutoffs_[next_frame];
+  BaseFloat next_cutoff = std::numeric_limits<BaseFloat>::infinity();
   // "cost_offset" contains the acoustic log-likelihoods on current frame in 
   // order to keep everything in a nice dynamic range. Reduce roundoff errors.
   BaseFloat cost_offset = cost_offsets_[cur_frame];
@@ -1245,7 +1259,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
           next_cutoff = tot_cost + adaptive_beam;  // a tighter boundary for
                                                    // emitting
         }
-        
+
         // no change flag is needed
         Bucket *new_bucket = FindOrAddBucket(arc_ref, next_frame,
                                              tot_cost, ac_cost,
