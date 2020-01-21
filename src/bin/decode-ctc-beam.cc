@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
 		std::string key = loglikes_reader.Key();
 		Matrix<BaseFloat> &loglikes (loglikes_reader.Value());
         if (en_penalty > 0)
-        loglikes.ColRange(1, 1050).Add(en_penalty);
+            loglikes.ColRange(1, 1050).Add(en_penalty);
 
 		if (loglikes.NumRows() == 0) {
 			KALDI_WARN << "Zero-length utterance: " << key;

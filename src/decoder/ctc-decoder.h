@@ -76,6 +76,7 @@ struct PrefixSeq {
 
 	void Reset() {
 		prefix.resize(PREFIX_MAX_LEN, 0);
+        //prefix.clear();
 		prefix_len = 0;
 		lmhis = NULL;
 		logp_blank = kLogZeroFloat;
@@ -90,7 +91,14 @@ struct PrefixSeq {
 		}
 		prefix[prefix_len] = word;
 		prefix_len++;
+        //prefix.push_back(word);
 	}
+
+    int PrefixBack() {
+        int id = prefix_len > 0 ? prefix_len-1 : 0;
+        return prefix[id];
+        //return prefix.back();
+    }
 
 	bool operator < (const PrefixSeq& preseq) const {
 		return logp > preseq.logp;
@@ -104,6 +112,7 @@ struct PrefixSeq {
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
         logp_lm = 0;
+		logp = 0;
 		sub_ken_state = sub_state;
 	}
 
@@ -163,15 +172,15 @@ struct CTCDecoderOptions {
   int sos;
   int eos;
   bool use_kenlm;
-  bool use_mode;
   int vocab_size;
+  std::string use_mode;
   std::string pinyin2words_id_rxfilename;
   std::string word2wordid_rxfilename;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(0),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1), max_mem(50000),
-					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), use_mode("normal"), vocab_size(7531),
-                       pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
+					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531),
+                       use_mode("normal"), pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
@@ -185,8 +194,8 @@ struct CTCDecoderOptions {
     opts->Register("sos", &sos, "Integer corresponds to <s>. You must set this to your actual SOS integer.");
     opts->Register("eos", &eos, "Integer corresponds to </s>. You must set this to your actual EOS integer.");
     opts->Register("use-kenlm", &use_kenlm, "Weather to use ken arpa language wrapper.");
-    opts->Register("use-mode", &use_mode, "Select beam search algorithm mode(normal|easy).");
 	opts->Register("vocab-size", &vocab_size, "Acoustic model output size.");
+    opts->Register("use-mode", &use_mode, "Select beam search algorithm mode(normal|easy).");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
   }
 };

@@ -187,13 +187,20 @@ void CTCDecoder::CleanBuffer() {
 }
 
 bool CTCDecoder::GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat &logp_lm) {
-	PrefixSeq *seq = pre_seq_list_.front();
+    PrefixSeq *seq = NULL;
+    if (config_.use_mode == "easy")
+        seq = &beam_easy_[0];
+    else
+	    seq = pre_seq_list_.front();
+
 	if (seq == NULL) return false;
 
 	//logp = LogAdd(seq->logp_blank, seq->logp_nblank) + seq->logp_lm;
 	logp = seq->logp;
     logp_lm = seq->logp_lm;
 	words = seq->prefix;
+    if (config_.use_mode == "easy")
+        words.resize(seq->prefix_len);
 	return true;
 }
 
@@ -234,8 +241,10 @@ void CTCDecoder::InitEasyDecoding(int topk) {
     // Elements in the beam are (prefix, (p_blank, p_no_blank))
     // Initialize the beam with the empty sequence, a probability of
     // 1 for ending in blank and zero for ending in non-blank (in log space).
-	beam_easy_[0].PrefixAppend(config_.blank);
-	beam_easy_[0].logp_blank = 0.0;
+	PrefixSeq *seq = &beam_easy_[0];
+    seq->Reset();
+	seq->PrefixAppend(config_.blank);
+	seq->logp_blank = 0.0;
 	cur_beam_size_ = 1;
 
 	// next beam buffer
@@ -876,10 +885,12 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 							ngram_logp *= M_LN10;
                         } else
 					#endif
-                        ngram_logp = const_arpa_->GetNgramLogprob(k, prefix);
-                        for (int i = 0; i < sub_const_arpa_.size(); i++) {
-                        	sub_ngram_logp = sub_const_arpa_[i]->GetNgramLogprob(k, prefix);
-                        	ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+                        {
+                            ngram_logp = const_arpa_->GetNgramLogprob(k, prefix);
+                            for (int i = 0; i < sub_const_arpa_.size(); i++) {
+                        	    sub_ngram_logp = sub_const_arpa_[i]->GetNgramLogprob(k, prefix);
+                        	    ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+                            }
                         }
                     }
                     // fusion score
@@ -962,8 +973,9 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
     */
 }
 
+/*
 void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam) {
-	KALDI_ASSRT(next_beam_size_%cur_beam_size_ == 0);
+	KALDI_ASSERT(next_beam_size_%cur_beam_size_ == 0);
 	BeamType beam;
 	for (int i = 0; i < cur_beam_size_; i++) {
 		beam[next_beam_easy_[i].prefix] = &next_beam_easy_[i];
@@ -987,6 +999,30 @@ void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam) {
 		merge_beam.push_back(seq.second);
 	}
 }
+*/
+
+void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam) {
+	KALDI_ASSERT(next_beam_size_%cur_beam_size_ == 0);
+	BeamType beam;
+    merge_beam.clear();
+	PrefixSeq *preseq, *n_preseq;
+	for (int i = 0; i < next_beam_size_; i++) {
+		auto it = beam.find(next_beam_easy_[i].prefix);
+		if (it != beam.end()) {
+			preseq = it->second;
+			n_preseq = &next_beam_easy_[i];
+			n_preseq->logp_nblank = LogAdd(preseq->logp_nblank, n_preseq->logp_nblank);
+			n_preseq->logp_blank = LogAdd(preseq->logp_blank, n_preseq->logp_blank);
+			n_preseq->logp = n_preseq->logp_lm + LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
+		    beam[n_preseq->prefix] = n_preseq;
+        }
+		beam[next_beam_easy_[i].prefix] = &next_beam_easy_[i];
+	}
+
+	for (auto &seq : beam) {
+		merge_beam.push_back(seq.second);
+	}
+}
 
 void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
@@ -994,7 +1030,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	int likes_size = loglikes.NumCols();
 	int vocab_size = config_.vocab_size;
 	PrefixSeq *preseq, *n_preseq;
-	std::vector<int> *prefix, *n_prefix;
+	std::vector<int> prefix, n_prefix;
 	std::vector<float> next_words(vocab_size);
 	float logp, logp_b, logp_lm, n_p_b, n_p_nb;
 	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
@@ -1011,11 +1047,11 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		// Only the probability of ending in blank gets updated.
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
 			logp = logp_b + log(config_.blank_penalty); // -2.30259
-
 			for (int i = 0; i < cur_beam_size_; i++) {
 				preseq = &beam_easy_[i];
 				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
 				preseq->logp_blank = n_p_b;
+			    preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, preseq->logp_nblank);
 			}
 			continue;
 		}
@@ -1044,20 +1080,22 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 
 		/// produce next beam
 		/// not extended
+        next_beam_size_ = 0;
 		for (int i = 0; i < cur_beam_size_; i++) {
 			preseq = &beam_easy_[i];
-			end_t = preseq->prefix.back();
+			end_t = preseq->PrefixBack();
 			n_preseq = &next_beam_easy_[next_beam_size_];
 			next_beam_size_++;
 
 			// blank
-			n_p_b = LogAdd(preseq->logp_blank+logp_b, preseq->logp_nblank+logp_b);
+			logp = logp_b + log(config_.blank_penalty); // -2.30259
+			n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
 
 			// If s is repeated at the end we also update the unchanged
 			// prefix. This is the merging case.
 			n_p_nb = kLogZeroFloat;
 			if (end_t != config_.blank) {
-				logp = next_words(n, end_t);
+				logp = next_words[end_t];
 				n_p_nb = preseq->logp_nblank+logp;
 			}
 
@@ -1077,7 +1115,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 			// for each beam appending word key
 			for (int i = 0; i < cur_beam_size_; i++) {
 				preseq = &beam_easy_[i];
-				end_t = preseq->prefix.back();
+				end_t = preseq->PrefixBack();
 				n_preseq = &next_beam_easy_[next_beam_size_];
 				next_beam_size_++;
 				*n_preseq = *preseq;
@@ -1096,15 +1134,13 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 				if (config_.lm_scale > 0.0) {
 					// ngram lm score
 					if (rscale < 1.0) {
-						prefix = preseq->prefix;
-						prefix[0] = config_.sos; // <s>
 					#if HAVE_KENLM == 1
 						if (config_.use_kenlm) {
-							index = kenlm_vocab_->Index(wordid_to_word_[k]);
+							index = kenlm_vocab_->Index(wordid_to_word_[key]);
 							ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
 							n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
 							for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
-								index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[k]);
+								index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[key]);
 								sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
 								ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
 							}
@@ -1112,15 +1148,20 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 							ngram_logp *= M_LN10;
 						} else
 					#endif
-						ngram_logp = const_arpa_->GetNgramLogprob(k, prefix);
-						for (int i = 0; i < sub_const_arpa_.size(); i++) {
-							sub_ngram_logp = sub_const_arpa_[i]->GetNgramLogprob(k, prefix);
-							ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
-						}
+                        {
+						    prefix = preseq->prefix;
+						    prefix[0] = config_.sos; // <s>
+						    ngram_logp = const_arpa_->GetNgramLogprob(key, prefix);
+						    for (int i = 0; i < sub_const_arpa_.size(); i++) {
+							    sub_ngram_logp = sub_const_arpa_[i]->GetNgramLogprob(key, prefix);
+							    ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+						    }
+                        }
 					}
 					// fusion score
 					logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
 				}
+                
 				n_preseq->PrefixAppend(key);
 				n_preseq->logp_blank = n_p_b;
 				n_preseq->logp_nblank = n_p_nb;
@@ -1132,12 +1173,12 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		std::vector<PrefixSeq*> valid_beam;
 		BeamMerge(valid_beam);
 		// select best TopN beam
-		std::sort(valid_beam.begin(), valid_beam.end());
+		std::sort(valid_beam.begin(), valid_beam.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
 		int size = valid_beam.size();
 		cur_beam_size_ = size >= config_.beam ? config_.beam : size;
-		for (int i = 0; i < cur_beam_size_; i++) {
+		for (int i = 0; i < cur_beam_size_; i++)
 			beam_easy_[i] = *valid_beam[i];
-		}
+		size++;
 	}
 }
 
