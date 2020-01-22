@@ -1024,6 +1024,7 @@ void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam) {
 	}
 }
 
+/*
 void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
@@ -1046,14 +1047,13 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		// blank pruning
 		// Only the probability of ending in blank gets updated.
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
-            /*
 			logp = logp_b + log(config_.blank_penalty); // -2.30259
 			for (int i = 0; i < cur_beam_size_; i++) {
 				preseq = &beam_easy_[i];
 				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
 				preseq->logp_blank = n_p_b;
 			    preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, preseq->logp_nblank);
-			}*/
+			}
 			continue;
 		}
 
@@ -1163,6 +1163,168 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 					logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
 				}
                 
+				n_preseq->PrefixAppend(key);
+				n_preseq->logp_blank = n_p_b;
+				n_preseq->logp_nblank = n_p_nb;
+				n_preseq->logp_lm += logp_lm;
+				n_preseq->logp = logp_lm +  LogAdd(n_p_b, n_p_nb);
+			}
+		}
+
+		std::vector<PrefixSeq*> valid_beam;
+		BeamMerge(valid_beam);
+		// select best TopN beam
+		std::sort(valid_beam.begin(), valid_beam.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
+		int size = valid_beam.size();
+		cur_beam_size_ = size >= config_.beam ? config_.beam : size;
+		for (int i = 0; i < cur_beam_size_; i++)
+			beam_easy_[i] = *valid_beam[i];
+		size++;
+	}
+}*/
+
+void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
+	// decode one utterance
+	int nframe = loglikes.NumRows();
+	int likes_size = loglikes.NumCols();
+	int vocab_size = config_.vocab_size;
+	PrefixSeq *preseq, *n_preseq;
+	std::vector<int> prefix, n_prefix;
+	std::vector<float> next_words(vocab_size);
+	std::vector<BaseFloat> next_step(likes_size);
+	float logp, logp_b, logp_lm, n_p_b, n_p_nb;
+	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
+			rscale = config_.rnnlm_scale;
+	int end_t, index, topk = config_.am_topk, key;
+
+	InitEasyDecoding(topk);
+
+	// decode one utterance
+	for (int n = 0; n < nframe; n++) {
+		logp_b = loglikes(n, config_.blank);
+
+		// blank pruning
+		// Only the probability of ending in blank gets updated.
+		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
+			/*
+			logp = logp_b + log(config_.blank_penalty); // -2.30259
+			for (int i = 0; i < cur_beam_size_; i++) {
+				preseq = &beam_easy_[i];
+				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+				preseq->logp_blank = n_p_b;
+			    preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, preseq->logp_nblank);
+			}*/
+			continue;
+		}
+
+		std::fill(next_words.begin(), next_words.end(), kLogZeroFloat);
+		// blank pruning
+		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
+			next_words[config_.blank] = logp_b + log(config_.blank_penalty);
+		} else if (config_.am_topk > 0) {
+			// Top K pruning, the nth bigest words
+            memcpy(&next_step.front(), loglikes.RowData(n), next_step.size()*sizeof(BaseFloat));
+            std::nth_element(next_step.begin(), next_step.begin()+config_.am_topk, next_step.end(), std::greater<BaseFloat>());
+            for (int k = 0; k < likes_size; k++) {
+            	logp = loglikes(n, k);
+                if (k == config_.blank) logp += log(config_.blank_penalty); // -2.30259
+            	// top K pruning
+            	if (logp > next_step[config_.am_topk]) {
+            		if (!use_pinyin_) {
+            			next_words[k] = logp;
+            		} else {
+            			for (int i = 0; i < pinyin2words_[k].size(); i++)
+            				next_words[pinyin2words_[k][i]] = logp;
+            		}
+            	}
+            }
+        }
+
+
+		/// produce next beam
+		/// not extended
+        next_beam_size_ = 0;
+		for (int i = 0; i < cur_beam_size_; i++) {
+			preseq = &beam_easy_[i];
+			end_t = preseq->PrefixBack();
+			n_preseq = &next_beam_easy_[next_beam_size_];
+			next_beam_size_++;
+
+			// blank
+			logp = logp_b + log(config_.blank_penalty); // -2.30259
+			n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+
+			// If s is repeated at the end we also update the unchanged
+			// prefix. This is the merging case.
+			n_p_nb = kLogZeroFloat;
+			if (end_t != config_.blank) {
+				logp = next_words[end_t];
+				n_p_nb = preseq->logp_nblank+logp;
+			}
+
+			*n_preseq = *preseq;
+			n_preseq->logp_blank = n_p_b;
+			n_preseq->logp_nblank = n_p_nb;
+			n_preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
+		}
+
+		/// extended
+		for (int k = 0; k < vocab_size; k++) {
+			key = k;
+			logp = next_words[k];
+			if (key == config_.blank || logp == kLogZeroFloat)
+				continue;
+
+			// for each beam appending word key
+			for (int i = 0; i < cur_beam_size_; i++) {
+				preseq = &beam_easy_[i];
+				end_t = preseq->PrefixBack();
+				n_preseq = &next_beam_easy_[next_beam_size_];
+				next_beam_size_++;
+				*n_preseq = *preseq;
+
+				n_p_b = kLogZeroFloat;
+				if (key != end_t) {
+					n_p_nb = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+				} else {
+					// We don't include the previous probability of not ending
+					// in blank (p_nb) if s is repeated at the end. The CTC
+					// algorithm merges characters not separated by a blank.
+					n_p_nb = preseq->logp_blank+logp;
+				}
+
+				// *NB* this would be a good place to include an LM score.
+				if (config_.lm_scale > 0.0) {
+					// ngram lm score
+					if (rscale < 1.0) {
+					#if HAVE_KENLM == 1
+						if (config_.use_kenlm) {
+							index = kenlm_vocab_->Index(wordid_to_word_[key]);
+							ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+							n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
+							for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
+								index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[key]);
+								sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
+								ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+							}
+							// Convert to natural log.
+							ngram_logp *= M_LN10;
+						} else
+					#endif
+                        {
+						    prefix = preseq->prefix;
+						    prefix[0] = config_.sos; // <s>
+						    ngram_logp = const_arpa_->GetNgramLogprob(key, prefix);
+						    for (int i = 0; i < sub_const_arpa_.size(); i++) {
+							    sub_ngram_logp = sub_const_arpa_[i]->GetNgramLogprob(key, prefix);
+							    ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+						    }
+                        }
+					}
+					// fusion score
+					logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
+				}
+
 				n_preseq->PrefixAppend(key);
 				n_preseq->logp_blank = n_p_b;
 				n_preseq->logp_nblank = n_p_nb;
