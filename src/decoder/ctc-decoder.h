@@ -86,7 +86,7 @@ struct PrefixSeq {
 	}
 
 	void PrefixAppend(int word) {
-		if (prefix_len > prefix.size()) {
+		if (prefix_len >= prefix.size()) {
 			prefix.resize(prefix.size()+PREFIX_MAX_LEN, 0);
 		}
 		prefix[prefix_len] = word;

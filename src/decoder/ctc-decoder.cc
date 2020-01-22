@@ -509,7 +509,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
             std::nth_element(next_step.begin(), next_step.begin()+config_.am_topk, next_step.end(), std::greater<BaseFloat>());
             for (int k = 0; k < likes_size; k++) {
             	logp = loglikes(n, k);
-                if (k == 0) logp += log(config_.blank_penalty); // -2.30259
+                if (k == config_.blank) logp += log(config_.blank_penalty); // -2.30259
             	// top K pruning
             	if (logp > next_step[config_.am_topk]) {
             		if (!use_pinyin_) {
@@ -1013,7 +1013,7 @@ void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam) {
 			n_preseq = &next_beam_easy_[i];
 			n_preseq->logp_nblank = LogAdd(preseq->logp_nblank, n_preseq->logp_nblank);
 			n_preseq->logp_blank = LogAdd(preseq->logp_blank, n_preseq->logp_blank);
-			n_preseq->logp = n_preseq->logp_lm + LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
+			n_preseq->logp = preseq->logp_lm + LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
 		    beam[n_preseq->prefix] = n_preseq;
         }
 		beam[next_beam_easy_[i].prefix] = &next_beam_easy_[i];
@@ -1046,13 +1046,14 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		// blank pruning
 		// Only the probability of ending in blank gets updated.
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
+            /*
 			logp = logp_b + log(config_.blank_penalty); // -2.30259
 			for (int i = 0; i < cur_beam_size_; i++) {
 				preseq = &beam_easy_[i];
 				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
 				preseq->logp_blank = n_p_b;
 			    preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, preseq->logp_nblank);
-			}
+			}*/
 			continue;
 		}
 
