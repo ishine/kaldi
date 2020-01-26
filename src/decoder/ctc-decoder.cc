@@ -1219,7 +1219,8 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	std::vector<float> next_words(vocab_size);
 	float logp, logp_b, logp_lm, n_p_b, n_p_nb;
 	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
-			rscale = config_.rnnlm_scale;
+			rscale = config_.rnnlm_scale,
+            blank_penalty = log(config_.blank_penalty);
 	int end_t, index, topk = likes_size/2, key;
     bool skip_blank = false;
 
@@ -1232,7 +1233,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		// blank pruning
 		// Only the probability of ending in blank gets updated.
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
-			logp = logp_b + log(config_.blank_penalty); // -2.30259
+			logp = logp_b + blank_penalty; // -2.30259
 			for (int i = 0; i < cur_beam_size_; i++) {
 				preseq = &beam_easy_[i];
 				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
@@ -1250,13 +1251,13 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		std::fill(next_words.begin(), next_words.end(), kLogZeroFloat);
 		// blank pruning
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
-			next_words[config_.blank] = logp_b + log(config_.blank_penalty); // -2.30259
+			next_words[config_.blank] = logp_b + blank_penalty; // -2.30259
 		} else {
 			// Top K pruning, the nth bigest words
             for (int k = 1; k < topk; k++) {
             	logp = loglikes(n, k);
             	key = loglikes(n, topk+k);
-                if (key == 0) logp += log(config_.blank_penalty); // -2.30259
+                if (key == 0) logp += blank_penalty; // -2.30259
 				if (key < vocab_size && key >= 0) {
         			if (!use_pinyin_) {
         				next_words[key] = logp;
@@ -1282,7 +1283,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 			next_beam_size_++;
 
 			// blank
-			logp = logp_b + log(config_.blank_penalty); // -2.30259
+			logp = logp_b + blank_penalty; // -2.30259
 			n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
 
 			// If s is repeated at the end we also update the unchanged
