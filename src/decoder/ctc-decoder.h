@@ -75,8 +75,8 @@ struct PrefixSeq {
 	}
 
 	void Reset() {
-		prefix.resize(PREFIX_MAX_LEN, 0);
-        //prefix.clear();
+		//prefix.resize(PREFIX_MAX_LEN, 0);
+        prefix.clear();
 		prefix_len = 0;
 		lmhis = NULL;
 		logp_blank = kLogZeroFloat;
@@ -86,18 +86,22 @@ struct PrefixSeq {
 	}
 
 	void PrefixAppend(int word) {
+        /*
 		if (prefix_len >= prefix.size()) {
 			prefix.resize(prefix.size()+PREFIX_MAX_LEN, 0);
 		}
 		prefix[prefix_len] = word;
 		prefix_len++;
-        //prefix.push_back(word);
+        */
+        prefix.push_back(word);
 	}
 
     int PrefixBack() {
+        /*
         int id = prefix_len > 0 ? prefix_len-1 : 0;
         return prefix[id];
-        //return prefix.back();
+        */
+        return prefix.back();
     }
 
 	bool operator < (const PrefixSeq& preseq) const {
@@ -249,7 +253,7 @@ class CTCDecoder {
 		void CopyHis(LstmlmHistroy* his);
         void CleanBuffer();
 
-        void BeamMerge(std::vector<PrefixSeq*> &merge_beam);
+        void BeamMerge(std::vector<PrefixSeq*> &merge_beam, bool skip_blank = false);
 
 
 		CTCDecoderOptions &config_;

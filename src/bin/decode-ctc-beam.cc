@@ -153,6 +153,7 @@ int main(int argc, char *argv[]) {
 		// decoding
 		if (search == "beam" && decoder_opts.am_topk > 0)
 			decoder->BeamSearch(loglikes);
+			//decoder->BeamSearchEasyTopk(loglikes);
 		else if (search == "beam") {
 			if (decoder_opts.use_mode == "easy")
 				decoder->BeamSearchEasyTopk(loglikes);
