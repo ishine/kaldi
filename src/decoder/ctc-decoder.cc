@@ -84,6 +84,18 @@ void CTCDecoder::Initialize() {
 	if (config_.use_mode == "easy") {
 		beam_easy_.resize(config_.beam, PrefixSeq());
 		cur_beam_size_ = 0;
+
+		// rnn lm
+	    if (config_.rnnlm_scale > 0) {
+	    	LstmlmHistroy his(rd_, cd_, kSetZero);
+	    	rnnlm_his_.resize(2*config_.beam, his);
+	    	rnnlm_logp_.resize(config_.beam);
+	    	for (int i = 0; i < config_.beam; i++) {
+	    		beam_easy_[i].lmhis = &rnnlm_his_[i];
+	    		beam_easy_[i].next_lmhis = &rnnlm_his_[config_.beam+i];
+	    		beam_easy_[i].lmlogp = &rnnlm_logp_[i];
+	    	}
+	    }
 	}
 }
 
@@ -249,6 +261,11 @@ void CTCDecoder::InitEasyDecoding(int topk) {
 	seq->PrefixAppend(config_.blank);
 	seq->logp_blank = 0.0;
 	cur_beam_size_ = 1;
+
+    if (config_.rnnlm_scale != 0) {
+    	// first input <s>
+    	seq->lmhis->SetZero();
+    }
 
 	// next beam buffer
 	next_beam_easy_.resize(config_.beam*topk);
@@ -1222,13 +1239,56 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 			rscale = config_.rnnlm_scale,
             blank_penalty = log(config_.blank_penalty);
 	int end_t, index, topk = likes_size/2, key;
-    bool skip_blank = false;
+    bool skip_blank = false, uselm;
+
+    // rnnlm
+    std::vector<int> in_words;
+    std::vector<Vector<BaseFloat>*> nnet_out;
+    std::vector<LstmlmHistroy*> context_in, context_out;
 
 	InitEasyDecoding(topk);
 
 	// decode one utterance
 	for (int n = 0; n < nframe; n++) {
 		logp_b = loglikes(n, config_.blank);
+
+		// Lstm language model process, beam streams parallel.
+		uselm = false;
+		if (config_.lm_scale > 0.0) {
+		   if (config_.blank_threshold <= 0)
+				uselm = true;
+		   else if (config_.blank_threshold > 0 && Exp(logp_b) <= config_.blank_threshold)
+				uselm = true;
+		}
+
+		if (uselm && rscale != 0) {
+			in_words.clear();
+			nnet_out.clear();
+			context_in.clear();
+			context_out.clear();
+
+			// always padding to beam streams
+			int i = 0, bz = 0;
+			while (bz < config_.beam) {
+				preseq = &beam_easy_[i];
+				in_words.push_back(preseq->PrefixBack());
+				context_in.push_back(preseq->lmhis);
+				context_out.push_back(preseq->next_lmhis);
+				nnet_out.push_back(preseq->lmlogp);
+				bz++;
+				if (bz < cur_beam_size_) i++;
+			}
+
+			// beam streams parallel process
+			lstmlm_->ForwardMseq(in_words, context_in, nnet_out, context_out);
+
+			// get the valid streams
+			for (int i = 0; i < cur_beam_size_; i++) {
+				preseq = &beam_easy_[i];
+				preseq->lmlogp->ApplyLog();
+			}
+		}
+
 
 		// blank pruning
 		// Only the probability of ending in blank gets updated.
@@ -1328,6 +1388,14 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 
 				// *NB* this would be a good place to include an LM score.
 				if (config_.lm_scale > 0.0) {
+                    // rnn lm score
+					if (rscale != 0) {
+                        rnnlm_logp = (*preseq->lmlogp)(key);
+                        // rnnlm history
+                        n_preseq->lmhis = preseq->next_lmhis;
+                        n_preseq->next_lmhis = preseq->lmhis;
+					}
+
 					// ngram lm score
 					if (rscale < 1.0) {
 					#if HAVE_KENLM == 1

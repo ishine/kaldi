@@ -129,6 +129,8 @@ struct PrefixSeq {
 
 	// rnnt language model history
 	LstmlmHistroy *lmhis;
+	LstmlmHistroy *next_lmhis;
+	Vector<BaseFloat> *lmlogp;
 
 	// log probabilities for the prefix given that
 	// it ends in a blank and dose not end in a blank at this time step.
@@ -276,10 +278,13 @@ class CTCDecoder {
 		std::vector<std::string> wordid_to_word_;
 		bool use_pinyin_;
 
+		// easy beam search
 		int cur_beam_size_;
 		int next_beam_size_;
 		std::vector<PrefixSeq> beam_easy_;
 		std::vector<PrefixSeq> next_beam_easy_;
+		std::vector<LstmlmHistroy> rnnlm_his_;
+		std::vector<Vector<BaseFloat> > rnnlm_logp_;
 
 #if HAVE_KENLM == 1
 		const KenVocab *kenlm_vocab_;

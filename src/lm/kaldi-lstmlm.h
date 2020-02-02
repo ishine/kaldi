@@ -42,6 +42,13 @@ struct LstmlmHistroy {
     }
     LstmlmHistroy() {}
 
+    void SetZero() {
+        for (int i = 0; i < his_recurrent.size(); i++)
+            his_recurrent[i].SetZero();
+        for (int i = 0; i < his_cell.size(); i++)
+            his_cell[i].SetZero();
+    }
+
 	std::vector<Vector<BaseFloat> > his_recurrent; //  each hidden lstm layer recurrent history
 	std::vector<Vector<BaseFloat> > his_cell; //  each hidden lstm layer cell history
 };
