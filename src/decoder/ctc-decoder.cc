@@ -1238,7 +1238,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
 			rscale = config_.rnnlm_scale,
             blank_penalty = log(config_.blank_penalty);
-	int end_t, index, topk = likes_size/2, key;
+	int end_t, index, topk = likes_size/2, key, cur_his = 0;
     bool skip_blank = false, uselm;
 
     // rnnlm
@@ -1393,7 +1393,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
                         rnnlm_logp = (*preseq->lmlogp)(key);
                         // rnnlm history
                         n_preseq->lmhis = preseq->next_lmhis;
-                        n_preseq->next_lmhis = preseq->lmhis;
+                        // n_preseq->next_lmhis = preseq->lmhis;
 					}
 
 					// ngram lm score
@@ -1442,8 +1442,14 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		std::sort(valid_beam.begin(), valid_beam.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
 		int size = valid_beam.size();
 		cur_beam_size_ = size >= config_.beam ? config_.beam : size;
-		for (int i = 0; i < cur_beam_size_; i++)
+		for (int i = 0; i < cur_beam_size_; i++) {
 			beam_easy_[i] = *valid_beam[i];
+			if (rscale != 0) {
+                beam_easy_[i].lmlogp = &rnnlm_logp_[i];
+                beam_easy_[i].next_lmhis = &rnnlm_his_[config_.beam*cur_his+i];
+            }
+        }
+        cur_his = (cur_his+1)%2;
 	}
 }
 

@@ -78,7 +78,6 @@ struct PrefixSeq {
 		//prefix.resize(PREFIX_MAX_LEN, 0);
         prefix.clear();
 		prefix_len = 0;
-		lmhis = NULL;
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
 		logp_lm = 0;
