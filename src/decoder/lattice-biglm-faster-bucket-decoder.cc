@@ -179,7 +179,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
                                                      // buckets map
 
   cost_offsets_.resize(1);
-  cost_offsets_[0] = std::numeric_limits<BaseFloat>::infinity();
+  cost_offsets_[0] = 0.0;
   
   cutoffs_.resize(2);
   cutoffs_[0] = std::numeric_limits<BaseFloat>::infinity();
@@ -615,12 +615,12 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::PruneBucketForwardLinks(
           next_bucket->back_cost;
         BaseFloat link_cost = link_back_cost + bucket->tot_cost;
         
-        KALDI_LOG << "Current state " << bucket->base_state
-                  << " and Next state " << next_bucket->base_state
-                  << " ilabel " << link->ilabel
-                  << " . The cost is " << link->acoustic_cost << " + "
-                  << link->graph_cost << " + " << next_bucket->back_cost
-                  << " + " << bucket->tot_cost << " = " << link_cost;
+        //KALDI_LOG << "Current state " << bucket->base_state
+        //          << " and Next state " << next_bucket->base_state
+        //          << " ilabel " << link->ilabel
+        //          << " . The cost is " << link->acoustic_cost << " + "
+        //          << link->graph_cost << " + " << next_bucket->back_cost
+        //          << " + " << bucket->tot_cost << " = " << link_cost;
         
         // link_cost is the difference in score between the best paths
         // through link source state and through link destination state
@@ -656,6 +656,19 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::PruneBucketForwardLinks(
     // optimizations could cause an infinite loop here for small delta and
     // high-dynamic-range scores.
   } // while changed
+
+  // Check part
+  bool has_zero = false;
+  for (Bucket *bucket = active_buckets_[frame_plus_one].buckets;
+       bucket != NULL; bucket = bucket->next) {      
+     KALDI_LOG << "Current state " << bucket->base_state
+               << " . The cost is " << bucket->tot_cost
+               << " + " << bucket->back_cost << " = "
+               << bucket->tot_cost + bucket->back_cost;
+     if (bucket->tot_cost + bucket->back_cost == 0)
+       has_zero = true;
+  }
+  if (!has_zero) KALDI_ERR << "Lost best path.";
 }
 
 

@@ -60,6 +60,7 @@ dir=$5
 
 srcdir=`dirname $dir`; # The model directory is one level up from decoding directory.
 sdata=$data/split$nj;
+cmvn_opts=`cat $srcdir/cmvn_opts 2>/dev/null`
 
 utils/lang/check_phones_compatible.sh {$srcdir,$graphdir}/phones.txt || exit 1
 
