@@ -61,6 +61,135 @@ class Softmax : public Component {
   }
 };
 
+class SoftmaxB : public Component {
+ public:
+  SoftmaxB(int32 dim_in, int32 dim_out)
+    : Component(dim_in, dim_out), blankid_(0), scale_(0.3)
+  { }
+  ~SoftmaxB()
+  { }
+
+  Component* Copy() const { return new SoftmaxB(*this); }
+  ComponentType GetType() const { return kSoftmaxB; }
+
+  void InitData(std::istream &is) {
+    is >> std::ws; // eat-up whitespace
+    // parse config
+    std::string token;
+    while (!is.eof()) {
+      ReadToken(is, false, &token);
+      /**/ if (token == "<BlankScale>") {
+	  			ReadBasicType(is, false, &blankid_);
+				ReadBasicType(is, false, &scale_);
+			} else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
+                     << " (blank scale)";
+      is >> std::ws; // eat-up whitespace
+    }
+    KALDI_ASSERT(blankid_ >= 0 && blankid_ < output_dim_);
+    KALDI_ASSERT(scale_ > 0.0 );
+  }
+
+  void ReadData(std::istream &is, bool binary) {
+    if ('<' == Peek(is, binary)) {
+      ExpectToken(is, binary, "<BlankScale>");
+      ReadBasicType(is, binary, &blankid_);
+      ReadBasicType(is, binary, &scale_);
+    }
+    KALDI_ASSERT(blankid_ >= 0 && blankid_ < output_dim_);
+    KALDI_ASSERT(scale_ > 0.0 );
+  }
+
+  void WriteData(std::ostream &os, bool binary) const {
+    WriteToken(os, binary, "<BlankScale>");
+    WriteBasicType(os, binary, blankid_);
+    WriteBasicType(os, binary, scale_);
+  }
+
+
+  void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
+    // y = e^x_j/sum_j(e^x_j)
+	out->CopyFromMat(in);
+	out->ColRange(blankid_, 1).Scale(scale_);
+    out->ApplySoftMaxPerRow(*out);
+  }
+
+  void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
+                        const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
+    // simply copy the error derivative
+    // (ie. assume crossentropy error function,
+    // while in_diff contains (net_output-target) :
+    // this is already derivative of the error with
+    // respect to activations of last layer neurons)
+    in_diff->CopyFromMat(out_diff);
+	in_diff->ColRange(blankid_, 1).Scale(scale_);
+  }
+
+ private:
+  int32	blankid_;
+  BaseFloat scale_;
+};
+
+class SoftmaxT : public Component {
+ public:
+  SoftmaxT(int32 dim_in, int32 dim_out)
+    : Component(dim_in, dim_out), temperature_(1.0)
+  { }
+  ~SoftmaxT()
+  { }
+
+  Component* Copy() const { return new SoftmaxT(*this); }
+  ComponentType GetType() const { return kSoftmaxT; }
+
+  void InitData(std::istream &is) {
+    is >> std::ws; // eat-up whitespace
+    // parse config
+    std::string token;
+    while (!is.eof()) {
+      ReadToken(is, false, &token);
+      /**/ if (token == "<Temperature>") ReadBasicType(is, false, &temperature_);
+      else KALDI_ERR << "Unknown token " << token << ", a typo in config?"
+                     << " (temperature)";
+      is >> std::ws; // eat-up whitespace
+    }
+    KALDI_ASSERT(temperature_ > 0.0 );
+  }
+
+  void ReadData(std::istream &is, bool binary) {
+    if ('<' == Peek(is, binary)) {
+      ExpectToken(is, binary, "<Temperature>");
+      ReadBasicType(is, binary, &temperature_);
+    }
+    KALDI_ASSERT(temperature_ > 0.0);
+  }
+
+  void WriteData(std::ostream &os, bool binary) const {
+    WriteToken(os, binary, "<Temperature>");
+    WriteBasicType(os, binary, temperature_);
+  }
+
+
+  void PropagateFnc(const CuMatrixBase<BaseFloat> &in, CuMatrixBase<BaseFloat> *out) {
+    // y = e^x_j/sum_j(e^x_j)
+	out->CopyFromMat(in);
+	out->Scale(temperature_);
+    out->ApplySoftMaxPerRow(*out);
+  }
+
+  void BackpropagateFnc(const CuMatrixBase<BaseFloat> &in, const CuMatrixBase<BaseFloat> &out,
+                        const CuMatrixBase<BaseFloat> &out_diff, CuMatrixBase<BaseFloat> *in_diff) {
+    // simply copy the error derivative
+    // (ie. assume crossentropy error function,
+    // while in_diff contains (net_output-target) :
+    // this is already derivative of the error with
+    // respect to activations of last layer neurons)
+    in_diff->CopyFromMat(out_diff);
+    in_diff->Scale(temperature_);
+  }
+
+ private:
+  BaseFloat temperature_;
+};
+
 class LogSoftmax : public Component {
  public:
   LogSoftmax(int32 dim_in, int32 dim_out)

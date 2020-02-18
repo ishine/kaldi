@@ -76,6 +76,8 @@ class Component {
 
     kActivationFunction = 0x0200, 
     kSoftmax,
+    kSoftmaxB,
+    kSoftmaxT,
 	kLogSoftmax,
 	kCBSoftmax,
     kRelu,
