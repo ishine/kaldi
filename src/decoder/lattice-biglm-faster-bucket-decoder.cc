@@ -513,7 +513,9 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ExpandBucket(
   std::unordered_map<PairId, Token*> token_map;
   for (typename std::vector<Token*>::iterator iter = bucket->tokens.begin();
        iter != bucket->tokens.end(); iter++) {
-    token_map[ConstructPair((*iter)->base_state, (*iter)->lm_state)] = *iter;
+    StateId base_state = (*iter)->base_state;
+    StateId lm_state = (*iter)->lm_state;
+    token_map[ConstructPair(base_state, lm_state)] = *iter;
   }
   // Prepare the cutoff value
   BaseFloat &cutoff = cutoffs_[frame];
@@ -538,12 +540,13 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ExpandBucket(
       Label ilabel = link->ilabel, olabel = link->olabel;
       // make a fake arc which is used to do PropagateLm. Only olabel and weight
       // are useful
-      Label fake_ilabel = 0;
       StateId fake_state = 0;
-      Arc fake_arc(fake_ilabel, olabel, link->graph_cost, fake_state);
+      Arc fake_arc(ilabel, olabel, link->graph_cost, fake_state);
 
-      StateId next_base_state = bucket->base_state,
-              next_lm_state = PropagateLm((*iter)->lm_state, &fake_arc);
+      StateId next_base_state = bucket->base_state;
+      StateId lm_state = (*iter)->lm_state;
+      StateId next_lm_state = PropagateLm(lm_state, &fake_arc);
+
       PairId next_pair = ConstructPair(next_base_state, next_lm_state);
 
       BaseFloat cur_cost = (*iter)->tot_cost,
@@ -661,10 +664,10 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::PruneBucketForwardLinks(
   bool has_zero = false;
   for (Bucket *bucket = active_buckets_[frame_plus_one].buckets;
        bucket != NULL; bucket = bucket->next) {      
-     KALDI_LOG << "Current state " << bucket->base_state
-               << " . The cost is " << bucket->tot_cost
-               << " + " << bucket->back_cost << " = "
-               << bucket->tot_cost + bucket->back_cost;
+     //KALDI_LOG << "Current state " << bucket->base_state
+     //          << " . The cost is " << bucket->tot_cost
+     //          << " + " << bucket->back_cost << " = "
+     //          << bucket->tot_cost + bucket->back_cost;
      if (bucket->tot_cost + bucket->back_cost == 0)
        has_zero = true;
   }
