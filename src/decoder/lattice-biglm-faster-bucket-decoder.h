@@ -128,7 +128,7 @@ struct BackwardLink {
                       BackwardLink *next):
       prev_elem(prev_elem), ilabel(ilabel), olabel(olabel),
       graph_cost(graph_cost), acoustic_cost(acoustic_cost),
-      next(next) { }
+      next(next) { } 
 };
 
 
@@ -227,6 +227,12 @@ struct StdToken {
     }
   }
   inline bool operator > (const Token &other) const { return other < (*this); }
+
+  inline void PrintInfo() {
+    std::cout << "The (" << base_state << "," << lm_state << ") Token cost "
+              << "is " << tot_cost << " + " << back_cost << " = "
+              << tot_cost + back_cost << std::endl;
+  }
 };
 
 
@@ -300,6 +306,12 @@ struct BackpointerToken {
     }
   }
   inline bool operator > (const Token &other) const { return other < (*this); }
+
+  inline void PrintInfo() {
+    std::cout << "The (" << base_state << "," << lm_state << ") Token cost "
+              << "is " << tot_cost << " + " << back_cost << " = "
+              << tot_cost + back_cost << std::endl;
+  }
 };
 
 
@@ -365,14 +377,16 @@ struct TokenBucket {
   // Insert a token into "tokens" max-heap. When the size of "tokens"
   // beyonds "length", remove the worst one.
   bool Insert(Token *tok) {
-    if (tokens.empty()) {
+    if (tokens.size() < length) {
       tokens.push_back(tok);
+      std::push_heap(tokens.begin(), tokens.end(), cmp<Token>());
       tok->in_queue = true;
       if (tok->tot_cost < tot_cost) {
         tot_cost = tok->tot_cost;
       }
     } else {
-      Token* worst = tokens.back();
+      Token* worst = tokens.front();
+
       // If the token is worse than current worst token. Don't insert.
       if (tok->tot_cost > worst->tot_cost) {
         // the token is an invalid token
@@ -380,28 +394,49 @@ struct TokenBucket {
         tok->in_queue = false;
         return false;
       }
+
       // Update the best tot_cost of the bucket
       if (tok->tot_cost < tot_cost) {
         tot_cost = tok->tot_cost;
       }
+
+      // Pop the worst token.
+      // set the tot_cost to infinity to mark this token should be pruned. As
+      // we have to delete the ForwardLinks which are related to this token,
+      // so we didn't delete it right now. And set in_queue to false
+      worst->in_queue = false;
+      worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
+      // Note: pop_heap function only put the worst element to the end of the
+      // container and then make the rest elements to a heap.
+      std::pop_heap(tokens.begin(), tokens.end(), cmp<Token>());
+      tokens.pop_back();
+
       // Insert the 'real' token
       tok->in_queue = true;
       tokens.push_back(tok);
       std::push_heap(tokens.begin(), tokens.end(), cmp<Token>());
-      if (tokens.size() > length) {
-        // set the tot_cost to infinity to mark this token should be pruned. As
-        // we have to delete the ForwardLinks which are related to this token.
-        std::pop_heap(tokens.begin(), tokens.end(), cmp<Token>());
-        // set the tot_cost to infinity which means the token will be deleted
-        // and in_queue to false
-        worst->in_queue = false;
-        worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
-        // Note: pop_heap function only put the worst element to the end of the
-        // container and then make the rest elements to a heap.
-        tokens.pop_back();
-      }
     }
     return true;
+  }
+
+  void PrintInfo() {
+    std::cout << "The (" << base_state << ") bucket's status is "
+              << (expanded ? "expanded." : "non-expanded.")
+              << " The best alpha is " << tot_cost << " and It has "
+              << tokens.size() << " real tokens." << std::endl;
+    if (expanded && tokens.size() != 0) {
+      for(typename std::vector<Token*>::iterator it = tokens.begin();
+          it != tokens.end(); it++) {
+        (*it)->PrintInfo();
+      }
+    }
+    for (BackwardBucketLinkT *bl = bucket_backward_links; bl != NULL;
+         bl = bl->next) {
+      std::cout << bl->prev_elem->base_state << " <--- "
+                << bl->ilabel << " : " << bl->olabel << " / ("
+                << bl->graph_cost << "," << bl->acoustic_cost << ")"
+                << std::endl;
+    }
   }
 };
 }  // namespace biglmbucketdecoder
@@ -665,9 +700,14 @@ class LatticeBiglmFasterBucketDecoderTpl {
   };
 
 
-  // Deletes the elements of the singly linked list
-  // of bucket->bucket_forward_links.
-  inline static void DeleteForwardBucketLinks(Bucket *bucket);
+  // Deletes the elements of the singly linked list of
+  // bucket->bucket_forward_links and the corresponding elements in 'destnation
+  // bucket' bucket_backward_links.
+  // This function will be called when a state is re-visited on a particular
+  // frame. This case will be happend when we process non-emiting arcs.
+  // Note: find the corresponding backward link from the singly linked list of
+  // destination bucket is painful. Need to be optimize.
+  inline static void DeleteBucketLinks(Bucket *bucket);
 
   // Deletes the elements of the singly linked list tok->links
   inline static void DeleteForwardLinks(Token *tok);
