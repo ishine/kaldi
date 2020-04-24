@@ -1407,6 +1407,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 								index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[key]);
 								sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
 								ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+								//ngram_logp = std::max(ngram_logp, sub_ngram_logp);
 							}
 							// Convert to natural log.
 							ngram_logp *= M_LN10;
