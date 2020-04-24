@@ -97,6 +97,18 @@ void CTCDecoder::Initialize() {
 	    	}
 	    }
 	}
+
+	if (config_.keywords != "") {
+		std::vector<std::string> kws;
+		if (!kaldi::SplitStringToVector(config_.keywords, "|", false, &kws))
+			KALDI_ERR << "Invalid keywords string " << config_.keywords;
+		int size = kws.size();
+		keywords_.resize(size);
+		for (int i = 0; i < size; i++) {
+			if (!kaldi::SplitStringToIntegers(kws[i], ":", false, &keywords_[i]))
+				KALDI_ERR << "Invalid keyword string " << kws[i];
+		}
+	}
 }
 
 void CTCDecoder::FreeBeam(BeamType *beam) {
@@ -209,7 +221,16 @@ bool CTCDecoder::GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat
 
 	logp = seq->logp;
     logp_lm = seq->logp_lm;
-	words = seq->prefix;
+
+
+    int size = keyword_.size() + seq->prefix.size();
+    words.resize(size);
+    words[0] = seq->prefix[0];
+    int k = 1;
+    for (int i = 0; i < keyword_.size(); i++)
+    	words[k++] = keyword_[i];
+	for (int i = 1; i < seq->prefix.size(); i++)
+		words[k++] = seq->prefix[i];
 
     /*
     if (config_.use_mode == "easy")
@@ -261,6 +282,7 @@ void CTCDecoder::InitEasyDecoding(int topk) {
 	seq->PrefixAppend(config_.blank);
 	seq->logp_blank = 0.0;
 	cur_beam_size_ = 1;
+	keyword_.clear();
 
     if (config_.rnnlm_scale != 0) {
     	// first input <s>
@@ -1226,6 +1248,53 @@ void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam, bool skip_blank)
 	}
 }
 
+int CTCDecoder::ProcessKeywordsTopk(const Matrix<BaseFloat> &loglikes) {
+	int nframe = loglikes.NumRows();
+	int likes_size = loglikes.NumCols();
+	int topk = likes_size/2, id, kid, cut_frame;
+	float logp, logp_b;
+
+	cut_frame = 0;
+	for (int i = 0; i < keywords_.size(); i++) {
+		kid = 0;
+		for (int n = 0; n < nframe; n++) {
+			logp_b = loglikes(n, config_.blank);
+			if (Exp(logp_b) > config_.blank_threshold)
+				continue;
+
+			logp = loglikes(n, 0);
+			id = loglikes(n, topk);
+			for (int k = 1; k < topk; k++) {
+				if (logp < loglikes(n, k)) {
+					logp = loglikes(n, k);
+					id = loglikes(n, topk+k);
+				}
+			}
+
+			if (kid >= keywords_.size()) {
+				if (id != keywords_[i][kid-1] && id != config_.blank)
+					break;
+			} else if (id != keywords_[i][kid] && id != config_.blank) {
+				// repeat
+				if (kid > 0 && id != keywords_[i][kid-1])
+					break;
+				else if (kid == 0)
+					break;
+			}
+
+			if (id == keywords_[i][kid])
+				kid++;
+			cut_frame = n+1;
+		}
+
+		if (kid == keywords_[i].size()) {
+			keyword_ = keywords_[i];
+			break;
+		}
+	}
+	return cut_frame;
+}
+
 void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
@@ -1238,7 +1307,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
 			rscale = config_.rnnlm_scale,
             blank_penalty = log(config_.blank_penalty);
-	int end_t, index, topk = likes_size/2, key, cur_his = 0;
+	int end_t, index, topk = likes_size/2, key, cur_his = 0, start = 0;
     bool skip_blank = false, uselm;
 
     // rnnlm
@@ -1248,8 +1317,11 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 
 	InitEasyDecoding(topk);
 
+	if (config_.keywords != "")
+		start = ProcessKeywordsTopk(loglikes);
+
 	// decode one utterance
-	for (int n = 0; n < nframe; n++) {
+	for (int n = start; n < nframe; n++) {
 		logp_b = loglikes(n, config_.blank);
 
 		// Lstm language model process, beam streams parallel.

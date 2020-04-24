@@ -179,13 +179,15 @@ struct CTCDecoderOptions {
   bool use_kenlm;
   int vocab_size;
   std::string use_mode;
+  std::string keywords;
   std::string pinyin2words_id_rxfilename;
   std::string word2wordid_rxfilename;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(0),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1), max_mem(50000),
 					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531),
-                       use_mode("normal"), pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
+                       use_mode("normal"), keywords(""),
+					   pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
@@ -201,6 +203,7 @@ struct CTCDecoderOptions {
     opts->Register("use-kenlm", &use_kenlm, "Weather to use ken arpa language wrapper.");
 	opts->Register("vocab-size", &vocab_size, "Acoustic model output size.");
     opts->Register("use-mode", &use_mode, "Select beam search algorithm mode(normal|easy).");
+    opts->Register("keywords", &keywords, "Cat the keywords before the utterance (keyword1|keyword2).");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
   }
 };
@@ -229,6 +232,8 @@ class CTCDecoder {
 		void BeamSearch(const Matrix<BaseFloat> &loglikes);
 
 		void BeamSearchTopk(const Matrix<BaseFloat> &loglikes);
+
+		int ProcessKeywordsTopk(const Matrix<BaseFloat> &loglikes);
 
 		void BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes);
 
@@ -284,6 +289,8 @@ class CTCDecoder {
 		std::vector<PrefixSeq> next_beam_easy_;
 		std::vector<LstmlmHistroy> rnnlm_his_;
 		std::vector<Vector<BaseFloat> > rnnlm_logp_;
+		std::vector<std::vector<int> > keywords_;
+		std::vector<int> keyword_;
 
 #if HAVE_KENLM == 1
 		const KenVocab *kenlm_vocab_;
