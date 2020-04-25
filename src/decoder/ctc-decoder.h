@@ -203,7 +203,7 @@ struct CTCDecoderOptions {
     opts->Register("use-kenlm", &use_kenlm, "Weather to use ken arpa language wrapper.");
 	opts->Register("vocab-size", &vocab_size, "Acoustic model output size.");
     opts->Register("use-mode", &use_mode, "Select beam search algorithm mode(normal|easy).");
-    opts->Register("keywords", &keywords, "Cat the keywords before the utterance (keyword1|keyword2).");
+    opts->Register("keywords", &keywords, "Cat the keywords before the utterance (keyword1+keyword2).");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
   }
 };

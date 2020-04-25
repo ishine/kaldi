@@ -100,8 +100,7 @@ void CTCDecoder::Initialize() {
 
 	if (config_.keywords != "") {
 		std::vector<std::string> kws;
-		if (!kaldi::SplitStringToVector(config_.keywords, "|", false, &kws))
-			KALDI_ERR << "Invalid keywords string " << config_.keywords;
+		kaldi::SplitStringToVector(config_.keywords, "+", false, &kws);
 		int size = kws.size();
 		keywords_.resize(size);
 		for (int i = 0; i < size; i++) {
@@ -1254,9 +1253,9 @@ int CTCDecoder::ProcessKeywordsTopk(const Matrix<BaseFloat> &loglikes) {
 	int topk = likes_size/2, id, kid, cut_frame;
 	float logp, logp_b;
 
-	cut_frame = 0;
 	for (int i = 0; i < keywords_.size(); i++) {
 		kid = 0;
+	    cut_frame = 0;
 		for (int n = 0; n < nframe; n++) {
 			logp_b = loglikes(n, config_.blank);
 			if (Exp(logp_b) > config_.blank_threshold)
@@ -1271,7 +1270,7 @@ int CTCDecoder::ProcessKeywordsTopk(const Matrix<BaseFloat> &loglikes) {
 				}
 			}
 
-			if (kid >= keywords_.size()) {
+			if (kid >= keywords_[i].size()) {
 				if (id != keywords_[i][kid-1] && id != config_.blank)
 					break;
 			} else if (id != keywords_[i][kid] && id != config_.blank) {
@@ -1285,12 +1284,16 @@ int CTCDecoder::ProcessKeywordsTopk(const Matrix<BaseFloat> &loglikes) {
 			if (id == keywords_[i][kid])
 				kid++;
 			cut_frame = n+1;
+            if (kid == keywords_[i].size())
+                break;
 		}
 
 		if (kid == keywords_[i].size()) {
 			keyword_ = keywords_[i];
 			break;
-		}
+		} else {
+            cut_frame = 0;
+        }
 	}
 	return cut_frame;
 }
