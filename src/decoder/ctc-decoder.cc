@@ -1250,17 +1250,24 @@ void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam, bool skip_blank)
 int CTCDecoder::ProcessKeywordsTopk(const Matrix<BaseFloat> &loglikes) {
 	int nframe = loglikes.NumRows();
 	int likes_size = loglikes.NumCols();
-	int topk = likes_size/2, id, kid, cut_frame;
+	int topk = likes_size/2, last_id, id,
+		ksize, cut_frame, ks;
 	float logp, logp_b;
 
 	for (int i = 0; i < keywords_.size(); i++) {
-		kid = 0;
+		ksize = keywords_[i].size();
 	    cut_frame = 0;
+	    last_id = config_.blank;
+	    std::vector<int> kws;
+	    std::vector<int> kws_tim;
 		for (int n = 0; n < nframe; n++) {
 			logp_b = loglikes(n, config_.blank);
-			if (Exp(logp_b) > config_.blank_threshold)
+			if (Exp(logp_b) > config_.blank_threshold) {
+				last_id = config_.blank;
 				continue;
+			}
 
+			// max logp and id
 			logp = loglikes(n, 0);
 			id = loglikes(n, topk);
 			for (int k = 1; k < topk; k++) {
@@ -1270,26 +1277,24 @@ int CTCDecoder::ProcessKeywordsTopk(const Matrix<BaseFloat> &loglikes) {
 				}
 			}
 
-			if (kid >= keywords_[i].size()) {
-				if (id != keywords_[i][kid-1] && id != config_.blank)
-					break;
-			} else if (id != keywords_[i][kid] && id != config_.blank) {
-				// repeat
-				if (kid > 0 && id != keywords_[i][kid-1])
-					break;
-				else if (kid == 0)
-					break;
+			if (id != config_.blank && id != last_id) {
+				kws.push_back(id);
+				kws_tim.push_back(n);
 			}
 
-			if (id == keywords_[i][kid])
-				kid++;
-			cut_frame = n+1;
-            if (kid == keywords_[i].size())
-                break;
+			ks = kws_tim.size();
+			if (id != config_.blank && id == last_id)
+				kws_tim[ks-1] = n;
+
+			if (ks > ksize || (ks > 0 && kws[ks-1] != keywords_[i][ks-1]))
+				break;
+
+			last_id = id;
 		}
 
-		if (kid == keywords_[i].size()) {
+		if (kws.size() >= ksize && kws[ksize-1] == keywords_[i][ksize-1]) {
 			keyword_ = keywords_[i];
+			cut_frame = kws_tim[ksize-1]+1;
 			break;
 		} else {
             cut_frame = 0;
