@@ -43,9 +43,10 @@ struct LatticeBiglmFasterBucketDecoderConfig {
                             // command-line program.
   BaseFloat beam_delta; // tune the adaptive_beam_ for each frame
   BaseFloat cost_scale;
-  BaseFloat prune_scale;   // Note: we don't make this configurable on the command line,
-                           // it's not a very important parameter.  It affects the
-                           // algorithm that prunes the tokens as we go.
+  BaseFloat prune_scale;
+  // Note: we don't make this configurable on the command line,
+  // it's not a very important parameter.  It affects the
+  // algorithm that prunes the tokens as we go.
   // Most of the options inside det_opts are not actually queried by the
   // LatticeFasterDecoder class itself, but by the code that calls it, for
   // example in the function DecodeUtteranceLatticeFaster.
@@ -197,8 +198,8 @@ struct StdToken {
   //'next' is the next in the singly-linked list of tokens for this frame.
   Token *next;
 
-  // identitfy the token is in bucket or not.
-  bool in_queue;
+  // identitfy the token is the top N tokens in a TokenBucket or not
+  bool in_heap;
 
   // This function does nothing and should be optimized out; it's needed
   // so we can share the regular LatticeFasterDecoderTpl code and the code
@@ -214,7 +215,7 @@ struct StdToken {
                   ForwardLinkT *links, Token *next, Token *backpointer):
     tot_cost(tot_cost), back_cost(back_cost),
     base_state(base_state), lm_state(lm_state),
-    links(links), next(next), in_queue(false) { }
+    links(links), next(next), in_heap(false) { }
   
   // The smaller, the better
   inline bool operator < (const Token &other) const {
@@ -271,8 +272,8 @@ struct BackpointerToken {
   //'next' is the next in the singly-linked list of tokens for this frame.
   Token *next;
 
-  // identitfy the token is in current bucket or not.
-  bool in_queue;
+  // identitfy the token is the top N tokens in a TokenBucket or not
+  bool in_heap;
 
   // Best preceding BackpointerToken (could be a on this frame, connected to
   // this via an epsilon transition, or on a previous frame).  This is only
@@ -292,7 +293,7 @@ struct BackpointerToken {
                           tot_cost(tot_cost), back_cost(back_cost),
                           base_state(base_state), lm_state(lm_state),
                           links(links), next(next), 
-                          in_queue(false),
+                          in_heap(false),
                           backpointer(backpointer) { }
 
   // The smaller, the better
@@ -349,16 +350,18 @@ struct TokenBucket {
                       // for this frame.
   bool in_queue;  // identitfy the 'TokenBucket' is in current queue or not
                   // to prevent duplication in function ProcessForFrame().
-
  
-  // We store the 'real' tokens into a vector and orginize it as a maximum heap.
-  // When we insert a token into the heap, we compare the "tot_cost" which is
-  // the smaller the better. So this is a max-heap.
-  std::vector<Token*> tokens;
+  // We store the top N 'real' tokens into a vector and orginize it as a
+  // maximum heap. When we insert a token into the heap, we compare the
+  // "tot_cost" which is the smaller the better. So this is a max-heap.
+  std::vector<Token*> top_toks;
   // when we insert an element into max-heap, it will call the compare
   // function automatically to compare the new element with the elements from
   // the leaf to root in order. If the compare function return false, the new
   // element will go on. Othewise, it will stop.
+  
+  // Store all the 'real' tokens into the vector
+  std::vector<Token*> all_toks;
 
 
   // Bear in mind, the type of StateId is unsigned int.
@@ -367,66 +370,75 @@ struct TokenBucket {
     expanded(expanded), bucket_backward_links(NULL), bucket_forward_links(NULL),
     tot_cost(std::numeric_limits<BaseFloat>::infinity()),
     back_cost(std::numeric_limits<BaseFloat>::infinity()),
-    base_state(base_state), length(bucket_size), next(next), in_queue(false) {
-      tokens.reserve(length + 1);  // reserve "length" + 1 positions to
-                                   // prevent memory re-allocate.
-      std::make_heap(tokens.begin(), tokens.end(), cmp<Token>());
+    base_state(base_state), length(bucket_size), next(next),
+    in_queue(false) {
+      top_toks.resize(0);
+      top_toks.reserve(length + 1);  // reserve "length" + 1 positions to
+                                     // prevent memory re-allocate.
+      // The top_toks is a max-heap which is used to manage the top N tokens
+      std::make_heap(top_toks.begin(), top_toks.end(), cmp<Token>());
+      all_toks.resize(0);
   }
 
-
-  // Insert a token into "tokens" max-heap. When the size of "tokens"
+  // Insert a token into "top_toks" max-heap. When the size of "top_toks"
   // beyonds "length", remove the worst one.
-  bool Insert(Token *tok) {
-    if (tokens.size() < length) {
-      tokens.push_back(tok);
-      std::push_heap(tokens.begin(), tokens.end(), cmp<Token>());
-      tok->in_queue = true;
-      if (tok->tot_cost < tot_cost) {
-        tot_cost = tok->tot_cost;
+  void Insert(Token *tok, bool fresh = true) {
+    if (!tok->in_heap) {  // the token is not in max-heap
+                          // (it maybe in all_toks or it is a new token)
+                          // check if we need to insert it into the heap
+      if (top_toks.size() < length) {  // the heap is not full
+                                       // insert it directly
+        top_toks.push_back(tok);
+        std::push_heap(top_toks.begin(), top_toks.end(), cmp<Token>());
+        tok->in_heap = true;
+
+        if (tok->tot_cost < tot_cost) {
+          tot_cost = tok->tot_cost;
+        }
+      } else {  // the heap is full. Compare with the worst one.
+        Token* worst = top_toks.front();
+
+        // If the token is worse than current worst token. Don't insert.
+        if (tok->tot_cost > worst->tot_cost) {
+          // the token is an invalid token
+          tok->in_heap = false;
+        } else {
+          // Check if we need to update the best tot_cost of the bucket
+          if (tok->tot_cost < tot_cost) {
+            tot_cost = tok->tot_cost;
+          }
+
+          // Pop the worst token.
+          worst->in_heap = false;
+          // Note: pop_heap function only put the worst element to the end of
+          // the container and then make the rest elements to a heap.
+          std::pop_heap(top_toks.begin(), top_toks.end(), cmp<Token>());
+          top_toks.pop_back();
+
+          // Insert the 'real' token
+          tok->in_heap = true;
+          top_toks.push_back(tok);
+          std::push_heap(top_toks.begin(), top_toks.end(), cmp<Token>());
+        }
       }
-    } else {
-      Token* worst = tokens.front();
-
-      // If the token is worse than current worst token. Don't insert.
-      if (tok->tot_cost > worst->tot_cost) {
-        // the token is an invalid token
-        tok->tot_cost = std::numeric_limits<BaseFloat>::infinity();
-        tok->in_queue = false;
-        return false;
-      }
-
-      // Update the best tot_cost of the bucket
-      if (tok->tot_cost < tot_cost) {
-        tot_cost = tok->tot_cost;
-      }
-
-      // Pop the worst token.
-      // set the tot_cost to infinity to mark this token should be pruned. As
-      // we have to delete the ForwardLinks which are related to this token,
-      // so we didn't delete it right now. And set in_queue to false
-      worst->in_queue = false;
-      worst->tot_cost = std::numeric_limits<BaseFloat>::infinity();
-      // Note: pop_heap function only put the worst element to the end of the
-      // container and then make the rest elements to a heap.
-      std::pop_heap(tokens.begin(), tokens.end(), cmp<Token>());
-      tokens.pop_back();
-
-      // Insert the 'real' token
-      tok->in_queue = true;
-      tokens.push_back(tok);
-      std::push_heap(tokens.begin(), tokens.end(), cmp<Token>());
+    } else {  // the token is in heap now.
+              // If this part is reached, the token must achieve a better
+              // alpha value. Note: it is controlled by the outer logic
+      std::make_heap(top_toks.begin(), top_toks.end(), cmp<Token>());   
     }
-    return true;
+
+    // if this is a new token, put it into the 'all_toks'
+    if (fresh) all_toks.push_back(tok); 
   }
 
   void PrintInfo() {
     std::cout << "The (" << base_state << ") bucket's status is "
               << (expanded ? "expanded." : "non-expanded.")
               << " The best alpha is " << tot_cost << " and It has "
-              << tokens.size() << " real tokens." << std::endl;
-    if (expanded && tokens.size() != 0) {
-      for(typename std::vector<Token*>::iterator it = tokens.begin();
-          it != tokens.end(); it++) {
+              << all_toks.size() << " real tokens." << std::endl;
+    if (expanded && all_toks.size() != 0) {
+      for(typename std::vector<Token*>::iterator it = all_toks.begin();
+          it != all_toks.end(); it++) {
         (*it)->PrintInfo();
       }
     }
@@ -731,6 +743,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // no purpose (and will hopefully be optimized out).
   inline Bucket* FindOrAddBucket(const Arc &arc, int32 token_list_index,
                                  BaseFloat tot_cost, BaseFloat ac_cost,
+                                 BaseFloat graph_cost,
                                  Bucket *source_bucket,
                                  StateIdToBucketMap *bucket_map,
                                  bool *changed);
