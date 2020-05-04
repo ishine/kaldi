@@ -372,12 +372,13 @@ struct TokenBucket {
     back_cost(std::numeric_limits<BaseFloat>::infinity()),
     base_state(base_state), length(bucket_size), next(next),
     in_queue(false) {
-      top_toks.resize(0);
-      top_toks.reserve(length + 1);  // reserve "length" + 1 positions to
+    
+    top_toks.resize(0);
+    top_toks.reserve(length + 1);  // reserve "length" + 1 positions to
                                      // prevent memory re-allocate.
-      // The top_toks is a max-heap which is used to manage the top N tokens
-      std::make_heap(top_toks.begin(), top_toks.end(), cmp<Token>());
-      all_toks.resize(0);
+    // The top_toks is a max-heap which is used to manage the top N tokens
+    std::make_heap(top_toks.begin(), top_toks.end(), cmp<Token>());
+    all_toks.resize(0);
   }
 
   // Insert a token into "top_toks" max-heap. When the size of "top_toks"
@@ -444,10 +445,19 @@ struct TokenBucket {
     }
     for (BackwardBucketLinkT *bl = bucket_backward_links; bl != NULL;
          bl = bl->next) {
-      std::cout << bl->prev_elem->base_state << " <--- "
+      std::cout << bl->prev_elem->base_state 
+                << " (" << bl->prev_elem->tot_cost << ") <--- "
                 << bl->ilabel << " : " << bl->olabel << " / ("
                 << bl->graph_cost << "," << bl->acoustic_cost << ")"
                 << std::endl;
+      if (bl->prev_elem->expanded && bl->prev_elem->all_toks.size() != 0) {
+        for(typename std::vector<Token*>::iterator it =
+            bl->prev_elem->all_toks.begin();
+            it != bl->prev_elem->all_toks.end(); it++) {
+          (*it)->PrintInfo();
+        }
+      }
+      std::cout << "----" << std::endl;
     }
   }
 };
