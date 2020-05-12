@@ -232,7 +232,8 @@ struct StdToken {
   inline void PrintInfo() {
     std::cout << "The (" << base_state << "," << lm_state << ") Token cost "
               << "is " << tot_cost << " + " << back_cost << " = "
-              << tot_cost + back_cost << std::endl;
+              << tot_cost + back_cost << " and the heap status is "
+              << (in_heap ? " true" : " false") << std::endl;
   }
 };
 
@@ -311,7 +312,9 @@ struct BackpointerToken {
   inline void PrintInfo() {
     std::cout << "The (" << base_state << "," << lm_state << ") Token cost "
               << "is " << tot_cost << " + " << back_cost << " = "
-              << tot_cost + back_cost << std::endl;
+              << tot_cost + back_cost << " and the heap status is "
+              << (in_heap ? " true" : " false") << std::endl;
+
   }
 };
 
@@ -384,6 +387,9 @@ struct TokenBucket {
   // Insert a token into "top_toks" max-heap. When the size of "top_toks"
   // beyonds "length", remove the worst one.
   void Insert(Token *tok, bool fresh = true) {
+    if (top_toks.empty()) {
+      tot_cost = tok->tot_cost;  // The first one
+    }
     if (!tok->in_heap) {  // the token is not in max-heap
                           // (it maybe in all_toks or it is a new token)
                           // check if we need to insert it into the heap
@@ -425,14 +431,32 @@ struct TokenBucket {
     } else {  // the token is in heap now.
               // If this part is reached, the token must achieve a better
               // alpha value. Note: it is controlled by the outer logic
-      std::make_heap(top_toks.begin(), top_toks.end(), cmp<Token>());   
+      std::make_heap(top_toks.begin(), top_toks.end(), cmp<Token>());
+      // Check if we need to update the bucket cost as a better alpha value is
+      // achieved.
+      if (tok->tot_cost < tot_cost) {
+        tot_cost = tok->tot_cost;
+      }
     }
 
     // if this is a new token, put it into the 'all_toks'
     if (fresh) all_toks.push_back(tok); 
   }
 
+  void Info(TokenBucket* bucket) {
+    std::cout << "The (" << bucket->base_state << ") bucket's status is "
+              << (bucket->expanded ? "expanded." : "non-expanded.")
+              << " The best alpha is " << bucket->tot_cost << " and It has "
+              << bucket->all_toks.size() << " real tokens." << std::endl;
+    if (bucket->expanded && bucket->all_toks.size() != 0) {
+      for(typename std::vector<Token*>::iterator it = bucket->all_toks.begin();
+          it != bucket->all_toks.end(); it++) {
+        (*it)->PrintInfo();
+      }
+    }
+  }
   void PrintInfo() {
+    /*
     std::cout << "The (" << base_state << ") bucket's status is "
               << (expanded ? "expanded." : "non-expanded.")
               << " The best alpha is " << tot_cost << " and It has "
@@ -443,13 +467,18 @@ struct TokenBucket {
         (*it)->PrintInfo();
       }
     }
+    */
+    std::cout << "-----print bucket info ------" << std::endl;
+    Info(this);
     for (BackwardBucketLinkT *bl = bucket_backward_links; bl != NULL;
          bl = bl->next) {
+      
       std::cout << bl->prev_elem->base_state 
                 << " (" << bl->prev_elem->tot_cost << ") <--- "
                 << bl->ilabel << " : " << bl->olabel << " / ("
                 << bl->graph_cost << "," << bl->acoustic_cost << ")"
                 << std::endl;
+      /*
       if (bl->prev_elem->expanded && bl->prev_elem->all_toks.size() != 0) {
         for(typename std::vector<Token*>::iterator it =
             bl->prev_elem->all_toks.begin();
@@ -457,8 +486,11 @@ struct TokenBucket {
           (*it)->PrintInfo();
         }
       }
+      */
+      Info(bl->prev_elem);
       std::cout << "----" << std::endl;
     }
+    std::cout << "----------finish a bucket -------" << std::endl;
   }
 };
 }  // namespace biglmbucketdecoder
@@ -895,6 +927,15 @@ class LatticeBiglmFasterBucketDecoderTpl {
     } else {
       Arc lm_arc;
       bool ans = lm_diff_fst_->GetArc(lm_state, arc->olabel, &lm_arc);
+      /*
+      if (debug_) {
+        std::cout << "The lm state is " << lm_state;
+        std::cout << ". The lm arc is " << lm_arc.ilabel << " : "
+                  << lm_arc.olabel << " with cost " << lm_arc.weight
+                  << " and the destination is " << lm_arc.nextstate
+                  << std::endl;
+      }
+      */
       if (!ans) {  // this case is unexpected for statistical LMs
         if (!warned_noarc_) {
           warned_noarc_ = true;
@@ -986,6 +1027,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
                                     // As we do lazy evaluation, we will trace
                                     // back and expand those buckets with 
                                     // pruning.
+  //bool debug_ = false;
 };
 
 typedef LatticeBiglmFasterBucketDecoderTpl<fst::StdFst,
