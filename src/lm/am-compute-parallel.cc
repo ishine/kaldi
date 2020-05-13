@@ -1,4 +1,4 @@
-// nnet0/nnet-compute-parallel.cc
+// lm/am-compute-parallel.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -23,30 +23,37 @@
 #include "util/kaldi-semaphore.h"
 #include "util/kaldi-mutex.h"
 #include "util/kaldi-thread.h"
-
 #include "lat/kaldi-lattice.h"
-
 #include "cudamatrix/cu-device.h"
 #include "base/kaldi-types.h"
 
-
 #include "nnet0/nnet-affine-transform.h"
-#include "nnet0/nnet-affine-preconditioned-transform.h"
-#include "nnet0/nnet-model-merge-function.h"
 #include "nnet0/nnet-activation.h"
-#include "nnet0/nnet-example.h"
 #include "nnet0/nnet-utils.h"
 
-#include "nnet0/nnet-compute-parallel.h"
+#include "lm/example.h"
+#include "lm/am-compute-parallel.h"
 
 namespace kaldi {
-namespace nnet0 {
+namespace lm {
+
+typedef nnet0::NnetTrainOptions NnetTrainOptions;
+typedef nnet0::NnetDataRandomizerOptions NnetDataRandomizerOptions;
+typedef nnet0::NnetParallelOptions NnetParallelOptions;
+typedef nnet0::Component Component;
+typedef nnet0::RandomizerMask RandomizerMask;
+typedef nnet0::MatrixRandomizer MatrixRandomizer;
+typedef nnet0::VectorRandomizer VectorRandomizer;
+typedef nnet0::PosteriorRandomizer PosteriorRandomizer;
+typedef nnet0::Xent Xent;
+typedef nnet0::Mse	Mse;
+typedef nnet0::MultiTaskLoss MultiTaskLoss;
 
 class TrainParallelClass: public MultiThreadable {
 
 private:
     const NnetUpdateOptions *opts;
-    NnetModelSync *model_sync;
+    LmModelSync *model_sync;
 
 	std::string feature_transform,
 				model_filename,
@@ -73,8 +80,8 @@ private:
  public:
   // This constructor is only called for a temporary object
   // that we pass to the RunMultiThreaded function.
-	TrainParallelClass(const NnetUpdateOptions *opts,
-			NnetModelSync *model_sync,
+    TrainParallelClass(const NnetUpdateOptions *opts,
+    		LmModelSync *model_sync,
 			std::string	model_filename,
             std::string target_model_filename,
 			std::string targets_rspecifier,
@@ -128,38 +135,32 @@ private:
 	}
 
 	  // This does the main function of the class.
-	void operator ()()
-	{
+	void operator ()() {
 
 		int thread_idx = this->thread_id_;
-
 		model_sync->LockModel();
-
 	    // Select the GPU
 	#if HAVE_CUDA == 1
-	    if (parallel_opts->num_procs > 1)
-	    {
+	    if (parallel_opts->num_procs > 1) {
 	    	//int32 thread_idx = model_sync->GetThreadIdx();
 	    	KALDI_LOG << "MyId: " << parallel_opts->myid << "  ThreadId: " << thread_idx;
 	    	CuDevice::Instantiate().MPISelectGpu(model_sync->gpuinfo_, model_sync->win, thread_idx, this->num_threads);
-	    	for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++)
-	    	{
+	    	for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++) {
 	    		KALDI_LOG << model_sync->gpuinfo_[i].hostname << "  myid: " << model_sync->gpuinfo_[i].myid
 	    					<< "  gpuid: " << model_sync->gpuinfo_[i].gpuid;
 	    	}
-	    }
-	    else
+	    } else {
 	    	CuDevice::Instantiate().SelectGpu();
+	    }
         CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
 
 	    //CuDevice::Instantiate().DisableCaching();
 	#endif
-
 	    model_sync->UnlockModel();
 
 		Nnet nnet_transf;
 	    if (feature_transform != "") {
-	      nnet_transf.Read(feature_transform);
+	    	nnet_transf.Read(feature_transform);
 	    }
 
 	    Nnet nnet;
@@ -176,12 +177,13 @@ private:
         */
 
 	    if (opts->dropout_retention > 0.0) {
-	      nnet_transf.SetDropoutRetention(opts->dropout_retention);
-	      nnet.SetDropoutRetention(opts->dropout_retention);
+	    	nnet_transf.SetDropoutRetention(opts->dropout_retention);
+	    	nnet.SetDropoutRetention(opts->dropout_retention);
 	    }
+
 	    if (crossvalidate) {
-	      nnet_transf.SetDropoutRetention(1.0);
-	      nnet.SetDropoutRetention(1.0);
+	    	nnet_transf.SetDropoutRetention(1.0);
+	    	nnet.SetDropoutRetention(1.0);
 	    }
 
 	    Nnet si_nnet;
@@ -194,7 +196,7 @@ private:
 	    	frozen_nnet.Read(opts->frozen_model_filename);
 	    }
 
-	    model_sync->Initialize(&nnet);
+	    model_sync->Initialize(&nnet, this->thread_id_);
 
 	    // skip frames
 	    int32 skip_frames = opts->skip_frames;
@@ -215,13 +217,13 @@ private:
 	    Mse mse(*opts->loss_opts);
 	    MultiTaskLoss multitask(*opts->loss_opts);
 	    if (0 == objective_function.compare(0, 9, "multitask")) {
-		  // objective_function contains something like :
-		  // 'multitask,xent,2456,1.0,mse,440,0.001'
-		  //
-		  // the meaning is following:
-		  // 'multitask,<type1>,<dim1>,<weight1>,...,<typeN>,<dimN>,<weightN>'
-		  multitask.InitFromString(objective_function);
-          stats_->multitask.InitFromString(objective_function);
+			// objective_function contains something like :
+			// 'multitask,xent,2456,1.0,mse,440,0.001'
+			//
+			// the meaning is following:
+			// 'multitask,<type1>,<dim1>,<weight1>,...,<typeN>,<dimN>,<weightN>'
+			multitask.InitFromString(objective_function);
+			stats_->multitask.InitFromString(objective_function);
 		}
 
 	    Timer time, mpi_time;
@@ -231,18 +233,14 @@ private:
 		Matrix<BaseFloat> nnet_out_h, nnet_diff_h;
 		Vector<BaseFloat> utt_flags;
 
-		DNNNnetExample *example;
-
-		ModelMergeFunction *p_merge_func = model_sync->GetModelMergeFunction();
+		DNNExample *example;
 
 		//double t1, t2, t3, t4;
 		int32 update_frames = 0, num_frames = 0, num_done = 0, num_dump = 0;
 		kaldi::int64 total_frames = 0;
 
-		while (1)
-		{
-			while (!feature_randomizer.IsFull() && (example = dynamic_cast<DNNNnetExample*>(repository_->ProvideExample())) != NULL)
-			{
+		while (true) {
+			while (!feature_randomizer.IsFull() && (example = dynamic_cast<DNNExample*>(repository_->ProvideExample())) != NULL) {
 				//time.Reset();
 				std::string utt = example->utt;
 				const Matrix<BaseFloat> &mat = example->input_frames;
@@ -306,13 +304,13 @@ private:
 			}
 
 	        if (feature_randomizer.Done())
-	        		break;
+	        	break;
 
 		      // randomize
       		if (!crossvalidate && opts->randomize) {
-        			const std::vector<int32>& mask = randomizer_mask.Generate(feature_randomizer.NumFrames());
-        			feature_randomizer.Randomize(mask);
-        			targets_randomizer.Randomize(mask);
+				const std::vector<int32>& mask = randomizer_mask.Generate(feature_randomizer.NumFrames());
+				feature_randomizer.Randomize(mask);
+				targets_randomizer.Randomize(mask);
        			weights_randomizer.Randomize(mask);
       		}
 
@@ -347,11 +345,10 @@ private:
 			      	si_nnet.Propagate(*p_nnet_in, &si_nnet_out);
 			      	//p_si_nnet_out = &si_nnet_out;
 			        // convert posterior to matrix,
-					PosteriorToMatrix(nnet_tgt, nnet.OutputDim(), &tgt_mat);
+					nnet0::PosteriorToMatrix(nnet_tgt, nnet.OutputDim(), &tgt_mat);
 					tgt_mat.Scale(1-this->kld_scale);
 					tgt_mat.AddMat(this->kld_scale, si_nnet_out);
 			    }
-
 
 				// evaluate objective function we've chosen
 				if (objective_function == "xent") {
@@ -376,95 +373,42 @@ private:
 					KALDI_ERR<< "Unknown objective function code : " << objective_function;
 				}
 
-		        // backward pass
+				// backward pass
 				if (!crossvalidate) {
 					// backpropagate
-
-                    /*
-                    if (model_sync->reset_gradient_[thread_idx] && parallel_opts->merge_func == "globalgradient") {
-                        nnet.ResetGradient();
-                        model_sync->reset_gradient_[thread_idx] = false;
-                        //KALDI_VLOG(1) << "Reset Gradient";
-                    }
-                    */
-
-					if (parallel_opts->num_threads > 1 && update_frames >= opts->update_frames) {
-					//if (update_frames >= opts->update_frames) {
-						nnet.Backpropagate(nnet_diff, NULL, false);
-						nnet.Gradient();
-
-						//t2 = time.Elapsed();
-						//time.Reset();
-
-						if (parallel_opts->asgd_lock)
-							model_sync->LockModel();
-
-						model_sync->SetWeight(&nnet);
-						nnet.UpdateGradient();
-						model_sync->GetWeight(&nnet);
-
-						if (parallel_opts->asgd_lock)
-							model_sync->UnlockModel();
-
-						update_frames = 0;
-
-						//t3 = time.Elapsed();
-					} else {
-						nnet.Backpropagate(nnet_diff, NULL, true);
-
-						//t2 = time.Elapsed();
-						//time.Reset();
-					}
-
-					//KALDI_WARN << "prepare data: "<< t1 <<" forward & backward: "<< t2 <<" update: "<< t3;
-					// relase the buffer, we don't need anymore
-
-					//multi-machine
-					if (parallel_opts->num_procs > 1)
+					nnet.Backpropagate(nnet_diff, NULL, true);
+					update_frames += num_frames;
+					if ((parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) &&
+							update_frames + num_frames > parallel_opts->merge_size && !model_sync->isLastMerge())
 					{
-						model_sync->LockModel();
+						// upload current model
+						model_sync->GetWeight(&nnet, this->thread_id_, this->thread_id_);
 
-						if (p_merge_func->CurrentMergeCache() + num_frames > parallel_opts->merge_size)
+						// model merge
+						model_sync->ThreadSync(this->thread_id_, 1);
+
+						// download last model
+						if (!model_sync->isLastMerge())
 						{
-							if (p_merge_func->leftMerge() <= 1 && !p_merge_func->isLastMerge())
-							{
-								p_merge_func->MergeStatus(1);
-							}
+							model_sync->SetWeight(&nnet, this->thread_id_);
 
-							if (p_merge_func->leftMerge() > 1 || !p_merge_func->isLastMerge())
-							{
-								model_sync->GetWeight(&nnet);
+							// nnet.ResetGradient();
 
-							    p_merge_func->Merge(0);
-							    KALDI_VLOG(1) << "Model " << parallel_opts->merge_func << " merge NO."
-										<< parallel_opts->num_merge - p_merge_func->leftMerge()
-							    				<< " Current mergesize = " << p_merge_func->CurrentMergeCache() << " frames.";
-							    p_merge_func->MergeCacheReset();
-
-							    model_sync->SetWeight(&nnet);
-                                //model_sync->ResetGradient();
-							}
+							KALDI_VLOG(1) << "Thread " << thread_id_ << " merge NO."
+											<< parallel_opts->num_merge - model_sync->leftMerge()
+												<< " Current mergesize = " << update_frames << " frames.";
+							update_frames = 0;
 						}
-
-						p_merge_func->AddMergeCache((int) num_frames);
-
-						model_sync->UnlockModel();
-
 					}
 				}
-
 				monitor(&nnet, total_frames, num_frames);
-
 				// increase time counter
-		        update_frames += num_frames;
-		        total_frames += num_frames;
+				total_frames += num_frames;
 
-		        // track training process
-			    if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0)
-				{
-                    int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
-					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump)
-					{
+				// track training process
+				if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0) {
+					int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
+					if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump) {
 						char name[512];
 						num_dump++;
 						sprintf(name, "%s_%d_%ld", model_filename.c_str(), num_dump, total_frames);
@@ -472,78 +416,59 @@ private:
 					}
 				}
 
-		        fflush(stderr);
-		        fsync(fileno(stderr));
+				fflush(stderr);
+				fsync(fileno(stderr));
 			}
-	  }
+		}
 
 		model_sync->LockStates();
-
 		stats_->total_frames += total_frames;
 		stats_->num_done += num_done;
-
 		if (objective_function == "xent"){
 			//KALDI_LOG << xent.Report();
 			stats_->xent.Add(&xent);
-		 }else if (objective_function == "mse"){
+		} else if (objective_function == "mse"){
 			//KALDI_LOG << mse.Report();
 			stats_->mse.Add(&mse);
-		 }else if (0 == objective_function.compare(0, 9, "multitask")) {
-			 stats_->multitask.Add(&multitask);
-         }else {
-			 KALDI_ERR<< "Unknown objective function code : " << objective_function;
-		 }
-
+		} else if (0 == objective_function.compare(0, 9, "multitask")) {
+			stats_->multitask.Add(&multitask);
+		} else {
+			KALDI_ERR<< "Unknown objective function code : " << objective_function;
+		}
 		model_sync->UnlockStates();
 
 		//last merge
-		if (!crossvalidate){
-			model_sync->LockModel();
+		if (!crossvalidate) {
+			if (parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) {
+				// upload current model
+				model_sync->GetWeight(&nnet, this->thread_id_, this->thread_id_);
 
-			bool last_thread = true;
-			for (int i = 0; i < parallel_opts->num_threads; i++)
-			{
-				if (i != thread_idx && !model_sync->isfinished_[i]){
-						last_thread = false;
-						break;
-				}
-			}
+				// last model merge
+				model_sync->ThreadSync(this->thread_id_, 0);
 
-			if (parallel_opts->num_procs > 1)
-			{
-				if (last_thread)
-				{
-					if (!p_merge_func->isLastMerge())
-						p_merge_func->MergeStatus(0);
+				// download last model
+				model_sync->SetWeight(&nnet, this->thread_id_);
 
-					model_sync->GetWeight(&nnet);
+				KALDI_VLOG(1) << "Thread " << thread_id_ << " merge NO."
+								<< parallel_opts->num_merge - model_sync->leftMerge()
+									<< " Current mergesize = " << update_frames << " frames.";
+			} else if (parallel_opts->num_threads == 1) {
+                // upload current model
+                model_sync->GetWeight(&nnet, this->thread_id_);
+            }
 
-					p_merge_func->Merge(0);
-						KALDI_VLOG(1) << "Model merge NO." << parallel_opts->num_merge-p_merge_func->leftMerge()
-									   << " Current mergesize = " << p_merge_func->CurrentMergeCache() << " frames.";
-						model_sync->SetWeight(&nnet);
-
-				}
-
-			}
-
-			if (last_thread)
-			{
+			if (this->thread_id_ == 0) {
 				KALDI_VLOG(1) << "Last thread upload model to host.";
-				//model_sync->CopyToHost(&nnet);
 				if(parallel_opts->myid == 0)
-					nnet.Write(target_model_filename, opts->binary);	
+					nnet.Write(target_model_filename, opts->binary);
 			}
-
-			model_sync->isfinished_[thread_idx] = true;
-			model_sync->UnlockModel();
 		}
 	}
 
 };
 
 
-void NnetUpdateParallel(const NnetUpdateOptions *opts,
+void AmUpdateParallel(const NnetUpdateOptions *opts,
 		std::string	model_filename,
         std::string target_model_filename,
 		std::string feature_rspecifier,
@@ -551,8 +476,8 @@ void NnetUpdateParallel(const NnetUpdateOptions *opts,
 		Nnet *nnet,
 		NnetStats *stats)
 {
-		ExamplesRepository repository;
-		NnetModelSync model_sync(nnet, opts->parallel_opts);
+		ExamplesRepository repository(128*10);
+		LmModelSync model_sync(nnet, opts->parallel_opts);
 
 		TrainParallelClass c(opts, &model_sync,
 								model_filename, 
@@ -587,8 +512,8 @@ void NnetUpdateParallel(const NnetUpdateOptions *opts,
 	    MultiThreader<TrainParallelClass> m(opts->parallel_opts->num_threads, c);
 
 	    // prepare sample
-		NnetExample *example;
-		std::vector<NnetExample*> examples;
+	    Example *example;
+		std::vector<Example*> examples;
 		std::vector<int> sweep_frames, loop_frames;
 		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
@@ -608,7 +533,7 @@ void NnetUpdateParallel(const NnetUpdateOptions *opts,
 				idx = (idx+1)%nframes;
 			}
 
-			example = new DNNNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader, 
+			example = new DNNExample(&feature_reader, &si_feature_reader, spec_aug_reader,
 					&targets_reader, &weights_reader, &model_sync, stats, opts);
 			example->SetSweepFrames(loop_frames, opts->skip_inner);
 			if (example->PrepareData(examples)) {
@@ -627,7 +552,7 @@ void NnetUpdateParallel(const NnetUpdateOptions *opts,
 }
 
 
-} // namespace nnet
+} // namespace lm
 } // namespace kaldi
 
 

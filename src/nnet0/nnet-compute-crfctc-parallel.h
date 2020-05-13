@@ -1,4 +1,4 @@
-// nnet0/nnet-compute-ctc-parallel.h
+// nnet0/nnet-compute-crfctc-parallel.h
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -17,10 +17,9 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef KALDI_NNET_NNET_COMPUTE_CTC_PARALLEL_H_
-#define KALDI_NNET_NNET_COMPUTE_CTC_PARALLEL_H_
+#ifndef KALDI_NNET_NNET_COMPUTE_CRFCTC_PARALLEL_H_
+#define KALDI_NNET_NNET_COMPUTE_CRFCTC_PARALLEL_H_
 
-//#include "nnet2/am-nnet.h"
 #include "hmm/transition-model.h"
 
 #include <string>
@@ -35,57 +34,38 @@
 
 #include "cudamatrix/cu-device.h"
 
-#include "nnet0/nnet-compute-parallel.h"
+#include "nnet0/nnet-compute-ctc-parallel.h"
 
 namespace kaldi {
 namespace nnet0 {
 
-struct NnetCtcUpdateOptions : public NnetUpdateOptions {
+struct NnetCrfCtcUpdateOptions : public NnetCtcUpdateOptions {
 
-
-    int32 num_stream;
-    int32 max_frames;
-    int32 batch_size;
-    int32 blank_label;
-
-    // l2 regularization constant on the 'ctc' output; the actual term added to
-    // the objf will be -0.5 times this constant times the squared l2 norm.
-    // (squared so it's additive across the dimensions).  e.g. try 0.0005.
-    BaseFloat l2_regularize;
-    BaseFloat clip_loss;
-    std::string ctc_imp;
-
-
-    NnetCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const SpecAugOptions *spec_opts,
+	BaseFloat lambda;
+	std::string weight_filename;
+    NnetCrfCtcUpdateOptions(const NnetTrainOptions *trn_opts, const NnetDataRandomizerOptions *rnd_opts, const SpecAugOptions *spec_opts,
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
-    	: NnetUpdateOptions(trn_opts, rnd_opts, spec_opts, loss_opts, parallel_opts, cuallocator_opts),
-        num_stream(4), max_frames(25000), batch_size(0), blank_label(0), l2_regularize(0.0),
-          clip_loss(1.0), ctc_imp("warp") { }
+    	: NnetCtcUpdateOptions(trn_opts, rnd_opts, spec_opts, loss_opts, parallel_opts, cuallocator_opts),
+		  lambda(0.1), weight_filename(""){ }
 
   	  void Register(OptionsItf *po) {
-  		  	NnetUpdateOptions::Register(po);
-
-	      	po->Register("num-stream", &num_stream, "---CTC--- BPTT multi-stream training");
-	      	po->Register("max-frames", &max_frames, "Max number of frames to be processed");
-	        po->Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
-	        po->Register("blank-label", &blank_label, "CTC output bank label id");
-	        po->Register("l2-regularize", &l2_regularize, "l2 regularization "
-	                       "constant for 'ctc' training, applied to the output "
-	                       "of the neural net.");
-	        po->Register("clip-loss", &clip_loss, "clip ctc loss, applied to the diff of the output "
-	                       "of the neural net.");
-	        po->Register("ctc-imp", &ctc_imp, "CTC objective function implementation, (eesen|warp)");
+  		  NnetCtcUpdateOptions::Register(po);
+  		  po->Register("lambda", &lambda, "ctc objective function ratio in crfctc.");
+  		  po->Register("path-weight", &weight_filename, "denominator fst path weight.");
+		  this->objective_function = "crfctc";
   	  }
 };
 
 
-struct NnetCtcStats: NnetStats {
+struct NnetCrfCtcStats: NnetCtcStats {
 
-    CtcItf ctc;
+    CrfCtc *crfctc;
 
-    NnetCtcStats(LossOptions &loss_opts): NnetStats(loss_opts) { }
+    NnetCrfCtcStats(LossOptions &loss_opts): NnetCtcStats(loss_opts) { 
+        crfctc = new CrfCtc; 
+    }
 
-    virtual void MergeStats(NnetUpdateOptions *opts, int root) {
+    void MergeStats(NnetUpdateOptions *opts, int root) {
         int myid = opts->parallel_opts->myid;
         MPI_Barrier(MPI_COMM_WORLD);
 
@@ -101,17 +81,14 @@ struct NnetCtcStats: NnetStats {
         addr = (void *) (myid==root ? MPI_IN_PLACE : (void*)(&this->num_other_error));
         MPI_Reduce(addr, (void*)(&this->num_other_error), 1, MPI_INT, MPI_SUM, root, MPI_COMM_WORLD);
 
-        if (opts->objective_function == "xent") {
-			xent.Merge(myid, 0); 
-        } else if (opts->objective_function == "ctc") {
-        	ctc.Merge(myid, 0);
+        if (opts->objective_function == "crfctc") {
+        	crfctc->Merge(myid, 0);
         } else {
         	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
-
     }
 
-    virtual void Print(NnetUpdateOptions *opts, double time_now) {
+    void Print(NnetUpdateOptions *opts, double time_now) {
         KALDI_LOG << "Done " << num_done << " files, " << num_no_tgt_mat
                   << " with no tgt_mats, " << num_other_error
                   << " with other errors. "
@@ -120,10 +97,8 @@ struct NnetCtcStats: NnetStats {
                   << ", " << time_now/60 << " min, " << total_frames/time_now << " fps"
                   << "]";
 
-        if (opts->objective_function == "xent") {
-			KALDI_LOG << xent.Report();
-        } else if (opts->objective_function == "ctc") {
-        	KALDI_LOG << ctc.Report();
+        if (opts->objective_function == "crfctc") {
+        	KALDI_LOG << crfctc->Report();
         } else {
         	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
@@ -131,23 +106,16 @@ struct NnetCtcStats: NnetStats {
 };
 
 
-void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
+void NnetCrfCtcUpdateParallel(const NnetCrfCtcUpdateOptions *opts,
+		fst::StdVectorFst *den_fst,
 		std::string	model_filename,
 		std::string	target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
-		NnetCtcStats *stats);
-
-void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
-		std::string	model_filename,
-		std::string	target_model_filename,
-		std::string feature_rspecifier,
-		std::string targets_rspecifier,
-		Nnet *nnet,
-		NnetStats *stats);
+		NnetCrfCtcStats *stats);
 
 } // namespace nnet0
 } // namespace kaldi
 
-#endif // KALDI_NNET_NNET_COMPUTE_CTC_PARALLEL_H_
+#endif // KALDI_NNET_NNET_COMPUTE_CRFCTC_PARALLEL_H_

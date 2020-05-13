@@ -30,6 +30,7 @@
 #include "warp-ctc/include/ctc.h"
 //#include "warp-transducer/include/rnnt.h"
 #include "add_network/include/rnnt.h"
+#include "nnet0/nnet-kernels-ansi.h"
 
 namespace kaldi {
 namespace nnet0 {
@@ -402,7 +403,7 @@ public:
 
 	/// CTC training over multiple sequences. The errors are returned to [diff]
 	virtual void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff) {};
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL) {};
 
 	/// Compute token error rate from the softmax-layer activations and the given labels. From the softmax activations,
 	/// we get the frame-level labels, by selecting the label with the largest probability at each frame. Then, the frame
@@ -454,7 +455,7 @@ class Ctc : public CtcItf {
 
   /// CTC training over multiple sequences. The errors are returned to [diff]
   void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-                    std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
+                    std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL);
 
  private:
   std::vector<int32> label_expand_;  // expanded version of the label sequence
@@ -474,7 +475,7 @@ public:
 
 	/// CTC training over multiple sequences. The errors are returned to [diff]
 	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL);
 
 	inline void throw_on_error(ctcStatus_t status, const char* message) {
 	    if (status != CTC_STATUS_SUCCESS) {
@@ -491,7 +492,6 @@ private:
 	CuVector<BaseFloat> ctc_workspace_;
     CuMatrix<BaseFloat> net_out_act_;
 };
-
 
 /*
 /// Alex Graves 2013 RNNT join network
@@ -539,7 +539,7 @@ public:
 
 	/// RNNT training over multiple sequences. The errors are returned to [diff]
 	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
-					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff);
+					std::vector< std::vector<int32> > &label, CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *ppzx = NULL);
 
 	inline void throw_on_error(rnntStatus_t status, const char* message) {
 	    if (status != RNNT_STATUS_SUCCESS) {
@@ -559,6 +559,148 @@ private:
 	CuVector<BaseFloat> rnnt_workspace_;
     CuMatrix<BaseFloat> trans_act_;
     CuMatrix<BaseFloat> pred_act_;
+};
+
+
+/// Fst based calculating denominator gradients in log domain
+class Denominator {
+public:
+	Denominator():
+		frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
+		frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
+		sequences_progress_(0), obj_progress_(0.0), report_step_(1000), num_dropped_(0),
+		den_fst_(NULL), batch_first_(false) {
+#if HAVE_CUDA == 1
+        stream_ = NULL;
+#endif
+        }
+
+	Denominator(fst::StdVectorFst *den_fst, bool batch_first = false):
+		frames_(0), sequences_num_(0), ref_num_(0), error_num_(0), obj_total_(0),
+		frames_progress_(0), ref_num_progress_(0), error_num_progress_(0),
+		sequences_progress_(0), obj_progress_(0.0), report_step_(1000), num_dropped_(0),
+		den_fst_(den_fst), batch_first_(batch_first) {
+#if HAVE_CUDA == 1
+        stream_ = NULL;
+#endif
+		InitalizeFst();
+		LoadFstToGPU();
+	}
+
+	virtual ~ Denominator() { ReleaseFstFromGPU();}
+
+	/// CRF denominator training over multiple sequences. The errors are returned to [diff]
+	void EvalParallel(const std::vector<int> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+			CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *alpha_llk = NULL);
+
+	/// Set the step of reporting
+	void SetReportStep(int32 report_step) { report_step_ = report_step;  }
+
+	/// Generate string with report
+	virtual std::string Report();
+
+	/// Merge statistic data
+	virtual void Add(Denominator *loss);
+	virtual void Merge(int myid, int root);
+
+protected:
+#if HAVE_CUDA == 1
+    cudaStream_t stream_;
+#endif
+	void InitalizeFst();
+	void LoadFstToGPU();
+	void ReleaseFstFromGPU();
+
+	double frames_;                    // total frame number
+	int32 sequences_num_;
+	double ref_num_;                   // total number of tokens in label sequences
+	double error_num_;                 // total number of errors (edit distance between hyp and ref)
+	double obj_total_;                       // total optimization objective
+
+	int32 frames_progress_;
+	int32 ref_num_progress_;
+	float error_num_progress_;
+
+	int32 sequences_progress_;         // registry for the number of sequences
+	double obj_progress_;              // registry for the optimization objective
+
+	int32 report_step_;                // report obj and accuracy every so many sequences/utterances
+    int32 num_dropped_;
+
+
+    // den fst
+	fst::StdVectorFst *den_fst_;
+	bool batch_first_;
+
+	// fst
+	int num_states_;
+	int num_arcs_;
+	std::vector<std::vector<int> > alpha_next_;
+	std::vector<std::vector<int> > beta_next_;
+	std::vector<std::vector<int> > alpha_ilabel_;
+	std::vector<std::vector<int> > beta_ilabel_;
+	std::vector<std::vector<BaseFloat> > alpha_weight_;
+	std::vector<std::vector<BaseFloat> > beta_weight_;
+	std::vector<BaseFloat> start_weight_;
+	std::vector<BaseFloat> end_weight_;
+
+    std::vector<Transition> transition_alpha_;
+    std::vector<Transition> transition_beta_;
+    std::vector<IntPair> transition_index_alpha_;
+    std::vector<IntPair> transition_index_beta_;
+
+    Transition* cu_transition_alpha_;
+    Transition* cu_transition_beta_;
+    IntPair* cu_transition_index_alpha_;
+    IntPair* cu_transition_index_beta_;
+    CuVector<BaseFloat> cu_start_weight_;
+    CuVector<BaseFloat> cu_end_weight_;
+
+    CuVector<BaseFloat> costs_alpha_;
+    CuVector<BaseFloat> costs_beta_;
+
+	CuVector<BaseFloat> alpha_;
+	CuVector<BaseFloat> beta_;
+	CuVector<BaseFloat> grad_storage_;
+};
+
+class CrfCtc : public CtcItf {
+public:
+    CrfCtc() {
+        ctc_ = new WarpCtc;
+        den_ = new Denominator;
+    }
+
+	CrfCtc(fst::StdVectorFst *den_fst, BaseFloat lambda, int blank_label, bool batch_first = false);
+
+	virtual ~ CrfCtc() { Destroy(); }
+
+	/// CRFCTC training over multiple sequences. The errors are returned to [diff]
+	void EvalParallel(const std::vector<int32> &frame_num_utt, const CuMatrixBase<BaseFloat> &net_out,
+					std::vector< std::vector<int32> > &label, Vector<BaseFloat> &path_weight,
+					CuMatrix<BaseFloat> *diff, Vector<BaseFloat> *objs = NULL);
+
+	/// Generate string with report
+	virtual std::string Report();
+
+	/// Merge statistic data
+	virtual void Add(CtcItf *loss);
+	virtual void Merge(int myid, int root);
+
+private:
+	void Destroy();
+
+	BaseFloat lambda_;
+	BaseFloat real_obj_progress_;
+	BaseFloat real_obj_total_;
+
+	Vector<BaseFloat> ctc_objs_;
+	Vector<BaseFloat> den_objs_;
+	Vector<BaseFloat> objs_;
+
+	WarpCtc *ctc_;
+	Denominator *den_;
+	CuMatrix<BaseFloat> dendiff_;
 };
 
 } // namespace nnet0

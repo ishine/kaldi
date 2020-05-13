@@ -1,4 +1,4 @@
-// nnet0/nnet-compute-ctc-parallel.cc
+// nnet0/nnet-compute-crfctc-parallel.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -36,22 +36,22 @@
 #include "nnet0/nnet-activation.h"
 #include "nnet0/nnet-example.h"
 
-#include "nnet0/nnet-compute-ctc-parallel.h"
+#include "nnet0/nnet-compute-crfctc-parallel.h"
 
 namespace kaldi {
 namespace nnet0 {
 
-class TrainCtcParallelClass: public MultiThreadable {
+class TrainCrfCtcParallelClass: public MultiThreadable {
 
 private:
-    const NnetCtcUpdateOptions *opts;
+    const NnetCrfCtcUpdateOptions *opts;
     NnetModelSync *model_sync;
+    fst::StdVectorFst *den_fst;
 
 	std::string feature_transform,
 				model_filename,
 				target_model_filename,
-				si_model_filename,
-				targets_rspecifier;
+				si_model_filename;
 
 	ExamplesRepository *repository_;
 	Nnet *host_nnet_;
@@ -73,23 +73,23 @@ private:
  public:
   // This constructor is only called for a temporary object
   // that we pass to the RunMultiThreaded function.
-    TrainCtcParallelClass(const NnetCtcUpdateOptions *opts,
+    TrainCrfCtcParallelClass(const NnetCrfCtcUpdateOptions *opts,
 			NnetModelSync *model_sync,
+			fst::StdVectorFst *den_fst,
 			std::string	model_filename,
 			std::string	target_model_filename,
-			std::string targets_rspecifier,
 			ExamplesRepository *repository,
 			Nnet *nnet,
 			NnetStats *stats):
 				opts(opts),
 				model_sync(model_sync),
+				den_fst(den_fst),
 				model_filename(model_filename),
 				target_model_filename(target_model_filename),
-				targets_rspecifier(targets_rspecifier),
 				repository_(repository),
                 host_nnet_(nnet),
 				stats_(stats)
- 	 		{
+ 	 	 	 {
 				trn_opts = opts->trn_opts;
 				rnd_opts = opts->rnd_opts;
 				parallel_opts = opts->parallel_opts;
@@ -136,32 +136,32 @@ private:
 		model_sync->LockModel();
 
 	    // Select the GPU
-	#if HAVE_CUDA == 1
-        if (opts->use_gpu == "yes") {
-	    if (parallel_opts->num_procs > 1) {
-	    	//thread_idx = model_sync->GetThreadIdx();
-	    	KALDI_LOG << "MyId: " << parallel_opts->myid << "  ThreadId: " << thread_idx;
-	    	CuDevice::Instantiate().MPISelectGpu(model_sync->gpuinfo_, model_sync->win, thread_idx, this->num_threads);
-	    	for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++)
-	    	{
-	    		KALDI_LOG << model_sync->gpuinfo_[i].hostname << "  myid: " << model_sync->gpuinfo_[i].myid
-	    					<< "  gpuid: " << model_sync->gpuinfo_[i].gpuid;
-	    	}
-	    }
-	    else
-	    	CuDevice::Instantiate().SelectGpu();
-	    	//CuDevice::Instantiate().SelectGpuId(opts->use_gpu);
-        CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
-        }
+#if HAVE_CUDA == 1
+		if (opts->use_gpu == "yes") {
+			if (parallel_opts->num_procs > 1) {
+				//thread_idx = model_sync->GetThreadIdx();
+				KALDI_LOG << "MyId: " << parallel_opts->myid << "  ThreadId: " << thread_idx;
+				CuDevice::Instantiate().MPISelectGpu(model_sync->gpuinfo_, model_sync->win, thread_idx, this->num_threads);
+				for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++) {
+					KALDI_LOG << model_sync->gpuinfo_[i].hostname << "  myid: " << model_sync->gpuinfo_[i].myid
+								<< "  gpuid: " << model_sync->gpuinfo_[i].gpuid;
+				}
+			} else {
+				CuDevice::Instantiate().SelectGpu();
+			}
+
+			//CuDevice::Instantiate().SelectGpuId(opts->use_gpu);
+			CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
+		}
 
 	    //CuDevice::Instantiate().DisableCaching();
-	#endif
+#endif
 
 	    model_sync->UnlockModel();
 
 		Nnet nnet_transf;
 	    if (feature_transform != "") {
-	      nnet_transf.Read(feature_transform);
+	    	nnet_transf.Read(feature_transform);
 	    }
 
 	    Nnet nnet;
@@ -177,15 +177,14 @@ private:
 	        nnet.SwitchToOnlinePreconditioning(rank_in, rank_out, update_period, num_samples_history, alpha);
         */
 
-
 	    if (opts->dropout_retention > 0.0) {
-	      nnet_transf.SetDropoutRetention(opts->dropout_retention);
-	      nnet.SetDropoutRetention(opts->dropout_retention);
+			nnet_transf.SetDropoutRetention(opts->dropout_retention);
+			nnet.SetDropoutRetention(opts->dropout_retention);
 	    }
 
 	    if (crossvalidate) {
-	      nnet_transf.SetDropoutRetention(1.0);
-	      nnet.SetDropoutRetention(1.0);
+			nnet_transf.SetDropoutRetention(1.0);
+			nnet.SetDropoutRetention(1.0);
 	    }
 
 	    Nnet si_nnet, softmax;
@@ -202,23 +201,11 @@ private:
 
 	    model_sync->Initialize(&nnet);
 
-	    RandomizerMask randomizer_mask(*rnd_opts);
-	    MatrixRandomizer feature_randomizer(*rnd_opts);
-	    PosteriorRandomizer targets_randomizer(*rnd_opts);
-	    VectorRandomizer weights_randomizer(*rnd_opts);
-
-	    Xent xent(*opts->loss_opts);
-	    Mse mse(*opts->loss_opts);
-
-	    CtcItf *ctc;
+	    CrfCtc *crfctc = new CrfCtc(this->den_fst, opts->lambda, opts->blank_label, false);
 	    // Initialize CTC optimizer
-	    if (opts->ctc_imp == "eesen")
-	    	ctc = new Ctc;
-	    else if (opts->ctc_imp == "warp") {
-			ctc = new WarpCtc(opts->blank_label);
+	    if (opts->objective_function == "crfctc") {
             // using activations directly: remove softmax, if present
             if (nnet.GetComponent(nnet.NumComponents()-1).GetType() == kaldi::nnet0::Component::kSoftmax) {
-                //KALDI_LOG << "Removing softmax from the nnet " << model_filename;
                 KALDI_LOG << "Removing softmax from the nnet " << model_filename << ", Appending logsoftmax";
                 nnet.RemoveComponent(nnet.NumComponents()-1);
                 nnet.AppendComponent(new LogSoftmax(nnet.OutputDim(),nnet.OutputDim()));
@@ -234,7 +221,17 @@ private:
 	        softmax.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
         }
 
-		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out, nnet_diff, frozen_nnet_out,
+	    RandomAccessBaseFloatReader *weight_reader = NULL;
+	    std::string weight_rspecifier = "";
+		if (opts->weight_filename != "") {
+			std::stringstream ss;
+			ss << "ark,t:" << opts->weight_filename;
+			weight_rspecifier = ss.str();
+			weight_reader = new RandomAccessBaseFloatReader(weight_rspecifier);
+		}
+
+		CuMatrix<BaseFloat> feats_transf, nnet_in, nnet_out,
+							nnet_diff, frozen_nnet_out,
 							nnet_out_rearrange, nnet_diff_rearrange,
 							*p_nnet_in, *p_nnet_out, *p_nnet_diff;
 		CuMatrix<BaseFloat> si_nnet_out, soft_nnet_out;
@@ -250,7 +247,6 @@ private:
 
 		int32 num_stream = opts->num_stream;
 		int32 frame_limit = opts->max_frames;
-		int32 targets_delay = opts->targets_delay;
 		int32 batch_size = opts->batch_size;
         int32 skip_frames = opts->skip_frames;
 
@@ -258,18 +254,16 @@ private:
 	    std::vector< std::vector<int> > labels_utt(num_stream);  // Label vector of every utterance
 	    std::vector<int> num_utt_frame_in, num_utt_frame_out;
         std::vector<int> new_utt_flags;
-		Vector<BaseFloat> utt_flags;
 		std::vector<int> idx, reidx;
+		std::vector<std::string> utts;
 		CuArray<MatrixIndexT> indexes;
 
 	    Matrix<BaseFloat> feat_mat_host;
 	    Vector<BaseFloat> frame_mask_host;
-	    Posterior target;
-	    std::vector<Posterior> targets_utt(num_stream);
+		Vector<BaseFloat> utt_flags, path_weight;
         std::string utt;
 
 	    CTCNnetExample *ctc_example = NULL;
-	    DNNNnetExample *dnn_example = NULL;
 	    NnetExample		*example = NULL;
 	    Timer time;
 	    double time_now = 0;
@@ -287,6 +281,7 @@ private:
 			cur_stream_num = 0; num_frames = 0;
 			num_utt_frame_in.clear();
 			num_utt_frame_out.clear();
+			utts.clear();
 
 			if (NULL == example)
 				example = repository_->ProvideExample();
@@ -299,13 +294,8 @@ private:
 				utt = example->utt;
 				Matrix<BaseFloat> &mat = example->input_frames;
 
-				if (objective_function == "xent"){
-					dnn_example = dynamic_cast<DNNNnetExample*>(example);
-					targets_utt[s] = dnn_example->targets;
-				} else if (objective_function == "ctc"){
-					ctc_example = dynamic_cast<CTCNnetExample*>(example);
-					labels_utt[s] = ctc_example->targets;
-				}
+				ctc_example = dynamic_cast<CTCNnetExample*>(example);
+				labels_utt[s] = ctc_example->targets;
 
 				if ((s+1)*mat.NumRows() > frame_limit || (s+1)*max_frame_num > frame_limit) break;
 				if (max_frame_num < mat.NumRows()) max_frame_num = mat.NumRows();
@@ -325,6 +315,7 @@ private:
 		        out_rows = in_rows/num_skip;
 		        out_rows += in_rows%num_skip > 0 ? 1:0;
 		        num_utt_frame_out.push_back(out_rows);
+		        utts.push_back(utt);
 
 				s++;
 				num_done++;
@@ -339,36 +330,20 @@ private:
             out_frames_pad = cur_stream_num * ((max_frame_num+num_skip-1)/num_skip);
 			new_utt_flags.resize(cur_stream_num, 1);
 
-			if (this->objective_function == "xent") {
-				target.resize(out_frames_pad);
-				frame_mask_host.Resize(out_frames_pad, kSetZero);
+			// den path weight
+			if (weight_reader != NULL) {
+				path_weight.Resize(cur_stream_num);
+				for (int s = 0; s < cur_stream_num; s++)
+					path_weight(s) = weight_reader->Value(utts[s]);
 			}
 
 			if (opts->network_type == "lstm") {
 				// Create the final feature matrix. Every utterance is padded to the max length within this group of utterances
 				feat_mat_host.Resize(in_frames_pad, feat_dim, kSetZero);
-
 				for (int s = 0; s < cur_stream_num; s++) {
-				  for (int r = 0; r < num_utt_frame_in[s]; r++) {
-					  feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(feats_utt[s].Row(r));
-				  }
-
-				  //ce label
-				  if (this->objective_function == "xent") {
-					  for (int r = 0; r < num_utt_frame_out[s]; r++) {
-						  if (r < targets_delay) {
-							  frame_mask_host(r*cur_stream_num + s) = 0;
-							  target[r*cur_stream_num + s] = targets_utt[s][r];
-						  } else if (r < num_utt_frame_out[s] + targets_delay) {
-							  frame_mask_host(r*cur_stream_num + s) = 1;
-							  target[r*cur_stream_num + s] = targets_utt[s][r-targets_delay];
-						  } else {
-							  frame_mask_host(r*cur_stream_num + s) = 0;
-							  int last = targets_utt[s].size()-1;
-							  target[r*cur_stream_num + s] = targets_utt[s][last];
-						  }
-					  }
-				  }
+					for (int r = 0; r < num_utt_frame_in[s]; r++) {
+						feat_mat_host.Row(r*cur_stream_num + s).CopyFromVec(feats_utt[s].Row(r));
+					}
 				}
 			} else if (opts->network_type == "fsmn") {
 				in_frames = 0, out_frames = 0;
@@ -458,16 +433,6 @@ private:
 				si_nnet_out.AddMat(-1.0, *p_soft_nnet_out);
 			}
 
-            /*
-			// check there's no nan/inf,
-			if (!KALDI_ISFINITE(nnet_out.Sum())) {
-			    KALDI_LOG << "NaN or inf found in final output nn-output for " << utt;
-                KALDI_VLOG(1) << nnet.Info();
-				monitor(&nnet, 0, num_frames);
-                break;
-			}
-            */
-
 	        if (opts->network_type == "fsmn") {
 				indexes = idx;
 				nnet_out_rearrange.Resize(out_frames_pad, nnet.OutputDim(), kSetZero, kStrideEqualNumCols);
@@ -475,25 +440,7 @@ private:
 				p_nnet_out = &nnet_out_rearrange;
 	        }
 
-	        if (objective_function == "xent") {
-	        	xent.Eval(frame_mask_host, *p_nnet_out, target, &nnet_diff);
-	        } else if (objective_function == "ctc") {
-				//ctc error
-				ctc->EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, &nnet_diff);
-				// Error rates
-				ctc->ErrorRateMSeq(num_utt_frame_out, *p_nnet_out, labels_utt);
-	        } else
-	        	KALDI_ERR<< "Unknown objective function code : " << objective_function;
-
-            /*
-			// check there's no nan/inf,
-			if (!KALDI_ISFINITE(nnet_diff.Sum())) {
-			    KALDI_LOG << "NaN or inf found in final nnet diff for " << utt;
-                KALDI_VLOG(1) << nnet.Info();
-				monitor(&nnet, 0, num_frames);
-                break;
-			}
-            */
+	        crfctc->EvalParallel(num_utt_frame_out, *p_nnet_out, labels_utt, path_weight, &nnet_diff);
 
 	        p_nnet_diff = &nnet_diff;
 	        if (opts->network_type == "fsmn") {
@@ -501,12 +448,6 @@ private:
 				nnet_diff_rearrange.Resize(out_frames, nnet.OutputDim(), kUndefined);
 				nnet_diff_rearrange.CopyRows(nnet_diff, indexes);
 				p_nnet_diff = &nnet_diff_rearrange;
-
-				//l2_term = 0;
-				if (opts->l2_regularize > 0.0) {
-					//l2_term += -0.5 * opts->l2_regularize * TraceMatMat(nnet_out, nnet_out, kTrans);
-					//p_nnet_diff->AddMat(opts->l2_regularize, nnet_out);
-				}
 	        }
 
 	        if (use_kld) {
@@ -614,12 +555,11 @@ private:
 
 		stats_->total_frames += total_frames;
 		stats_->num_done += num_done;
-		if (objective_function == "xent")
-			stats_->xent.Add(&xent);
-		else if (objective_function == "ctc")
-			dynamic_cast<NnetCtcStats*>(stats_)->ctc.Add(ctc);
-		else
+		if (objective_function == "crfctc") {
+			dynamic_cast<NnetCrfCtcStats*>(stats_)->crfctc->Add(crfctc);
+		} else {
 			KALDI_ERR<< "Unknown objective function code : " << objective_function;
+		}
 
 		model_sync->UnlockStates();
 
@@ -655,17 +595,11 @@ private:
 			if (last_thread && parallel_opts->myid == 0)
 			{
 				KALDI_VLOG(1) << "Last thread upload model to host.";
-				// model_sync->CopyToHost(&nnet);
-                // prevent copy local nnet component propagate buffer (e.g. lstm,cnn)
-                // host_nnet_->Read(model_filename);
-				// model_sync->SetWeight(host_nnet_);
                 if (opts->ctc_imp == "warp") {
                     //add back the softmax
                     KALDI_LOG << "Removing logsoftmax, Appending the softmax " << target_model_filename;
                     nnet.RemoveComponent(nnet.NumComponents()-1);
                     nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
-                    //KALDI_LOG << "Appending the softmax " << target_model_filename;
-                    //nnet.AppendComponent(new Softmax(nnet.OutputDim(),nnet.OutputDim()));
                 }
 				nnet.Write(target_model_filename, opts->binary);	
 			}
@@ -678,19 +612,20 @@ private:
 };
 
 
-void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
+void NnetCrfCtcUpdateParallel(const NnetCrfCtcUpdateOptions *opts,
+		fst::StdVectorFst *den_fst,
 		std::string	model_filename,
 		std::string target_model_filename,
 		std::string feature_rspecifier,
 		std::string targets_rspecifier,
 		Nnet *nnet,
-		NnetCtcStats *stats)
+		NnetCrfCtcStats *stats)
 {
 		ExamplesRepository repository;
 		NnetModelSync model_sync(nnet, opts->parallel_opts);
 
-		TrainCtcParallelClass c(opts, &model_sync,
-								model_filename, target_model_filename, targets_rspecifier,
+		TrainCrfCtcParallelClass c(opts, &model_sync, den_fst,
+								model_filename, target_model_filename,
 								&repository, nnet, stats);
 
 
@@ -710,7 +645,7 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 	    // The initialization of the following class spawns the threads that
 	    // process the examples.  They get re-joined in its destructor.
-	    MultiThreader<TrainCtcParallelClass> mc(opts->parallel_opts->num_threads, c);
+	    MultiThreader<TrainCrfCtcParallelClass> mc(opts->parallel_opts->num_threads, c);
 
 		// prepare sample
 	    NnetExample *example;
@@ -752,81 +687,6 @@ void NnetCtcUpdateParallel(const NnetCtcUpdateOptions *opts,
 
 }
 
-void NnetCEUpdateParallel(const NnetCtcUpdateOptions *opts,
-		std::string	model_filename,
-		std::string target_model_filename,
-		std::string feature_rspecifier,
-		std::string targets_rspecifier,
-		Nnet *nnet,
-		NnetStats *stats)
-{
-		ExamplesRepository repository;
-		NnetModelSync model_sync(nnet, opts->parallel_opts);
-
-		TrainCtcParallelClass c(opts, &model_sync,
-								model_filename, target_model_filename, targets_rspecifier,
-								&repository, nnet, stats);
-
-
-	  {
-
-		    SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
-			RandomAccessBaseFloatMatrixReader si_feature_reader(opts->si_feature_rspecifier);
-		    RandomAccessBaseFloatVectorReader weights_reader;
-			RandomAccessPosteriorReader targets_reader(targets_rspecifier);
-			std::string spec_aug_rspecifier = "";
-	    	RandomAccessTokenReader *spec_aug_reader = NULL;
-    		if (opts->spec_aug_filename != "") {
-    			std::stringstream ss;
-    			ss << "ark,t:" << opts->spec_aug_filename;
-    			spec_aug_rspecifier = ss.str();
-				spec_aug_reader = new RandomAccessTokenReader(spec_aug_rspecifier);
-    		}
-
-	    // The initialization of the following class spawns the threads that
-	    // process the examples.  They get re-joined in its destructor.
-	    MultiThreader<TrainCtcParallelClass> mc(opts->parallel_opts->num_threads, c);
-
-
-		// prepare sample
-	    NnetExample *example;
-	    std::vector<NnetExample*> examples;
-	    std::vector<int> sweep_frames, loop_frames;
-		if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
-			KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
-		for (int i = 0; i < sweep_frames.size(); i++) {
-			if (sweep_frames[i] >= opts->skip_frames)
-				KALDI_ERR << "invalid sweep frames indexes";
-		}
-
-		int nframes = sweep_frames.size();
-		int idx = 0;
-		loop_frames = sweep_frames;
-		// loop sweep skip frames
-	    for (; !feature_reader.Done(); feature_reader.Next()) {
-	    	if (!opts->sweep_loop) {
-	    		loop_frames.resize(1);
-	    		loop_frames[0] = sweep_frames[idx];
-	    		idx = (idx+1)%nframes;
-	    	}
-
-	    	example = new DNNNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
-					&targets_reader, &weights_reader, &model_sync, stats, opts);
-            example->SetSweepFrames(loop_frames, opts->skip_inner);
-	    	if (example->PrepareData(examples)) {
-	    		for (int i = 0; i < examples.size(); i++) {
-	    			repository.AcceptExample(examples[i]);
-	    		}
-	    		if (examples[0] != example)
-	    			delete example;
-	    	}
-	    	else
-	    		delete example;
-	    }
-	    repository.ExamplesDone();
-	  }
-
-}
 
 } // namespace nnet
 } // namespace kaldi

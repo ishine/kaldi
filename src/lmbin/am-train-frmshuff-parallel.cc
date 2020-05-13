@@ -1,4 +1,4 @@
-// nnet0/nnet-train-lstm-streams-asgd.cc
+// lm/am-train-frmshuff-parallel.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -25,20 +25,23 @@
 #include "util/common-utils.h"
 #include "base/timer.h"
 #include "cudamatrix/cu-device.h"
-#include "nnet0/nnet-compute-lstm-asgd.h"
+#include "nnet0/nnet-activation.h"
+
+#include "lm/am-compute-parallel.h"
 
 int main(int argc, char *argv[]) {
   using namespace kaldi;
   using namespace kaldi::nnet0;
+  using namespace kaldi::lm;
   typedef kaldi::int32 int32;  
   
   try {
     const char *usage =
-        "Perform one iteration of Neural Network training by mini-batch Stochastic Gradient Descent.\n"
-        "This version use pdf-posterior as targets, prepared typically by ali-to-post.\n"
-        "Usage:  nnet-train-lstm-streams-asgd [options] <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
-        "e.g.: \n"
-        " nnet-train-lstm-streams-asgd scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
+		"Perform one iteration of Neural Network training by mini-batch Stochastic Gradient Descent.\n"
+		"This version use pdf-posterior as targets, prepared typically by ali-to-post.\n"
+		"Usage:  am-train-frmshuff-parallel [options] <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
+		"e.g.: \n"
+		" am-train-frmshuff-parallel scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
 
     ParseOptions po(usage);
 
@@ -61,8 +64,8 @@ int main(int argc, char *argv[]) {
     cuallocator_opts.cache_memory = false;
     cuallocator_opts.Register(&po);
 
-    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &spec_opts,
-    		&loss_opts, &parallel_opts, &cuallocator_opts);
+    NnetUpdateOptions opts(&trn_opts, &rnd_opts, &spec_opts,
+                            &loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
@@ -73,12 +76,12 @@ int main(int argc, char *argv[]) {
     }
 
     std::string feature_rspecifier = po.GetArg(1),
-      targets_rspecifier = po.GetArg(2),
-      model_filename = po.GetArg(3);
+    			targets_rspecifier = po.GetArg(2),
+				model_filename = po.GetArg(3);
         
     std::string target_model_filename;
     if (!opts.crossvalidate) {
-      target_model_filename = po.GetArg(4);
+    	target_model_filename = po.GetArg(4);
     }
 
     using namespace kaldi;
@@ -87,9 +90,10 @@ int main(int argc, char *argv[]) {
 
     //Select the GPU
 #if HAVE_CUDA==1
-    CuDevice::Instantiate().AllowMultithreading();
-    CuDevice::Instantiate().Initialize();
-    //CuDevice::Instantiate().DisableCaching();
+    if (opts.use_gpu == "yes") {
+        CuDevice::Instantiate().AllowMultithreading();
+        CuDevice::Instantiate().Initialize();
+    }
 #endif
 
 
@@ -101,7 +105,7 @@ int main(int argc, char *argv[]) {
     KALDI_LOG << "TRAINING STARTED";
 
 
-    NnetLstmUpdateAsgd(&opts,
+    AmUpdateParallel(&opts,
 					model_filename,
                     target_model_filename,
 					feature_rspecifier,

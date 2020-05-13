@@ -1,4 +1,4 @@
-// nnet0/nnet-train-lstm-streams-asgd.cc
+// nnet0bin/nnet-train-crfctc-parallel.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -17,15 +17,17 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/kaldi-common.h"
+#include "base/timer.h"
+#include "util/common-utils.h"
+#include "cudamatrix/cu-device.h"
+#include "fstext/fstext-lib.h"
+
 #include "nnet0/nnet-trnopts.h"
 #include "nnet0/nnet-nnet.h"
 #include "nnet0/nnet-loss.h"
 #include "nnet0/nnet-randomizer.h"
-#include "base/kaldi-common.h"
-#include "util/common-utils.h"
-#include "base/timer.h"
-#include "cudamatrix/cu-device.h"
-#include "nnet0/nnet-compute-lstm-asgd.h"
+#include "nnet0/nnet-compute-crfctc-parallel.h"
 
 int main(int argc, char *argv[]) {
   using namespace kaldi;
@@ -36,9 +38,9 @@ int main(int argc, char *argv[]) {
     const char *usage =
         "Perform one iteration of Neural Network training by mini-batch Stochastic Gradient Descent.\n"
         "This version use pdf-posterior as targets, prepared typically by ali-to-post.\n"
-        "Usage:  nnet-train-lstm-streams-asgd [options] <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
+        "Usage:  nnet-train-crfctc-parallel [options] <denominator-fst> <feature-rspecifier> <targets-rspecifier> <model-in> [<model-out>]\n"
         "e.g.: \n"
-        " nnet-train-lstm-streams-asgd scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
+        " nnet-train-crfctc-parallel den.fst scp:feature.scp ark:posterior.ark nnet.init nnet.iter1\n";
 
     ParseOptions po(usage);
 
@@ -58,66 +60,70 @@ int main(int argc, char *argv[]) {
     loss_opts.Register(&po);
 
     CuAllocatorOptions cuallocator_opts;
-    cuallocator_opts.cache_memory = false;
     cuallocator_opts.Register(&po);
 
-    NnetLstmUpdateOptions opts(&trn_opts, &rnd_opts, &spec_opts,
+    NnetCrfCtcUpdateOptions opts(&trn_opts, &rnd_opts, &spec_opts,
     		&loss_opts, &parallel_opts, &cuallocator_opts);
     opts.Register(&po);
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 4-(opts.crossvalidate?1:0)) {
-      po.PrintUsage();
-      exit(1);
+    if (po.NumArgs() != 5-(opts.crossvalidate?1:0)) {
+		po.PrintUsage();
+		exit(1);
     }
 
-    std::string feature_rspecifier = po.GetArg(1),
-      targets_rspecifier = po.GetArg(2),
-      model_filename = po.GetArg(3);
+    std::string den_fst_rxfilename = po.GetArg(1),
+				feature_rspecifier = po.GetArg(2),
+				targets_rspecifier = po.GetArg(3),
+				model_filename = po.GetArg(4);
         
     std::string target_model_filename;
     if (!opts.crossvalidate) {
-      target_model_filename = po.GetArg(4);
+    	target_model_filename = po.GetArg(5);
     }
 
     using namespace kaldi;
     using namespace kaldi::nnet0;
     typedef kaldi::int32 int32;
 
-    //Select the GPU
+// Initialize GPU
 #if HAVE_CUDA==1
-    CuDevice::Instantiate().AllowMultithreading();
-    CuDevice::Instantiate().Initialize();
-    //CuDevice::Instantiate().DisableCaching();
+    if (opts.use_gpu == "yes") {
+        CuDevice::Instantiate().AllowMultithreading();
+        CuDevice::Instantiate().Initialize();
+    }
 #endif
 
 
     Nnet nnet;
-    NnetStats stats(loss_opts);
+    NnetCrfCtcStats stats(loss_opts);
+
+    fst::StdVectorFst den_fst;
+    ReadFstKaldi(den_fst_rxfilename, &den_fst);
 
     Timer time;
     double time_now = 0;
     KALDI_LOG << "TRAINING STARTED";
 
+    NnetCrfCtcUpdateParallel(&opts,
+    		&den_fst,
+			model_filename,
+			target_model_filename,
+			feature_rspecifier,
+            targets_rspecifier,
+			&nnet,
+			&stats);
 
-    NnetLstmUpdateAsgd(&opts,
-					model_filename,
-                    target_model_filename,
-					feature_rspecifier,
-					targets_rspecifier,
-								&nnet,
-								&stats);
-
-
-    /*
+	/*
     if (!opts.crossvalidate) {
         nnet.Write(target_model_filename, opts.binary);
     }
-    */
+	*/
 
     KALDI_LOG << "TRAINING FINISHED; ";
     time_now = time.Elapsed();
+
 
     stats.Print(&opts, time_now);
 

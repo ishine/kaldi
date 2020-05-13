@@ -35,31 +35,28 @@
 #include "nnet0/nnet-affine-preconditioned-transform.h"
 #include "nnet0/nnet-model-merge-function.h"
 #include "nnet0/nnet-activation.h"
-#include "nnet0/nnet-example.h"
 #include "nnet0/nnet-affine-transform.h"
 #include "nnet0/nnet-multi-net-component.h"
 #include "nnet0/nnet-rnnt-join-transform.h"
 #include "nnet0/nnet-word-vector-transform.h"
 
+#include "lm/example.h"
 #include "lm/lm-compute-lstm-parallel.h"
 #include "lm/rnnt-compute-lstm-parallel.h"
 
 namespace kaldi {
 namespace lm {
 
-class TrainRNNTLstmParallelClass: public MultiThreadable {
+typedef nnet0::NnetTrainOptions NnetTrainOptions;
+typedef nnet0::NnetDataRandomizerOptions NnetDataRandomizerOptions;
+typedef nnet0::NnetParallelOptions NnetParallelOptions;
+typedef nnet0::Nnet nnet;
+typedef nnet0::Component Component;
+typedef nnet0::MultiNetComponent MultiNetComponent;
+typedef nnet0::RNNTJoinTransform RNNTJoinTransform;
+typedef nnet0::WordVectorTransform WordVectorTransform;
 
-	typedef nnet0::NnetTrainOptions NnetTrainOptions;
-	typedef nnet0::NnetDataRandomizerOptions NnetDataRandomizerOptions;
-	typedef nnet0::NnetParallelOptions NnetParallelOptions;
-	typedef nnet0::ExamplesRepository  ExamplesRepository;
-	typedef nnet0::Nnet nnet;
-	typedef nnet0::Component Component;
-    typedef nnet0::NnetExample NnetExample;
-	typedef nnet0::RNNTNnetExample RNNTNnetExample;
-	typedef nnet0::MultiNetComponent MultiNetComponent;
-	typedef nnet0::RNNTJoinTransform RNNTJoinTransform;
-    typedef nnet0::WordVectorTransform WordVectorTransform;
+class TrainRNNTLstmParallelClass: public MultiThreadable {
 
 private:
     const RNNTLstmUpdateOptions *opts;
@@ -147,8 +144,7 @@ private:
 		model_sync->LockModel();
 	    // Select the GPU
 	#if HAVE_CUDA == 1
-	    if (parallel_opts->num_procs > 1)
-	    {
+	    if (parallel_opts->num_procs > 1) {
 	    	//thread_idx = model_sync->GetThreadIdx();
 	    	KALDI_LOG << "MyId: " << parallel_opts->myid << "  ThreadId: " << thread_idx;
 	    	CuDevice::Instantiate().MPISelectGpu(model_sync->gpuinfo_, model_sync->win, thread_idx, this->num_threads);
@@ -158,8 +154,10 @@ private:
 	    					<< "  gpuid: " << model_sync->gpuinfo_[i].gpuid;
 	    	}
 	    }
-	    else
+	    else {
 	    	CuDevice::Instantiate().SelectGpu();
+	    }
+	    CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
 
 	    //CuDevice::Instantiate().DisableCaching();
 	#endif
@@ -267,8 +265,8 @@ private:
         sos_id = opts->sos_id;
 
         std::string utt;
-        RNNTNnetExample *rnnt_example = NULL;
-	    NnetExample		*example = NULL;
+        RNNTExample *rnnt_example = NULL;
+	    Example		*example = NULL;
 	    Timer time;
 	    double time_now = 0;
 
@@ -291,7 +289,7 @@ private:
 				utt = example->utt;
 				Matrix<BaseFloat> &mat = example->input_frames;
 
-				rnnt_example = dynamic_cast<RNNTNnetExample*>(example);
+				rnnt_example = dynamic_cast<RNNTExample*>(example);
 				labels_utt[s] = rnnt_example->input_wordids;
 
 				if ((s+1)*mat.NumRows() > frame_limit || (s+1)*max_frame_num > frame_limit) break;
@@ -514,7 +512,7 @@ void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 		Nnet *nnet,
 		RNNTStats *stats)
 {
-		nnet0::ExamplesRepository repository(128*30);
+		ExamplesRepository repository(128*30);
 		LmModelSync model_sync(nnet, opts->parallel_opts);
 
 		TrainRNNTLstmParallelClass c(opts, &model_sync,
@@ -540,8 +538,8 @@ void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 			MultiThreader<TrainRNNTLstmParallelClass> mc(opts->parallel_opts->num_threads, c);
 
 			// prepare sample
-			nnet0::NnetExample *example;
-			std::vector<nnet0::NnetExample*> examples;
+			Example *example;
+			std::vector<Example*> examples;
 			std::vector<int> sweep_frames, loop_frames;
 			if (!kaldi::SplitStringToIntegers(opts->sweep_frames_str, ":", false, &sweep_frames))
 				KALDI_ERR << "Invalid sweep-frames string " << opts->sweep_frames_str;
@@ -561,7 +559,7 @@ void RNNTLstmUpdateParallel(const RNNTLstmUpdateOptions *opts,
 					idx = (idx+1)%nframes;
 				}
 
-				example = new nnet0::RNNTNnetExample(&feature_reader, &si_feature_reader, spec_aug_reader,
+				example = new RNNTExample(&feature_reader, &si_feature_reader, spec_aug_reader,
                                                     &targets_reader, stats, opts);
 				example->SetSweepFrames(loop_frames, opts->skip_inner);
 				if (example->PrepareData(examples)) {

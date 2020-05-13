@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
         "Decode, reading log-likelihoods (CTC acoustic model output) as matrices.\n"
         "Note: you'll usually want decode-faster-ctc rather than this program.\n"
         "\n"
-        "Usage:   decode-ctc-beam [options] <lstm-language-model> <loglikes-rspecifier> <words-wspecifier>\n";
+        "Usage:   decode-ctc-beam [options] <lstm-language-model(optional)> <loglikes-rspecifier> <words-wspecifier>\n";
 
     ParseOptions po(usage);
     bool binary = true;
@@ -46,6 +46,7 @@ int main(int argc, char *argv[]) {
     float en_penalty = 0.0;
     std::string word_syms_filename;
     std::string const_arpa_filename;
+    std::string sub_language_models;
     po.Register("binary", &binary, "Write output in binary mode");
     po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
@@ -54,6 +55,7 @@ int main(int argc, char *argv[]) {
     po.Register("en-penalty", &en_penalty, "For CTC decoding, "
     		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
     po.Register("const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
+    po.Register("sub-language-models", &sub_language_models, "Sub language models(model1:model2:...)");
 
     KaldiLstmlmWrapperOpts lstmlm_opts;
     CTCDecoderOptions decoder_opts;
@@ -62,14 +64,21 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 3) {
+    std::string  lstmlm_rxfilename = "",
+    			loglikes_rspecifier,
+				words_wspecifier;
+
+    if (po.NumArgs() == 3) {
+        lstmlm_rxfilename = po.GetArg(1);
+        loglikes_rspecifier = po.GetArg(2);
+        words_wspecifier = po.GetArg(3);
+    } else if (po.NumArgs() == 2) {
+        loglikes_rspecifier = po.GetArg(1);
+        words_wspecifier = po.GetArg(2);
+    } else { 
 		po.PrintUsage();
 		exit(1);
     }
-
-    std::string  lstmlm_rxfilename = po.GetArg(1),
-    			loglikes_rspecifier = po.GetArg(2),
-				words_wspecifier = po.GetArg(3);
 
     Int32VectorWriter words_writer(words_wspecifier);
 
@@ -83,28 +92,47 @@ int main(int argc, char *argv[]) {
     SequentialBaseFloatMatrixReader loglikes_reader(loglikes_rspecifier);
 
     // Reads the language model.
-	KaldiLstmlmWrapper lstmlm(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
+	KaldiLstmlmWrapper *lstmlm = NULL;
+	if (lstmlm_rxfilename != "")
+		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
+
+	std::vector<std::string> sub_lm_filenames;
+	if (sub_language_models != "")
+		kaldi::SplitStringToVector(sub_language_models, ":", false, &sub_lm_filenames);
+
 	// Reads the language model in ConstArpaLm format.
 	ConstArpaLm *const_arpa = NULL;
+	std::vector<ConstArpaLm *> sub_const_arpa;
 #if HAVE_KENLM == 1
 	KenModel *ken_arpa = NULL;
+	std::vector<KenModel *> sub_ken_arpa;
 #endif
+
+	int num_sub = sub_lm_filenames.size();
 	// decoder
 	CTCDecoder *decoder;
 	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && !decoder_opts.use_kenlm) {
         const_arpa = new ConstArpaLm;
 		ReadKaldiObject(const_arpa_filename, const_arpa);
-		decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
+        sub_const_arpa.resize(num_sub);
+		for (int i = 0; i < num_sub; i++) {
+			sub_const_arpa[i] = new ConstArpaLm;
+			ReadKaldiObject(sub_lm_filenames[i], sub_const_arpa[i]);
+		}
+		decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa, sub_const_arpa);
 	} else if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && decoder_opts.use_kenlm) {
 #if HAVE_KENLM == 1
 		ken_arpa = new KenModel(const_arpa_filename.c_str());
-		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa);
+        sub_ken_arpa.resize(num_sub);
+		for (int i = 0; i < num_sub; i++)
+			sub_ken_arpa[i] = new KenModel(sub_lm_filenames[i].c_str());
+		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa);
 #endif
 	} else {
-        decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa);
+        decoder = new CTCDecoder(decoder_opts, lstmlm, const_arpa, sub_const_arpa);
     }
 
-    BaseFloat tot_like = 0.0, logp = 0.0;
+    BaseFloat tot_like = 0.0, logp = 0.0, logp_lm;
     kaldi::int64 frame_count = 0;
     int num_success = 0, num_fail = 0;
     std::vector<int> words;
@@ -114,7 +142,7 @@ int main(int argc, char *argv[]) {
 		std::string key = loglikes_reader.Key();
 		Matrix<BaseFloat> &loglikes (loglikes_reader.Value());
         if (en_penalty > 0)
-        loglikes.ColRange(1, 1050).Add(en_penalty);
+            loglikes.ColRange(1, 1050).Add(en_penalty);
 
 		if (loglikes.NumRows() == 0) {
 			KALDI_WARN << "Zero-length utterance: " << key;
@@ -123,14 +151,20 @@ int main(int argc, char *argv[]) {
 		}
 
 		// decoding
-		if (search == "beam")
+		if (search == "beam" && decoder_opts.am_topk > 0)
 			decoder->BeamSearch(loglikes);
-		else if (search == "greedy")
+			//decoder->BeamSearchEasyTopk(loglikes);
+		else if (search == "beam") {
+			if (decoder_opts.use_mode == "easy")
+				decoder->BeamSearchEasyTopk(loglikes);
+			else
+				decoder->BeamSearchTopk(loglikes);
+		} else if (search == "greedy")
 			decoder->GreedySearch(loglikes);
 		else
 			KALDI_ERR << "UnSupported search function: " << search;
 
-		if (decoder->GetBestPath(words, logp)) {
+		if (decoder->GetBestPath(words, logp, logp_lm)) {
 			words_writer.Write(key, words);
 			if (word_syms != NULL) {
 				std::cerr << key << ' ';
@@ -146,8 +180,8 @@ int main(int argc, char *argv[]) {
 			num_success++;
 			frame_count += loglikes.NumRows();
 			tot_like += logp;
-			KALDI_LOG << "Log-like per frame for utterance " << key << " is "
-					  << (logp / loglikes.NumRows()) << " over "
+			KALDI_LOG << "Log-like for utterance " << key << " is "
+					  << "score = " << logp << ", lm_score = " << logp_lm << " over "
 					  << loglikes.NumRows() << " frames.";
 		} else {
 			num_fail++;
