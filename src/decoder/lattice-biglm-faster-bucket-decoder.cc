@@ -144,16 +144,32 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
    * the following code, it should be commented out.
    * The following code is just use to make sure a fst doesn't have the wrong
    * epsilon input self-loop.
+  */
+  /*
+  BaseFloat min = std::numeric_limits<BaseFloat>::infinity();
+  BaseFloat max = -std::numeric_limits<BaseFloat>::infinity();
+  int32 num_positive = 0, num_negative = 0;
   for (fst::StateIterator<FST> siter(*fst_); !siter.Done(); siter.Next()) {
     const StateId &state_id = siter.Value();
     for(fst::ArcIterator<FST> aiter(*fst_, state_id); !aiter.Done();
         aiter.Next()) {
       const Arc &arc = aiter.Value();
-      if (arc.ilabel == 0) KALDI_ASSERT(state_id != arc.nextstate);
+      BaseFloat graph_cost = arc.weight.Value();
+      if (graph_cost >= 0) {
+        num_positive++;
+        max = std::max(graph_cost, max);
+      }
+      if (graph_cost < 0) {
+        num_negative++;
+        min = std::min(graph_cost, min);
+      }
     }
   }
-  KALDI_LOG << "Make sure not epsilon self-loop";
-
+  KALDI_LOG << "There are " << num_positive << " values and the max is "
+            << max << " , and there are " << num_negative
+            << " values and the min is " << min;
+  */
+  /*
   fst::StateIterator<FST> siter(*fst_);
   for (siter.Next(); !siter.Done();
        siter.Next()) {
@@ -183,6 +199,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
   // clean up from last time:
   cost_offsets_.clear();
   cutoffs_.clear();
+  adaptive_beam_.clear();
   ClearActiveTokens();  // num_toks_ is set to 0
 
   warned_ = false;
@@ -190,7 +207,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
   decoding_finalized_ = false;
 
   final_costs_.clear();
-  adaptive_beam_ = config_.beam;
+  adaptive_beam_.push_back(config_.beam);
 
   // initialize
   // Maybe move this to constructor can abvoid allocate a new map for each
@@ -226,6 +243,13 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
   cutoffs_[0] = std::numeric_limits<BaseFloat>::infinity();
   cutoffs_[1] = std::numeric_limits<BaseFloat>::infinity();
 
+  final_ = false;
+  stats_bucket_operation_forward = 0;
+  stats_bucket_operation_backward = 0;
+  stats_bucket_operation_final_forward = 0;
+  stats_bucket_operation_final_backward = 0;
+  stats_token_operation = 0;
+  stats_token_operation_final = 0;
   /*
   // Check the TokenBucket and the token list (make sure the popped token is ok)
   Token* &toks = active_toks_[0].toks;
@@ -268,6 +292,15 @@ bool LatticeBiglmFasterBucketDecoderTpl<FST, Token>::Decode(
   FinalizeDecoding();
   // Returns true if we have any kind of traceback available (not necessarily
   // to the end state; query ReachedFinal() for that).
+  std::cout << "For the utterance, there are "
+            << stats_bucket_operation_forward << " forward bucket operations ( "
+            << stats_bucket_operation_final_forward << " on final stage ). "
+            << "There are " << stats_bucket_operation_backward
+            << " backward bucket operations ( "
+            << stats_bucket_operation_final_backward << " on final stage ). "
+            << "There are " << stats_token_operation << " token operations ( "
+            << stats_token_operation_final << " on final stage )."
+            << std::endl;
   return !active_toks_.empty() && active_toks_.back().toks != NULL;
 }
 
@@ -565,6 +598,8 @@ LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddBucket(
           //  cutoff = dest_tot_cost + config_.beam;
             
           // Add to target bucket
+          stats_token_operation++;
+          if (final_) stats_token_operation_final++;
           Token *dest_tok = FindOrAddToken(dest_pair, token_list_index,
                                            dest_tot_cost, &tmp_map,
                                            dest_bucket, *iter);
@@ -601,6 +636,8 @@ LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddBucket(
         //else if (dest_tot_cost + config_.beam < cutoff)
         //  cutoff = dest_tot_cost + config_.beam;
         // Add to target bucket
+        stats_token_operation++;
+        if (final_) stats_token_operation_final++;
         Token *dest_tok = FindOrAddToken(dest_pair, token_list_index,
                                          dest_tot_cost, &tmp_map,
                                          dest_bucket, *iter);
@@ -703,6 +740,8 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ExpandBucket(
     int32 frame, Bucket* bucket) {
   if (bucket->expanded) return;
 
+  stats_bucket_operation_backward++;
+  if (final_) stats_bucket_operation_final_backward++;
   // build an unordered_map with bucket's tokens to do token recombination.
   std::unordered_map<PairId, Token*> token_map;
   for (typename std::vector<Token*>::iterator iter = bucket->all_toks.begin();
@@ -754,6 +793,8 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ExpandBucket(
       //  cutoff = tot_cost + config_.beam;
 
       // Add to target bucket
+      stats_token_operation++;
+      if (final_) stats_token_operation_final++;
       Token *new_tok = FindOrAddToken(next_pair, frame, tot_cost,
                                       &token_map, bucket, *iter);
       // add a forwardlink
@@ -1290,6 +1331,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FinalizeDecoding() {
   ProcessNonemitting();
   
   // Expand all buckets that are active on the final frame
+  final_ = true;
   int32 index = active_buckets_.size() - 1;
   Bucket *cur_bucket = active_buckets_[index].buckets;
   while (cur_bucket != NULL) {
@@ -1578,15 +1620,15 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
 
   // Declare a local variable so the compiler can put it in a register, since
   // C++ assumes other threads could be modifying class members.
-  BaseFloat adaptive_beam = adaptive_beam_;
+  BaseFloat adaptive_beam = adaptive_beam_[cur_frame];
   // "cur_cutoff" will be kept to the best-seen-so-far token on this frame
   // + adaptive_beam
-  BaseFloat cur_cutoff = std::numeric_limits<BaseFloat>::infinity();
+  BaseFloat &cur_cutoff = cutoffs_[cur_frame];
   // "next_cutoff" is used to limit a new token in next frame should be handle
   // or not. It will be updated along with the further processing.
   // this will be kept updated to the best-seen-so-far token "on next frame"
   // + adaptive_beam
-  BaseFloat next_cutoff = std::numeric_limits<BaseFloat>::infinity();
+  BaseFloat &next_cutoff = cutoffs_[next_frame];
   // "cost_offset" contains the acoustic log-likelihoods on current frame in 
   // order to keep everything in a nice dynamic range. Reduce roundoff errors.
   BaseFloat cost_offset = cost_offsets_[cur_frame];
@@ -1667,6 +1709,8 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
                   ac_cost = 0;
         BaseFloat tot_cost = cur_cost + graph_cost;
         if (tot_cost < cur_cutoff) {
+          stats_bucket_operation_forward++;
+          if (final_) stats_bucket_operation_final_forward++;
           Bucket *new_bucket = FindOrAddBucket(arc_ref, cur_frame,
                                                tot_cost, ac_cost, graph_cost,
                                                bucket, cur_buckets_,
@@ -1688,7 +1732,8 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
           next_cutoff = tot_cost + adaptive_beam;  // a tighter boundary for
                                                    // emitting
         }
-
+        stats_bucket_operation_forward++;
+        if (final_) stats_bucket_operation_final_forward++;
         // no change flag is needed
         Bucket *new_bucket = FindOrAddBucket(arc_ref, next_frame,
                                              tot_cost, ac_cost, graph_cost,
@@ -1705,7 +1750,11 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
   cost_offsets_.resize(cur_frame + 2, 0.0);
   cost_offsets_[next_frame] = adaptive_beam - next_cutoff;
 
+  // Init the cutoff value for next frame
+  cutoffs_.resize(cur_frame  + 2, std::numeric_limits<BaseFloat>::infinity());
+
   {  // This block updates adaptive_beam_
+    adaptive_beam_.resize(cur_frame + 1, config_.beam);
     BaseFloat beam_used_this_frame = adaptive_beam;
     Bucket *bucket = cur_queue_.Pop();
     if (bucket != NULL) {
@@ -1718,20 +1767,45 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
     if (num_processed <= config_.min_active) {
       // num-toks active is dangerously low, increase the beam even if it
       // already exceeds the user-specified beam.
-      adaptive_beam_ = std::max<BaseFloat>(
+      adaptive_beam_[next_frame] = std::max<BaseFloat>(
           config_.beam, beam_used_this_frame + 2.0 * config_.beam_delta);
    } else {
       // have adaptive_beam_ approach beam_ in intervals of config_.beam_delta
       BaseFloat diff_from_beam = beam_used_this_frame - config_.beam;
       if (std::abs(diff_from_beam) < config_.beam_delta) {
-        adaptive_beam_ = config_.beam;
+        adaptive_beam_[next_frame] = config_.beam;
       } else {
         // make it close to beam_
-        adaptive_beam_ = beam_used_this_frame -
+        adaptive_beam_[next_frame] = beam_used_this_frame -
           config_.beam_delta * (diff_from_beam > 0 ? 1 : -1);
       }
     }
   }
+
+  /*
+  // Check the percentage of buckets which have been expanded
+  if (cur_frame > 0 && cur_frame % 50 == 0) {
+    BaseFloat tot_buckets = 0;
+    BaseFloat expanded_buckets = 0;
+    for (int32 i = 0; i <= cur_frame; i++) {
+      Bucket *bucket_tmp = active_buckets_[i].buckets;
+      while (bucket_tmp != NULL) {
+        if (bucket_tmp->expanded) {
+          tot_buckets++;
+          expanded_buckets++;
+        } else {
+          tot_buckets++;
+        }
+        bucket_tmp = bucket_tmp->next;
+      }
+    }
+    std::cout << "On frame " << cur_frame
+              << ", the percentage of buckets which have been expanded is "
+              << expanded_buckets / tot_buckets << " ( "
+              << expanded_buckets << " vs. " << tot_buckets << " )."
+              << std::endl;
+  }
+  */
 
   // Check current frame
   /*
@@ -1876,10 +1950,10 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessNonemitting() {
 
   // Declare a local variable so the compiler can put it in a register, since
   // C++ assumes other threads could be modifying class members.
-  BaseFloat adaptive_beam = adaptive_beam_;
+  BaseFloat adaptive_beam = adaptive_beam_[cur_frame];
   // "cur_cutoff" will be kept to the best-seen-so-far token on this frame
   // + adaptive_beam
-  BaseFloat cur_cutoff = std::numeric_limits<BaseFloat>::infinity();
+  BaseFloat &cur_cutoff = cutoffs_[cur_frame];
 
   Bucket *bucket = NULL;
   int32 num_processed = 0;
@@ -1914,6 +1988,8 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessNonemitting() {
         BaseFloat graph_cost = arc_ref.weight.Value();
         BaseFloat tot_cost = cur_cost + graph_cost;
         if (tot_cost < cur_cutoff) {
+          stats_bucket_operation_forward++;
+          if (final_) stats_bucket_operation_final_forward++;
           Bucket *new_bucket = FindOrAddBucket(arc_ref, cur_frame, tot_cost,
                                                0, graph_cost,
                                                bucket, cur_buckets_,

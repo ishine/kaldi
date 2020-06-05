@@ -59,7 +59,7 @@ class LatticeBiglmFasterDecoder {
       const LatticeBiglmFasterDecoderConfig &config,
       fst::DeterministicOnDemandFst<fst::StdArc> *lm_diff_fst):
       fst_(fst), lm_diff_fst_(lm_diff_fst), config_(config),
-      warned_noarc_(false), num_toks_(0) {
+      warned_noarc_(false), num_toks_(0), stats_token_operation_(0) {
     config.Check();
     KALDI_ASSERT(fst.Start() != fst::kNoStateId &&
                  lm_diff_fst->Start() != fst::kNoStateId);
@@ -88,6 +88,7 @@ class LatticeBiglmFasterDecoder {
     active_toks_[0].toks = start_tok;
     toks_.Insert(start_pair, start_tok);
     num_toks_++;
+    stats_token_operation_ = 0;
     ProcessNonemitting(0);
     
     // We use 1-based indexing for frames in this decoder (if you view it in
@@ -107,6 +108,8 @@ class LatticeBiglmFasterDecoder {
     }
     // Returns true if we have any kind of traceback available (not necessarily
     // to the end state; query ReachedFinal() for that).
+    std::cout << "For the utterance, there are " << stats_token_operation_
+              << " token operations." << std::endl;
     return !final_costs_.empty();
   }
 
@@ -744,6 +747,7 @@ class LatticeBiglmFasterDecoder {
             else if (tot_cost + config_.beam < next_cutoff)
               next_cutoff = tot_cost + config_.beam; // prune by best current token
             PairId next_pair = ConstructPair(arc.nextstate, next_lm_state);
+            stats_token_operation_++;
             Elem *e_next = FindOrAddToken(next_pair, frame, tot_cost, true, NULL);
             // true: emitting, NULL: no change indicator needed
           
@@ -813,6 +817,7 @@ class LatticeBiglmFasterDecoder {
           if (tot_cost < cutoff) {
             bool changed;
             PairId next_pair = ConstructPair(arc.nextstate, next_lm_state);
+            stats_token_operation_++;
             Elem *e_new = FindOrAddToken(next_pair, frame, tot_cost,
                                          false, &changed); // false: non-emit
             
@@ -849,6 +854,7 @@ class LatticeBiglmFasterDecoder {
   // on the last frame.
   std::map<Token*, BaseFloat> final_costs_; // A cache of final-costs
   // of tokens on the last frame-- it's just convenient to store it this way.
+  int32 stats_token_operation_;
   
   // It might seem unclear why we call DeleteElems(toks_.Clear()).
   // There are two separate cleanup tasks we need to do at when we start a new file.

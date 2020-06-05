@@ -11,6 +11,7 @@ minactive=200
 maxactive=7000
 beam=15.0
 lattice_beam=8.0
+bucket_length=5
 
 acwt=1.0
 post_decode_acwt=10.0
@@ -170,10 +171,17 @@ if [ $stage -le 1 ]; then
   $cmd JOB=1:$nj $dir/log/decode.JOB.log \
     latgen-biglm-bucket-faster-mapped --acoustic-scale=$acwt \
       --allow-partial=true --max-active=$maxactive --min-active=$minactive \
-      --beam=$beam --lattice-beam=$lattice_beam \
+      --beam=$beam --lattice-beam=$lattice_beam --bucket-length=$bucket_length \
       --word-symbol-table=$graphdir/words.txt \
       $srcdir/final.mdl $graphdir/HCLG.fst "$oldlm_cmd" "$newlm_cmd" \
       "$posteriors_rspecifier" "$lat_wspecifier" || exit 1;
+#  $cmd JOB=1:$nj $dir/log/decode.JOB.log \
+#    latgen-biglm-faster-mapped --acoustic-scale=$acwt \
+#      --allow-partial=true --max-active=$maxactive --min-active=$minactive \
+#      --beam=$beam --lattice-beam=$lattice_beam \
+#      --word-symbol-table=$graphdir/words.txt \
+#      $srcdir/final.mdl $graphdir/HCLG.fst "$oldlm_cmd" "$newlm_cmd" \
+#      "$posteriors_rspecifier" "$lat_wspecifier" || exit 1;
 fi
 
 if ! $skip_scoring ; then

@@ -1019,7 +1019,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   BaseFloat final_relative_cost_;
   BaseFloat final_best_cost_;
 
-  BaseFloat adaptive_beam_;  // will be set to beam_ when we start
+  std::vector<BaseFloat> adaptive_beam_;  // will be set to beam_ when we start
   BucketQueue cur_queue_;  // temp variable used in 
                            // ProcessForFrame/ProcessNonemitting
 
@@ -1028,6 +1028,18 @@ class LatticeBiglmFasterBucketDecoderTpl {
                                     // back and expand those buckets with 
                                     // pruning.
   //bool debug_ = false;
+  // Record the total number of operations which processes an arc entering
+  // a bucket
+  int32 stats_bucket_operation_forward = 0;
+  int32 stats_bucket_operation_backward = 0;
+  int32 stats_bucket_operation_final_forward = 0;
+  int32 stats_bucket_operation_final_backward = 0;
+  // Record the total number of operations on expanded bucket which creates
+  // an arc between tokens
+  int32 stats_token_operation = 0;
+  int32 stats_token_operation_final = 0;
+  // sign we are in the final process
+  bool final_ = false;
 };
 
 typedef LatticeBiglmFasterBucketDecoderTpl<fst::StdFst,

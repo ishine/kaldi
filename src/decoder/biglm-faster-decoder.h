@@ -56,6 +56,7 @@ class BiglmFasterDecoder {
   // A PairId will be constructed as: (StateId in fst) + (StateId in lm_diff_fst) << 32;
   typedef uint64 PairId;
   typedef Arc::Weight Weight;
+
   
   // This constructor is the same as for FasterDecoder, except the second
   // argument (lm_diff_fst) is new; it's an FST (actually, a
