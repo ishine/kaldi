@@ -1019,7 +1019,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   BaseFloat final_relative_cost_;
   BaseFloat final_best_cost_;
 
-  std::vector<BaseFloat> adaptive_beam_;  // will be set to beam_ when we start
+  BaseFloat adaptive_beam_;  // will be set to beam_ when we start
   BucketQueue cur_queue_;  // temp variable used in 
                            // ProcessForFrame/ProcessNonemitting
 
