@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Set -e here so that we catch if any executable fails immediately
 set -euo pipefail
@@ -54,7 +54,7 @@ fi
 # run those things.
 local/nnet3/run_ivector_common.sh --stage $stage \
                                   --train-set $train_set \
-				  --test-sets "$test_sets" \
+                                  --test-sets "$test_sets" \
                                   --gmm $gmm \
                                   --nnet3-affix "$nnet3_affix" || exit 1;
 

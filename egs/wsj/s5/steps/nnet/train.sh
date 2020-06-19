@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright 2012-2017  Brno University of Technology (author: Karel Vesely)
 # Apache 2.0
@@ -209,7 +209,7 @@ cp $data_cv/feats.scp $dir/cv.scp_non_local
 
 ###### OPTIONALLY IMPORT FEATURE SETTINGS (from pre-training) ######
 ivector_dim= # no ivectors,
-if [ -n $feature_transform ]; then
+if [ -n "$feature_transform" ]; then
   D=$(dirname $feature_transform)
   echo "# importing feature settings from dir '$D'"
   [ -e $D/online_cmvn_opts ] && online_cmvn_opts=$(cat $D/online_cmvn_opts)
@@ -276,7 +276,7 @@ if [ -n "$feature_transform" ]; then
   cp $feature_transform $tmp; feature_transform=$tmp
 else
   # Make default proto with splice,
-  if [ -n $feature_transform_proto ]; then
+  if [ -n "$feature_transform_proto" ]; then
     echo "# importing custom 'feature_transform_proto' from '$feature_transform_proto'"
   else
     echo "# + default 'feature_transform_proto' with splice +/-$splice frames,"

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Copyright 2013  Johns Hopkins University (author: Daniel Povey)
 # Apache 2.0
@@ -113,6 +113,11 @@ fi
 cp $srcdir/wav.scp $dir
 if [ -f $srcdir/reco2file_and_channel ]; then
   cp $srcdir/reco2file_and_channel $dir
+fi
+
+# copy the source reco2dur
+if [ -f $srcdir/reco2dur ]; then
+  cp $srcdir/reco2dur $dir
 fi
 
 if [ -f $srcdir/segments ]; then
