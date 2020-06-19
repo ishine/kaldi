@@ -1,6 +1,7 @@
 // nnet3/nnet-chain-example.h
 
 // Copyright      2015  Johns Hopkins University (author: Daniel Povey)
+// Copyright      2020  Idiap Research Institute (author: Srikanth Madikeri)
 
 // See ../../COPYING for clarification regarding multiple authors
 //
@@ -213,8 +214,6 @@ void GetChainComputationRequest(const Nnet &nnet,
                                 bool store_component_stats,
                                 bool use_xent_regularization,
                                 bool use_xent_derivative,
-								bool use_iterate_scale,
-								bool use_iterate_derivative,
                                 ComputationRequest *computation_request);
 
 
@@ -276,6 +275,13 @@ MapType eg_to_egs_;
 };
 
 
+bool ParseFromQueryString(const std::string &string,
+                          const std::string &key_name,
+                          std::string *value);
+
+bool ParseFromQueryString(const std::string &string,
+                          const std::string &key_name,
+                          BaseFloat *value);
 
 } // namespace nnet3
 } // namespace kaldi

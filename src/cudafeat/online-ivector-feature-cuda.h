@@ -45,8 +45,18 @@ class IvectorExtractorFastCuda {
     Read(config);
     cu_lda_.Resize(info_.lda_mat.NumRows(), info_.lda_mat.NumCols());
     cu_lda_.CopyFromMat(info_.lda_mat);
+
+    // The last col in the LDA matrix may be an affine offset
+    // copy that column to offset_ now.  This may or may not be used
+    // when getting the features later
+    offset_.Resize(cu_lda_.NumRows());
+    offset_.CopyColFromMat(cu_lda_, cu_lda_.NumCols() - 1);
+    d_info_ = static_cast<int *>(CuDevice::Instantiate().Malloc(sizeof(int)));
   }
-  ~IvectorExtractorFastCuda() {}
+  ~IvectorExtractorFastCuda() {
+    KALDI_ASSERT(d_info_);
+    CuDevice::Instantiate().Free(d_info_);
+  }
 
   // This function goes directly from features to an i-vector
   // which makes the computation easier to port to GPU
@@ -106,6 +116,7 @@ class IvectorExtractorFastCuda {
   CuMatrix<BaseFloat> ubm_means_inv_vars_;
   CuMatrix<BaseFloat> ubm_inv_vars_;
   CuMatrix<BaseFloat> cu_lda_;
+  CuVector<BaseFloat> offset_;
   // extractor variables
   CuMatrix<BaseFloat> ie_U_;
 
@@ -117,6 +128,9 @@ class IvectorExtractorFastCuda {
   int b_;
   CuVector<BaseFloat> tot_post_;
   float prior_offset_;
+
+  // Buffer used by cusolver
+  int *d_info_;
 };
 }  // namespace kaldi
 

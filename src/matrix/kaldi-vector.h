@@ -234,9 +234,9 @@ class VectorBase {
   /// Set each element to y = (x == orig ? changed : x).
   void ReplaceValue(Real orig, Real changed);
 
-  /// Multipy element-by-element by another vector.
+  /// Multiply element-by-element by another vector.
   void MulElements(const VectorBase<Real> &v);
-  /// Multipy element-by-element by another vector of different type.
+  /// Multiply element-by-element by another vector of different type.
   template<typename OtherReal>
   void MulElements(const VectorBase<OtherReal> &v);
 
@@ -249,7 +249,7 @@ class VectorBase {
   /// Add a constant to each element of a vector.
   void Add(Real c);
 
-  /// Add element-by-element product of vectlrs:
+  /// Add element-by-element product of vectors:
   //  this <-- alpha * v .* r + beta*this .
   void AddVecVec(Real alpha, const VectorBase<Real> &v,
                  const VectorBase<Real> &r, Real beta);
@@ -360,7 +360,7 @@ class VectorBase {
 
   /// Reads from C++ stream (option to add to existing contents).
   /// Throws exception on failure
-  void Read(std::istream & in, bool binary, bool add = false);
+  void Read(std::istream &in, bool binary, bool add = false);
 
   /// Writes to C++ stream (option to write in binary).
   void Write(std::ostream &Out, bool binary) const;
@@ -455,7 +455,7 @@ class Vector: public VectorBase<Real> {
 
   /// Read function using C++ streams.  Can also add to existing contents
   /// of matrix.
-  void Read(std::istream & in, bool binary, bool add = false);
+  void Read(std::istream &in, bool binary, bool add = false);
 
   /// Set vector to a specified size (can be zero).
   /// The value of the new data depends on resize_type:
@@ -469,7 +469,7 @@ class Vector: public VectorBase<Real> {
   /// Remove one element and shifts later elements down.
   void RemoveElement(MatrixIndexT i);
 
-  /// Assignment operator, protected so it can only be used by std::vector
+  /// Assignment operator.
   Vector<Real> &operator = (const Vector<Real> &other) {
     Resize(other.Dim(), kUndefined);
     this->CopyFromVec(other);
@@ -510,37 +510,36 @@ class SubVector : public VectorBase<Real> {
     KALDI_ASSERT(static_cast<UnsignedMatrixIndexT>(origin)+
                  static_cast<UnsignedMatrixIndexT>(length) <=
                  static_cast<UnsignedMatrixIndexT>(t.Dim()));
-    VectorBase<Real>::data_ = const_cast<Real*> (t.Data()+origin);
-    VectorBase<Real>::dim_   = length;
+    this->data_ = const_cast<Real*> (t.Data()+origin);
+    this->dim_   = length;
   }
 
   /// This constructor initializes the vector to point at the contents
   /// of this packed matrix (SpMatrix or TpMatrix).
   SubVector(const PackedMatrix<Real> &M) {
-    VectorBase<Real>::data_ = const_cast<Real*> (M.Data());
-    VectorBase<Real>::dim_   = (M.NumRows()*(M.NumRows()+1))/2;
+    this->data_ = const_cast<Real*> (M.Data());
+    this->dim_   = (M.NumRows()*(M.NumRows()+1))/2;
   }
 
   /// Copy constructor
   SubVector(const SubVector &other) : VectorBase<Real> () {
     // this copy constructor needed for Range() to work in base class.
-    VectorBase<Real>::data_ = other.data_;
-    VectorBase<Real>::dim_ = other.dim_;
+    this->data_ = other.data_;
+    this->dim_ = other.dim_;
   }
 
   /// Constructor from a pointer to memory and a length.  Keeps a pointer
   /// to the data but does not take ownership (will never delete).
   /// Caution: this constructor enables you to evade const constraints.
   SubVector(const Real *data, MatrixIndexT length) : VectorBase<Real> () {
-    VectorBase<Real>::data_ = const_cast<Real*>(data);
-    VectorBase<Real>::dim_   = length;
+    this->data_ = const_cast<Real*>(data);
+    this->dim_   = length;
   }
-
 
   /// This operation does not preserve const-ness, so be careful.
   SubVector(const MatrixBase<Real> &matrix, MatrixIndexT row) {
-    VectorBase<Real>::data_ = const_cast<Real*>(matrix.RowData(row));
-    VectorBase<Real>::dim_   = matrix.NumCols();
+    this->data_ = const_cast<Real*>(matrix.RowData(row));
+    this->dim_   = matrix.NumCols();
   }
 
   ~SubVector() {}  ///< Destructor (does nothing; no pointers are owned here).

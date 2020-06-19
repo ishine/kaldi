@@ -58,15 +58,14 @@ NnetChainTrainer::NnetChainTrainer(const NnetChainTrainingOptions &opts,
 
 
 void NnetChainTrainer::Train(const NnetChainExample &chain_eg) {
+  NVTX_RANGE(__func__);
   bool need_model_derivative = true;
   const NnetTrainerOptions &nnet_config = opts_.nnet_config;
   bool use_xent_regularization = (opts_.chain_config.xent_regularize != 0.0);
-  bool use_iterate_scale = (opts_.chain_config.iterate_scale != 0.0);
   ComputationRequest request;
   GetChainComputationRequest(*nnet_, chain_eg, need_model_derivative,
                              nnet_config.store_component_stats,
                              use_xent_regularization, need_model_derivative,
-							 use_iterate_scale, need_model_derivative,
                              &request);
   std::shared_ptr<const NnetComputation> computation = compiler_.Compile(request);
 
@@ -97,6 +96,7 @@ void NnetChainTrainer::Train(const NnetChainExample &chain_eg) {
 
 void NnetChainTrainer::TrainInternal(const NnetChainExample &eg,
                                      const NnetComputation &computation) {
+  NVTX_RANGE(__func__);
   const NnetTrainerOptions &nnet_config = opts_.nnet_config;
   // note: because we give the 1st arg (nnet_) as a pointer to the
   // constructor of 'computer', it will use that copy of the nnet to
@@ -204,6 +204,7 @@ void NnetChainTrainer::TrainInternalBackstitch(const NnetChainExample &eg,
 void NnetChainTrainer::ProcessOutputs(bool is_backstitch_step2,
                                       const NnetChainExample &eg,
                                       NnetComputer *computer) {
+  NVTX_RANGE(__func__);
   // normally the eg will have just one output named 'output', but
   // we don't assume this.
   // In backstitch training, the output-name with the "_backstitch" suffix is
@@ -225,7 +226,6 @@ void NnetChainTrainer::ProcessOutputs(bool is_backstitch_step2,
 
     bool use_xent = (opts_.chain_config.xent_regularize != 0.0);
     std::string xent_name = sup.name + "-xent";  // typically "output-xent".
-
     CuMatrix<BaseFloat> xent_deriv;
 
     BaseFloat tot_objf, tot_l2_term, tot_weight;
@@ -249,32 +249,11 @@ void NnetChainTrainer::ProcessOutputs(bool is_backstitch_step2,
                                         tot_weight, xent_objf);
     }
 
-    // the following code computes the iterate loss.  add by wangzhichao. 2019.11.14
-	bool use_iterate = (opts_.chain_config.iterate_scale != 0.0);
-	std::string iterate_name = sup.name + "-iterate";  // typically "output-iterate".
-	CuMatrix<BaseFloat> iterate_deriv(nnet_output.NumRows(),
-                                      nnet_output.NumCols(),
-                                      kUndefined);
-	if (use_iterate) {
-	  BaseFloat iterate_objf, iterate_l2_term, iterate_weight;
-      const CuMatrixBase<BaseFloat> &iterate_output = computer->GetOutput(
-          iterate_name);
-
-      ComputeChainObjfAndDeriv(opts_.chain_config, den_graph_,
-                               sup.supervision, iterate_output,
-                               &iterate_objf, &iterate_l2_term, &iterate_weight,
-                               &iterate_deriv,
-                               NULL);
-
-	}
-
     if (opts_.apply_deriv_weights && sup.deriv_weights.Dim() != 0) {
       CuVector<BaseFloat> cu_deriv_weights(sup.deriv_weights);
       nnet_output_deriv.MulRowsVec(cu_deriv_weights);
       if (use_xent)
         xent_deriv.MulRowsVec(cu_deriv_weights);
-	  if (use_iterate)
-		iterate_deriv.MulRowsVec(cu_deriv_weights);
     }
 
     computer->AcceptInput(sup.name, &nnet_output_deriv);
@@ -288,12 +267,6 @@ void NnetChainTrainer::ProcessOutputs(bool is_backstitch_step2,
       xent_deriv.Scale(opts_.chain_config.xent_regularize);
       computer->AcceptInput(xent_name, &xent_deriv);
     }
-
-	if (use_iterate) {
-	  iterate_deriv.Scale(opts_.chain_config.iterate_scale);
-	  computer->AcceptInput(iterate_name, &iterate_deriv);
-	}
-
   }
 }
 

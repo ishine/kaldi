@@ -41,11 +41,10 @@ class NnetChainLdaStatsAccumulator {
   void AccStats(const NnetChainExample &eg) {
     ComputationRequest request;
     bool need_backprop = false, store_stats = false,
-        need_xent = false, need_xent_deriv = false,
-		need_iterate = false, need_iterate_deriv = false;
+        need_xent = false, need_xent_deriv = false;
 
     GetChainComputationRequest(nnet_, eg, need_backprop, store_stats,
-                               need_xent, need_xent_deriv, need_iterate, need_iterate_deriv, &request);
+                               need_xent, need_xent_deriv, &request);
 
     const NnetComputation &computation = *(compiler_.Compile(request));
 

@@ -89,7 +89,7 @@ class ArpaFileParser {
   /// If symbol table is a null pointer, the file should contain integer
   /// symbol values, and oov_handling has no effect. bos_symbol and eos_symbol
   /// must be valid symbols still.
-  ArpaFileParser(ArpaParseOptions options, fst::SymbolTable* symbols);
+  ArpaFileParser(const ArpaParseOptions& options, fst::SymbolTable* symbols);
   virtual ~ArpaFileParser();
 
   /// Read ARPA LM file from a stream.
@@ -130,7 +130,7 @@ class ArpaFileParser {
   bool ShouldWarn();
 
   /// N-gram counts. Valid from the point when HeaderAvailable() is called.
-  const std::vector<int64>& NgramCounts() const { return ngram_counts_; }
+  const std::vector<int32>& NgramCounts() const { return ngram_counts_; }
 
  private:
   ArpaParseOptions options_;
@@ -138,7 +138,7 @@ class ArpaFileParser {
   int32 line_number_;
   uint32 warning_count_;
   std::string current_line_;
-  std::vector<int64> ngram_counts_;
+  std::vector<int32> ngram_counts_;
 };
 
 }  // namespace kaldi
