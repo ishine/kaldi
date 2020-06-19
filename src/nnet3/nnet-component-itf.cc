@@ -28,6 +28,7 @@
 #include "nnet3/nnet-general-component.h"
 #include "nnet3/nnet-convolutional-component.h"
 #include "nnet3/nnet-attention-component.h"
+#include "nnet3/nnet-embedding-component.h"
 #include "nnet3/nnet-parse.h"
 #include "nnet3/nnet-computation-graph.h"
 
@@ -67,8 +68,16 @@ ComponentPrecomputedIndexes* ComponentPrecomputedIndexes::NewComponentPrecompute
     ans = new TimeHeightConvolutionComponent::PrecomputedIndexes();
   } else if (cpi_type == "RestrictedAttentionComponentPrecomputedIndexes") {
     ans = new RestrictedAttentionComponent::PrecomputedIndexes();
+  } else if (cpi_type == "SelfAttentionComponentPrecomputedIndexes") {
+    ans = new SelfAttentionComponent::PrecomputedIndexes();
+  } else if (cpi_type == "Contextless3RestrictedAttentionComponentPrecomputedIndexes") {
+    ans = new Contextless3RestrictedAttentionComponent::PrecomputedIndexes();
+  } else if (cpi_type == "PositionEmbeddingComponentPrecomputedIndexes") {
+    ans = new PositionEmbeddingComponent::PrecomputedIndexes();
   } else if (cpi_type == "GeneralDropoutComponentPrecomputedIndexes") {
     ans = new GeneralDropoutComponentPrecomputedIndexes();
+  } else if (cpi_type == "SpecAugmentTimeMaskComponentPrecomputedIndexes") {
+    ans = new SpecAugmentTimeMaskComponentPrecomputedIndexes();
   } else if (cpi_type == "TdnnComponentPrecomputedIndexes") {
     ans = new TdnnComponent::PrecomputedIndexes();
   }
@@ -167,6 +176,8 @@ Component* Component::NewComponentOfType(const std::string &component_type) {
     ans = new DropoutMaskComponent();
   } else if (component_type == "GeneralDropoutComponent") {
     ans = new GeneralDropoutComponent();
+  } else if (component_type == "SpecAugmentTimeMaskComponent") {
+    ans = new SpecAugmentTimeMaskComponent();
   } else if (component_type == "BackpropTruncationComponent") {
     ans = new BackpropTruncationComponent();
   } else if (component_type == "LstmNonlinearityComponent") {
@@ -177,6 +188,12 @@ Component* Component::NewComponentOfType(const std::string &component_type) {
     ans = new TimeHeightConvolutionComponent();
   } else if (component_type == "RestrictedAttentionComponent") {
     ans = new RestrictedAttentionComponent();
+  } else if (component_type == "SelfAttentionComponent") {
+    ans = new SelfAttentionComponent();
+  } else if (component_type == "Contextless3RestrictedAttentionComponent") {
+    ans = new Contextless3RestrictedAttentionComponent();
+  } else if (component_type == "PositionEmbeddingComponent") {
+    ans = new PositionEmbeddingComponent();
   } else if (component_type == "SumBlockComponent") {
     ans = new SumBlockComponent();
   } else if (component_type == "GruNonlinearityComponent") {

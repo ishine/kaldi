@@ -8,7 +8,7 @@
 set -e
 
 # configs for 'chain'
-stage=12
+stage=15
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
@@ -219,7 +219,8 @@ if [ $stage -le 15 ]; then
   if [ ! -z $decode_iter ]; then
     iter_opts=" --iter $decode_iter "
   fi
-  for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
+#  for decode_set in not_on_screen_sogou test8000_sogou testIOS_sogou testset_testND_sogou; do
+  for decode_set in testNewLong_sogou; do
        steps/nnet3/decode_sogou.sh --acwt 1.0 --post-decode-acwt 10.0 \
           --nj 8 --cmd "$decode_cmd" $iter_opts \
           --extra-left-context $extra_left_context  \

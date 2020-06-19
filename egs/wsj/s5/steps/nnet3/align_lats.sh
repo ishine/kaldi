@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash 
 # Copyright 2012  Brno University of Technology (Author: Karel Vesely)
 #           2013  Johns Hopkins University (Author: Daniel Povey)
 #           2015  Vijayaditya Peddinti
@@ -9,23 +9,35 @@
 # Computes training alignments using nnet3 DNN, with output to lattices.
 
 # Begin configuration section.
-nj=4
+nj=8
 cmd=run.pl
 stage=-1
 # Begin configuration.
-scale_opts="--transition-scale=1.0 --self-loop-scale=0.1"
-acoustic_scale=0.1
+scale_opts="--transition-scale=1.0 --self-loop-scale=1.0"  #for chain, set"--transition-scale=1.0 --self-loop-scale=0.1" for CE model
+acoustic_scale=1.0  #for chain
 beam=20
 iter=final
-frames_per_chunk=50
-extra_left_context=0
+frames_per_chunk=1500
+extra_left_context=50
 extra_right_context=0
-extra_left_context_initial=-1
-extra_right_context_final=-1
+extra_left_context_initial=0
+extra_right_context_final=0
 online_ivector_dir=
 graphs_scp=
 generate_ali_from_lats=false # If true, alingments generated from lattices.
+use_gpu=true    #If true, generate lattices use gpu
 # End configuration options.
+gpu_opt="--use-gpu=no"
+gpu_queue_opt=
+num_threads=4 # if >1, will use gmm-latgen-faster-parallel
+
+if $use_gpu; then
+  gpu_queue_opt="--gpu 1"
+  gpu_opt="--use-gpu=yes"
+fi
+
+thread_string=
+[ $num_threads -gt 1 ] && thread_string="-parallel --num-threads=$num_threads"
 
 echo "$0 $@"  # Print the command line for logging
 
@@ -128,6 +140,23 @@ if [ $stage -le 0 ]; then
 fi
 
 if [ $stage -le 1 ]; then
+  if $use_gpu; then
+    nnet_forward_compute="nnet3-compute $gpu_opt $ivector_opts $frame_subsampling_opt \
+      --frames-per-chunk=$frames_per_chunk \
+      --extra-left-context=$extra_left_context \
+      --extra-right-context=$extra_right_context \
+      --extra-left-context-initial=$extra_left_context_initial \
+      --extra-right-context-final=$extra_right_context_final \
+      $srcdir/${iter}.mdl \"$feats\" ark:-"
+
+    $cmd $gpu_queue_opt --num-threads $num_threads JOB=1:$nj $dir/log/generate_lattices.JOB.log \
+      $nnet_forward_compute \| \
+      latgen-faster-mapped$thread_string --acoustic-scale=$acoustic_scale \
+      --beam=$beam --lattice-beam=$beam \
+      --allow-partial=false --word-determinize=false \
+      $srcdir/${iter}.mdl "ark:gunzip -c $dir/fsts.JOB.gz |" \
+      ark,s,cs:- "ark:|gzip -c >$dir/lat.JOB.gz"
+  else
   # Warning: nnet3-latgen-faster doesn't support a retry-beam so you may get more
   # alignment errors (however, it does have a default min-active=200 so this
   # will tend to reduce alignment errors).
@@ -137,17 +166,18 @@ if [ $stage -le 1 ]; then
   #  --lattice-beam=$beam keeps all the alternatives that were within the beam,
   #    it means we do no pruning of the lattice (lattices from a training transcription
   #    will be small anyway).
-  $cmd JOB=1:$nj $dir/log/generate_lattices.JOB.log \
-    nnet3-latgen-faster --acoustic-scale=$acoustic_scale $ivector_opts $frame_subsampling_opt \
-    --frames-per-chunk=$frames_per_chunk \
-    --extra-left-context=$extra_left_context \
-    --extra-right-context=$extra_right_context \
-    --extra-left-context-initial=$extra_left_context_initial \
-    --extra-right-context-final=$extra_right_context_final \
-    --beam=$beam --lattice-beam=$beam \
-    --allow-partial=false --word-determinize=false \
-    $srcdir/${iter}.mdl "ark:gunzip -c $dir/fsts.JOB.gz |" \
-    "$feats" "ark:|gzip -c >$dir/lat.JOB.gz" || exit 1;
+    $cmd JOB=1:$nj $dir/log/generate_lattices.JOB.log \
+      nnet3-latgen-faster --acoustic-scale=$acoustic_scale $ivector_opts $frame_subsampling_opt \
+      --frames-per-chunk=$frames_per_chunk \
+      --extra-left-context=$extra_left_context \
+      --extra-right-context=$extra_right_context \
+      --extra-left-context-initial=$extra_left_context_initial \
+      --extra-right-context-final=$extra_right_context_final \
+      --beam=$beam --lattice-beam=$beam \
+      --allow-partial=false --word-determinize=false \
+      $srcdir/${iter}.mdl "ark:gunzip -c $dir/fsts.JOB.gz |" \
+      "$feats" "ark:|gzip -c >$dir/lat.JOB.gz" || exit 1;
+  fi
 fi
 
 if [ $stage -le 2 ] && $generate_ali_from_lats; then

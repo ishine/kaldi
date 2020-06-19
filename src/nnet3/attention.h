@@ -218,6 +218,12 @@ void GetAttentionDotProducts(BaseFloat alpha,
                              const CuMatrixBase<BaseFloat> &B,
                              CuMatrixBase<BaseFloat> *C);
 
+void GetFullAttentionDotProducts(const time_height_convolution::ConvolutionComputationIo &io,
+								 BaseFloat alpha,
+                                 const CuMatrixBase<BaseFloat> &A,
+                                 const CuMatrixBase<BaseFloat> &B,
+                                 CuMatrixBase<BaseFloat> *C);
+
 
 /**
    This function is related to GetAttentionDotProducts(); it
@@ -299,6 +305,14 @@ void AttentionForward(BaseFloat key_scale,
                       CuMatrixBase<BaseFloat> *c,
                       CuMatrixBase<BaseFloat> *output);
 
+void FullAttentionForward(const time_height_convolution::ConvolutionComputationIo &io,
+				          BaseFloat key_scale,
+                          const CuMatrixBase<BaseFloat> &keys,
+                          const CuMatrixBase<BaseFloat> &queries,
+                          const CuMatrixBase<BaseFloat> &values,
+                          CuMatrixBase<BaseFloat> *c,
+                          CuMatrixBase<BaseFloat> *output);
+
 /** Performs the backward pass corresponding to 'AttentionForward',
     propagating the derivative back to the keys, queries and values.
 
@@ -317,12 +331,66 @@ void AttentionBackward(BaseFloat key_scale,
                        CuMatrixBase<BaseFloat> *queries_deriv,
                        CuMatrixBase<BaseFloat> *values_deriv);
 
-
+void FullAttentionBackward(BaseFloat key_scale,
+                       const CuMatrixBase<BaseFloat> &keys,
+                       const CuMatrixBase<BaseFloat> &queries,
+                       const CuMatrixBase<BaseFloat> &values,
+                       const CuMatrixBase<BaseFloat> &c,
+                       const CuMatrixBase<BaseFloat> &output_deriv,
+                       CuMatrixBase<BaseFloat> *keys_deriv,
+                       CuMatrixBase<BaseFloat> *queries_deriv,
+                       CuMatrixBase<BaseFloat> *values_deriv);
 
 
 
 
 } // namespace attention
+namespace contextless3attention {
+
+void GetAttentionDotProducts(BaseFloat alpha,
+                             const CuMatrixBase<BaseFloat> &A,
+                             const CuMatrixBase<BaseFloat> &B,
+                             CuMatrixBase<BaseFloat> *C,
+							 int32 row_shift);
+
+void ApplyScalesToOutput(BaseFloat alpha,
+                         const CuMatrixBase<BaseFloat> &B,
+                         const CuMatrixBase<BaseFloat> &C,
+                         CuMatrixBase<BaseFloat> *A,
+						 int32 row_shift);
+
+void ApplyScalesToInput(BaseFloat alpha,
+                        const CuMatrixBase<BaseFloat> &A,
+                        const CuMatrixBase<BaseFloat> &C,
+                        CuMatrixBase<BaseFloat> *B,
+						int32 row_shift);
+void ApplyScalesToInputTrans(BaseFloat alpha,
+                        const CuMatrixBase<BaseFloat> &A,
+                        const CuMatrixBase<BaseFloat> &C,
+                        CuMatrixBase<BaseFloat> *B,
+						int32 row_shift);
+
+void AttentionForward(BaseFloat key_scale,
+                      const CuMatrixBase<BaseFloat> &keys,
+                      const CuMatrixBase<BaseFloat> &queries,
+                      const CuMatrixBase<BaseFloat> &values,
+                      CuMatrixBase<BaseFloat> *c,
+                      CuMatrixBase<BaseFloat> *output,
+                      int32 row_shift,
+                      int32 effective_context_dim);
+
+void AttentionBackward(BaseFloat key_scale,
+                       const CuMatrixBase<BaseFloat> &keys,
+                       const CuMatrixBase<BaseFloat> &queries,
+                       const CuMatrixBase<BaseFloat> &values,
+                       const CuMatrixBase<BaseFloat> &c,
+                       const CuMatrixBase<BaseFloat> &output_deriv,
+                       CuMatrixBase<BaseFloat> *keys_deriv,
+                       CuMatrixBase<BaseFloat> *queries_deriv,
+                       CuMatrixBase<BaseFloat> *values_deriv,
+                      int32 row_shift,
+                      int32 effective_context_dim);
+} // namespace contextless3attention
 } // namespace nnet3
 } // namespace kaldi
 

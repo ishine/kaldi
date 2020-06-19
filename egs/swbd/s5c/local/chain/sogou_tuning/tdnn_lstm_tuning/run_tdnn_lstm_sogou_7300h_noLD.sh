@@ -12,13 +12,13 @@ stage=15
 train_stage=-10
 get_egs_stage=-10
 speed_perturb=false
-dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD # Note: _sp will get added to this if $speed_perturb == true.
+dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD_LFR # Note: _sp will get added to this if $speed_perturb == true.
 decode_iter=
 decode_dir_affix=
 
 # training options
 leftmost_questions_truncate=-1
-chunk_width=150
+chunk_width=
 chunk_left_context=40
 chunk_right_context=0
 xent_regularize=0.025
@@ -27,10 +27,11 @@ label_delay=0
 # decode options
 extra_left_context=50
 extra_right_context=0
-frames_per_chunk=
+frames_per_chunk=150,100
+frames_per_chunk_primary=$(echo $frames_per_chunk | cut -d, -f1)
 
 remove_egs=false
-common_egs_dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD/egs
+common_egs_dir=
 
 affix=
 # End configuration section.
@@ -136,8 +137,8 @@ if [ $stage -le 12 ]; then
 
   # the first splicing is moved before the lda layer, so no splicing here
   relu-renorm-layer name=tdnn1 input=Append(-2,-1,0,1,2) dim=1024
-  relu-renorm-layer name=tdnn2 input=Append(-1,0,1) dim=1024
-  relu-renorm-layer name=tdnn3 input=Append(-1,0,1) dim=1024
+  relu-renorm-layer name=tdnn2 input=Append(-3,0,3) dim=1024
+  relu-renorm-layer name=tdnn3 input=Append(-3,0,3) dim=1024
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
   fast-lstmr-layer name=fastlstm1 cell-dim=1536 recurrent-projection-dim=512 delay=-3
@@ -188,7 +189,7 @@ if [ $stage -le 13 ]; then
     --trainer.deriv-truncate-margin 8 \
     --egs.stage $get_egs_stage \
     --egs.opts "--frames-overlap-per-eg 0" \
-    --egs.chunk-width $chunk_width \
+    --egs.chunk-width $frames_per_chunk \
     --egs.chunk-left-context $chunk_left_context \
     --egs.chunk-right-context $chunk_right_context \
     --egs.chunk-left-context-initial 0 \
@@ -197,7 +198,7 @@ if [ $stage -le 13 ]; then
     --cleanup.remove-egs $remove_egs \
     --feat-dir data/${train_set} \
     --tree-dir $treedir \
-    --lat-dir exp/tri3b_lats_nodup_7300h \
+    --lat-dir exp/tri3b_lats_nodup \
     --dir $dir  || exit 1;
 fi
 <<!
@@ -225,7 +226,7 @@ if [ $stage -le 15 ]; then
           --extra-right-context $extra_right_context  \
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
-          --frames-per-chunk "$frames_per_chunk" \
+          --frames-per-chunk "$frames_per_chunk_primary" \
          $graph_dir data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done

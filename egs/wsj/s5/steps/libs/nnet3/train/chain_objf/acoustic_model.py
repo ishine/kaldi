@@ -123,7 +123,7 @@ def train_new_models(dir, iter, srand, num_jobs,
                      raw_model_string, egs_dir,
                      apply_deriv_weights,
                      min_deriv_time, max_deriv_time_relative,
-                     l2_regularize, xent_regularize, leaky_hmm_coefficient,
+                     l2_regularize, xent_regularize, iterate_scale, leaky_hmm_coefficient,
                      momentum, max_param_change,
                      shuffle_buffer_size, num_chunk_per_minibatch_str,
                      frame_subsampling_factor, run_opts, train_opts,
@@ -190,6 +190,7 @@ def train_new_models(dir, iter, srand, num_jobs,
                     --apply-deriv-weights={app_deriv_wts} \
                     --l2-regularize={l2} --leaky-hmm-coefficient={leaky} \
                     {cache_io_opts}  --xent-regularize={xent_reg} \
+		    --iterate-scale={iterate_scale} \
                     {deriv_time_opts} \
                     --print-interval=10 --momentum={momentum} \
                     --max-param-change={max_param_change} \
@@ -213,7 +214,8 @@ def train_new_models(dir, iter, srand, num_jobs,
                         app_deriv_wts=apply_deriv_weights,
                         fr_shft=frame_shift, l2=l2_regularize,
                         train_opts=train_opts,
-                        xent_reg=xent_regularize, leaky=leaky_hmm_coefficient,
+                        xent_reg=xent_regularize, iterate_scale=iterate_scale, 
+			leaky=leaky_hmm_coefficient,
                         cache_io_opts=cache_io_opts,
                         parallel_train_opts=run_opts.parallel_train_opts,
                         verbose_opt=verbose_opt,
@@ -241,7 +243,7 @@ def train_one_iteration(dir, iter, srand, egs_dir,
                         num_chunk_per_minibatch_str,
                         apply_deriv_weights, min_deriv_time,
                         max_deriv_time_relative,
-                        l2_regularize, xent_regularize,
+                        l2_regularize, xent_regularize, iterate_scale,
                         leaky_hmm_coefficient,
                         momentum, max_param_change, shuffle_buffer_size,
                         frame_subsampling_factor,
@@ -276,7 +278,7 @@ def train_one_iteration(dir, iter, srand, egs_dir,
     # validation set objectives
     compute_train_cv_probabilities(
         dir=dir, iter=iter, egs_dir=egs_dir,
-        l2_regularize=l2_regularize, xent_regularize=xent_regularize,
+        l2_regularize=l2_regularize, xent_regularize=xent_regularize, iterate_scale=iterate_scale,
         leaky_hmm_coefficient=leaky_hmm_coefficient, run_opts=run_opts,
         use_multitask_egs=use_multitask_egs)
 
@@ -314,6 +316,7 @@ def train_one_iteration(dir, iter, srand, egs_dir,
                      max_deriv_time_relative=max_deriv_time_relative,
                      l2_regularize=l2_regularize,
                      xent_regularize=xent_regularize,
+		     iterate_scale=iterate_scale,
                      leaky_hmm_coefficient=leaky_hmm_coefficient,
                      momentum=momentum,
                      max_param_change=cur_max_param_change,
@@ -470,7 +473,7 @@ def prepare_initial_acoustic_model(dir, run_opts, srand=-1, input_model=None):
 
 
 def compute_train_cv_probabilities(dir, iter, egs_dir, l2_regularize,
-                                   xent_regularize, leaky_hmm_coefficient,
+                                   xent_regularize, iterate_scale, leaky_hmm_coefficient,
                                    run_opts,
                                    use_multitask_egs=False):
     model = '{0}/{1}.mdl'.format(dir, iter)
@@ -487,12 +490,14 @@ def compute_train_cv_probabilities(dir, iter, egs_dir, l2_regularize,
         """{command} {dir}/log/compute_prob_valid.{iter}.log \
                 nnet3-chain-compute-prob --l2-regularize={l2} \
                 --leaky-hmm-coefficient={leaky} --xent-regularize={xent_reg} \
+		--iterate-scale={iterate_scale} \
                 {model} {dir}/den.fst \
                 "ark,bg:nnet3-chain-copy-egs {multitask_egs_opts} {scp_or_ark}:{egs_dir}/valid_diagnostic{egs_suffix} \
                     ark:- | nnet3-chain-merge-egs --minibatch-size=1:64 ark:- ark:- |" \
         """.format(command=run_opts.command, dir=dir, iter=iter, model=model,
                    l2=l2_regularize, leaky=leaky_hmm_coefficient,
                    xent_reg=xent_regularize,
+		   iterate_scale=iterate_scale,
                    egs_dir=egs_dir,
                    multitask_egs_opts=multitask_egs_opts,
                    scp_or_ark=scp_or_ark, egs_suffix=egs_suffix))
@@ -506,12 +511,14 @@ def compute_train_cv_probabilities(dir, iter, egs_dir, l2_regularize,
         """{command} {dir}/log/compute_prob_train.{iter}.log \
                 nnet3-chain-compute-prob --l2-regularize={l2} \
                 --leaky-hmm-coefficient={leaky} --xent-regularize={xent_reg} \
+		--iterate-scale={iterate_scale} \
                 {model} {dir}/den.fst \
                 "ark,bg:nnet3-chain-copy-egs {multitask_egs_opts} {scp_or_ark}:{egs_dir}/train_diagnostic{egs_suffix} \
                     ark:- | nnet3-chain-merge-egs --minibatch-size=1:64 ark:- ark:- |" \
         """.format(command=run_opts.command, dir=dir, iter=iter, model=model,
                    l2=l2_regularize, leaky=leaky_hmm_coefficient,
                    xent_reg=xent_regularize,
+		   iterate_scale=iterate_scale,
                    egs_dir=egs_dir,
                    multitask_egs_opts=multitask_egs_opts,
                    scp_or_ark=scp_or_ark, egs_suffix=egs_suffix))
@@ -557,7 +564,7 @@ def compute_progress(dir, iter, run_opts):
 
 def combine_models(dir, num_iters, models_to_combine, num_chunk_per_minibatch_str,
                    egs_dir, leaky_hmm_coefficient, l2_regularize,
-                   xent_regularize, run_opts,
+                   xent_regularize, iterate_scale, run_opts,
                    max_objective_evaluations=30,
                    use_multitask_egs=False):
     """ Function to do model combination
@@ -627,6 +634,7 @@ def combine_models(dir, num_iters, models_to_combine, num_chunk_per_minibatch_st
     compute_train_cv_probabilities(
         dir=dir, iter='final', egs_dir=egs_dir,
         l2_regularize=l2_regularize, xent_regularize=xent_regularize,
+	iterate_scale=iterate_scale,
         leaky_hmm_coefficient=leaky_hmm_coefficient,
         run_opts=run_opts,
         use_multitask_egs=use_multitask_egs)

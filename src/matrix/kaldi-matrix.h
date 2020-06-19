@@ -236,6 +236,12 @@ class MatrixBase {
   /// Multiply each element with a scalar value.
   void Scale(Real alpha);
 
+  /// Generate position-encodding matrix. 
+  void PosEmbStandard(Real alpha);
+
+  /// Generate mask matrix for self-attention computation.
+  void SetMask(int mask_step, int num_mask_value, Real value);
+
   /// Set, element-by-element, *this = max(*this, A)
   void Max(const MatrixBase<Real> &A);
   /// Set, element-by-element, *this = min(*this, A)

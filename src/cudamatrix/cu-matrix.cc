@@ -662,6 +662,58 @@ void CuMatrixBase<Real>::Scale(Real value) {
   }
 }
 
+template<typename Real>
+void CuMatrixBase<Real>::PosEmbStandard(Real value) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    if (num_rows_ == 0) return;
+    CuTimer tim;
+/*
+    dim3 dimGrid, dimBlock;
+    GetBlockSizesForSimpleMatrixOperation(NumRows(), NumCols(),
+                                          &dimGrid, &dimBlock);
+	int d_model = NumCols();
+	Real div_term = -1.0 * log(value) / d_model;
+    cuda_PosEmb(dimGrid, dimBlock, data_, div_term, Dim());
+*/
+    int dimBlock(CU1DBLOCK);
+    int dimGrid(n_blocks(NumRows(),CU1DBLOCK));
+//	int dimGrid = std::min(65535, NumRows());
+//	int dimBlock = std::min(1024, NumCols());
+	int d_model = NumCols();
+	Real div_term = -1.0 * log(value) / d_model;
+    cuda_PosEmb(dimGrid, dimBlock, data_, div_term, Dim());
+
+    CU_SAFE_CALL(cudaGetLastError());
+
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+	Mat().PosEmbStandard(value);
+  }
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::SetMask(int32 mask_step, int32 num_mask_value, Real value) {
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+    if (num_rows_ == 0) return;
+    CuTimer tim;
+
+    int dimBlock(CU1DBLOCK);
+    int dimGrid(n_blocks(NumRows(),CU1DBLOCK));
+
+    cuda_SetMask(dimGrid, dimBlock, data_, mask_step, num_mask_value, value, Dim());
+    CU_SAFE_CALL(cudaGetLastError());
+
+    CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+	Mat().SetMask(mask_step, num_mask_value, value);
+  }
+}
 
 template<typename Real>
 void CuMatrixBase<Real>::MulElements(const CuMatrixBase<Real>& A) {

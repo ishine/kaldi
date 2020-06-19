@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Begin configuration section.
-cmd=queue.pl
+cmd=run.pl
 stage=0
 extra_files=
-num_jobs=120
-max_job_run=40
+num_jobs=20
+max_job_run=20
 # End configuration section.
 echo "$0 $@"  # Print the command line for logging
 
@@ -88,7 +88,7 @@ echo $num_jobs > $dest/num_jobs  || exit 1
 
 echo "$0: checking the denlats files generated have at least 90% of the utterances."
 num_lines=`cat $dest_temp_dir/combined_lats_sorted.scp | wc -l` || exit 1;
-num_lines_tot=`cat $data/split$num_jobs/$*/utt2spk | wc -l` || exit 1;
+num_lines_tot=`cat $data/utt2spk | wc -l` || exit 1;
 python -c "import sys;
 percent = 100.0 * float($num_lines) / $num_lines_tot
 if percent < 90 :

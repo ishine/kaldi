@@ -54,10 +54,10 @@ right_tolerance=  # chain right tolerance == max label delay.
 left_tolerance=
 
 stage=0
-max_jobs_run=15         # This should be set to the maximum number of nnet3-chain-get-egs jobs you are
+max_jobs_run=30         # This should be set to the maximum number of nnet3-chain-get-egs jobs you are
                         # comfortable to run in parallel; you can increase it if your disk
                         # speed is greater and you have more machines.
-max_shuffle_jobs_run=50  # the shuffle jobs now include the nnet3-chain-normalize-egs command,
+max_shuffle_jobs_run=30  # the shuffle jobs now include the nnet3-chain-normalize-egs command,
                          # which is fairly CPU intensive, so we can run quite a few at once
                          # without overloading the disks.
 srand=0     # rand seed for nnet3-chain-get-egs, nnet3-chain-copy-egs and nnet3-chain-shuffle-egs
@@ -322,7 +322,7 @@ if [ $stage -le 2 ]; then
   rm $dir/.error 2>/dev/null
 
   (
-    $cmd --max-jobs-run 6 JOB=1:$nj $dir/log/lattice_copy.JOB.log \
+    $cmd --max-jobs-run 120 JOB=1:$nj $dir/log/lattice_copy.JOB.log \
       lattice-copy --include="cat $dir/valid_uttlist $dir/train_subset_uttlist |" --ignore-missing \
       "$lats_rspecifier" \
       ark,scp:$dir/lat_special.JOB.ark,$dir/lat_special.JOB.scp || exit 1

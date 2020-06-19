@@ -98,9 +98,12 @@ void NnetChainComputeProb::Compute(const NnetChainExample &chain_eg) {
   // regular objective.
   bool use_xent_regularization = (chain_config_.xent_regularize != 0.0),
       use_xent_derivative = false;
+  bool use_iterate_scale = (chain_config_.iterate_scale != 0.0),
+	  use_iterate_derivative = false;
   GetChainComputationRequest(nnet_, chain_eg, need_model_derivative,
                              store_component_stats, use_xent_regularization,
-                             use_xent_derivative, &request);
+							 use_xent_derivative, use_iterate_scale,
+							 use_iterate_derivative, &request);
   std::shared_ptr<const NnetComputation> computation = compiler_.Compile(request);
   NnetComputer computer(nnet_config_.compute_config, *computation,
                         nnet_, deriv_nnet_);

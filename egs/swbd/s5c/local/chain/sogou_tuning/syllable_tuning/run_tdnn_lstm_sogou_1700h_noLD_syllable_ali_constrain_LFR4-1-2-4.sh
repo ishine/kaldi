@@ -211,7 +211,7 @@ fi
 #fi
 
 decode_suff=0528_decode15s
-graph_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_ali_constrain_5s_ngram3_denfst/graph_0528_syllable
+graph_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_ali_constrain_5s_2gram_denfst_L5R5_LFR4_1-2-4/graph_0528_syllable
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -228,7 +228,7 @@ if [ $stage -le 15 ]; then
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
           --frames-per-chunk "$frames_per_chunk" \
-         $graph_dir data/${decode_set} \
+         $graph_dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done
 fi

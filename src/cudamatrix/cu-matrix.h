@@ -492,6 +492,9 @@ class CuMatrixBase {
   /// Zeroes all elements for which col > row.
   void SetZeroAboveDiag();
   void Scale(Real value);
+  void PosEmbStandard(Real value);
+
+  void SetMask(int32 mask_step, int32 num_mask_value, Real value);
 
   /// Multiply two matrices elementwise: C = C .* A
   void MulElements(const CuMatrixBase<Real> &A);

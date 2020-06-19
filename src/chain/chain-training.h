@@ -70,9 +70,16 @@ struct ChainTrainingOptions {
   // should have a softmax as its final nonlinearity.
   BaseFloat xent_regularize;
 
+  // Iterate-loss scale.  (e.g. try 0.3).  If nonzero,
+  // the network is expected to have an output named 'output-iterate', which
+  // is as the final output layer but takes an intedmediate output of the network 
+  // as input.
+  BaseFloat iterate_scale;
+
   ChainTrainingOptions(): l2_regularize(0.0), out_of_range_regularize(0.01),
                           leaky_hmm_coefficient(1.0e-05),
-                          xent_regularize(0.0) { }
+                          xent_regularize(0.0), 
+                          iterate_scale(0.0) { }
 
   void Register(OptionsItf *opts) {
     opts->Register("l2-regularize", &l2_regularize, "l2 regularization "
@@ -93,6 +100,11 @@ struct ChainTrainingOptions {
                    "nonzero, the network is expected to have an output "
                    "named 'output-xent', which should have a softmax as "
                    "its final nonlinearity.");
+	opts->Register("iterate-scale", &iterate_scale, "Iterate-loss scale "
+                   "for 'chain' training.  If nonzero, the network is "
+				   "expected to have an output named 'output-iterate' "
+                   "which is as the final output layer but takes an "
+				   "intedmediate output of the network as input.");
   }
 };
 

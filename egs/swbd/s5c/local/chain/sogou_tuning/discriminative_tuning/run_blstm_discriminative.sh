@@ -30,8 +30,8 @@ extra_right_context_final=0
 . ./path.sh
 . ./utils/parse_options.sh
 
-srcdir=exp/chain/9tdnn_4blstm_65M_7wh_1epoch
-train_data_dir=data/3w8_dialogue2w4_farfield2k_input4k_tra2Record8k_level1_part3
+srcdir=exp/chain/9tdnn_4blstm_65M_10wh_4epoch_smbr_stage1
+train_data_dir=data/train_sogou_fbank_11w_sdt_stage2_8000h_part5
 online_ivector_dir=
 degs_dir=                     # If provided, will skip the degs directory creation
 lats_dir=                     # If provided, will skip denlats creation
@@ -47,7 +47,7 @@ frames_per_eg=150
 frames_overlap_per_eg=30
 
 ## Nnet training options
-effective_learning_rate=0.000000125
+effective_learning_rate=0.0000001
 max_param_change=1
 num_jobs_nnet=4
 num_epochs=1
@@ -83,7 +83,7 @@ if [ ! -f ${srcdir}/final.mdl ]; then
   exit 1;
 fi
 
-lang=data/lang
+lang=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/lang_chain_2y_hunshu
 
 frame_subsampling_opt=
 frame_subsampling_factor=1
@@ -104,7 +104,7 @@ if [ $frame_subsampling_factor -ne 1 ]; then
 
   train_data_dir=${train_data_dir}_fs
 
-  affix=_fs_part3
+  affix=_fs_stage2_part5
 fi
 
 ##rm ${online_ivector_dir}_fs/ivector_online.scp 2>/dev/null || true
@@ -184,8 +184,8 @@ if [ $stage -le 4 ]; then
 fi
 
 testsets="testC1pen_0215eva_0.3m_sogou testC1pen_0215eva_1m_sogou testC1pen_0215eva_2m_sogou testRecordv2-dialog2-represent-long-0.3m_sogou testRecordv2-dialog2-interview-long-1m_sogou testRecordv2-dialog2-meeting-long-2m_sogou"
-decode_suff=0528_level1
-graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_0528
+decode_suff=tra2_hunshu
+graph_dir=/public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/exp/chain/lstm_6j_16k_500h_ld5/graph_translate2_hunshu_20191122
 if [ $stage -le 5 ]; then
   iter_opts=
   if [ ! -z $decode_iter ]; then
@@ -204,6 +204,7 @@ if [ $stage -le 5 ]; then
   done
 fi
 wait;
+exit 0;
 if [ $stage -le 6 ]; then
   for decode_set in $testsets; do
     steps/lmrescore_const_arpa.sh --cmd "$decode_cmd" \

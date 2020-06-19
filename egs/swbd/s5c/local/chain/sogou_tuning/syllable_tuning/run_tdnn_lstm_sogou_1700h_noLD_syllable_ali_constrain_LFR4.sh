@@ -8,7 +8,7 @@
 set -e
 
 # configs for 'chain'
-stage=13
+stage=15
 train_stage=-5
 get_egs_stage=-10
 speed_perturb=false
@@ -18,7 +18,7 @@ decode_dir_affix=
 
 # training options
 leftmost_questions_truncate=-1
-chunk_width=500
+chunk_width=498
 chunk_left_context=40
 chunk_right_context=0
 xent_regularize=0.025
@@ -136,17 +136,17 @@ if [ $stage -le 12 ]; then
 
   # the first splicing is moved before the lda layer, so no splicing here
   relu-renorm-layer name=tdnn1 input=Append(-5,-4,-3,-2,-1,0,1,2,3,4,5) dim=768
-  relu-renorm-layer name=tdnn2 input=Append(-1,0,1) dim=768
-  relu-renorm-layer name=tdnn3 input=Append(-1,0,1) dim=768
+  relu-renorm-layer name=tdnn2 input=Append(-4,0,4) dim=768
+  relu-renorm-layer name=tdnn3 input=Append(-4,0,4) dim=768
 
   # check steps/libs/nnet3/xconfig/lstm.py for the other options and defaults
-  fast-lstmr-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  fast-lstmr-layer name=fastlstm1 cell-dim=1024 recurrent-projection-dim=384 delay=-4
   relu-renorm-layer name=tdnn4 input=Append(-4,0,4) dim=1024
   relu-renorm-layer name=tdnn5 input=Append(-4,0,4) dim=1024
-  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  fast-lstmr-layer name=fastlstm2 cell-dim=1024 recurrent-projection-dim=384 delay=-4
   relu-renorm-layer name=tdnn6 input=Append(-4,0,4) dim=1024
   relu-renorm-layer name=tdnn7 input=Append(-4,0,4) dim=1024
-  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=384 delay=-3
+  fast-lstmr-layer name=fastlstm3 cell-dim=1024 recurrent-projection-dim=384 delay=-4
 
   ## adding the layers for chain branch
   output-layer name=output input=fastlstm3 output-delay=$label_delay include-log-softmax=false dim=$num_targets max-change=1.5
@@ -211,7 +211,7 @@ fi
 #fi
 
 decode_suff=0528_decode15s
-graph_dir=exp/chain/tdnn_lstm_1c_sogoufeat_7300hours_noLD_syllable_ali/graph_0528_syllable
+graph_dir=exp/chain/tdnn_lstm_1c_sogoufeat_1700hours_noLD_syllable_ali_constrain_5s_2gram_denfst_L5R5_LFR4_1-2-4/graph_0528_syllable
 if [ $stage -le 15 ]; then
   [ -z $extra_left_context ] && extra_left_context=$chunk_left_context;
   [ -z $extra_right_context ] && extra_right_context=$chunk_right_context;
@@ -228,7 +228,7 @@ if [ $stage -le 15 ]; then
           --extra-left-context-initial 0 \
           --extra-right-context-final 0 \
           --frames-per-chunk "$frames_per_chunk" \
-         $graph_dir data/${decode_set} \
+         $graph_dir /public/speech/wangzhichao/kaldi/kaldi-wzc/egs/sogou/s5c/data/${decode_set} \
          $dir/decode_${decode_set}_${decode_suff} || exit 1;
   done
 fi

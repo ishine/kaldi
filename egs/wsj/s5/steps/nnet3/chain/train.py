@@ -76,6 +76,9 @@ def get_args():
                         dest='xent_regularize', default=0.0,
                         help="Weight of regularization function which is the "
                         "cross-entropy cost the outputs.")
+    parser.add_argument("--chain.iterate-scale", type=float,
+		        dest='iterate_scale', default=0.0,
+			help="Weight of the iterate loss function.")
     parser.add_argument("--chain.right-tolerance", type=int,
                         dest='right_tolerance', default=5, help="")
     parser.add_argument("--chain.left-tolerance", type=int,
@@ -539,6 +542,7 @@ def train(args, run_opts):
                 max_deriv_time_relative=max_deriv_time_relative,
                 l2_regularize=args.l2_regularize,
                 xent_regularize=args.xent_regularize,
+		iterate_scale=args.iterate_scale,
                 leaky_hmm_coefficient=args.leaky_hmm_coefficient,
                 momentum=args.momentum,
                 max_param_change=args.max_param_change,
@@ -581,6 +585,7 @@ def train(args, run_opts):
                 leaky_hmm_coefficient=args.leaky_hmm_coefficient,
                 l2_regularize=args.l2_regularize,
                 xent_regularize=args.xent_regularize,
+		iterate_scale=args.iterate_scale,
                 run_opts=run_opts,
                 max_objective_evaluations=args.max_objective_evaluations,
                 use_multitask_egs=use_multitask_egs)
@@ -591,7 +596,8 @@ def train(args, run_opts):
             chain_lib.compute_train_cv_probabilities(
                 dir=args.dir, iter=num_iters, egs_dir=egs_dir,
                 l2_regularize=args.l2_regularize, xent_regularize=args.xent_regularize,
-                leaky_hmm_coefficient=args.leaky_hmm_coefficient,
+                iterate_scale=args.iterate_scale, 
+		leaky_hmm_coefficient=args.leaky_hmm_coefficient,
                 run_opts=run_opts,
                 use_multitask_egs=use_multitask_egs)
             common_lib.force_symlink("compute_prob_valid.{iter}.log"

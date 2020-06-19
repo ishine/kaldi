@@ -226,9 +226,127 @@ void TestAttentionForwardBackward() {
   }
 }
 
+void TestSelfAttentionForwardBackward() {
+  BaseFloat key_scale = 0.5 * RandInt(1, 3);
+  BaseFloat epsilon = 1.0e-03;
+  int32 test_dim = 3;
+
+  time_height_convolution::ConvolutionComputationIo io;
+  io.num_images = RandInt(1, 5);
+  io.num_t_in = RandInt(1, 10);
+  io.num_t_out = io.num_t_in;
+  
+  int32 output_num_rows = io.num_images * io.num_t_out,
+      value_dim = RandInt(10, 30), key_dim = RandInt(10, 30),
+      row_shift = 0, 
+	  input_num_rows = output_num_rows,
+	  context_dim = input_num_rows,
+      query_dim = key_dim;
+  CuMatrix<BaseFloat> keys(input_num_rows, key_dim),
+      queries(output_num_rows, query_dim),
+      values(input_num_rows, value_dim),
+      C(output_num_rows, input_num_rows),
+      output(output_num_rows, value_dim);
+
+
+  keys.SetRandn();
+  queries.SetRandn();
+  values.SetRandn();
+
+  FullAttentionForward(io, key_scale, keys, queries, values, &C, &output);
+
+  CuMatrix<BaseFloat> keys_deriv(input_num_rows, key_dim),
+      queries_deriv(output_num_rows, query_dim),
+      values_deriv(input_num_rows, value_dim),
+      output_deriv(output_num_rows, output.NumCols());
+
+  output_deriv.SetRandn();
+
+  FullAttentionBackward(key_scale, keys, queries, values, C,
+                    output_deriv, &keys_deriv, &queries_deriv,
+                    &values_deriv);
+
+  Matrix<BaseFloat> cpu_values_deriv(values_deriv), 
+	                cpu_keys_deriv(keys_deriv), 
+					cpu_queries_deriv(queries_deriv);
+
+  BaseFloat objf_baseline = TraceMatMat(output_deriv, output, kTrans);
+
+  {  // perturb the values and see if the objf changes as predicted.
+    Vector<BaseFloat> predicted_vec(test_dim), observed_vec(test_dim);
+    for (int32 i = 0; i < test_dim; i++) {
+      CuMatrix<BaseFloat> values2(input_num_rows, value_dim);
+      values2.SetRandn();
+      values2.Scale(epsilon);
+      BaseFloat predicted_delta_objf = TraceMatMat(values_deriv, values2, kTrans);
+      values2.AddMat(1.0, values);
+
+      output.SetZero();
+      FullAttentionForward(io, key_scale, keys, queries, values2, &C, &output);
+      BaseFloat objf2 = TraceMatMat(output_deriv, output, kTrans),
+          observed_delta_objf = objf2 - objf_baseline;
+      KALDI_LOG << "Changing values: predicted objf change is "
+                << predicted_delta_objf << ", observed objf change is "
+                << observed_delta_objf;
+      predicted_vec(i) = predicted_delta_objf;
+      observed_vec(i) = observed_delta_objf;
+    }
+    KALDI_ASSERT(predicted_vec.ApproxEqual(observed_vec, 0.1));
+  }
+
+  {  // perturb the keys and see if the objf changes as predicted.
+    Vector<BaseFloat> predicted_vec(test_dim), observed_vec(test_dim);
+    for (int32 i = 0; i < test_dim; i++) {
+      CuMatrix<BaseFloat> keys2(input_num_rows, key_dim);
+      keys2.SetRandn();
+      keys2.Scale(epsilon);
+
+      BaseFloat predicted_delta_objf = TraceMatMat(keys_deriv, keys2, kTrans);
+	  
+      keys2.AddMat(1.0, keys);
+
+      output.SetZero();
+      FullAttentionForward(io, key_scale, keys2, queries, values, &C, &output);
+      BaseFloat objf2 = TraceMatMat(output_deriv, output, kTrans),
+          observed_delta_objf = objf2 - objf_baseline;
+      KALDI_LOG << "Changing keys: predicted objf change is "
+                << predicted_delta_objf << ", observed objf change is "
+                << observed_delta_objf;
+      predicted_vec(i) = predicted_delta_objf;
+      observed_vec(i) = observed_delta_objf;
+    }
+
+    KALDI_ASSERT(predicted_vec.ApproxEqual(observed_vec, 0.1));
+  }
+
+
+  {  // perturb the queries and see if the objf changes as predicted.
+    Vector<BaseFloat> predicted_vec(test_dim), observed_vec(test_dim);
+    for (int32 i = 0; i < test_dim; i++) {
+      CuMatrix<BaseFloat> queries2(output_num_rows, query_dim);
+      queries2.SetRandn();
+      queries2.Scale(epsilon);
+      BaseFloat predicted_delta_objf = TraceMatMat(queries_deriv, queries2, kTrans);
+      queries2.AddMat(1.0, queries);
+
+      output.SetZero();
+      FullAttentionForward(io, key_scale, keys, queries2, values, &C, &output);
+      BaseFloat objf2 = TraceMatMat(output_deriv, output, kTrans),
+          observed_delta_objf = objf2 - objf_baseline;
+      KALDI_LOG << "Changing queries: predicted objf change is "
+                << predicted_delta_objf << ", observed objf change is "
+                << observed_delta_objf;
+      predicted_vec(i) = predicted_delta_objf;
+      observed_vec(i) = observed_delta_objf;
+    }
+    KALDI_ASSERT(predicted_vec.ApproxEqual(observed_vec, 0.1));
+  }
+}
+
 void UnitTestAttention() {
-  UnitTestAttentionDotProductAndAddScales();
-  TestAttentionForwardBackward();
+//  UnitTestAttentionDotProductAndAddScales();
+//  TestAttentionForwardBackward();
+  TestSelfAttentionForwardBackward();
 }
 
 
@@ -249,7 +367,9 @@ int main() {
     else
       CuDevice::Instantiate().SelectGpuId("optional"); // -2 .. automatic selection
 #endif
+	printf("======= Loop %d======\n", loop);
     for (int32 i = 0; i < 5; i++) {
+	  printf("####### Test %d in loop %d\n", i, loop);
       UnitTestAttention();
     }
   }

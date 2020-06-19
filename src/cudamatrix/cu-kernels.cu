@@ -453,6 +453,47 @@ static void _scale(Real* mat, Real value, MatrixDim d) {
 
 template<typename Real>
 __global__
+ static void _PosEmb(Real* mat, Real value, MatrixDim d) {
+  for (int pos = blockIdx.x; pos < d.rows; pos += gridDim.x) {
+    Real* sp = mat + pos * d.stride;
+    for (int id = threadIdx.x; id < d.cols; id += blockDim.x)
+    {
+       Real div_term = exp(id * value);
+       Real scaled_time = pos * div_term;
+       if (id % 2 == 0)
+         sp[id] = sin(scaled_time);
+       else
+         sp[id] = cos(scaled_time);
+     }
+  }
+}
+
+template<typename Real>
+__global__
+ static void _set_mask(Real* mat, int mask_step, int num_mask_value, Real value, MatrixDim d) {
+  for (int pos = blockIdx.x; pos < d.rows; pos += gridDim.x) {
+    Real* sp = mat + pos * d.stride;
+    for (int id = threadIdx.x; id < num_mask_value; id += blockDim.x)
+    {
+       sp[mask_step * id + pos] = value;
+     }
+  }
+}
+
+//template<typename Real>
+//__global__
+// static void _set_mask(Real* mat, int mask_step, int num_mask_value, Real value, MatrixDim d) {
+//  for (int pos = blockIdx.x; pos < d.rows; pos += gridDim.x) {
+//    Real* sp = mat + pos * d.stride;
+//	int idx = pos % mask_step;
+//    for (int id = threadIdx.x; id < num_mask_value; id += blockDim.x) {
+//	  sp[mask_step * id + idx] = value;
+//    }
+//  }
+//}
+
+template<typename Real>
+__global__
 static void _mul_elements(Real* mat, const Real* A, MatrixDim dst_d,
                           int src_stride) {
   int32_cuda i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -3834,6 +3875,14 @@ void cudaF_scale(dim3 Gr, dim3 Bl, float* mat, float value, MatrixDim d) {
   _scale<<<Gr,Bl>>>(mat,value,d);
 }
 
+void cudaF_PosEmb(int Gr, int Bl, float* mat, float value, MatrixDim d) {
+  _PosEmb<<<Gr,Bl>>>(mat,value,d);
+}
+
+void cudaF_set_mask(int Gr, int Bl, float *mat, int mask_step, int num_mask_value,  float value, MatrixDim d) {
+  _set_mask<<<Gr,Bl>>>(mat,mask_step,num_mask_value,value,d);
+}
+
 void cudaF_mul_elements(dim3 Gr, dim3 Bl, float* mat, const float* A,
                         MatrixDim dst_d, int src_stride) {
   _mul_elements<<<Gr,Bl>>>(mat,A,dst_d,src_stride);
@@ -4548,6 +4597,14 @@ void cudaD_scale_diag_packed(int Gr, int Bl, double* mat, double value,
 
 void cudaD_scale(dim3 Gr, dim3 Bl, double* mat, double value, MatrixDim d) {
   _scale<<<Gr,Bl>>>(mat,value,d);
+}
+
+void cudaD_PosEmb(int Gr, int Bl, double* mat, double value, MatrixDim d) {
+  _PosEmb<<<Gr,Bl>>>(mat,value,d);
+}
+
+void cudaD_set_mask(int Gr, int Bl, double* mat, int mask_step, int num_mask_value, double value, MatrixDim d) {
+  _set_mask<<<Gr,Bl>>>(mat,mask_step,num_mask_value,value,d);
 }
 
 void cudaD_mul_elements(dim3 Gr, dim3 Bl, double* mat, const double* A,

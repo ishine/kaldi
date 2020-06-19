@@ -19,7 +19,7 @@ decode_dir_affix=
 # training options
 leftmost_questions_truncate=-1
 chunk_width=-1
-minibatch_size=1
+minibatch_size=500=1:32/1000=1:16,20
 chunk_left_context=40
 chunk_right_context=0
 xent_regularize=0.025

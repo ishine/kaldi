@@ -1220,6 +1220,45 @@ template<typename Real> void MatrixBase<Real>::Scale(Real alpha) {
   }
 }
 
+template<typename Real> void MatrixBase<Real>::PosEmbStandard(Real alpha) {
+  if (num_rows_ == 0) return;
+  int d_model = NumCols();
+  for(int row = 0; row < NumRows(); row++){
+	Real *row_data = RowData(row);
+	for(int dim = 0; dim < d_model; dim++){
+	  if(dim % 2 == 0){
+		row_data[dim] = std::sin(row/std::pow(alpha,1.0*dim/d_model));
+      }
+      else{
+		row_data[dim] = std::cos(row/std::pow(alpha,1.0*dim/d_model));
+      }
+    }
+  }
+}
+
+template<typename Real> void MatrixBase<Real>::SetMask(int mask_step, int num_mask_value, Real value) {
+  if (num_rows_ == 0) return;  
+  if (num_cols_ != mask_step * num_mask_value) return;
+  for (int i = 0; i < NumRows(); i++) {
+    Real *row_data = RowData(i);
+	for (int32 j = 0; j < num_mask_value; j++) {
+	  row_data[mask_step * j + i] = value;
+	}
+  }
+}
+/*
+template<typename Real> void MatrixBase<Real>::SetMask(int mask_step, int num_mask_value, Real value) {
+  if (num_rows_ == 0) return;  
+  if (num_cols_ != mask_step * num_mask_value) return;
+  for (int i = 0; i < NumRows(); i++) {
+	int idx = i % mask_step;
+    Real *row_data = RowData(i);
+	for (int32 j = 0; j < num_mask_value; j++) {
+	  row_data[mask_step * j + idx] = value;
+	}
+  }
+}
+*/
 template<typename Real>  // scales each row by scale[i].
 void MatrixBase<Real>::MulRowsVec(const VectorBase<Real> &scale) {
   KALDI_ASSERT(scale.Dim() == num_rows_);

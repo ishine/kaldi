@@ -14,9 +14,10 @@ if(@ARGV!=2)
 #$NumComponents=4;          #for lstm set-up
 #$NumComponents=31;         #for tdnn-lstm set-up
 #$NumComponents=24;         #for FSMN online set-up
-#$NumComponents=60;          #for FSMN offline set-up
-#$NumComponents=15;          #for 3TDNN-3BLSTM set-up
-$NumComponents=28;          #for 9TDNN-4BLSTM set-up
+#$NumComponents=60;         #for FSMN offline set-up
+#$NumComponents=15;         #for 3TDNN-3BLSTM set-up
+$NumComponents=31;         #for 9TDNN-4BLSTM set-up
+#$NumComponents=46;          #for 12TDNN-10Attention set-up
 
 ################## 3TDNN-3BLSTM example ##################
 #system("cat <<EOF > nnet.proto
@@ -36,7 +37,7 @@ $NumComponents=28;          #for 9TDNN-4BLSTM set-up
 #name=blstm3 type=Blstm input=768 cell=1536 output=768 discard=0
 #name=output type=NaturalGradientAffineComponent input=768 output=3766
 #EOF");
-################## 3TDNN-3BLSTM example ##################
+################## 9TDNN-4BLSTM example ##################
 system("cat <<EOF > nnet.proto
 name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1280
 name=relu1 type=RectifiedLinearComponent 
@@ -52,20 +53,23 @@ name=renorm3 type=NormalizeComponent
 name=blstm1 type=Blstm input=1024 cell=1280 output=768 discard=0
 name=tdnn4 type=NaturalGradientAffineComponent input=768 output=1536
 name=relu4 type=RectifiedLinearComponent
+name=renorm4 type=NormalizeComponent
 name=splice3 type=Splice offset=[-1,0,1] input=1536 output=4608
 name=tdnn5 type=LinearComponent input=4608 output=512
 name=blstm2 type=Blstm input=512 cell=1280 output=768 discard=0
 name=tdnn6 type=NaturalGradientAffineComponent input=768 output=1536
 name=relu6 type=RectifiedLinearComponent
+name=renorm6 type=NormalizeComponent
 name=splice4 type=Splice offset=[-1,0,1] input=1536 output=4608
 name=tdnn7 type=LinearComponent input=4608 output=512
 name=blstm3 type=Blstm input=512 cell=1280 output=768 discard=0
 name=tdnn8 type=NaturalGradientAffineComponent input=768 output=1536
 name=relu8 type=RectifiedLinearComponent
+name=renorm8 type=NormalizeComponent
 name=splice5 type=Splice offset=[-1,0,1] input=1536 output=4608
 name=tdnn9 type=LinearComponent input=4608 output=512
 name=blstm4 type=Blstm input=512 cell=1280 output=768 discard=0
-name=output type=NaturalGradientAffineComponent input=768 output=3766
+name=output type=NaturalGradientAffineComponent input=768 output=4528
 EOF");
 ################### Deep FSMN offline example ###################
 #system("cat <<EOF > nnet.proto
@@ -159,6 +163,56 @@ EOF");
 #name=output type=NaturalGradientAffineComponent input=256 output=3766
 #EOF");
 
+################### 12TDNN-10ATTENTION example ###################
+#system("cat <<EOF > nnet.proto
+#name=batchnorm0 type=BatchNormComponent blocks=5
+#name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1280
+#name=relu1 type=RectifiedLinearComponent
+#name=batchnorm1 type=BatchNormComponent
+#name=splice1 type=Splice offset=[-1,0,1] input=1280 output=3840
+#name=tdnn2 type=NaturalGradientAffineComponent input=3840 output=1280
+#name=relu2 type=RectifiedLinearComponent
+#name=batchnorm2 type=BatchNormComponent
+#name=splice2 type=Splice offset=[-1,0,1] input=1280 output=3840
+#name=tdnn3 type=NaturalGradientAffineComponent input=3840 output=1024
+#name=relu3 type=RectifiedLinearComponent
+#name=batchnorm3 type=BatchNormComponent
+#name=positionembedding1 type=PositionEmbeddingComponent
+#name=attentionblock1 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock1 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding2 type=PositionEmbeddingComponent
+#name=attentionblock2 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock2 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding3 type=PositionEmbeddingComponent
+#name=attentionblock3 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock3 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding4 type=PositionEmbeddingComponent
+#name=attentionblock4 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock4 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding5 type=PositionEmbeddingComponent
+#name=attentionblock5 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock5 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding6 type=PositionEmbeddingComponent
+#name=attentionblock6 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock6 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding7 type=PositionEmbeddingComponent
+#name=attentionblock7 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock7 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding8 type=PositionEmbeddingComponent
+#name=attentionblock8 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock8 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding9 type=PositionEmbeddingComponent
+#name=attentionblock9 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock9 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=positionembedding10 type=PositionEmbeddingComponent
+#name=attentionblock10 type=MultiHeadSelfAttentionBlock input=1024 hid=3072 output=1024 stride=1 scale=1.0
+#name=feedforwardblock10 type=FeedForwardBlock input=1024 hid=2048 proj=512 offset=[-1,0,1] output=1024 scale=1.0
+#name=prefinal type=NaturalGradientAffineComponent input=1024 output=1024
+#name=relu4 type=RectifiedLinearComponent
+#name=batchnorm4 type=BatchNormComponent
+#name=output type=NaturalGradientAffineComponent input=1024 output=4528
+#EOF");
+
 ################### tdnn-lstm example ###################
 #system("cat <<EOF > nnet.proto
 #name=tdnn1 type=NaturalGradientAffineComponent input=355 output=1024
@@ -216,6 +270,7 @@ while($layer_cnt < $NumComponents)
 {
   $component = <PROTO>;
   chomp $component;
+  print "Layer:$layer_cnt\n";
   if($component=~/AffineComponent/) {
     &parse_affine($component);
   }
@@ -225,10 +280,13 @@ while($layer_cnt < $NumComponents)
   elsif($component=~/RectifiedLinearComponent/) {
     &parse_relu($component);
   }  
+  elsif($component=~/PositionEmbeddingComponent/) {
+    &parse_pe($component);
+  }
   elsif($component=~/NormalizeComponen/) { 
     &parse_renorm($component); 
   } 
-  elsif($component=~/BatchNormComponent/) {
+  elsif($component=~/BatchNormComponent/) { ### "=" is to fix the conflict with BlockBatchNormComponent
     &parse_batchnorm($component);
   }
   elsif($component=~/Splice/) {
@@ -239,6 +297,12 @@ while($layer_cnt < $NumComponents)
   }
   elsif($component=~/Dfsmn/) {
     &parse_dfsmn($component); 
+  }
+  elsif($component=~/MultiHeadSelfAttentionBlock/) {
+    &parse_mhablock($component); 
+  }
+  elsif($component=~/FeedForwardBlock/) {
+    &parse_feedforwardblock($component); 
   }
   elsif($component=~/Lstm/) {
     &parse_lstm($component);
@@ -387,6 +451,29 @@ sub parse_relu {
   print "converting  $_[0] finished...\n";
 }
 
+sub parse_pe {
+  $find = 0;
+  while($line=<IN>) 
+  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/PositionEmbeddingComponent/) 
+    {
+      $find = 1;
+      @a = split /\s+/, $line;
+      $input_dim = $a[4];
+      $output_dim = $a[6];
+      print OUT "<PositionEmbeddingComponent> $output_dim $input_dim\n";
+      last;
+    }
+  }
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting $_[0] finished...\n";
+}
+
 sub parse_renorm {
   $find=0;
   while($line=<IN>)
@@ -413,6 +500,12 @@ sub parse_renorm {
 
 sub parse_batchnorm {
   $find=0;
+  $num_blocks = 1;
+  @units = split /\s+/, $_[0];
+  if(@units == 3)
+  {
+    $num_blocks = &parse_node($units[2]);
+  }
   @stat_mean = ();
   @stat_var = ();
   while($line=<IN>)
@@ -424,26 +517,30 @@ sub parse_batchnorm {
       @a = split /\s+/, $line;
       $dim = $a[4];
       $block_dim = $a[6];
+      if($dim == $block_dim && $num_blocks != 1)
+      {
+        $dim = $dim * $num_blocks;                
+      }
       $epsilon = $a[8];
       $target_rms = $a[10];
       $count = $a[14];
       $cnt = 0;
-	  while($cnt < 16) {
-	    shift @a;
-		$cnt++;
-	  }
-	  push @stat_mean, @a[1..$dim];
-	  $line = <IN>;
-	  chomp $line;
+      while($cnt < 16) {
+	shift @a;
+	$cnt++;
+      }
+      push @stat_mean, @a[1..$block_dim];
+      $line = <IN>;
+      chomp $line;
       @params = split /\s+/, $line;
-	  shift @params;
-	  push @stat_var, @params[1..$dim];
+      shift @params;
+      push @stat_var, @params[1..$block_dim];
 	  
-	  ### write nnet1 batchnorm ###
+      ### write nnet1 batchnorm ###
       print OUT "<BatchNormComponent> $dim $dim\n";
       print OUT "<BlockDim> $block_dim <Epsilon> $epsilon <TargetRms> $target_rms <Count> $count\n";
-	  print OUT "[ @stat_mean ]\n";
-	  print OUT "[ @stat_var ]\n";
+      print OUT "[ @stat_mean ]\n";
+      print OUT "[ @stat_var ]\n";
       last;
     }
   }
@@ -552,8 +649,7 @@ sub parse_dfsmn {
   while($line=<IN>) 
   {
     chomp $line;
-    if($line=~/ComponentName/ && $line=~/NaturalGradientAffineComponent/)	
-	{
+    if($line=~/ComponentName/ && $line=~/NaturalGradientAffineComponent/) {
       ### reading the affine-transform part ###
       $cnt=0;
       while($cnt < $hid_dim)
@@ -565,7 +661,7 @@ sub parse_dfsmn {
         $cnt++;
       }
 	  
-	  $line=<IN>;
+      $line=<IN>;
       chomp $line;
       @params = split /\s+/, $line;
       shift @params;
@@ -573,52 +669,52 @@ sub parse_dfsmn {
       push @affine_bias, @params[1..$hid_dim];
 	  
       ### reading the relu part ###
-	  $line=<IN>;
-	  $line=<IN>;
-	  chomp $line;
-	  if(!($line=~/ComponentName/ && $line=~/RectifiedLinearComponent/))
-	  {
-	    print "Error: RELU part in DFSMN is not found!\n";
-		$find = 0;
-		last;
-	  }
-      
-	  ### reading the batchnorm part ###
-      $line=<IN>;  $line=<IN>; $line=<IN>;
       $line=<IN>;
-	  chomp $line;
+      $line=<IN>;
+      chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/RectifiedLinearComponent/))
+      {
+	print "Error: RELU part in DFSMN is not found!\n";
+        $find = 0;
+	last;
+      }
+      
+      ### reading the batchnorm part ###
+      $line=<IN>; $line=<IN>; $line=<IN>;
+      $line=<IN>;
+      chomp $line;
       if(!($line=~/ComponentName/ && $line=~/BatchNormComponent/))
       {
-	  	print "Error: BatchNorm part in DFSMN is not found!\n";
-		$find = 0;
-		last;  
-	  }
+	print "Error: BatchNorm part in DFSMN is not found!\n";
+	$find = 0;
+	last;  
+      }
       @a = split /\s+/, $line;
       $epsilon = $a[8];
       $target_rms = $a[10];
       $count = $a[14];
       $cnt = 0;
-	  while($cnt < 16) {
-	    shift @a;
-		$cnt++;
-	  }
-	  push @stat_mean, @a[1..$hid_dim];
-	  $line = <IN>;
-	  chomp $line;
+      while($cnt < 16) {
+        shift @a;
+        $cnt++;
+      }
+      push @stat_mean, @a[1..$hid_dim];
+      $line = <IN>;
+      chomp $line;
       @params = split /\s+/, $line;
-	  shift @params;
-	  push @stat_var, @params[1..$hid_dim];
+      shift @params;
+      push @stat_var, @params[1..$hid_dim];
 	  
-	  ### reading the linear-project part ###
-	  $line=<IN>;
-	  $line=<IN>;
-	  chomp $line;
+      ### reading the linear-project part ###
+      $line=<IN>;
+      $line=<IN>;
+      chomp $line;
       if(!($line=~/ComponentName/ && $line=~/LinearComponent/))
       {
-	    print "Error: Linear-project part in DFSMN is not found!\n";
-		$find = 0;
-		last;
-	  }
+	print "Error: Linear-project part in DFSMN is not found!\n";
+	$find = 0;
+	last;
+      }
       $cnt=0;
       while($cnt < $output_dim)
       {
@@ -629,44 +725,44 @@ sub parse_dfsmn {
         $cnt++;
       }	
 	  
-	  ### reading the fsmn part ###
-	  $line=<IN>;
-	  $line=<IN>;
-	  chomp $line;
+      ### reading the fsmn part ###
+      $line=<IN>;
+      $line=<IN>;
+      chomp $line;
       if(!($line=~/ComponentName/ && $line=~/NaturalGradientPerElementScaleComponent/))	
-	  {
+      {
         print "Error: the FSMN part in DFSMN is not found!\n";
-		$find = 0;
-		last;
-	  }
-	  @a = split /\s+/, $line;
-	  $line=<IN>;	  
-	  #read the SumBlockComponent and check the filter size
-	  $line=<IN>;          
-	  chomp $line;
-	  @b = split /\s+/, $line;
-	  $sum_block_in = $b[4];
-	  if ($sum_block_in != ($l_order+$r_order+1)*$input_dim)
-	  {
-	    print "Error: the filter order in $_[0] may be wrong!\n";
-		exit 1;
-	  }
-	  $cnt = 0;
-	  while($cnt < 10)
-	  {
-	    shift @a;
-		$cnt++;
-	  }
-	  push @filter_params, @a[1..$input_dim*($l_order+$r_order+1)];
+	$find = 0;
+	last;
+      }
+      @a = split /\s+/, $line;
+      $line=<IN>;	  
+      #read the SumBlockComponent and check the filter size
+      $line=<IN>;          
+      chomp $line;
+      @b = split /\s+/, $line;
+      $sum_block_in = $b[4];
+      if ($sum_block_in != ($l_order+$r_order+1)*$input_dim)
+      {
+	print "Error: the filter order in $_[0] may be wrong!\n";
+	exit 1;
+      }
+      $cnt = 0;
+      while($cnt < 10)
+      {
+	shift @a;
+	$cnt++;
+      }
+      push @filter_params, @a[1..$input_dim*($l_order+$r_order+1)];
 	  
-	  ### write nne1 dfsmn ###
-	  $find = 1;
+      ### write nne1 dfsmn ###
+      $find = 1;
       print OUT "<DeepFsmn> $output_dim $input_dim\n";
       print OUT "<LearnRateCoef> 2.5 <HidSize> $hid_dim <LOrder> $l_order <ROrder> $r_order <Stride> $stride <Epsilon> $epsilon <TargetRms> $target_rms <Count> $count\n";
 	  
-	  ### write affine-transform part ###
+      ### write affine-transform part ###
       print OUT " [\n";
-	  $cnt=0;
+      $cnt=0;
       while($cnt < $hid_dim)
       {
         if ($cnt == ($hid_dim-1))
@@ -679,13 +775,13 @@ sub parse_dfsmn {
       }	  
       print OUT " [ @affine_bias ]\n";
 	  
-	  ### write RELU part ###
+      ### write RELU part ###
 	  
-	  ### write batchnorm part ###
+      ### write batchnorm part ###
       print OUT "[ @stat_mean ]\n";
-	  print OUT "[ @stat_var ]\n";
+      print OUT "[ @stat_var ]\n";
 	  
-	  ### write linear-project part ###
+      ### write linear-project part ###
       $cnt=0;
       while($cnt < $output_dim)
       {
@@ -698,7 +794,7 @@ sub parse_dfsmn {
         $cnt++;
       }	  
 	  
-	  ### write fsmn part ###
+      ### write fsmn part ###
       $cnt=0;
       while($cnt < $l_order+$r_order+1)
       {
@@ -710,8 +806,8 @@ sub parse_dfsmn {
         print OUT "  @filter_params[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n"; 
         $cnt++;
       }
-	  last;
-	}
+      last;
+    }
   }
   if($find == 0)
   {
@@ -719,6 +815,312 @@ sub parse_dfsmn {
     exit 1;
   }
   print "converting  $_[0] finished...\n";
+}
+
+sub parse_mhablock {
+  $find=0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $hid_dim = &parse_node($units[3]);
+  $output_dim = &parse_node($units[4]);
+  $time_stride = &parse_node($units[5]);
+  $sum_scale = &parse_node($units[6]);
+  $num_heads = 0;
+  $key_dim = 0;
+  $value_dim = 0;
+  $key_scale = 0;
+  $num_leftinput = 0;
+  $num_rightinput = 0;
+  $epsilon = 0;
+  $target_rms = 0;
+  $count = 0;
+  @linear_affine = ();
+  @affine_bias = ();
+  @stat_mean = ();
+  @stat_var = ();
+  
+  while($line=<IN>)  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/NaturalGradientAffineComponent/) {
+      ### reading the affine-transform part ###
+      $cnt=0;
+      while($cnt < $hid_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+        push @linear_affine, @params[1..$input_dim];
+        $cnt++;
+      }
+
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @affine_bias=();   # 1 * $hid_dim; 
+      push @affine_bias, @params[1..$hid_dim];
+     
+      ### reading the self-attention part ###
+      $line = <IN>;
+      $line = <IN>; 
+      chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/Contextless3RestrictedAttentionComponent/))
+      {
+        print "Error: SelfAttention part in MultiHeadAttentionBlock is not found!\n";
+        $find = 0;
+        last;
+      }
+      @a = split /\s+/, $line;
+      $num_heads = $a[4];
+      $key_dim = $a[6];
+      $value_dim = $a[8];
+      $num_leftinput = $a[10];
+      $num_rightinput = $a[12];
+      $key_scale = $a[26];
+      
+      ### reading the batchnorm part ###
+      $line=<IN>;
+      chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/BatchNormComponent/))
+      {
+        print "Error: BatchNorm part in MultiHeadAttentionBlock is not found!\n";
+        $find = 0;
+        last;
+      }
+      @a = split /\s+/, $line;
+      $epsilon = $a[8];
+      $target_rms = $a[10];
+      $count = $a[14];
+      $cnt = 0;
+      while($cnt < 16) {
+        shift @a;
+        $cnt++;
+      }
+      push @stat_mean, @a[1..$output_dim];
+      $line = <IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      push @stat_var, @params[1..$output_dim];
+
+      ### write nnet1 MultiHeadAttentionBlock model ###
+      $find = 1;
+      print OUT "<MultiHeadSelfAttentionBlock> $output_dim $input_dim\n";
+      print OUT "<NumHeads> $num_heads <KeyDim> $key_dim <ValueDim> $value_dim <QueryDim> $key_dim <KeyScale> $key_scale <TimeStride> $time_stride \
+<NumLeftInuts> $num_leftinput <NumRightInputs> $num_rightinput <Epsilon> $epsilon <TargetRms> $target_rms <Count> $count <SumScale> $sum_scale\n";
+
+      ### write affine-transform part ###
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $hid_dim)
+      {
+        if ($cnt == ($hid_dim-1))
+        {
+          print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+      print OUT " [ @affine_bias ]\n";
+      
+     ### write batchnorm part ###
+      print OUT "[ @stat_mean ]\n";
+      print OUT "[ @stat_var ]\n";
+      last;
+    }#end if
+  }#end while
+
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting $_[0] finished...\n";
+}
+
+sub parse_feedforwardblock {
+  $find=0;
+  @units = split /\s+/, $_[0];
+  $input_dim = &parse_node($units[2]);
+  $hid_dim = &parse_node($units[3]);
+  $project_dim = &parse_node($units[4]);
+  $offset = &parse_node($units[5]);
+  $output_dim = &parse_node($units[6]);
+  $sum_scale = &parse_node($units[7]);
+  $offset =~ s/\[(.*)\]/$1/;
+  @splice_idx = split /,/, $offset;
+
+  $epsilon = 0;
+  $target_rms = 0;
+  $count = 0;
+  @linear_affine = ();
+  @affine_bias = ();
+  @linear_project1 = ();
+  @linear_project2 = ();
+  @stat_mean = ();
+  @stat_var = ();
+
+  while($line=<IN>)  {
+    chomp $line;
+    if($line=~/ComponentName/ && $line=~/NaturalGradientAffineComponent/) {
+      ### reading affine-transform part ###
+      $cnt=0;
+      while($cnt < $hid_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+        push @linear_affine, @params[1..$input_dim];
+        $cnt++;
+      }
+
+      $line=<IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      @affine_bias=();   # 1 * $hid_dim; 
+      push @affine_bias, @params[1..$hid_dim]; 
+   
+      ### reading the relu part ###
+      $line=<IN>;
+      $line=<IN>;
+      chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/RectifiedLinearComponent/))
+      {
+        print "Error: RELU part in FeedForwardBlock is not found!\n";
+        $find = 0;
+        last;
+      }
+
+      ### reading the linear-project-1 part ###
+      $line=<IN>; $line=<IN>; $line=<IN>;
+      $line=<IN>;
+      chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/LinearComponent/))
+      {
+        print "Error: Linear-project-1 part in FeedForwardBlock is not found!\n";
+        $find = 0;
+        last;
+      }
+      $cnt=0;
+      while($cnt < $project_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+        push @linear_project1, @params[1..$hid_dim];
+        $cnt++;
+      }
+
+      ### reading the linear-project-2 part ###
+      $line=<IN>;
+      $line=<IN>;
+      chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/LinearComponent/))
+      {
+        print "Error: Linear-project-2 part in FeedForwardBlock is not found!\n";
+        $find = 0;
+        last;
+      }
+      $cnt=0;
+      $splice_dim = @splice_idx;
+      $tdnn_dim = $splice_dim * $project_dim;
+      while($cnt < $output_dim)
+      {
+        $line=<IN>;
+        chomp $line;
+        @params=split /\s+/, $line;
+   
+        push @linear_project2, @params[1..$tdnn_dim];
+        $cnt++;
+      }
+      ### reading the batchnorm part ###
+      $line=<IN>;
+      $line=<IN>;
+      chomp $line;
+      if(!($line=~/ComponentName/ && $line=~/BatchNormComponent/))
+      {
+        print "Error: BatchNorm part in MultiHeadAttentionBlock is not found!\n";
+        $find = 0;
+        last;
+      }
+      @a = split /\s+/, $line;
+      $epsilon = $a[8];
+      $target_rms = $a[10];
+      $count = $a[14];
+      $cnt = 0;
+      while($cnt < 16) {
+        shift @a;
+        $cnt++;
+      }
+      push @stat_mean, @a[1..$output_dim];
+      $line = <IN>;
+      chomp $line;
+      @params = split /\s+/, $line;
+      shift @params;
+      push @stat_var, @params[1..$output_dim];
+
+      ### write nnet1 FeedForwardBlock model ###
+      $find = 1;
+      print OUT "<FeedForwardBlock> $output_dim $input_dim\n";
+      print OUT "<HidSize> $hid_dim <ProjectDim> $project_dim <Splice> [ @splice_idx ] <Epsilon> $epsilon <TargetRms> $target_rms <Count> $count <SumScale> $sum_scale\n";
+
+      ### write affine-transform part ###
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $hid_dim)
+      {
+        if ($cnt == ($hid_dim-1))
+        {
+          print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_affine[$cnt*$input_dim..($cnt+1)*$input_dim-1]\n";
+        $cnt++;
+      }
+      print OUT " [ @affine_bias ]\n";
+
+      ### write linear-project-1 part ###
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $project_dim)
+      {
+        if ($cnt == ($project_dim-1))
+        {
+          print OUT "  @linear_project1[$cnt*$hid_dim..($cnt+1)*$hid_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_project1[$cnt*$hid_dim..($cnt+1)*$hid_dim-1]\n";
+        $cnt++;
+      }
+
+      ### write linear-project-2 part ###
+      print OUT " [\n";
+      $cnt=0;
+      while($cnt < $output_dim)
+      {
+        if ($cnt == ($output_dim-1))
+        {
+          print OUT "  @linear_project2[$cnt*$tdnn_dim..($cnt+1)*$tdnn_dim-1] ]\n";
+          last;
+        }
+        print OUT "  @linear_project2[$cnt*$tdnn_dim..($cnt+1)*$tdnn_dim-1]\n";
+        $cnt++;
+      }
+  
+      ### write batchnorm part ###
+      print OUT "[ @stat_mean ]\n";
+      print OUT "[ @stat_var ]\n";
+      last;
+    }#end if
+  }#end while
+  if($find == 0)
+  {
+    print "Error: Can't find $_[0] in nnet3 model file.\n";
+    exit 1;
+  }
+  print "converting $_[0] finished...\n";
 }
 
 sub parse_lstm {

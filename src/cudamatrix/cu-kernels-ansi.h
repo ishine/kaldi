@@ -630,6 +630,10 @@ void cudaD_scale_diag_packed(int Gr, int Bl, double* mat, double value,
 void cudaF_scale_diag_packed(int Gr, int Bl, float* mat, float value, int dim);
 void cudaD_scale(dim3 Gr, dim3 Bl, double *mat, double value, MatrixDim d);
 void cudaF_scale(dim3 Gr, dim3 Bl, float *mat, float value, MatrixDim d);
+void cudaD_PosEmb(int Gr, int Bl, double *mat, double value, MatrixDim d);
+void cudaF_PosEmb(int Gr, int Bl, float *mat, float value, MatrixDim d);
+void cudaD_set_mask(int Gr, int Bl, double *mat, int mask_step, int num_mask_value, double value, MatrixDim d);
+void cudaF_set_mask(int Gr, int Bl, float *mat, int mask_step, int num_mask_value, float value, MatrixDim d);
 void cudaD_select_rows(dim3 Gr, dim3 Bl, const int* out_row_ptr,
                        int* out_col_idx, double* out_val,
                        const int* row_indexes, const int num_selected_rows,
