@@ -1311,7 +1311,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	PrefixSeq *preseq, *n_preseq;
 	std::vector<int> prefix, n_prefix;
 	std::vector<float> next_words(vocab_size);
-	float logp, logp_b, logp_lm, n_p_b, n_p_nb;
+	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
 	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
 			rscale = config_.rnnlm_scale,
             blank_penalty = log(config_.blank_penalty);

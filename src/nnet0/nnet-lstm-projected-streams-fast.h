@@ -781,6 +781,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 
 	    w_r_m_.AddMat(-lr, w_r_m_corr_);
 
+        /*
         if (clip_cell_ > 0.0) {
           w_gifo_x_.ApplyFloor(-clip_cell_);
           w_gifo_x_.ApplyCeiling(clip_cell_);
@@ -796,7 +797,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
           peephole_f_c_.ApplyCeiling(clip_cell_);
           peephole_o_c_.ApplyFloor(-clip_cell_);
           peephole_o_c_.ApplyCeiling(clip_cell_);
-        }
+        }*/
   }
 
   void ResetGradient()
