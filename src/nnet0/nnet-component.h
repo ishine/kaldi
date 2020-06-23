@@ -65,6 +65,7 @@ class Component {
     kLstmProjectedStreams,
 	kLstmStreams,
 	kLstmStandard,
+	kLstmProjectedStandard,
 	kLstmProjectedStreamsFast,
 	kLstmProjectedStreamsFixedPoint,
 	kLstmProjectedStreamsSimple,
