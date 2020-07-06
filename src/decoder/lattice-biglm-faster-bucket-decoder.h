@@ -30,6 +30,7 @@
 #include "lat/kaldi-lattice.h"
 #include "decoder/grammar-fst.h"
 #include "decoder/lattice-faster-decoder.h"
+#include <algorithm>
 
 namespace kaldi {
 
@@ -155,6 +156,11 @@ struct ForwardLink {
       next_elem(next_elem), ilabel(ilabel), olabel(olabel),
       graph_cost(graph_cost), acoustic_cost(acoustic_cost),
       next(next) { }
+  
+  void Print() {
+    std::cout << ilabel << " : " << olabel << " /(" << graph_cost << ","
+              << acoustic_cost << ").";
+  }
 };
 
 
@@ -443,18 +449,81 @@ struct TokenBucket {
     if (fresh) all_toks.push_back(tok); 
   }
 
-  void Info(TokenBucket* bucket) {
+  void BucketInfo(TokenBucket *bucket,
+                  std::set<TokenBucket*> *preceding_buckets) {
+     std::cout << "The (" << bucket->base_state << ") bucket's status is "
+              << (bucket->expanded ? "expanded." : "non-expanded.")
+              << " The best alpha is " << bucket->tot_cost << ", it has "
+              << bucket->all_toks.size() << " real tokens, and it has "
+              << preceding_buckets->size() << " preceding buckets :";
+     for (typename std::set<TokenBucket*>::iterator it =
+          preceding_buckets->begin(); it != preceding_buckets->end(); it++) {
+       std::cout << " " << (*it)->base_state;
+     }
+     std::cout << "." << std::endl;
+  }
+
+  void Info(TokenBucket *bucket) {
     std::cout << "The (" << bucket->base_state << ") bucket's status is "
               << (bucket->expanded ? "expanded." : "non-expanded.")
-              << " The best alpha is " << bucket->tot_cost << " and It has "
+              << " The best alpha is " << bucket->tot_cost << ", it has "
               << bucket->all_toks.size() << " real tokens." << std::endl;
+    // Print the 'real' tokens of the cur_bucket.
     if (bucket->expanded && bucket->all_toks.size() != 0) {
-      for(typename std::vector<Token*>::iterator it = bucket->all_toks.begin();
-          it != bucket->all_toks.end(); it++) {
-        (*it)->PrintInfo();
+      for(typename std::vector<Token*>::iterator it_token =
+          bucket->all_toks.begin(); it_token != bucket->all_toks.end();
+          it_token++) {
+        (*it_token)->PrintInfo();
       }
     }
   }
+  
+  /*
+  void Info(TokenBucket* bucket) {
+    // Use two queue. One is used to process the buckets on this depth, the
+    // other is used to store the sub-level buckets which will be process in
+    // the next turn.
+    std::set<TokenBucket* > cur_set;
+    std::set<TokenBucket* > next_set;
+
+    cur_set.insert(bucket);
+    while (!cur_set.empty()) {
+      for (typename std::set<TokenBucket*>::iterator it = cur_set.begin();
+           it != cur_set.end(); it++) {
+        TokenBucket* cur_bucket = (*it);
+        // Get the preceding buckets of the 'cur_bucket'
+        std::set<TokenBucket* > tmp_set;
+        BackwardBucketLinkT *bl = cur_bucket->bucket_backward_links;
+        while (bl != NULL) {
+          TokenBucket *preceding_bucket = bl->prev_elem;
+          tmp_set.insert(preceding_bucket);
+          bl = bl->next;
+        }
+
+        // Print the information of the 'cur_bucket'
+        BucketInfo(cur_bucket, &tmp_set);
+      
+        // Print the 'real' tokens of the cur_bucket.
+        if (cur_bucket->expanded && cur_bucket->all_toks.size() != 0) {
+          for(typename std::vector<Token*>::iterator it_token =
+              cur_bucket->all_toks.begin();
+              it_token != cur_bucket->all_toks.end(); it_token++) {
+            (*it_token)->PrintInfo();
+          }
+        }
+
+        // Union the next_set and tmp_set
+        for (typename std::set<TokenBucket*>::iterator it_set = tmp_set.begin();
+             it_set != tmp_set.end(); it_set++) {
+          next_set.insert(*it_set);
+        }
+      }
+      cur_set.clear();
+      cur_set.swap(next_set);
+    }
+  }
+  */
+
   void PrintInfo() {
     /*
     std::cout << "The (" << base_state << ") bucket's status is "
@@ -470,14 +539,14 @@ struct TokenBucket {
     */
     std::cout << "-----print bucket info ------" << std::endl;
     Info(this);
-    for (BackwardBucketLinkT *bl = bucket_backward_links; bl != NULL;
-         bl = bl->next) {
-      
-      std::cout << bl->prev_elem->base_state 
-                << " (" << bl->prev_elem->tot_cost << ") <--- "
-                << bl->ilabel << " : " << bl->olabel << " / ("
-                << bl->graph_cost << "," << bl->acoustic_cost << ")"
-                << std::endl;
+    //for (BackwardBucketLinkT *bl = bucket_backward_links; bl != NULL;
+    //     bl = bl->next) {
+    //  
+    //  std::cout << bl->prev_elem->base_state 
+    //            << " (" << bl->prev_elem->tot_cost << ") <--- "
+    //            << bl->ilabel << " : " << bl->olabel << " / ("
+    //            << bl->graph_cost << "," << bl->acoustic_cost << ")"
+    //            << std::endl;
       /*
       if (bl->prev_elem->expanded && bl->prev_elem->all_toks.size() != 0) {
         for(typename std::vector<Token*>::iterator it =
@@ -487,10 +556,19 @@ struct TokenBucket {
         }
       }
       */
-      Info(bl->prev_elem);
-      std::cout << "----" << std::endl;
-    }
+    //  Info(bl->prev_elem);
+    //  std::cout << "----" << std::endl;
+    //}
     std::cout << "----------finish a bucket -------" << std::endl;
+  }
+
+  void PrintForwardLinks() {
+    ForwardBucketLinkT *tmp = bucket_forward_links;
+    while (tmp != NULL) {
+      tmp->Print();
+      std::cout << " --> " << tmp->next_elem->base_state << std::endl;
+      tmp = tmp->next;
+    }
   }
 };
 }  // namespace biglmbucketdecoder

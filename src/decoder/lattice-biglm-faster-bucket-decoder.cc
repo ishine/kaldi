@@ -560,8 +560,10 @@ LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddBucket(
       for (BackwardBucketLinkT *blink = dest_bucket->bucket_backward_links;
            blink != NULL; blink = blink->next) {
         Bucket *pre_bucket = blink->prev_elem;  // The preceding bucket
-        BaseFloat cutoff = blink->ilabel == 0 ? cutoffs_[token_list_index] :
-                                                cutoffs_[token_list_index - 1];
+        // We are adding tokens to destination bucket, so the cutoff is only
+        // related to the destination frame.
+        BaseFloat cutoff = cutoffs_[token_list_index];
+
         for (typename std::vector<Token* >::iterator iter =
              pre_bucket->top_toks.begin(); iter != pre_bucket->top_toks.end();
              ++iter) {
@@ -619,8 +621,8 @@ LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FindOrAddBucket(
       // a) a new 'dest_bucket' is generated with non-epsilon output arc.
       // b) an existing 'expanded' bucket is reached no matter the output of
       //    the arc is epsilon or not.
-      BaseFloat cutoff = arc.ilabel == 0 ? cutoffs_[token_list_index] :
-                                           cutoffs_[token_list_index - 1];
+      BaseFloat cutoff = cutoffs_[token_list_index];
+
       for (typename std::vector<Token*>::iterator iter =
            source_bucket->top_toks.begin();
            iter != source_bucket->top_toks.end(); iter++) {
@@ -774,8 +776,8 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ExpandBucket(
   for (BackwardBucketLinkT *link = bucket->bucket_backward_links;
        link != NULL; link = link->next) {
     Bucket *pre_bucket = link->prev_elem;
-    BaseFloat cutoff = link->ilabel == 0 ? cutoffs_[frame] :
-                                           cutoffs_[frame - 1];
+    BaseFloat cutoff = cutoffs_[frame];
+
     for (typename std::vector<Token*>::iterator iter =
          pre_bucket->top_toks.begin();
          iter != pre_bucket->top_toks.end(); ++iter) {
@@ -1656,11 +1658,9 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
 
   cur_queue_.Clear();
   // Add buckets to queue
-  int32 y = 0;
   for (typename StateIdToBucketMap::const_iterator iter = cur_buckets_->begin();
        iter != cur_buckets_->end(); iter++) {
     cur_queue_.Push(iter->second);
-    y++;
   }
 
   // Declare a local variable so the compiler can put it in a register, since
@@ -1699,7 +1699,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
     }
   }
   */
-  int32 x = 0;
+  int32 num_recomb = 0;
   for (; num_processed < max_active && (bucket = cur_queue_.Pop()) != NULL;
        num_processed++) {
     BaseFloat cur_cost = bucket->tot_cost;
@@ -1780,7 +1780,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
           next_cutoff = tot_cost + adaptive_beam;  // a tighter boundary for
                                                    // emitting
         }
-        x++;
+        num_recomb++;
         stats_bucket_operation_forward++;
         if (final_) stats_bucket_operation_final_forward++;
         // no change flag is needed
@@ -1790,11 +1790,6 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::ProcessForFrame(
     }  // for all arcs
     //debug_ = false;
   }  // end of for loop
-  if (cur_frame == 188 || cur_frame == 189 || cur_frame == 190) {
-    std::cout << "On " << cur_frame << " frame." << std::endl;
-    std::cout << "We do " << x << " times FindOrAddBucket for next frame." << std::endl;
-    std::cout << "We process " << num_processed << " buckets of " << y << std::endl;
-  }
 
   // Store the offset on the acoustic likelihoods that we're applying.
   // Could just do cost_offsets_.push_back(cost_offset), but we
