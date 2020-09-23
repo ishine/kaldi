@@ -52,23 +52,18 @@ struct LatticeBiglmFasterBucketDecoderConfig {
   // LatticeFasterDecoder class itself, but by the code that calls it, for
   // example in the function DecodeUtteranceLatticeFaster.
   fst::DeterminizeLatticePhonePrunedOptions det_opts;
-
-  BaseFloat proportion;
-  int32 beta_interval;
   int32 bucket_length; // the capacity of each bucket
 
   LatticeBiglmFasterBucketDecoderConfig():
     beam(16.0),
     max_active(std::numeric_limits<int32>::max()),
-    min_active(20),
+    min_active(200),
     lattice_beam(10.0),
     prune_interval(25),
     determinize_lattice(true),
     beam_delta(0.5),
     cost_scale(1.0),
     prune_scale(0.1),
-    proportion(0.5),
-    beta_interval(5),
     bucket_length(5) { }
 
   void Register(OptionsItf *opts) {
@@ -91,14 +86,6 @@ struct LatticeBiglmFasterBucketDecoderConfig {
     opts->Register("cost-scale", &cost_scale, "A scale that we multiply the "
                    "token costs by before intergerizing; a larger value means "
                    "more buckets and precise.");
-    opts->Register("proportion", &proportion, "Use it to select a value between "
-                   "beam and lattice-beam. The value will be used to decide a "
-                   "token expand or not when we trace-back to expand bucket."
-                   "1->beam, 0->lattice-beam");
-    opts->Register("beta-interval", &beta_interval, "Interval (in frames) over "
-                   "which to update the beta value of the bucket. If the value "
-                   "is less than zero, the beta of the bucket will always be "
-                   "up-to-date.");
     opts->Register("bucket-length", &bucket_length, "The capacity of each "
                    "bucket.");
   }
@@ -107,7 +94,6 @@ struct LatticeBiglmFasterBucketDecoderConfig {
                  && min_active <= max_active
                  && prune_interval > 0 && beam_delta > 0.0
                  && prune_scale > 0.0 && prune_scale < 1.0
-                 && proportion >= 0.0 && proportion <= 1.0
                  && bucket_length >= 1);
   }
 };
@@ -373,8 +359,6 @@ struct TokenBucket {
                       // for this frame.
   bool in_queue;  // identitfy the 'TokenBucket' is in current queue or not
                   // to prevent duplication in function ProcessForFrame().
-  int32 update_time;  // records the specific time-step on which the back_cost
-                      // is updated. It helps us to decide we update or not.
  
   // We store the top N 'real' tokens into a vector and orginize it as a
   // maximum heap. When we insert a token into the heap, we compare the
@@ -396,7 +380,7 @@ struct TokenBucket {
     tot_cost(std::numeric_limits<BaseFloat>::infinity()),
     back_cost(std::numeric_limits<BaseFloat>::infinity()),
     base_state(base_state), length(bucket_size), next(next),
-    in_queue(false), update_time(-1) {
+    in_queue(false) {
     
     top_toks.resize(0);
     top_toks.reserve(length + 1);  // reserve "length" + 1 positions to
@@ -465,7 +449,6 @@ struct TokenBucket {
     if (fresh) all_toks.push_back(tok); 
   }
 
- 
   void BucketInfo(TokenBucket *bucket,
                   std::set<TokenBucket*> *preceding_buckets) {
      std::cout << "The (" << bucket->base_state << ") bucket's status is "
@@ -483,10 +466,7 @@ struct TokenBucket {
   void Info(TokenBucket *bucket) {
     std::cout << "The (" << bucket->base_state << ") bucket's status is "
               << (bucket->expanded ? "expanded." : "non-expanded.")
-              << " The best alpha is " << bucket->tot_cost << ", "
-              << " The beta is " << bucket->back_cost << " and time is "
-              << bucket->update_time
-              << " , it has "
+              << " The best alpha is " << bucket->tot_cost << ", it has "
               << bucket->all_toks.size() << " real tokens." << std::endl;
     // Print the 'real' tokens of the cur_bucket.
     if (bucket->expanded && bucket->all_toks.size() != 0) {
@@ -902,7 +882,8 @@ class LatticeBiglmFasterBucketDecoderTpl {
 
   // Fill the 'real' tokens into the bucket according to the 'Backwardlinks'
   // of the bucket recursively.
-  // The frame index is used to find the specific token list
+  // The frame index help to grab the cutoff value and adaptive_beam to do
+  // pruning.
   void ExpandBucket(int32 frame, Bucket* bucket);
 
 
@@ -1015,11 +996,6 @@ class LatticeBiglmFasterBucketDecoderTpl {
   void InitBucketBeta(int32 frame, BaseFloat scale = 1.0);
   void InitBeta(int32 frame, BaseFloat scale = 1.0);
 
-  // We initialize the beta of a bucket when it is first used rather than it
-  // is created. After that, if the time stamp of a bucket is too far behind
-  // the current frame when we use it again, we will update it.
-  void InitOrUpdateBucketBeta(Bucket* bucket, bool restrict = false);
-
 
   // Update the graph cost according to lm_state and olabel
   // Return new LM State
@@ -1093,7 +1069,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   fst::DeterministicOnDemandFst<Arc> *lm_diff_fst_;
   LatticeBiglmFasterBucketDecoderConfig config_;
 
-  std::vector<BaseFloat> cost_offsets_;  // This contains, for each
+  std::vector<BaseFloat> cost_offsets_; // This contains, for each
   // frame, an offset that was added to the acoustic log-likelihoods on that
   // frame in order to keep everything in a nice dynamic range i.e.  close to
   // zero, to reduce roundoff errors.
@@ -1101,7 +1077,7 @@ class LatticeBiglmFasterBucketDecoderTpl {
   // added to arcs from "frame t" to "frame t+1").
 
 
-  int32 num_toks_;  // current total #toks allocated...
+  int32 num_toks_; // current total #toks allocated...
   bool warned_;
   bool warned_noarc_;  // Use in PropagateLm to indicate the unusual phenomenon.
                        // Prevent duplicate warnings.
@@ -1125,7 +1101,10 @@ class LatticeBiglmFasterBucketDecoderTpl {
   BucketQueue cur_queue_;  // temp variable used in 
                            // ProcessForFrame/ProcessNonemitting
 
-  BaseFloat tb_thresh_;  // A value between beam and lattice_beam
+  std::vector<BaseFloat> cutoffs_;  // Keep the cutoffs_ values for each frame.
+                                    // As we do lazy evaluation, we will trace
+                                    // back and expand those buckets with 
+                                    // pruning.
   //bool debug_ = false;
   // Record the total number of operations which processes an arc entering
   // a bucket

@@ -60,7 +60,7 @@ struct LatticeBiglmFasterBucketDecoderConfig {
   LatticeBiglmFasterBucketDecoderConfig():
     beam(16.0),
     max_active(std::numeric_limits<int32>::max()),
-    min_active(20),
+    min_active(200),
     lattice_beam(10.0),
     prune_interval(25),
     determinize_lattice(true),
