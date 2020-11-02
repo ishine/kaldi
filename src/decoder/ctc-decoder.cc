@@ -63,6 +63,21 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 			  << "integers in your symbol table?";
 		}
 	}
+	for (int32 i = 0; i < word_symbols->NumSymbols(); i++) {
+		if (word_symbols->Find(i) == "") {
+		  KALDI_ERR << "Could not find word for integer " << i << "in the word "
+			  << "symbol table, mismatched symbol table or you have discoutinuous "
+			  << "integers in your symbol table?";
+		}
+		word_to_wordid_[word_symbols->Find(i)] = i;
+	}
+	sceneword_.resize(word_symbols->NumSymbols(), 0.0);
+	std::ifstream is(config.scene_syms_filename);
+	std::string ss;
+	while (!is.eof()) {
+		is >> ss;
+		sceneword_[word_to_wordid_[ss]] = 1.0;
+	}
 }
 #endif
 
@@ -1393,22 +1408,45 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
 			next_words[config_.blank] = logp_b + blank_penalty; // -2.30259
 		} else {
-			// Top K pruning, the nth bigest words
-            for (int k = 1; k < topk; k++) {
-            	logp = loglikes(n, k);
-            	key = loglikes(n, topk+k);
-                if (key == 0) logp += blank_penalty; // -2.30259
-				if (key < vocab_size && key >= 0) {
-        			if (!use_pinyin_) {
-        				next_words[key] = logp;
-        			} else {
-        				for (int i = 0; i < pinyin2words_[key].size(); i++)
-        					next_words[pinyin2words_[key][i]] = logp;
-        			}
-				} /* else {
-                    KALDI_ERR << "topk key " << key << " out of range [0, " << vocab_size << ")";
-                } */
-            }
+			int nhit = 0;
+			BaseFloat logsum = 0;
+			for (int k = 1; k < config_.scene_topk; k++) {
+				logp = loglikes(n, k);
+				key = loglikes(n, topk+k);
+				if (key != config_.blank && sceneword_[key] > 0) {
+					//logsum += Exp(logp);
+					nhit++;
+				}
+				logsum = 1 - Exp(logp_b);
+			}
+
+			if (nhit > 0) {
+				for (int k = 1; k < config_.scene_topk; k++) {
+					logp = loglikes(n, k);
+					key = loglikes(n, topk+k);
+					if (key == config_.blank) logp += blank_penalty; // -2.30259
+					else if (sceneword_[key] > 0) logp = Log(logsum/nhit);
+					if (key == config_.blank || sceneword_[key] > 0)
+						next_words[key] = logp;
+				}
+			} else {
+				// Top K pruning, the nth bigest words
+				for (int k = 1; k < topk; k++) {
+					logp = loglikes(n, k);
+					key = loglikes(n, topk+k);
+					if (key == config_.blank) logp += blank_penalty; // -2.30259
+					if (key < vocab_size && key >= 0) {
+						if (!use_pinyin_) {
+							next_words[key] = logp;
+						} else {
+							for (int i = 0; i < pinyin2words_[key].size(); i++)
+								next_words[pinyin2words_[key][i]] = logp;
+						}
+					} /* else {
+						KALDI_ERR << "topk key " << key << " out of range [0, " << vocab_size << ")";
+					} */
+				}
+			}
         }
 
 

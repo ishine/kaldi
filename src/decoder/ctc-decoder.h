@@ -178,16 +178,18 @@ struct CTCDecoderOptions {
   int eos;
   bool use_kenlm;
   int vocab_size;
+  int scene_topk;
   std::string use_mode;
   std::string keywords;
   std::string pinyin2words_id_rxfilename;
   std::string word2wordid_rxfilename;
+  std::string scene_syms_filename;
 
   CTCDecoderOptions(): beam(5), blank(0), am_topk(0),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1), max_mem(50000),
-					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531),
+					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531), scene_topk(0),
                        use_mode("normal"), keywords(""),
-					   pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
+					   pinyin2words_id_rxfilename(""), word2wordid_rxfilename(""), scene_syms_filename("")
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
@@ -205,6 +207,8 @@ struct CTCDecoderOptions {
     opts->Register("use-mode", &use_mode, "Select beam search algorithm mode(normal|easy).");
     opts->Register("keywords", &keywords, "Cat the keywords before the utterance (keyword1+keyword2).");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
+	opts->Register("scene_syms_filename", &scene_syms_filename, "Symbol table for scene asr filename");
+	opts->Register("scene_topk", &scene_topk, "For each time step beam search, keep top K am output probability words in scene asr.")
   }
 };
 
@@ -280,6 +284,7 @@ class CTCDecoder {
 		std::vector<int> cd_;
 		std::vector<std::vector<int> > pinyin2words_;
 		std::vector<std::string> wordid_to_word_;
+		std::unordered_map<std::string, int> word_to_wordid_;
 		bool use_pinyin_;
 
 		// easy beam search
@@ -291,6 +296,7 @@ class CTCDecoder {
 		std::vector<Vector<BaseFloat> > rnnlm_logp_;
 		std::vector<std::vector<int> > keywords_;
 		std::vector<int> keyword_;
+		std::vector<BaseFloat> sceneword_;
 
 #if HAVE_KENLM == 1
 		const KenVocab *kenlm_vocab_;
