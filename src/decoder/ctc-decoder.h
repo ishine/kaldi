@@ -208,7 +208,7 @@ struct CTCDecoderOptions {
     opts->Register("keywords", &keywords, "Cat the keywords before the utterance (keyword1+keyword2).");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
 	opts->Register("scene_syms_filename", &scene_syms_filename, "Symbol table for scene asr filename");
-	opts->Register("scene_topk", &scene_topk, "For each time step beam search, keep top K am output probability words in scene asr.")
+	opts->Register("scene_topk", &scene_topk, "For each time step beam search, keep top K am output probability words in scene asr.");
   }
 };
 

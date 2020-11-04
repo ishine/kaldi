@@ -42,12 +42,16 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa), sub_kenlm_apra_(sub_kenlm_apra) {
 	Initialize();
 
-    kenlm_vocab_ = &(kenlm_arpa_->GetVocabulary());
-	// sub language lmodel vocab
-    int nsub = sub_kenlm_apra.size();
-    sub_kenlm_vocab_.resize(nsub);
-    for (int i = 0; i < nsub; i++)
-        sub_kenlm_vocab_[i] = &(sub_kenlm_apra[i]->GetVocabulary());
+    const_arpa_ = NULL;
+    kenlm_vocab_ = NULL;
+    if (kenlm_arpa_ != NULL) {
+        kenlm_vocab_ = &(kenlm_arpa_->GetVocabulary());
+	    // sub language lmodel vocab
+        int nsub = sub_kenlm_apra.size();
+        sub_kenlm_vocab_.resize(nsub);
+        for (int i = 0; i < nsub; i++)
+            sub_kenlm_vocab_[i] = &(sub_kenlm_apra[i]->GetVocabulary());
+    }
 
 	/// symbols
 	fst::SymbolTable *word_symbols = NULL;
@@ -71,13 +75,16 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 		}
 		word_to_wordid_[word_symbols->Find(i)] = i;
 	}
-	sceneword_.resize(word_symbols->NumSymbols(), 0.0);
-	std::ifstream is(config.scene_syms_filename);
-	std::string ss;
-	while (!is.eof()) {
-		is >> ss;
-		sceneword_[word_to_wordid_[ss]] = 1.0;
-	}
+
+    if (config.scene_syms_filename != "") {
+	    sceneword_.resize(word_symbols->NumSymbols(), 0.0);
+	    std::ifstream is(config.scene_syms_filename);
+	    std::string ss;
+	    while (!is.eof()) {
+		    is >> ss;
+		    sceneword_[word_to_wordid_[ss]] = 1.0;
+	    }
+    }
 }
 #endif
 
@@ -664,7 +671,7 @@ void CTCDecoder::BeamSearch(const Matrix<BaseFloat> &loglikes) {
                         	}
 							// Convert to natural log.
 							ngram_logp *= M_LN10;
-                        } else
+                        } else if (const_arpa_ != NULL)
 					#endif
                         {
                             prefix = preseq->prefix;
@@ -941,7 +948,7 @@ void CTCDecoder::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
                         	}
 							// Convert to natural log.
 							ngram_logp *= M_LN10;
-                        } else
+                        } else if (const_arpa_ != NULL)
 					#endif
                         {
                             prefix = preseq->prefix;
@@ -1327,7 +1334,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	std::vector<int> prefix, n_prefix;
 	std::vector<float> next_words(vocab_size);
 	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
-	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
+	float ngram_logp = kLogZeroFloat, rnnlm_logp = kLogZeroFloat, sub_ngram_logp = kLogZeroFloat,
 			rscale = config_.rnnlm_scale,
             blank_penalty = log(config_.blank_penalty);
 	int end_t, index, topk = likes_size/2, key, cur_his = 0, start = 0;
@@ -1414,10 +1421,9 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 				logp = loglikes(n, k);
 				key = loglikes(n, topk+k);
 				if (key != config_.blank && sceneword_[key] > 0) {
-					//logsum += Exp(logp);
+					logsum += Exp(logp);
 					nhit++;
 				}
-				logsum = 1 - Exp(logp_b);
 			}
 
 			if (nhit > 0) {
@@ -1425,7 +1431,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 					logp = loglikes(n, k);
 					key = loglikes(n, topk+k);
 					if (key == config_.blank) logp += blank_penalty; // -2.30259
-					else if (sceneword_[key] > 0) logp = Log(logsum/nhit);
+					else if (sceneword_[key] > 0) logp = Log(Exp(logp)/logsum);
 					if (key == config_.blank || sceneword_[key] > 0)
 						next_words[key] = logp;
 				}
@@ -1482,7 +1488,8 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		/// extended
 		for (int k = 1; k < topk; k++) {
 			key = loglikes(n, topk+k);
-			logp = loglikes(n, k);
+			//logp = loglikes(n, k);
+            logp = next_words[key];
 			if (key == config_.blank || key >= vocab_size || key < 0)
 				continue;
 
@@ -1517,7 +1524,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 					// ngram lm score
 					if (rscale < 1.0) {
 					#if HAVE_KENLM == 1
-						if (config_.use_kenlm) {
+						if (config_.use_kenlm && kenlm_arpa_ != NULL) {
 							index = kenlm_vocab_->Index(wordid_to_word_[key]);
 							ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
 							n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
@@ -1529,7 +1536,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 							}
 							// Convert to natural log.
 							ngram_logp *= M_LN10;
-						} else
+						} else if (const_arpa_ != NULL)
 					#endif
                         {
 						    prefix = preseq->prefix;
