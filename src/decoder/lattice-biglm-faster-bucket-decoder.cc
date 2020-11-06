@@ -202,6 +202,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
 
   // clean up from last time:
   cost_offsets_.clear();
+  CleanBucket();
   ClearActiveTokens();  // num_toks_ is set to 0
 
   warned_ = false;
@@ -1565,7 +1566,8 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::FinalizeDecoding() {
 
   // At this point, we don't need 'Bucket' any more. We delete them for clearly.
   // TODO: maybe it can merge into another function to speedup
-  CleanBucket();
+  //CleanBucket();
+  // Moved to InitDecoding()
 
   //int32 final_frame_plus_one = NumFramesDecoded();
   // Keep in mind, the 'real' token only have forward links.
@@ -1652,6 +1654,7 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::CleanBucket() {
       delete bucket;
     }
   }
+  active_buckets_.clear();
 }
 
 
