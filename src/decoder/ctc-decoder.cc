@@ -27,6 +27,7 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 						ConstArpaLm *const_arpa,
 						std::vector<ConstArpaLm *> &sub_const_arpa):
 		config_(config), lstmlm_(lstmlm), const_arpa_(const_arpa), sub_const_arpa_(sub_const_arpa) {
+	in_scene_ = false;
 	Initialize();
 #if HAVE_KENLM == 1
     kenlm_arpa_ = NULL;
@@ -40,6 +41,10 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 			            KenModel *kenlm_arpa,
 						std::vector<KenModel *> &sub_kenlm_apra):
 		config_(config), lstmlm_(lstmlm), kenlm_arpa_(kenlm_arpa), sub_kenlm_apra_(sub_kenlm_apra) {
+	in_scene_ = false;
+	if (scene_trie_.LoadDict(config.scene_syms_filename))
+    	in_scene_ = true;
+
 	Initialize();
 
     const_arpa_ = NULL;
@@ -75,16 +80,6 @@ CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 		}
 		word_to_wordid_[word_symbols->Find(i)] = i;
 	}
-
-    if (config.scene_syms_filename != "") {
-	    sceneword_.resize(word_symbols->NumSymbols(), 0.0);
-	    std::ifstream is(config.scene_syms_filename);
-	    std::string ss;
-	    while (!is.eof()) {
-		    is >> ss;
-		    sceneword_[word_to_wordid_[ss]] = 1.0;
-	    }
-    }
 }
 #endif
 
@@ -103,18 +98,19 @@ void CTCDecoder::Initialize() {
 		use_pinyin_ = true;
 	}
 
+	int beam_size = this->in_scene_ ? config_.beam + config_.scene_beam : config_.beam;
 	if (config_.use_mode == "easy") {
-		beam_easy_.resize(config_.beam, PrefixSeq());
+		beam_easy_.resize(beam_size, PrefixSeq());
 		cur_beam_size_ = 0;
 
 		// rnn lm
 	    if (config_.rnnlm_scale > 0) {
 	    	LstmlmHistroy his(rd_, cd_, kSetZero);
-	    	rnnlm_his_.resize(2*config_.beam, his);
-	    	rnnlm_logp_.resize(config_.beam);
-	    	for (int i = 0; i < config_.beam; i++) {
+	    	rnnlm_his_.resize(2*beam_size, his);
+	    	rnnlm_logp_.resize(beam_size);
+	    	for (int i = 0; i < beam_size; i++) {
 	    		beam_easy_[i].lmhis = &rnnlm_his_[i];
-	    		beam_easy_[i].next_lmhis = &rnnlm_his_[config_.beam+i];
+	    		beam_easy_[i].next_lmhis = &rnnlm_his_[beam_size+i];
 	    		beam_easy_[i].lmlogp = &rnnlm_logp_[i];
 	    	}
 	    }
@@ -303,6 +299,7 @@ void CTCDecoder::InitEasyDecoding(int topk) {
 	seq->PrefixAppend(config_.blank);
 	seq->logp_blank = 0.0;
 	cur_beam_size_ = 1;
+	cur_scene_beam_size_ = 0;
 	keyword_.clear();
 
     if (config_.rnnlm_scale != 0) {
@@ -313,6 +310,11 @@ void CTCDecoder::InitEasyDecoding(int topk) {
 	// next beam buffer
 	next_beam_easy_.resize(config_.beam*topk);
 	next_beam_size_ = 0;
+	if (this->in_scene_) {
+		next_scene_beam_.resize(config_.scene_beam*config_.scene_topk);
+		next_scene_beam_size_ = 0;
+	}
+
 #if HAVE_KENLM == 1
     if (kenlm_arpa_ != NULL)
 	    seq->ken_state = kenlm_arpa_->BeginSentenceState();
@@ -1235,13 +1237,19 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 }
 */
 
-void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam, bool skip_blank) {
+void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam,
+		std::vector<PrefixSeq*> *scene_beam, bool skip_blank) {
 	KALDI_ASSERT(next_beam_size_%cur_beam_size_ == 0);
 	BeamType beam;
 
     if (skip_blank) {
 	    for (int i = 0; i < cur_beam_size_; i++)
             merge_beam.push_back(&beam_easy_[i]);
+
+	    if (in_scene_ && scene_beam != NULL) {
+	    	for (int i = cur_beam_size_; i < cur_beam_size_+cur_scene_beam_size_; i++)
+	    		scene_beam->push_back(&beam_easy_[i]);
+	    }
         return ;
     }
 
@@ -1266,6 +1274,25 @@ void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam, bool skip_blank)
 
 	for (auto &seq : beam) {
 		merge_beam.push_back(seq.second);
+	}
+
+	if (in_scene_ && scene_beam != NULL) {
+		beam.clear();
+		for (int i = 0; i < next_scene_beam_size_; i++) {
+			n_preseq = &next_scene_beam_[i];
+			auto it = beam.find(n_preseq->prefix);
+			if (it != beam.end()) {
+				preseq = it->second;
+				if (n_preseq->logp > preseq->logp)
+					beam[it->first] = n_preseq;
+			} else {
+				beam[n_preseq->prefix] = n_preseq;
+			}
+		}
+
+		for (auto &seq : beam) {
+			scene_beam->push_back(seq.second);
+		}
 	}
 }
 
@@ -1415,45 +1442,23 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
 			next_words[config_.blank] = logp_b + blank_penalty; // -2.30259
 		} else {
-			int nhit = 0;
-			BaseFloat logsum = 0;
-			for (int k = 1; k < config_.scene_topk; k++) {
+			// Top K pruning, the nth bigest words
+			for (int k = 1; k < topk; k++) {
 				logp = loglikes(n, k);
 				key = loglikes(n, topk+k);
-				if (key != config_.blank && sceneword_[key] > 0) {
-					logsum += Exp(logp);
-					nhit++;
-				}
-			}
-
-			if (nhit > 0) {
-				for (int k = 1; k < config_.scene_topk; k++) {
-					logp = loglikes(n, k);
-					key = loglikes(n, topk+k);
-					if (key == config_.blank) logp += blank_penalty; // -2.30259
-					else if (sceneword_[key] > 0) logp = Log(Exp(logp)/logsum);
-					if (key == config_.blank || sceneword_[key] > 0)
+				if (key == config_.blank) logp += blank_penalty; // -2.30259
+				if (key < vocab_size && key >= 0) {
+					if (!use_pinyin_) {
 						next_words[key] = logp;
-				}
-			} else {
-				// Top K pruning, the nth bigest words
-				for (int k = 1; k < topk; k++) {
-					logp = loglikes(n, k);
-					key = loglikes(n, topk+k);
-					if (key == config_.blank) logp += blank_penalty; // -2.30259
-					if (key < vocab_size && key >= 0) {
-						if (!use_pinyin_) {
-							next_words[key] = logp;
-						} else {
-							for (int i = 0; i < pinyin2words_[key].size(); i++)
-								next_words[pinyin2words_[key][i]] = logp;
-						}
-					} /* else {
-						KALDI_ERR << "topk key " << key << " out of range [0, " << vocab_size << ")";
-					} */
-				}
+					} else {
+						for (int i = 0; i < pinyin2words_[key].size(); i++)
+							next_words[pinyin2words_[key][i]] = logp;
+					}
+				} /* else {
+					KALDI_ERR << "topk key " << key << " out of range [0, " << vocab_size << ")";
+				} */
 			}
-        }
+		}
 
 
 		/// produce next beam
@@ -1488,8 +1493,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		/// extended
 		for (int k = 1; k < topk; k++) {
 			key = loglikes(n, topk+k);
-			//logp = loglikes(n, k);
-            logp = next_words[key];
+			logp = loglikes(n, k);
 			if (key == config_.blank || key >= vocab_size || key < 0)
 				continue;
 
@@ -1563,7 +1567,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 		}
 
 		std::vector<PrefixSeq*> valid_beam;
-		BeamMerge(valid_beam, skip_blank);
+		BeamMerge(valid_beam, NULL, skip_blank);
 		// select best TopN beam
 		std::sort(valid_beam.begin(), valid_beam.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
 		int size = valid_beam.size();
@@ -1575,6 +1579,360 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
                 beam_easy_[i].next_lmhis = &rnnlm_his_[config_.beam*cur_his+i];
             }
         }
+        cur_his = (cur_his+1)%2;
+	}
+}
+
+void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
+	// decode one utterance
+	int nframe = loglikes.NumRows();
+	int likes_size = loglikes.NumCols();
+	int vocab_size = config_.vocab_size;
+	PrefixSeq *preseq, *n_preseq;
+	std::vector<int> prefix, n_prefix;
+	std::vector<float> next_words(vocab_size);
+	std::vector<int> next_scene_bpes(vocab_size);
+	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
+	float ngram_logp = kLogZeroFloat, rnnlm_logp = kLogZeroFloat, sub_ngram_logp = kLogZeroFloat,
+			rscale = config_.rnnlm_scale,
+            blank_penalty = log(config_.blank_penalty);
+	int end_t, index, topk = likes_size/2, key, cur_his = 0, start = 0;
+    bool skip_blank = false, uselm;
+    TrieNode *node, *next_node;
+
+    // rnnlm
+    std::vector<int> in_words;
+    std::vector<Vector<BaseFloat>*> nnet_out;
+    std::vector<LstmlmHistroy*> context_in, context_out;
+
+	InitEasyDecoding(topk);
+
+	if (config_.keywords != "")
+		start = ProcessKeywordsTopk(loglikes);
+
+	// decode one utterance
+	for (int n = start; n < nframe; n++) {
+		logp_b = loglikes(n, config_.blank);
+
+		// Lstm language model process, beam streams parallel.
+		uselm = false;
+		if (config_.lm_scale > 0.0) {
+		   if (config_.blank_threshold <= 0)
+				uselm = true;
+		   else if (config_.blank_threshold > 0 && Exp(logp_b) <= config_.blank_threshold)
+				uselm = true;
+		}
+
+		if (uselm && rscale != 0) {
+			in_words.clear();
+			nnet_out.clear();
+			context_in.clear();
+			context_out.clear();
+
+			// always padding to beam streams
+			int i = 0, bz = 0;
+			while (bz < config_.beam) {
+				preseq = &beam_easy_[i];
+				in_words.push_back(preseq->PrefixBack());
+				context_in.push_back(preseq->lmhis);
+				context_out.push_back(preseq->next_lmhis);
+				nnet_out.push_back(preseq->lmlogp);
+				bz++;
+				if (bz < cur_beam_size_) i++;
+			}
+
+			// beam streams parallel process
+			lstmlm_->ForwardMseq(in_words, context_in, nnet_out, context_out);
+
+			// get the valid streams
+			for (int i = 0; i < cur_beam_size_; i++) {
+				preseq = &beam_easy_[i];
+				preseq->lmlogp->ApplyLog();
+			}
+		}
+
+
+		// blank pruning
+		// Only the probability of ending in blank gets updated.
+		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
+			logp = logp_b + blank_penalty; // -2.30259
+			for (int i = 0; i < cur_beam_size_; i++) {
+				preseq = &beam_easy_[i];
+				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+                // n_p_b approximate 1, meanwhile n_p_nb = 0;
+				n_p_nb = preseq->logp_nblank+kLogZeroFloat;
+				preseq->logp_blank = n_p_b;
+			    preseq->logp_nblank = n_p_nb;
+			    preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, preseq->logp_nblank);
+			    //preseq->logp = LogAdd(n_p_b, preseq->logp_nblank);
+			}
+            skip_blank = true;
+			continue;
+		}
+
+		std::fill(next_words.begin(), next_words.end(), kLogZeroFloat);
+		// blank pruning
+		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
+			next_words[config_.blank] = logp_b + blank_penalty; // -2.30259
+		} else {
+			// Top K pruning, the nth bigest words
+			for (int k = 1; k < topk; k++) {
+				logp = loglikes(n, k);
+				key = loglikes(n, topk+k);
+				if (key == config_.blank) logp += blank_penalty; // -2.30259
+				if (key < vocab_size && key >= 0) {
+					if (!use_pinyin_) {
+						next_words[key] = logp;
+					} else {
+						for (int i = 0; i < pinyin2words_[key].size(); i++)
+							next_words[pinyin2words_[key][i]] = logp;
+					}
+				} /* else {
+					KALDI_ERR << "topk key " << key << " out of range [0, " << vocab_size << ")";
+				} */
+			}
+		}
+
+
+		/// produce next beam
+		/// not extended
+        next_beam_size_ = 0;
+        next_scene_beam_size_ = 0;
+        skip_blank = false;
+		for (int i = 0; i < cur_beam_size_+cur_scene_beam_size_; i++) {
+			preseq = &beam_easy_[i];
+			end_t = preseq->PrefixBack();
+			n_preseq = &next_beam_easy_[next_beam_size_];
+			next_beam_size_++;
+
+			// blank
+			logp = logp_b + blank_penalty; // -2.30259
+			n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+
+			// If s is repeated at the end we also update the unchanged
+			// prefix. This is the merging case.
+			n_p_nb = kLogZeroFloat;
+			if (end_t != config_.blank) {
+				logp = next_words[end_t];
+				n_p_nb = preseq->logp_nblank+logp;
+			}
+
+			*n_preseq = *preseq;
+			n_preseq->logp_blank = n_p_b;
+			n_preseq->logp_nblank = n_p_nb;
+			n_preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
+			//n_preseq->logp = LogAdd(n_p_b, n_p_nb);
+			n_preseq->scene_node = preseq->scene_node;
+		}
+
+
+
+		float scene_sum = 0;
+		if (in_scene_) {
+			for (int k = 1; k < config_.scene_topk; k++) {
+				key = loglikes(n, topk+k);
+				logp = loglikes(n, k);
+				if (key == config_.blank || key >= vocab_size || key < 0)
+					continue;
+
+				// for each beam appending word key
+				for (int i = 0; i < cur_beam_size_+cur_scene_beam_size_; i++) {
+					preseq = &beam_easy_[i];
+					node = preseq->scene_node;
+					if (preseq->scene_node == NULL)
+						node = scene_trie_.GetRootNode();
+
+					next_node = scene_trie_.Trav(node, key);
+					if (next_node != NULL) {
+						scene_sum += logp;
+						break;
+					}
+				}
+			}
+		}
+
+		/// extended
+		for (int k = 1; k < topk; k++) {
+			key = loglikes(n, topk+k);
+			logp = loglikes(n, k);
+			if (key == config_.blank || key >= vocab_size || key < 0)
+				continue;
+
+			// for each beam appending word key
+			for (int i = 0; i < cur_beam_size_+cur_scene_beam_size_; i++) {
+				preseq = &beam_easy_[i];
+				end_t = preseq->PrefixBack();
+
+				n_p_b = kLogZeroFloat;
+				if (key != end_t) {
+					n_p_nb = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+				} else {
+					// We don't include the previous probability of not ending
+					// in blank (p_nb) if s is repeated at the end. The CTC
+					// algorithm merges characters not separated by a blank.
+					n_p_nb = preseq->logp_blank+logp;
+				}
+
+				// normal asr
+				if (preseq->scene_node == NULL) {
+					n_preseq = &next_beam_easy_[next_beam_size_];
+					next_beam_size_++;
+					*n_preseq = *preseq;
+
+					// *NB* this would be a good place to include an LM score.
+					if (config_.lm_scale > 0.0) {
+						// rnn lm score
+						if (rscale != 0) {
+							rnnlm_logp = (*preseq->lmlogp)(key);
+							// rnnlm history
+							n_preseq->lmhis = preseq->next_lmhis;
+							// n_preseq->next_lmhis = preseq->lmhis;
+						}
+
+						// ngram lm score
+						if (rscale < 1.0) {
+						#if HAVE_KENLM == 1
+							if (config_.use_kenlm && kenlm_arpa_ != NULL) {
+								index = kenlm_vocab_->Index(wordid_to_word_[key]);
+								ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+								n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
+								for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
+									index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[key]);
+									sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
+									ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+									//ngram_logp = std::max(ngram_logp, sub_ngram_logp);
+								}
+								// Convert to natural log.
+								ngram_logp *= M_LN10;
+							} else if (const_arpa_ != NULL)
+						#endif
+							{
+								prefix = preseq->prefix;
+								prefix[0] = config_.sos; // <s>
+								ngram_logp = const_arpa_->GetNgramLogprob(key, prefix);
+								for (int i = 0; i < sub_const_arpa_.size(); i++) {
+									sub_ngram_logp = sub_const_arpa_[i]->GetNgramLogprob(key, prefix);
+									ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
+								}
+							}
+						}
+						// fusion score
+						logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
+					}
+
+					n_preseq->PrefixAppend(key);
+					n_preseq->logp_blank = n_p_b;
+					n_preseq->logp_nblank = n_p_nb;
+					//n_preseq->logp_nblank = n_p_nb + logp_lm;
+					n_preseq->logp_lm += logp_lm;
+					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
+					//n_preseq->logp = LogAdd(n_p_b, n_p_nb);
+
+					n_preseq->scene_node = NULL;
+				}
+
+				/////////////
+				// scene asr
+				if (!in_scene_ && k > config_.scene_topk)
+					continue;
+
+				node = preseq->scene_node;
+				if (preseq->scene_node == NULL)
+					node = scene_trie_.GetRootNode();
+
+				next_node = scene_trie_.Trav(node, key);
+
+				if (next_node == NULL)
+					continue;
+
+				// new scene bpe score
+				logp = logp / scene_sum;
+				if (key != end_t) {
+					n_p_nb = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+				} else {
+					// We don't include the previous probability of not ending
+					// in blank (p_nb) if s is repeated at the end. The CTC
+					// algorithm merges characters not separated by a blank.
+					n_p_nb = preseq->logp_blank+logp;
+				}
+
+				// is a word node
+				if (next_node->is_word_) {
+					logp_lm = 0; // LOG_1
+
+					n_preseq = &next_scene_beam_[next_scene_beam_size_];
+					next_scene_beam_size_++;
+					*n_preseq = *preseq;
+
+					n_preseq->PrefixAppend(key);
+					n_preseq->logp_blank = n_p_b;
+					n_preseq->logp_nblank = n_p_nb;
+					n_preseq->logp_lm += logp_lm;
+					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
+
+					n_preseq->scene_node = NULL;
+
+				#if HAVE_KENLM == 1
+					n_preseq->ken_state = kenlm_arpa_->BeginSentenceState();
+				#endif
+
+					if (next_node->NumChild() > 0) {
+						logp_lm = 0; // LOG_1
+
+						n_preseq = &next_scene_beam_[next_scene_beam_size_];
+						next_scene_beam_size_++;
+						*n_preseq = *preseq;
+
+						n_preseq->PrefixAppend(key);
+						n_preseq->logp_blank = n_p_b;
+						n_preseq->logp_nblank = n_p_nb;
+						n_preseq->logp_lm += logp_lm;
+						n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
+
+						n_preseq->scene_node = next_node;
+					}
+				} else { // is not a word node
+					logp_lm = 0; // LOG_1
+					n_preseq = &next_scene_beam_[next_scene_beam_size_];
+					next_scene_beam_size_++;
+					*n_preseq = *preseq;
+
+					n_preseq->PrefixAppend(key);
+					n_preseq->logp_blank = n_p_b;
+					n_preseq->logp_nblank = n_p_nb;
+					n_preseq->logp_lm += logp_lm;
+					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
+
+					n_preseq->scene_node = next_node;
+				}
+
+			}
+		}
+
+		std::vector<PrefixSeq*> valid_beam;
+		std::vector<PrefixSeq*> scene_beam;
+		BeamMerge(valid_beam, &scene_beam, skip_blank);
+		// select best TopN beam
+		std::sort(valid_beam.begin(), valid_beam.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
+		int size = valid_beam.size();
+		cur_beam_size_ = size >= config_.beam ? config_.beam : size;
+		for (int i = 0; i < cur_beam_size_; i++) {
+			beam_easy_[i] = *valid_beam[i];
+			if (rscale != 0) {
+                beam_easy_[i].lmlogp = &rnnlm_logp_[i];
+                beam_easy_[i].next_lmhis = &rnnlm_his_[config_.beam*cur_his+i];
+            }
+        }
+
+		if (in_scene_) {
+			std::sort(scene_beam.begin(), scene_beam.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
+			int scene_size = scene_beam.size();
+			cur_scene_beam_size_ = scene_size >= config_.scene_beam ? config_.scene_beam : scene_size;
+			for (int i = size; i < cur_beam_size_+cur_scene_beam_size_; i++) {
+				beam_easy_[i] = *scene_beam[i];
+			}
+		}
+
         cur_his = (cur_his+1)%2;
 	}
 }
