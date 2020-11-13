@@ -254,6 +254,10 @@ class CTCDecoder {
 
 		void BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes);
 
+        void DeleteSceneBeam(std::vector<PrefixSeq> &beam);
+
+        void DebugBeam(std::vector<PrefixSeq> &beam, int size, int nframe);
+
 	protected:
         typedef unordered_map<std::vector<int>,
         		PrefixSeq*, VectorHasher<int> > BeamType;

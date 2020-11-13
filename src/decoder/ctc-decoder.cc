@@ -308,12 +308,14 @@ void CTCDecoder::InitEasyDecoding(int topk) {
     }
 
 	// next beam buffer
-	next_beam_easy_.resize(config_.beam*topk);
-	next_beam_size_ = 0;
+    int beam = config_.beam;
 	if (this->in_scene_) {
-		next_scene_beam_.resize(config_.scene_beam*config_.scene_topk);
+		next_scene_beam_.resize(config_.scene_beam*(config_.scene_topk+1));
 		next_scene_beam_size_ = 0;
+        beam = config_.beam + config_.scene_beam;
 	}
+	next_beam_easy_.resize(beam*topk);
+	next_beam_size_ = 0;
 
 #if HAVE_KENLM == 1
     if (kenlm_arpa_ != NULL)
@@ -1239,7 +1241,7 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 
 void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam,
 		std::vector<PrefixSeq*> *scene_beam, bool skip_blank) {
-	KALDI_ASSERT(next_beam_size_%cur_beam_size_ == 0);
+	//KALDI_ASSERT(next_beam_size_%cur_beam_size_ == 0);
 	BeamType beam;
 
     if (skip_blank) {
@@ -1583,6 +1585,31 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	}
 }
 
+void CTCDecoder::DeleteSceneBeam(std::vector<PrefixSeq> &beam) {
+    std::vector<PrefixSeq*> tmp;
+    tmp.reserve(beam.size());
+    for (int i = 0; i < beam.size(); i++) {
+        if (beam[i].scene_node == NULL) 
+            tmp.push_back(&beam[i]);
+    }
+    std::sort(tmp.begin(), tmp.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
+    std::vector<PrefixSeq> new_beam(tmp.size());
+    for (int i = 0; i < tmp.size(); i++)
+        new_beam[i] = *tmp[i];
+    beam = new_beam;
+}
+
+void CTCDecoder::DebugBeam(std::vector<PrefixSeq> &beam, int n, int nframe) {
+    int size = beam.size() > n ? n : beam.size();
+    printf("###No.%d frame beams:\n", nframe);
+    for (int i = 0; i < size; i++) {
+        PrefixSeq &seq = beam[i];
+        for (int j = 1; j < seq.prefix.size(); j++) 
+            std::cout << wordid_to_word_[seq.prefix[j]] << ' ';
+        std::cout << "score = " << seq.logp << ", ctc_score = " << seq.logp-seq.logp_lm << ", lm_score = " << seq.logp_lm << ", scene = " << seq.scene_node << std::endl;
+    }
+}
+
 void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 	// decode one utterance
 	int nframe = loglikes.NumRows();
@@ -1592,7 +1619,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 	std::vector<int> prefix, n_prefix;
 	std::vector<float> next_words(vocab_size);
 	std::vector<int> next_scene_bpes(vocab_size);
-	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
+	float logp = 0, logp_b = 0, logp_lm = 0, sence_logp = 0, n_p_b, n_p_nb;
 	float ngram_logp = kLogZeroFloat, rnnlm_logp = kLogZeroFloat, sub_ngram_logp = kLogZeroFloat,
 			rscale = config_.rnnlm_scale,
             blank_penalty = log(config_.blank_penalty);
@@ -1702,8 +1729,13 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 		for (int i = 0; i < cur_beam_size_+cur_scene_beam_size_; i++) {
 			preseq = &beam_easy_[i];
 			end_t = preseq->PrefixBack();
-			n_preseq = &next_beam_easy_[next_beam_size_];
-			next_beam_size_++;
+            if (preseq->scene_node == NULL) {
+			    n_preseq = &next_beam_easy_[next_beam_size_];
+			    next_beam_size_++;
+            } else {
+                n_preseq = &next_scene_beam_[next_scene_beam_size_];
+                next_scene_beam_size_++;
+            }
 
 			// blank
 			logp = logp_b + blank_penalty; // -2.30259
@@ -1722,14 +1754,13 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 			n_preseq->logp_nblank = n_p_nb;
 			n_preseq->logp = preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 			//n_preseq->logp = LogAdd(n_p_b, n_p_nb);
-			n_preseq->scene_node = preseq->scene_node;
 		}
 
 
 
 		float scene_sum = 0;
 		if (in_scene_) {
-			for (int k = 1; k < config_.scene_topk; k++) {
+			for (int k = 1; k <= config_.scene_topk; k++) {
 				key = loglikes(n, topk+k);
 				logp = loglikes(n, k);
 				if (key == config_.blank || key >= vocab_size || key < 0)
@@ -1744,7 +1775,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 
 					next_node = scene_trie_.Trav(node, key);
 					if (next_node != NULL) {
-						scene_sum += logp;
+						scene_sum += Exp(logp);
 						break;
 					}
 				}
@@ -1827,13 +1858,11 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->logp_lm += logp_lm;
 					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 					//n_preseq->logp = LogAdd(n_p_b, n_p_nb);
-
-					n_preseq->scene_node = NULL;
 				}
 
 				/////////////
 				// scene asr
-				if (!in_scene_ && k > config_.scene_topk)
+				if (!in_scene_ || (in_scene_ && k > config_.scene_topk))
 					continue;
 
 				node = preseq->scene_node;
@@ -1846,22 +1875,22 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 					continue;
 
 				// new scene bpe score
-				logp = logp / scene_sum;
+				sence_logp = Log(Exp(logp)/(scene_sum+0.0001));
 				if (key != end_t) {
-					n_p_nb = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
+					n_p_nb = LogAdd(preseq->logp_blank+sence_logp, preseq->logp_nblank+sence_logp);
 				} else {
 					// We don't include the previous probability of not ending
 					// in blank (p_nb) if s is repeated at the end. The CTC
 					// algorithm merges characters not separated by a blank.
-					n_p_nb = preseq->logp_blank+logp;
+					n_p_nb = preseq->logp_blank+sence_logp;
 				}
 
 				// is a word node
 				if (next_node->is_word_) {
 					logp_lm = 0; // LOG_1
 
-					n_preseq = &next_scene_beam_[next_scene_beam_size_];
-					next_scene_beam_size_++;
+					n_preseq = &next_beam_easy_[next_beam_size_];
+					next_beam_size_++;
 					*n_preseq = *preseq;
 
 					n_preseq->PrefixAppend(key);
@@ -1928,13 +1957,19 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 			std::sort(scene_beam.begin(), scene_beam.end(), CTCDecoderUtil::compare_PrefixSeq_reverse);
 			int scene_size = scene_beam.size();
 			cur_scene_beam_size_ = scene_size >= config_.scene_beam ? config_.scene_beam : scene_size;
-			for (int i = size; i < cur_beam_size_+cur_scene_beam_size_; i++) {
-				beam_easy_[i] = *scene_beam[i];
+			for (int i = 0; i < cur_scene_beam_size_; i++) {
+				beam_easy_[i+cur_beam_size_] = *scene_beam[i];
 			}
 		}
 
+        //DebugBeam(beam_easy_, 15, n);
+
         cur_his = (cur_his+1)%2;
 	}
+
+    if (in_scene_) {
+        DeleteSceneBeam(beam_easy_);
+    }
 }
 
 
