@@ -50,6 +50,7 @@ struct PrefixSeq {
         prefix_len = 1;
         logp = 0;
         scene_node = NULL;
+        is_sence = false;
 	}
 
 	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words) {
@@ -61,6 +62,7 @@ struct PrefixSeq {
         prefix_len = prefix.size();
         logp = 0;
         scene_node = NULL;
+        is_sence = false;
 	}
 
 	PrefixSeq(const std::vector<int> &words) {
@@ -72,6 +74,7 @@ struct PrefixSeq {
         prefix_len = prefix.size();
         logp = 0;
         scene_node = NULL;
+        is_sence = false;
 	}
 
 	PrefixSeq() {
@@ -87,6 +90,7 @@ struct PrefixSeq {
 		logp_lm = 0;
 		logp = 0;
 		scene_node = NULL;
+        is_sence = false;
 	}
 
 	void PrefixAppend(int word) {
@@ -123,6 +127,7 @@ struct PrefixSeq {
 		logp = 0;
 		sub_ken_state = sub_state;
 		scene_node = NULL;
+        is_sence = false;
 	}
 
 	KenState	ken_state;
@@ -137,6 +142,7 @@ struct PrefixSeq {
 	LstmlmHistroy *next_lmhis;
 	Vector<BaseFloat> *lmlogp;
 	TrieNode *scene_node;
+    bool is_sence;
 
 	// log probabilities for the prefix given that
 	// it ends in a blank and dose not end in a blank at this time step.
@@ -146,9 +152,7 @@ struct PrefixSeq {
     BaseFloat logp;
     int prefix_len;
 
-	std::string tostring() {
-		return "";
-	}
+	std::string ToStr();
 };
 
 struct CTCDecoderUtil {
@@ -193,7 +197,7 @@ struct CTCDecoderOptions {
   std::string word2wordid_rxfilename;
   std::string scene_syms_filename;
 
-  CTCDecoderOptions(): beam(5), scene_beam(5), blank(0), am_topk(0),
+  CTCDecoderOptions(): beam(5), scene_beam(10), blank(0), am_topk(0),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1), max_mem(50000),
 					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531), scene_topk(0),
                        use_mode("normal"), keywords(""),
@@ -254,11 +258,11 @@ class CTCDecoder {
 
 		void BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes);
 
-        void DeleteSceneBeam(std::vector<PrefixSeq> &beam);
-
-        void DebugBeam(std::vector<PrefixSeq> &beam, int size, int nframe);
-
 	protected:
+        void DeleteSceneBeam(std::vector<PrefixSeq> &beam, int size);
+
+        std::string DebugBeam(std::vector<PrefixSeq> &beam, int size, int nframe);
+
         typedef unordered_map<std::vector<int>,
         		PrefixSeq*, VectorHasher<int> > BeamType;
         typedef unordered_map<std::vector<int>,

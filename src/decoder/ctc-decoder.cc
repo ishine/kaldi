@@ -22,6 +22,18 @@
 
 namespace kaldi {
 
+std::string PrefixSeq::ToStr() {
+	std::ostringstream out;
+    out << "prefix = {";
+    for (int i = 0; i < prefix.size(); i++) 
+        out << prefix[i] << ", ";
+    out << "},";
+    out << " score = " << logp << ", ctc_score = " << logp-logp_lm 
+                << ", lm_score = " << logp_lm << ", scene = " << scene_node << ", is_sence = " << is_sence
+                << ", lmhis = " << lmhis << ", next_lmhis = " << next_lmhis;
+   return out.str();
+}
+
 CTCDecoder::CTCDecoder(CTCDecoderOptions &config,
 						KaldiLstmlmWrapper *lstmlm,
 						ConstArpaLm *const_arpa,
@@ -308,13 +320,16 @@ void CTCDecoder::InitEasyDecoding(int topk) {
     }
 
 	// next beam buffer
-    int beam = config_.beam;
+    int scene_beam = 0;
 	if (this->in_scene_) {
-		next_scene_beam_.resize(config_.scene_beam*(config_.scene_topk+1));
+        // max scene beam size
+        scene_beam = config_.scene_beam + config_.beam + config_.scene_beam*config_.scene_topk*2;
+		next_scene_beam_.resize(scene_beam);
 		next_scene_beam_size_ = 0;
-        beam = config_.beam + config_.scene_beam;
+        // new beam size not in scene
+        // beam = config_.beam + config_.scene_beam;
 	}
-	next_beam_easy_.resize(beam*topk);
+	next_beam_easy_.resize(config_.beam*topk);
 	next_beam_size_ = 0;
 
 #if HAVE_KENLM == 1
@@ -1265,23 +1280,50 @@ void CTCDecoder::BeamMerge(std::vector<PrefixSeq*> &merge_beam,
 		auto it = beam.find(n_preseq->prefix);
 		if (it != beam.end()) {
 			preseq = it->second;
-			n_preseq->logp_nblank = LogAdd(preseq->logp_nblank, n_preseq->logp_nblank);
-			n_preseq->logp_blank = LogAdd(preseq->logp_blank, n_preseq->logp_blank);
-			n_preseq->logp = n_preseq->logp_lm + LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
+			preseq->logp_nblank = LogAdd(preseq->logp_nblank, n_preseq->logp_nblank);
+			preseq->logp_blank = LogAdd(preseq->logp_blank, n_preseq->logp_blank);
+			preseq->logp = preseq->logp_lm + LogAdd(preseq->logp_blank, preseq->logp_nblank);
 			//n_preseq->logp = LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
-			beam.erase(it);
-		}
-		merge_beam.push_back(n_preseq);
+			//beam.erase(it);
+		} else {
+		    merge_beam.push_back(n_preseq);
+        }
 	}
+
+	if (in_scene_ && scene_beam != NULL) {
+	    for (int i = 0; i < merge_beam.size(); i++) {
+		    beam[merge_beam[i]->prefix] = merge_beam[i];
+	    }
+        merge_beam.clear();
+        merge_beam.reserve(beam.size());
+
+		for (int i = 0; i < next_scene_beam_size_; i++) {
+		    n_preseq = &next_scene_beam_[i];
+            if (n_preseq->scene_node != NULL)
+                continue;
+		    auto it = beam.find(n_preseq->prefix);
+		    if (it != beam.end()) {
+                preseq = it->second;
+                if (n_preseq->logp > preseq->logp)
+                    beam[n_preseq->prefix] = n_preseq;
+            } else {
+                beam[n_preseq->prefix] = n_preseq;
+            }
+        }
+    }
 
 	for (auto &seq : beam) {
 		merge_beam.push_back(seq.second);
 	}
 
+
 	if (in_scene_ && scene_beam != NULL) {
 		beam.clear();
 		for (int i = 0; i < next_scene_beam_size_; i++) {
 			n_preseq = &next_scene_beam_[i];
+            if (n_preseq->scene_node == NULL)
+                continue;
+
 			auto it = beam.find(n_preseq->prefix);
 			if (it != beam.end()) {
 				preseq = it->second;
@@ -1585,10 +1627,10 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 	}
 }
 
-void CTCDecoder::DeleteSceneBeam(std::vector<PrefixSeq> &beam) {
+void CTCDecoder::DeleteSceneBeam(std::vector<PrefixSeq> &beam, int size) {
     std::vector<PrefixSeq*> tmp;
-    tmp.reserve(beam.size());
-    for (int i = 0; i < beam.size(); i++) {
+    tmp.reserve(size);
+    for (int i = 0; i < size; i++) {
         if (beam[i].scene_node == NULL) 
             tmp.push_back(&beam[i]);
     }
@@ -1596,18 +1638,21 @@ void CTCDecoder::DeleteSceneBeam(std::vector<PrefixSeq> &beam) {
     std::vector<PrefixSeq> new_beam(tmp.size());
     for (int i = 0; i < tmp.size(); i++)
         new_beam[i] = *tmp[i];
-    beam = new_beam;
+    beam.insert(beam.begin(), new_beam.begin(), new_beam.end());
 }
 
-void CTCDecoder::DebugBeam(std::vector<PrefixSeq> &beam, int n, int nframe) {
+std::string CTCDecoder::DebugBeam(std::vector<PrefixSeq> &beam, int n, int frame_idx) {
+    std::ostringstream ostr;
     int size = beam.size() > n ? n : beam.size();
-    printf("###No.%d frame beams:\n", nframe);
+    ostr << "###No." << frame_idx << " frame beams info:\n";
     for (int i = 0; i < size; i++) {
         PrefixSeq &seq = beam[i];
         for (int j = 1; j < seq.prefix.size(); j++) 
-            std::cout << wordid_to_word_[seq.prefix[j]] << ' ';
-        std::cout << "score = " << seq.logp << ", ctc_score = " << seq.logp-seq.logp_lm << ", lm_score = " << seq.logp_lm << ", scene = " << seq.scene_node << std::endl;
+             ostr << wordid_to_word_[seq.prefix[j]] << ' ';
+         ostr << "score = " << seq.logp << ", ctc_score = " << seq.logp-seq.logp_lm << 
+         ", lm_score = " << seq.logp_lm << ", scene = " << seq.scene_node << ", is_sence = " << seq.is_sence << std::endl;
     }
+    return ostr.str();
 }
 
 void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
@@ -1683,7 +1728,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 		// Only the probability of ending in blank gets updated.
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
 			logp = logp_b + blank_penalty; // -2.30259
-			for (int i = 0; i < cur_beam_size_; i++) {
+			for (int i = 0; i < cur_beam_size_+cur_scene_beam_size_; i++) {
 				preseq = &beam_easy_[i];
 				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
                 // n_p_b approximate 1, meanwhile n_p_nb = 0;
@@ -1758,6 +1803,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 
 
 
+        /*
 		float scene_sum = 0;
 		if (in_scene_) {
 			for (int k = 1; k <= config_.scene_topk; k++) {
@@ -1780,7 +1826,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 					}
 				}
 			}
-		}
+		}*/
 
 		/// extended
 		for (int k = 1; k < topk; k++) {
@@ -1875,7 +1921,8 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 					continue;
 
 				// new scene bpe score
-				sence_logp = Log(Exp(logp)/(scene_sum+0.0001));
+				// sence_logp = Log(Exp(logp)/(scene_sum+0.0001));
+                sence_logp = logp;
 				if (key != end_t) {
 					n_p_nb = LogAdd(preseq->logp_blank+sence_logp, preseq->logp_nblank+sence_logp);
 				} else {
@@ -1889,8 +1936,8 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 				if (next_node->is_word_) {
 					logp_lm = 0; // LOG_1
 
-					n_preseq = &next_beam_easy_[next_beam_size_];
-					next_beam_size_++;
+				    n_preseq = &next_scene_beam_[next_scene_beam_size_];
+					next_scene_beam_size_++;
 					*n_preseq = *preseq;
 
 					n_preseq->PrefixAppend(key);
@@ -1900,6 +1947,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 
 					n_preseq->scene_node = NULL;
+                    n_preseq->is_sence = true;
 
 				#if HAVE_KENLM == 1
 					n_preseq->ken_state = kenlm_arpa_->BeginSentenceState();
@@ -1919,6 +1967,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 						n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 
 						n_preseq->scene_node = next_node;
+                        n_preseq->is_sence = true;
 					}
 				} else { // is not a word node
 					logp_lm = 0; // LOG_1
@@ -1933,6 +1982,7 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 
 					n_preseq->scene_node = next_node;
+                    n_preseq->is_sence = true;
 				}
 
 			}
@@ -1962,13 +2012,14 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 			}
 		}
 
-        //DebugBeam(beam_easy_, 15, n);
+        if (kaldi::g_kaldi_verbose_level >= 1)
+            KALDI_VLOG(1) << DebugBeam(beam_easy_, cur_beam_size_+cur_scene_beam_size_, n);
 
         cur_his = (cur_his+1)%2;
 	}
 
     if (in_scene_) {
-        DeleteSceneBeam(beam_easy_);
+        DeleteSceneBeam(beam_easy_, cur_beam_size_+cur_scene_beam_size_);
     }
 }
 
