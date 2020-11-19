@@ -42,10 +42,9 @@ public:
 	void Clear();
 };
 
-
 class TrieNode {
 public:
-	std::unordered_map<TrieKey, TrieNode> children_;
+	std::unordered_map<TrieKey, TrieNode> *children_;
 	TrieKey key_;
 	bool is_word_;
 	WordInfo *info_;
@@ -77,9 +76,9 @@ public:
 
 	bool LoadDict(std::string path);
 
-	const TrieNode *GetRootNode() { return &root_; }
+	TrieNode *GetRootNode() { return &root_; }
 
-	const TrieNode* Trav(TrieNode* node, TrieKey key);
+	TrieNode* Trav(TrieNode* node, TrieKey key);
 
 
 private:
@@ -92,4 +91,4 @@ private:
 
 #include "util/trie-tree-inl.h"
 
-#endif /* UTIL_TRIE_TREE_H_ */
+#endif /* KALDI_UTIL_TRIE_TREE_H_ */

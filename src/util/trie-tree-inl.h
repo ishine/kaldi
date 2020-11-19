@@ -47,6 +47,7 @@ std::string WordInfo::ToStr() {
 /// TrieNode
 ////////////
 TrieNode::TrieNode() {
+    children_ = new std::unordered_map<TrieKey, TrieNode>;
 	key_ = 0;
 	is_word_ = false;
 	info_ = NULL;
@@ -57,31 +58,35 @@ TrieNode::~TrieNode() {
 		delete info_;
 		info_ = NULL;
 	}
+
+    if (children_ != NULL) {
+        delete children_;
+        children_ = NULL;
+    }
 }
 
 TrieNode *TrieNode::GetNode(TrieKey key) {
-	auto it = children_.find(key);
-	if (it == children_.end()) {
+	auto it = children_->find(key);
+	if (it == children_->end()) {
 		return NULL;
-	} else {
-		return &(it->second);
 	}
+
+    return &(it->second);
 }
 
 TrieNode *TrieNode::AddNode(TrieKey key) {
-	TrieNode child;
-	child.key_ = key;
-	children_[key] = child;
-	return &children_[key];
+	TrieNode &child = (*children_)[key];
+    child.key_ = key;
+	return &child;
 }
 
 int TrieNode::NumChild() {
-	return children_.size();
+	return children_->size();
 }
 
 std::string TrieNode::ToStr() {
 	char buffer[1024] = {0};
-	sprintf(buffer, "[key:%s, is_word: %s, info: %s]",
+	sprintf(buffer, "[key:%d, is_word: %s, info: %s]",
 			key_, is_word_?"true":"false", info_==NULL ? "NULL":info_->ToStr().c_str());
 	return std::string(buffer);
 }
@@ -93,7 +98,7 @@ void TrieNode::Clear() {
 		delete info_;
 		info_ = NULL;
 	}
-	children_.clear();
+	children_->clear();
 }
 
 
@@ -129,7 +134,7 @@ bool Trie::LoadDict(std::string path) {
 		split(line, "\t", strs);
 		size = strs.size();
 		if (size < 2) {
-			printf("line err: %d, %s\n", num, line);
+            std::cout << "line err: " << num << ", " << line << std::endl;
 			return false;
 		}
 
@@ -159,12 +164,12 @@ bool Trie::LoadDict(std::string path) {
 }
 
 void Trie::split(std::string &str, const std::string &delim, std::vector<std::string> &strs) {
-	size_t start, end = str.find(delim);
+	size_t start = 0, end = str.find(delim);
 	strs.clear();
 	while (end != std::string::npos) {
 		strs.push_back(str.substr(start, end-start));
 		start = end + delim.length();
-		end = str.find(delim);
+		end = str.find(delim, start);
 	}
 	strs.push_back(str.substr(start, end-start));
 }
@@ -195,7 +200,7 @@ TrieNode* Trie::Insert(std::vector<TrieKey> &word_ids,
 }
 
 TrieNode* Trie::Search(std::vector<TrieKey> &word) {
-	TrieNode *p = &root_, *np = p;
+	TrieNode *p = &root_;
 
 	for (int i = 0; i < word.size(); i++) {
 		TrieKey key = word[i];
@@ -206,7 +211,7 @@ TrieNode* Trie::Search(std::vector<TrieKey> &word) {
 	return p;
 }
 
-const TrieNode* Trie::Trav(TrieNode* node, TrieKey key) {
+TrieNode* Trie::Trav(TrieNode* node, TrieKey key) {
 	if (node == NULL)
 		return NULL;
 	return node->GetNode(key);

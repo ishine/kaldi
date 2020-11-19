@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
 			//decoder->BeamSearchEasyTopk(loglikes);
 		else if (search == "beam") {
 			if (decoder_opts.use_mode == "easy")
-				decoder->BeamSearchEasyTopk(loglikes);
+				decoder->BeamSearchEasySceneTopk(loglikes);
 			else
 				decoder->BeamSearchTopk(loglikes);
 		} else if (search == "greedy")
