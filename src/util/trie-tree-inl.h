@@ -47,9 +47,9 @@ std::string WordInfo::ToStr() {
 /// TrieNode
 ////////////
 TrieNode::TrieNode() {
-    children_ = new std::unordered_map<TrieKey, TrieNode>;
-	key_ = 0;
+	key_ = -1;
 	is_word_ = false;
+    num_child_ = 0;
 	info_ = NULL;
 }
 
@@ -59,29 +59,56 @@ TrieNode::~TrieNode() {
 		info_ = NULL;
 	}
 
-    if (children_ != NULL) {
-        delete children_;
-        children_ = NULL;
+    for (auto &node : children_)
+        delete node.second;
+
+    for (int i = 0; i < children_vec_.size(); i++) {
+        if (children_vec_[i] != NULL)
+            delete children_vec_[i];
     }
 }
 
 TrieNode *TrieNode::GetNode(TrieKey key) {
-	auto it = children_->find(key);
-	if (it == children_->end()) {
-		return NULL;
-	}
+    TrieNode *node = NULL;
 
-    return &(it->second);
+    if (num_child_ > TRIE_NODE_SIZE) {
+        node = children_vec_[key];
+    } else {
+        auto it = children_.find(key);
+	    if (it != children_.end())
+            node = it->second;
+    }
+        
+    return node;
 }
 
 TrieNode *TrieNode::AddNode(TrieKey key) {
-	TrieNode &child = (*children_)[key];
-    child.key_ = key;
-	return &child;
+
+    if (num_child_ == 0)
+        children_.reserve(TRIE_NODE_SIZE);
+
+	TrieNode *child = new TrieNode;
+    child->key_ = key;
+    num_child_++;
+
+    if (num_child_ <= TRIE_NODE_SIZE) {
+        children_[key] = child;
+    } else {
+        if (num_child_ == TRIE_NODE_SIZE+1) {
+            children_vec_.resize(TRIE_NODE_MAX_SIZE, NULL);
+            for (auto &node : children_)
+                children_vec_[node.first] = node.second;
+            children_.clear();
+        }
+        KALDI_ASSERT(key < TRIE_NODE_MAX_SIZE);
+        children_vec_[key] = child; 
+    }
+
+	return child;
 }
 
 int TrieNode::NumChild() {
-	return children_->size();
+	return num_child_;
 }
 
 std::string TrieNode::ToStr() {
@@ -89,16 +116,6 @@ std::string TrieNode::ToStr() {
 	sprintf(buffer, "[key:%d, is_word: %s, info: %s]",
 			key_, is_word_?"true":"false", info_==NULL ? "NULL":info_->ToStr().c_str());
 	return std::string(buffer);
-}
-
-void TrieNode::Clear() {
-	key_ = 0;
-	is_word_ = false;
-	if (info_ != NULL) {
-		delete info_;
-		info_ = NULL;
-	}
-	children_->clear();
 }
 
 
@@ -114,7 +131,6 @@ Trie::~Trie() {
 }
 
 bool Trie::LoadDict(std::string path) {
-	root_.Clear();
 	root_.key_ = '^';
 
 	if (path == "")

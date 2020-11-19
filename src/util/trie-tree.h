@@ -30,6 +30,8 @@ namespace kaldi {
 typedef int TrieKey;
 typedef float TrieWeight;
 typedef int TrieClassType;
+#define TRIE_NODE_SIZE  26
+#define TRIE_NODE_MAX_SIZE  10000
 
 class WordInfo {
 public:
@@ -44,9 +46,11 @@ public:
 
 class TrieNode {
 public:
-	std::unordered_map<TrieKey, TrieNode> *children_;
+	std::unordered_map<TrieKey, TrieNode*> children_;
+    std::vector<TrieNode*> children_vec_;
 	TrieKey key_;
 	bool is_word_;
+    int num_child_;
 	WordInfo *info_;
 
 	TrieNode();
