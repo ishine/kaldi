@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
     ParseOptions po(usage);
     bool binary = true;
     std::string search = "beam";
-    float blank_posterior_scale = -1.0;
+    float blank_posterior_scale = -1.0;s
     float en_penalty = 0.0;
     std::string word_syms_filename;
     std::string const_arpa_filename;

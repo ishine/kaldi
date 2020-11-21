@@ -39,6 +39,7 @@ public:
 	TrieClassType class_;
 	TrieWeight weight_;
 	std::string word_;
+	int	id_;
 	WordInfo();
 	std::string ToStr();
 	void Clear();
@@ -71,8 +72,8 @@ public:
 	// If not present, inserts word ids into trie
 	// If the word ids is prefix of trie node, just
 	// marks leaf node
-	TrieNode* Insert(std::vector<TrieKey> &word_ids, std::string& word,
-			TrieWeight weight, TrieClassType ctype);
+	TrieNode* Insert(std::vector<TrieKey> &bpe_ids, std::string& word,
+			int word_id, TrieWeight weight, TrieClassType ctype);
 
 	// Returns true if word presents in trie, else
 	// false

@@ -31,6 +31,7 @@ WordInfo::WordInfo() {
 
 void WordInfo::Clear() {
 	len_ = 0;
+	id_ = -1;
 	class_ = 0;
     weight_ = 0.0;
     word_.clear();
@@ -38,8 +39,8 @@ void WordInfo::Clear() {
 
 std::string WordInfo::ToStr() {
 	char buffer[256] = {0};
-	sprintf(buffer, "[word:%s, len: %d, ctype=%d, weight=%.3f]",
-			word_.c_str(), len_, class_, weight_);
+	sprintf(buffer, "[word:%s, len=%d, id=%d, ctype=%d, weight=%.3f]",
+			word_.c_str(), len_, id_, class_, weight_);
 	return std::string(buffer);
 }
 
@@ -142,10 +143,10 @@ bool Trie::LoadDict(std::string path) {
 
 	std::string line, word;
 	std::vector<std::string> strs, ids;
-	std::vector<TrieKey> word_ids;
+	std::vector<TrieKey> bpe_ids;
 	TrieWeight weight;
 	TrieClassType ctype;
-	int num = 0, size;
+	int num = 0, size, word_id = 0;
 	while(getline(ifs, line)) {
 		split(line, "\t", strs);
 		size = strs.size();
@@ -157,22 +158,27 @@ bool Trie::LoadDict(std::string path) {
 		if (size >= 2) {
 			word = strs[0];
 			split(strs[1], " ", ids);
-			word_ids.resize(ids.size());
+			bpe_ids.resize(ids.size());
 			for (int i = 0; i < ids.size(); i++)
-				word_ids[i] = std::stoi(ids[i]);
+				bpe_ids[i] = std::stoi(ids[i]);
+		}
+
+		word_id = -1;
+		if (size >= 3) {
+			word_id = std::stoi(strs[2]);
 		}
 
 		ctype = 0;
-		if (size >= 3) {
-			ctype = std::stoi(strs[2]);
+		if (size >= 4) {
+			ctype = std::stoi(strs[3]);
 		}
 
 		weight = 0;
-		if (size >= 4) {
-			weight = std::stof(strs[3]);
+		if (size >= 5) {
+			weight = std::stof(strs[4]);
 		}
 		/// build trie tree
-		this->Insert(word_ids, word, ctype, weight);
+		this->Insert(bpe_ids, word, word_id, ctype, weight);
 	}
 
 	ifs.close();
@@ -190,12 +196,12 @@ void Trie::split(std::string &str, const std::string &delim, std::vector<std::st
 	strs.push_back(str.substr(start, end-start));
 }
 
-TrieNode* Trie::Insert(std::vector<TrieKey> &word_ids,
-		std::string& word, TrieWeight weight, TrieClassType ctype) {
+TrieNode* Trie::Insert(std::vector<TrieKey> &bpe_ids, std::string& word,
+		int word_id, TrieWeight weight, TrieClassType ctype) {
 	TrieNode *p = &root_, *np = p;
 
-	for (int i = 0; i < word_ids.size(); i++) {
-		TrieKey key = word_ids[i];
+	for (int i = 0; i < bpe_ids.size(); i++) {
+		TrieKey key = bpe_ids[i];
 		np = p->GetNode(key);
 		if (np == NULL)
 			np = p->AddNode(key);
@@ -207,9 +213,10 @@ TrieNode* Trie::Insert(std::vector<TrieKey> &word_ids,
 		p->is_word_ = true;
 		p->info_ = new WordInfo;
 		p->info_->class_ = ctype;
-		p->info_->len_ = word_ids.size();
+		p->info_->len_ = bpe_ids.size();
 		p->info_->weight_ = weight;
 		p->info_->word_ = word;
+		p->info_->id_ = word_id;
 	}
 
 	return p;
