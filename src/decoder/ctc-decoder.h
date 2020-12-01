@@ -24,10 +24,9 @@
 #include "base/kaldi-common.h"
 #include "util/stl-utils.h"
 #include "itf/options-itf.h"
-#include "util/hash-list.h"
+#include "util/trie-tree.h"
 #include "lm/kaldi-lstmlm.h"
 #include "lm/const-arpa-lm.h"
-#include "util/trie-tree.h"
 
 #if HAVE_KENLM == 1
 #include "lm/model.hh"

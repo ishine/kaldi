@@ -23,7 +23,6 @@
 #include <vector>
 #include <list>
 #include "util/stl-utils.h"
-#include "util/hash-list.h"
 
 namespace kaldi {
 
@@ -93,7 +92,5 @@ private:
 };
 
 }
-
-#include "util/trie-tree-inl.h"
 
 #endif /* KALDI_UTIL_TRIE_TREE_H_ */

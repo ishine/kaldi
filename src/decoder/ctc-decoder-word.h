@@ -24,10 +24,9 @@
 #include "base/kaldi-common.h"
 #include "util/stl-utils.h"
 #include "itf/options-itf.h"
-#include "util/hash-list.h"
+#include "util/trie-tree.h"
 #include "lm/kaldi-lstmlm.h"
 #include "lm/const-arpa-lm.h"
-#include "util/trie-tree.h"
 
 #if HAVE_KENLM == 1
 #include "lm/model.hh"
@@ -41,14 +40,16 @@
 
 namespace kaldi {
 
-struct PrefixSeq {
+struct PrefixSeqWord {
 
-	PrefixSeq() {
+	PrefixSeqWord() {
 		Reset();
 	}
 
 	void Reset() {
 		//prefix.resize(PREFIX_MAX_LEN, 0);
+        prefix_bpe.clear();
+        prefix_word.clear();
         prefix_bpe.reserve(PREFIX_BPE_MAX_LEN);
         prefix_word.reserve(PREFIX_WORD_MAX_LEN);
 		logp_blank = kLogZeroFloat;
@@ -74,7 +75,7 @@ struct PrefixSeq {
         return prefix_word.back();
     }
 
-	bool operator < (const PrefixSeq& preseq) const {
+	bool operator < (const PrefixSeqWord& preseq) const {
 		return logp > preseq.logp;
 	}
 
@@ -106,7 +107,7 @@ struct PrefixSeq {
 };
 
 struct CTCDecoderWordUtil {
-	static bool compare_PrefixSeq_reverse(const PrefixSeq *a, const PrefixSeq *b) {
+	static bool compare_PrefixSeqWord_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
 		return a->logp > b->logp;
 	}
 };
@@ -174,23 +175,22 @@ class CTCDecoderWord {
 		void BeamSearchTopk(const Matrix<BaseFloat> &loglikes);
 
 	protected:
-        void DeleteInWordBeam(std::vector<PrefixSeq> &beam, int size);
+        void DeleteInWordBeam(std::vector<PrefixSeqWord> &beam, int size);
 
-        std::string DebugBeam(std::vector<PrefixSeq> &beam, int size, int nframe);
+        std::string DebugBeam(std::vector<PrefixSeqWord> &beam, int size, int nframe);
 
         typedef unordered_map<std::vector<int>,
-        		PrefixSeq*, VectorHasher<int> > BeamType;
+        		PrefixSeqWord*, VectorHasher<int> > BeamType;
         typedef unordered_map<std::vector<int>,
         		LstmlmHistroy*, VectorHasher<int> > HisType;
         typedef unordered_map<std::vector<int>,
         		Vector<BaseFloat>*, VectorHasher<int> > LogProbType;
 
         void Initialize();
-		void InitDecoding();
-		void InitEasyDecoding(int topk);
+		void InitDecoding(int topk);
 
-        void BeamMerge(std::vector<PrefixSeq*> &bep_beam,
-        		std::vector<PrefixSeq*> &word_beam, bool skip_blank = false);
+        void BeamMerge(std::vector<PrefixSeqWord*> &bep_beam,
+        		std::vector<PrefixSeqWord*> &word_beam, bool skip_blank = false);
 
 
 		CTCDecoderWordOptions &config_;
@@ -198,6 +198,7 @@ class CTCDecoderWord {
 
 		std::vector<std::string> wordid_to_word_;
 		std::unordered_map<std::string, int> word_to_wordid_;
+        std::list<PrefixSeqWord*> pre_seq_list_;
 
 		// rnn lm
 		std::vector<int> rd_;
@@ -207,9 +208,9 @@ class CTCDecoderWord {
 
 		// beam search
 		Trie word_trie_;
-		std::vector<PrefixSeq> cur_beam_;
-		std::vector<PrefixSeq> next_bpe_beam_;
-		std::vector<PrefixSeq> next_word_beam_;
+		std::vector<PrefixSeqWord> cur_beam_;
+		std::vector<PrefixSeqWord> next_bpe_beam_;
+		std::vector<PrefixSeqWord> next_word_beam_;
 
 		int cur_bpe_beam_size_;
 		int cur_word_beam_size_;

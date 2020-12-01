@@ -1,4 +1,4 @@
-// util/trie-tree-inl.h
+// util/trie-tree.cc
 
 // Copyright 2015-2016   Shanghai Jiao Tong University (author: Wei Deng)
 
@@ -16,9 +16,7 @@
 // MERCHANTABLITY OR NON-INFRINGEMENT.
 // See the Apache 2 License for the specific language governing permissions and
 
-#ifndef KALDI_UTIL_TRIE_TREE_INL_H_
-#define KALDI_UTIL_TRIE_TREE_INL_H_
-
+#include "util/trie-tree.h"
 
 namespace kaldi {
 
@@ -155,6 +153,7 @@ bool Trie::LoadDict(std::string path) {
 			return false;
 		}
 
+        // word and bpe ids
 		if (size >= 2) {
 			word = strs[0];
 			split(strs[1], " ", ids);
@@ -163,16 +162,19 @@ bool Trie::LoadDict(std::string path) {
 				bpe_ids[i] = std::stoi(ids[i]);
 		}
 
+        // word id
 		word_id = -1;
 		if (size >= 3) {
 			word_id = std::stoi(strs[2]);
 		}
 
+        // word class type
 		ctype = 0;
 		if (size >= 4) {
 			ctype = std::stoi(strs[3]);
 		}
 
+        // word weight
 		weight = 0;
 		if (size >= 5) {
 			weight = std::stof(strs[4]);
@@ -241,5 +243,3 @@ TrieNode* Trie::Trav(TrieNode* node, TrieKey key) {
 }
 
 }
-
-#endif /* UTIL_TRIE_TREE_INL_H_ */

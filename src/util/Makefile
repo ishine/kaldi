@@ -11,7 +11,7 @@ TESTFILES = const-integer-set-test stl-utils-test text-utils-test \
 
 OBJFILES = text-utils.o kaldi-io.o kaldi-holder.o kaldi-table.o \
            parse-options.o simple-options.o simple-io-funcs.o \
-           kaldi-semaphore.o kaldi-mutex.o kaldi-barrier.o kaldi-thread.o 
+           kaldi-semaphore.o kaldi-mutex.o kaldi-barrier.o kaldi-thread.o trie-tree.o
 
 LIBNAME = kaldi-util
 

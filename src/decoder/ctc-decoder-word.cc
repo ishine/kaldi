@@ -17,12 +17,10 @@
 // See the Apache 2 License for the specific language governing permissions and
 // limitations under the License.
 #include "decoder/ctc-decoder-word.h"
-#include "base/kaldi-common.h"
-#include "util/common-utils.h"
 
 namespace kaldi {
 
-std::string PrefixSeq::ToStr() {
+std::string PrefixSeqWord::ToStr() {
 	std::ostringstream out;
     out << "prefix = {";
     for (int i = 0; i < prefix_word.size(); i++)
@@ -30,14 +28,13 @@ std::string PrefixSeq::ToStr() {
     out << "},";
 
     out << " score = " << logp << ", ctc_score = " << logp-logp_lm
-                << ", lm_score = " << logp_lm << ", scene = " << trie_node
+                << ", lm_score = " << logp_lm << ", trie_node = " << trie_node
                 << ", lmhis = " << lmhis << ", next_lmhis = " << next_lmhis;
    return out.str();
 }
 
-
 #if HAVE_KENLM == 1
-CTCDecoderWord::CTCDecoderWord(CTCDecoderOptions &config,
+CTCDecoderWord::CTCDecoderWord(CTCDecoderWordOptions &config,
 			            KaldiLstmlmWrapper *lstmlm,
 			            KenModel *kenlm_arpa,
 						std::vector<KenModel *> &sub_kenlm_apra):
@@ -89,7 +86,7 @@ void CTCDecoderWord::Initialize() {
 	}
 
 	int beam_size = config_.beam + config_.word_beam;
-	cur_beam_.resize(beam_size, PrefixSeq());
+	cur_beam_.resize(beam_size, PrefixSeqWord());
 	cur_bpe_beam_size_ = 0;
 	cur_word_beam_size_ = 0;
 
@@ -107,8 +104,43 @@ void CTCDecoderWord::Initialize() {
 }
 
 
+void CTCDecoderWord::InitDecoding(int topk) {
+    // Elements in the beam are (prefix, (p_blank, p_no_blank))
+    // Initialize the beam with the empty sequence, a probability of
+    // 1 for ending in blank and zero for ending in non-blank (in log space).
+	PrefixSeqWord *seq = &cur_beam_[0];
+    seq->Reset();
+	seq->PrefixBpeAppend(config_.blank);
+	seq->PrefixWordAppend(config_.blank);
+	seq->logp_blank = 0.0;
+	cur_bpe_beam_size_ = 1;
+	cur_word_beam_size_ = 0;
+
+    if (config_.rnnlm_scale != 0) {
+    	// first input <s>
+    	seq->lmhis->SetZero();
+    }
+
+	// next beam buffer
+	next_bpe_beam_.resize(config_.beam*topk, PrefixSeqWord());
+	next_bpe_beam_size_ = 0;
+
+	next_word_beam_.resize(config_.word_beam*topk, PrefixSeqWord());
+	next_word_beam_size_ = 0;
+
+#if HAVE_KENLM == 1
+    if (kenlm_arpa_ != NULL)
+	    seq->ken_state = kenlm_arpa_->BeginSentenceState();
+
+    int nsub = sub_kenlm_apra_.size();
+    seq->sub_ken_state.resize(nsub);
+    for (int i = 0; i < nsub; i++)
+        seq->sub_ken_state[i] = sub_kenlm_apra_[i]->BeginSentenceState();
+#endif
+}
+
 bool CTCDecoderWord::GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat &logp_lm) {
-    PrefixSeq *seq = &cur_beam_[0];
+    PrefixSeqWord *seq = &cur_beam_[0];
 
 	if (seq == NULL) return false;
 
@@ -124,43 +156,34 @@ bool CTCDecoderWord::GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseF
 	return true;
 }
 
-void CTCDecoderWord::InitEasyDecoding(int topk) {
-    // Elements in the beam are (prefix, (p_blank, p_no_blank))
-    // Initialize the beam with the empty sequence, a probability of
-    // 1 for ending in blank and zero for ending in non-blank (in log space).
-	PrefixSeq *seq = &cur_beam_[0];
-    seq->Reset();
-	seq->PrefixBpeAppend(config_.blank);
-	seq->PrefixWordAppend(config_.blank);
-	seq->logp_blank = 0.0;
-	cur_bpe_beam_size_ = 1;
-	cur_word_beam_size_ = 0;
+void CTCDecoderWord::GreedySearch(const Matrix<BaseFloat> &loglikes) {
+    int nframe = loglikes.NumRows(), k;
+	int likes_size = loglikes.NumCols();
+    int topk = likes_size/2;
+    PrefixSeqWord *pre_seq;
+    BaseFloat logp;
 
-    if (config_.rnnlm_scale != 0) {
-    	// first input <s>
-    	seq->lmhis->SetZero();
-    }
-
-	// next beam buffer
-	next_bpe_beam_.resize(config_.beam*topk);
-	next_bpe_beam_size_ = 0;
-
-	next_word_beam_.resize(config_.word_beam*topk);
-	next_word_beam_size_ = 0;
-
-#if HAVE_KENLM == 1
-    if (kenlm_arpa_ != NULL)
-	    seq->ken_state = kenlm_arpa_->BeginSentenceState();
-
-    int nsub = sub_kenlm_apra_.size();
-    seq->sub_ken_state.resize(nsub);
-    for (int i = 0; i < nsub; i++)
-        seq->sub_ken_state[i] = sub_kenlm_apra_[i]->BeginSentenceState();
-#endif
+    InitDecoding(topk);
+    // decode one utterance
+    pre_seq = &cur_beam_[0];
+    for (int n = 0; n < nframe; n++) {
+        logp = loglikes.Row(n).Range(0, topk).Max(&k);
+        k = loglikes(n, topk+k);
+        pre_seq->logp_blank += logp;
+        pre_seq->prefix_bpe.push_back(k);
+    }    
+    std::vector<int> words;
+    words.push_back(config_.blank);
+    for (int i = 1; i < pre_seq->prefix_bpe.size(); i++) {
+        if (pre_seq->prefix_bpe[i] != config_.blank && pre_seq->prefix_bpe[i] != pre_seq->prefix_bpe[i-1])
+            words.push_back(pre_seq->prefix_bpe[i]);
+    }    
+    pre_seq->prefix_bpe = words;
 }
 
-void CTCDecoderWord::BeamMerge(std::vector<PrefixSeq*> &bpe_beam,
-		std::vector<PrefixSeq*> &word_beam, bool skip_blank) {
+
+void CTCDecoderWord::BeamMerge(std::vector<PrefixSeqWord*> &bpe_beam,
+		std::vector<PrefixSeqWord*> &word_beam, bool skip_blank) {
 	//KALDI_ASSERT(next_beam_size_%cur_beam_size_ == 0);
 	BeamType beam;
 
@@ -184,7 +207,7 @@ void CTCDecoderWord::BeamMerge(std::vector<PrefixSeq*> &bpe_beam,
 
 
     /*
-	PrefixSeq *preseq, *n_preseq;
+	PrefixSeqWord *preseq, *n_preseq;
 	beam.reserve(next_bpe_beam_size_);
 	bpe_beam.reserve(next_bpe_beam_size_);
 	for (int i = 0; i < next_bpe_beam_size_; i++) {
@@ -225,30 +248,35 @@ void CTCDecoderWord::BeamMerge(std::vector<PrefixSeq*> &bpe_beam,
 }
 
 
-void CTCDecoderWord::DeleteInWordBeam(std::vector<PrefixSeq> &beam, int size) {
-    std::vector<PrefixSeq*> tmp;
+void CTCDecoderWord::DeleteInWordBeam(std::vector<PrefixSeqWord> &beam, int size) {
+    std::vector<PrefixSeqWord*> tmp;
     tmp.reserve(size);
     for (int i = 0; i < size; i++) {
         if (beam[i].trie_node == NULL)
             tmp.push_back(&beam[i]);
     }
-    std::sort(tmp.begin(), tmp.end(), CTCDecoderWordUtil::compare_PrefixSeq_reverse);
-    std::vector<PrefixSeq> new_beam(tmp.size());
+    std::sort(tmp.begin(), tmp.end(), CTCDecoderWordUtil::compare_PrefixSeqWord_reverse);
+    std::vector<PrefixSeqWord> new_beam(tmp.size());
     for (int i = 0; i < tmp.size(); i++)
         new_beam[i] = *tmp[i];
     beam.insert(beam.begin(), new_beam.begin(), new_beam.end());
 }
 
-std::string CTCDecoderWord::DebugBeam(std::vector<PrefixSeq> &beam, int n, int frame_idx) {
+std::string CTCDecoderWord::DebugBeam(std::vector<PrefixSeqWord> &beam, int n, int frame_idx) {
     std::ostringstream ostr;
     int size = beam.size() > n ? n : beam.size();
     ostr << "###No." << frame_idx << " frame beams info:\n";
     for (int i = 0; i < size; i++) {
-        PrefixSeq &seq = beam[i];
+        PrefixSeqWord &seq = beam[i];
+        ostr << "BPE: ";
+        for (int j = 1; j < seq.prefix_bpe.size(); j++)
+             ostr << seq.prefix_bpe[j] << ' ';
+
+        ostr << ", Word: ";
         for (int j = 1; j < seq.prefix_word.size(); j++)
              ostr << wordid_to_word_[seq.prefix_word[j]] << ' ';
-         ostr << "score = " << seq.logp << ", ctc_score = " << seq.logp-seq.logp_lm << 
-         ", lm_score = " << seq.logp_lm << ", scene = " << seq.trie_node << std::endl;
+         ostr << "; score = " << seq.logp << ", ctc_score = " << seq.logp-seq.logp_lm << 
+         ", lm_score = " << seq.logp_lm << ", trie_node = " << seq.trie_node << std::endl;
     }
     return ostr.str();
 }
@@ -258,11 +286,11 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 	int nframe = loglikes.NumRows();
 	int likes_size = loglikes.NumCols();
 	int vocab_size = config_.vocab_size;
-	PrefixSeq *preseq, *n_preseq;
+	PrefixSeqWord *preseq, *n_preseq;
 	std::vector<int> prefix, n_prefix;
 	std::vector<float> next_words(vocab_size);
 	std::vector<int> next_scene_bpes(vocab_size);
-	float logp = 0, logp_b = 0, logp_lm = 0, sence_logp = 0, n_p_b, n_p_nb;
+	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
 	float ngram_logp = kLogZeroFloat, rnnlm_logp = kLogZeroFloat, sub_ngram_logp = kLogZeroFloat,
 			rscale = config_.rnnlm_scale,
             blank_penalty = log(config_.blank_penalty);
@@ -275,7 +303,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
     std::vector<Vector<BaseFloat>*> nnet_out;
     std::vector<LstmlmHistroy*> context_in, context_out;
 
-	InitEasyDecoding(topk);
+	InitDecoding(topk);
 
 	// decode one utterance
 	for (int n = start; n < nframe; n++) {
@@ -506,11 +534,11 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 			}
 		}
 
-		std::vector<PrefixSeq*> bpe_beam;
-		std::vector<PrefixSeq*> word_beam;
+		std::vector<PrefixSeqWord*> bpe_beam;
+		std::vector<PrefixSeqWord*> word_beam;
 		BeamMerge(bpe_beam, word_beam, skip_blank);
 		// select best TopN beam
-		std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeq_reverse);
+		std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqWord_reverse);
 		int size = bpe_beam.size();
 		cur_bpe_beam_size_ = size >= config_.beam ? config_.beam : size;
 		for (int i = 0; i < cur_bpe_beam_size_; i++) {
@@ -521,8 +549,8 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
             }
         }
 
-		std::sort(word_beam.begin(), word_beam.end(), CTCDecoderWordUtil::compare_PrefixSeq_reverse);
-		int size = word_beam.size();
+		std::sort(word_beam.begin(), word_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqWord_reverse);
+		size = word_beam.size();
 		cur_word_beam_size_ = size >= config_.word_beam ? config_.word_beam : size;
 		for (int i = 0; i < cur_word_beam_size_; i++) {
 			cur_beam_[i+cur_bpe_beam_size_] = *word_beam[i];

@@ -42,8 +42,7 @@ int main(int argc, char *argv[]) {
     ParseOptions po(usage);
     bool binary = true;
     std::string search = "beam";
-    float blank_posterior_scale = -1.0;s
-    float en_penalty = 0.0;
+    float blank_posterior_scale = -1.0;
     std::string word_syms_filename;
     std::string const_arpa_filename;
     std::string sub_language_models;
@@ -51,8 +50,6 @@ int main(int argc, char *argv[]) {
     po.Register("search", &search, "search function(beam|greedy)");
     po.Register("word-symbol-table", &word_syms_filename, "Symbol table for words [for debug output]");
     po.Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, "
-    		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
-    po.Register("en-penalty", &en_penalty, "For CTC decoding, "
     		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
     po.Register("const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
     po.Register("sub-language-models", &sub_language_models, "Sub language models(model1:model2:...)");
@@ -100,9 +97,7 @@ int main(int argc, char *argv[]) {
 	if (sub_language_models != "")
 		kaldi::SplitStringToVector(sub_language_models, ":", false, &sub_lm_filenames);
 
-	// Reads the language model in ConstArpaLm format.
-	ConstArpaLm *const_arpa = NULL;
-	std::vector<ConstArpaLm *> sub_const_arpa;
+	// Reads the language model in KenModel format.
 #if HAVE_KENLM == 1
 	KenModel *ken_arpa = NULL;
 	std::vector<KenModel *> sub_ken_arpa;
@@ -117,7 +112,7 @@ int main(int argc, char *argv[]) {
         sub_ken_arpa.resize(num_sub);
 		for (int i = 0; i < num_sub; i++)
 			sub_ken_arpa[i] = new KenModel(sub_lm_filenames[i].c_str());
-		decoder = new CTCDecoder(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa);
+		decoder = new CTCDecoderWord(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa);
 #endif
 	} else {
 		KALDI_ERR << "UnSupported ConstArpaLm " << const_arpa_filename;
@@ -132,8 +127,6 @@ int main(int argc, char *argv[]) {
     for (; !loglikes_reader.Done(); loglikes_reader.Next()) {
 		std::string key = loglikes_reader.Key();
 		Matrix<BaseFloat> &loglikes (loglikes_reader.Value());
-        if (en_penalty > 0)
-            loglikes.ColRange(1, 1050).Add(en_penalty);
 
 		if (loglikes.NumRows() == 0) {
 			KALDI_WARN << "Zero-length utterance: " << key;
