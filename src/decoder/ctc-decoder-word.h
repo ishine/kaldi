@@ -110,6 +110,20 @@ struct CTCDecoderWordUtil {
 	static bool compare_PrefixSeqWord_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
 		return a->logp > b->logp;
 	}
+    
+	static bool compare_PrefixSeqBpe_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
+        KALDI_ASSERT(a->trie_node != NULL && b->trie_node != NULL);
+
+        float logp_lm_a, logp_lm_b, bpe_len, nbpe;
+        bpe_len = a->prefix_bpe.size()-1;
+        nbpe = a->trie_node->layer_+1;
+        logp_lm_a = a->logp_lm > 0 ? a->logp_lm/(bpe_len-nbpe)*bpe_len : a->logp_lm;
+
+        bpe_len = b->prefix_bpe.size()-1;
+        nbpe = b->trie_node->layer_+1;
+        logp_lm_b = b->logp_lm > 0 ? b->logp_lm/(bpe_len-nbpe)*bpe_len : b->logp_lm;
+		return logp_lm_a+LogAdd(a->logp_blank, a->logp_nblank) > logp_lm_b+LogAdd(b->logp_blank, b->logp_nblank);
+	}
 };
 
 struct CTCDecoderWordOptions {
@@ -125,13 +139,14 @@ struct CTCDecoderWordOptions {
 	int eos;
 	bool use_kenlm;
 	int vocab_size;
+    std::string bpe2bpeid_rxfilename;
 	std::string word2wordid_rxfilename;
 	std::string word2bpeid_rxfilename;
 
 	CTCDecoderWordOptions(): beam(5), word_beam(10), blank(0), am_topk(0),
 					   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1),
 					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(true), vocab_size(7531),
-					   word2wordid_rxfilename(""), word2bpeid_rxfilename("")
+					   bpe2bpeid_rxfilename(""), word2wordid_rxfilename(""), word2bpeid_rxfilename("")
 					   { }
 
 	void Register(OptionsItf *opts) {
@@ -147,6 +162,7 @@ struct CTCDecoderWordOptions {
 		opts->Register("eos", &eos, "Integer corresponds to </s>. You must set this to your actual EOS integer.");
 		opts->Register("use-kenlm", &use_kenlm, "Weather to use ken arpa language wrapper.");
 		opts->Register("vocab-size", &vocab_size, "Acoustic model output size.");
+		opts->Register("bpe2bpeid-table", &bpe2bpeid_rxfilename, "Map from bpe to bpe id table.");
 		opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
 		opts->Register("word2bpeid-table", &word2bpeid_rxfilename, "Map from word to bpe ids table");
 	}
@@ -196,9 +212,12 @@ class CTCDecoderWord {
 		CTCDecoderWordOptions &config_;
 		KaldiLstmlmWrapper *lstmlm_;
 
+        BeamType beam_union_;
+
 		std::vector<std::string> wordid_to_word_;
+		std::vector<std::string> bpeid_to_bpe_;
 		std::unordered_map<std::string, int> word_to_wordid_;
-        std::list<PrefixSeqWord*> pre_seq_list_;
+		std::unordered_map<std::string, int> bpe_to_bpeid_;
 
 		// rnn lm
 		std::vector<int> rd_;

@@ -54,7 +54,7 @@ CTCDecoderWord::CTCDecoderWord(CTCDecoderWordOptions &config,
             sub_kenlm_vocab_[i] = &(sub_kenlm_apra[i]->GetVocabulary());
     }
 
-	/// symbols
+	/// word symbols
 	fst::SymbolTable *word_symbols = NULL;
 	if (!(word_symbols = fst::SymbolTable::ReadText(config_.word2wordid_rxfilename)))
 		KALDI_ERR << "Could not read symbol table from file " << config_.word2wordid_rxfilename;
@@ -75,6 +75,29 @@ CTCDecoderWord::CTCDecoderWord(CTCDecoderWordOptions &config,
 			  << "integers in your symbol table?";
 		}
 		word_to_wordid_[word_symbols->Find(i)] = i;
+	}
+
+	/// bpe symbols
+	fst::SymbolTable *bpe_symbols = NULL;
+	if (!(bpe_symbols = fst::SymbolTable::ReadText(config_.bpe2bpeid_rxfilename)))
+		KALDI_ERR << "Could not read symbol table from file " << config_.bpe2bpeid_rxfilename;
+
+	bpeid_to_bpe_.resize(bpe_symbols->NumSymbols());
+	for (int32 i = 0; i < bpe_symbols->NumSymbols(); i++) {
+		bpeid_to_bpe_[i] = bpe_symbols->Find(i);
+		if (bpeid_to_bpe_[i] == "") {
+		  KALDI_ERR << "Could not find bpe for integer " << i << "in the bpe "
+			  << "symbol table, mismatched symbol table or you have discoutinuous "
+			  << "integers in your symbol table?";
+		}
+	}
+	for (int32 i = 0; i < bpe_symbols->NumSymbols(); i++) {
+		if (bpe_symbols->Find(i) == "") {
+		  KALDI_ERR << "Could not find bpe for integer " << i << "in the bpe "
+			  << "symbol table, mismatched symbol table or you have discoutinuous "
+			  << "integers in your symbol table?";
+		}
+		bpe_to_bpeid_[bpe_symbols->Find(i)] = i;
 	}
 }
 #endif
@@ -122,11 +145,14 @@ void CTCDecoderWord::InitDecoding(int topk) {
     }
 
 	// next beam buffer
-	next_bpe_beam_.resize(config_.beam*topk, PrefixSeqWord());
+    int beam_size = config_.beam + config_.word_beam;
+	next_bpe_beam_.resize(beam_size*topk, PrefixSeqWord());
 	next_bpe_beam_size_ = 0;
 
-	next_word_beam_.resize(config_.word_beam*topk, PrefixSeqWord());
+	next_word_beam_.resize(beam_size*topk, PrefixSeqWord());
 	next_word_beam_size_ = 0;
+
+    //beam_union_.reserve(beam_size*topk);
 
 #if HAVE_KENLM == 1
     if (kenlm_arpa_ != NULL)
@@ -185,7 +211,7 @@ void CTCDecoderWord::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 void CTCDecoderWord::BeamMerge(std::vector<PrefixSeqWord*> &bpe_beam,
 		std::vector<PrefixSeqWord*> &word_beam, bool skip_blank) {
 	//KALDI_ASSERT(next_beam_size_%cur_beam_size_ == 0);
-	BeamType beam;
+	//BeamType beam;
 
     if (skip_blank) {
 	    for (int i = 0; i < cur_bpe_beam_size_; i++)
@@ -196,55 +222,59 @@ void CTCDecoderWord::BeamMerge(std::vector<PrefixSeqWord*> &bpe_beam,
         return ;
     }
 
-
+    /*
     bpe_beam.reserve(next_bpe_beam_size_);
-	for (int i = 0; i < cur_bpe_beam_size_; i++)
+	for (int i = 0; i < next_bpe_beam_size_; i++)
 		bpe_beam.push_back(&next_bpe_beam_[i]);
 
 	word_beam.reserve(next_word_beam_size_);
 	for (int i = 0; i < next_word_beam_size_; i++)
 		word_beam.push_back(&next_word_beam_[i]);
+    */
 
-
-    /*
+    std::vector<int> prefix_key;
+    prefix_key.reserve(PREFIX_BPE_MAX_LEN+PREFIX_WORD_MAX_LEN);
+	beam_union_.clear();
 	PrefixSeqWord *preseq, *n_preseq;
-	beam.reserve(next_bpe_beam_size_);
-	bpe_beam.reserve(next_bpe_beam_size_);
 	for (int i = 0; i < next_bpe_beam_size_; i++) {
 		n_preseq = &next_bpe_beam_[i];
-		auto it = beam.find(n_preseq->prefix_bpe);
-	    if (it != beam.end()) {
+        prefix_key.clear();
+        prefix_key.insert(prefix_key.begin(), n_preseq->prefix_bpe.begin(), n_preseq->prefix_bpe.end());
+        prefix_key.insert(prefix_key.end(), n_preseq->prefix_word.begin(), n_preseq->prefix_word.end());
+		auto it = beam_union_.find(prefix_key);
+	    if (it != beam_union_.end()) {
             preseq = it->second;
-            if (n_preseq->logp > preseq->logp)
-                beam[n_preseq->prefix_bpe] = n_preseq;
+			preseq->logp_nblank = LogAdd(preseq->logp_nblank, n_preseq->logp_nblank);
+			preseq->logp_blank = LogAdd(preseq->logp_blank, n_preseq->logp_blank);
+			preseq->logp = preseq->logp_lm + LogAdd(preseq->logp_blank, preseq->logp_nblank);
         } else {
-            beam[n_preseq->prefix_bpe] = n_preseq;
+            beam_union_[prefix_key] = n_preseq;
         }
 	}
 
-	for (auto &seq : beam) {
+	for (auto &seq : beam_union_) {
 		bpe_beam.push_back(seq.second);
 	}
 
 
 
-	beam.clear();
-	beam.reserve(next_word_beam_size_);
+	beam_union_.clear();
 	for (int i = 0; i < next_word_beam_size_; i++) {
 		n_preseq = &next_word_beam_[i];
-		auto it = beam.find(n_preseq->prefix_word);
-		if (it != beam.end()) {
-			preseq = it->second;
-			if (n_preseq->logp > preseq->logp)
-				beam[it->first] = n_preseq;
+		auto it = beam_union_.find(n_preseq->prefix_word);
+		if (it != beam_union_.end()) {
+            preseq = it->second;
+			preseq->logp_nblank = LogAdd(preseq->logp_nblank, n_preseq->logp_nblank);
+			preseq->logp_blank = LogAdd(preseq->logp_blank, n_preseq->logp_blank);
+		    preseq->logp = preseq->logp_lm + LogAdd(preseq->logp_blank, preseq->logp_nblank);
 		} else {
-			beam[n_preseq->prefix_word] = n_preseq;
+			beam_union_[n_preseq->prefix_word] = n_preseq;
 		}
 	}
 
-	for (auto &seq : beam) {
+	for (auto &seq : beam_union_) {
 		word_beam.push_back(seq.second);
-	}*/
+	}
 }
 
 
@@ -270,7 +300,7 @@ std::string CTCDecoderWord::DebugBeam(std::vector<PrefixSeqWord> &beam, int n, i
         PrefixSeqWord &seq = beam[i];
         ostr << "BPE: ";
         for (int j = 1; j < seq.prefix_bpe.size(); j++)
-             ostr << seq.prefix_bpe[j] << ' ';
+             ostr << bpeid_to_bpe_[seq.prefix_bpe[j]] << ' ';
 
         ostr << ", Word: ";
         for (int j = 1; j < seq.prefix_word.size(); j++)
@@ -455,6 +485,10 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 
 				// is a word node
 				if (next_node->is_word_) {
+				    n_preseq = &next_word_beam_[next_word_beam_size_];
+					next_word_beam_size_++;
+					*n_preseq = *preseq;
+
 					int word_id = next_node->info_->id_;
 
 					// *NB* this would be a good place to include an LM score.
@@ -473,25 +507,23 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 							if (config_.use_kenlm && kenlm_arpa_ != NULL) {
 								index = kenlm_vocab_->Index(wordid_to_word_[word_id]);
 								ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+								// Convert to natural log.
+								ngram_logp *= M_LN10;
+
 								n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
 								for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
 									index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[word_id]);
 									sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
+								    sub_ngram_logp *= M_LN10;
 									ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
 									//ngram_logp = std::max(ngram_logp, sub_ngram_logp);
 								}
-								// Convert to natural log.
-								ngram_logp *= M_LN10;
 							}
 						#endif
 						}
 						// fusion score
 						logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
 					}
-
-				    n_preseq = &next_word_beam_[next_word_beam_size_];
-					next_word_beam_size_++;
-					*n_preseq = *preseq;
 
 					n_preseq->PrefixBpeAppend(key);
 					n_preseq->logp_blank = n_p_b;
@@ -503,6 +535,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->trie_node = NULL;
 
 					if (next_node->NumChild() > 0) {
+						logp_lm = 0; // LOG_1
 
 						n_preseq = &next_bpe_beam_[next_bpe_beam_size_];
 						next_bpe_beam_size_++;
@@ -517,6 +550,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 						n_preseq->trie_node = next_node;
 					}
 				} else { // is not a word node
+                    logp_lm = 0; // LOG_1
 
 					n_preseq = &next_bpe_beam_[next_bpe_beam_size_];
 					next_bpe_beam_size_++;
@@ -538,7 +572,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		std::vector<PrefixSeqWord*> word_beam;
 		BeamMerge(bpe_beam, word_beam, skip_blank);
 		// select best TopN beam
-		std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqWord_reverse);
+		std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqBpe_reverse);
 		int size = bpe_beam.size();
 		cur_bpe_beam_size_ = size >= config_.beam ? config_.beam : size;
 		for (int i = 0; i < cur_bpe_beam_size_; i++) {

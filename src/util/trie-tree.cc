@@ -49,6 +49,7 @@ TrieNode::TrieNode() {
 	key_ = -1;
 	is_word_ = false;
     num_child_ = 0;
+    layer_ = -1;
 	info_ = NULL;
 }
 
@@ -112,8 +113,8 @@ int TrieNode::NumChild() {
 
 std::string TrieNode::ToStr() {
 	char buffer[1024] = {0};
-	sprintf(buffer, "[key:%d, is_word: %s, info: %s]",
-			key_, is_word_?"true":"false", info_==NULL ? "NULL":info_->ToStr().c_str());
+	sprintf(buffer, "[key: %d, is_word: %s, layer: %d, info: %s]",
+			key_, is_word_?"true":"false", layer_, info_==NULL ? "NULL":info_->ToStr().c_str());
 	return std::string(buffer);
 }
 
@@ -205,8 +206,10 @@ TrieNode* Trie::Insert(std::vector<TrieKey> &bpe_ids, std::string& word,
 	for (int i = 0; i < bpe_ids.size(); i++) {
 		TrieKey key = bpe_ids[i];
 		np = p->GetNode(key);
-		if (np == NULL)
+		if (np == NULL) {
 			np = p->AddNode(key);
+            np->layer_ = i;
+        }
 		p = np;
 	}
 

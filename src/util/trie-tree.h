@@ -51,6 +51,7 @@ public:
 	TrieKey key_;
 	bool is_word_;
     int num_child_;
+    int layer_;
 	WordInfo *info_;
 
 	TrieNode();

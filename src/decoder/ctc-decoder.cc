@@ -1575,15 +1575,16 @@ void CTCDecoder::BeamSearchEasyTopk(const Matrix<BaseFloat> &loglikes) {
 						if (config_.use_kenlm && kenlm_arpa_ != NULL) {
 							index = kenlm_vocab_->Index(wordid_to_word_[key]);
 							ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+							// Convert to natural log.
+							ngram_logp *= M_LN10;
 							n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
 							for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
 								index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[key]);
 								sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
+                                sub_ngram_logp *= M_LN10;
 								ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
 								//ngram_logp = std::max(ngram_logp, sub_ngram_logp);
 							}
-							// Convert to natural log.
-							ngram_logp *= M_LN10;
 						} else if (const_arpa_ != NULL)
 					#endif
                         {
@@ -1872,15 +1873,16 @@ void CTCDecoder::BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes) {
 							if (config_.use_kenlm && kenlm_arpa_ != NULL) {
 								index = kenlm_vocab_->Index(wordid_to_word_[key]);
 								ngram_logp = kenlm_arpa_->Score(preseq->ken_state, index, n_preseq->ken_state);
+								// Convert to natural log.
+								ngram_logp *= M_LN10;
 								n_preseq->sub_ken_state.resize(sub_kenlm_apra_.size());
 								for (int i = 0; i < sub_kenlm_apra_.size(); i++) {
 									index = sub_kenlm_vocab_[i]->Index(wordid_to_word_[key]);
 									sub_ngram_logp = sub_kenlm_apra_[i]->Score(preseq->sub_ken_state[i], index, n_preseq->sub_ken_state[i]);
+                                    sub_ngram_logp *= M_LN10;
 									ngram_logp = LogAdd(ngram_logp, sub_ngram_logp);
 									//ngram_logp = std::max(ngram_logp, sub_ngram_logp);
 								}
-								// Convert to natural log.
-								ngram_logp *= M_LN10;
 							} else if (const_arpa_ != NULL)
 						#endif
 							{
