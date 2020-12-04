@@ -197,13 +197,13 @@ void CTCDecoderWord::GreedySearch(const Matrix<BaseFloat> &loglikes) {
         k = loglikes(n, topk+k);
         pre_seq->logp_blank += logp;
         pre_seq->prefix_bpe.push_back(k);
-    }    
+    }
     std::vector<int> words;
     words.push_back(config_.blank);
     for (int i = 1; i < pre_seq->prefix_bpe.size(); i++) {
         if (pre_seq->prefix_bpe[i] != config_.blank && pre_seq->prefix_bpe[i] != pre_seq->prefix_bpe[i-1])
             words.push_back(pre_seq->prefix_bpe[i]);
-    }    
+    }
     pre_seq->prefix_bpe = words;
 }
 
@@ -305,7 +305,7 @@ std::string CTCDecoderWord::DebugBeam(std::vector<PrefixSeqWord> &beam, int n, i
         ostr << ", Word: ";
         for (int j = 1; j < seq.prefix_word.size(); j++)
              ostr << wordid_to_word_[seq.prefix_word[j]] << ' ';
-         ostr << "; score = " << seq.logp << ", ctc_score = " << seq.logp-seq.logp_lm << 
+         ostr << "; score = " << seq.logp << ", ctc_score = " << seq.logp-seq.logp_lm <<
          ", lm_score = " << seq.logp_lm << ", trie_node = " << seq.trie_node << std::endl;
     }
     return ostr.str();

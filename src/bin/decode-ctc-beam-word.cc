@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
 		}
 
 		// decoding
-		if (search == "beam" && decoder_opts.am_topk > 0)
+		if (search == "beam")
 			decoder->BeamSearchTopk(loglikes);
 		else if (search == "greedy")
 			decoder->GreedySearch(loglikes);

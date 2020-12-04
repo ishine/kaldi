@@ -30,7 +30,8 @@ BINFILES = align-equal align-equal-compiled acc-tree-stats \
         transform-vec align-text matrix-dim copy-align ali-join-to-post latgen-faster-ctc \
 		compile-train-graphs-ctc align-compiled-mapped-ctc copy-fst arpa2fst post-to-smat \
 		latgen-faster-ctc-mapped-parallel analyze-pdf-acc triphone-to-pdf compile-questions-phone \
-        compile-graph compare-int-vector decode-faster-rnnt decode-ctc-beam decode-ctc-beam-word
+        compile-graph compare-int-vector decode-faster-rnnt decode-ctc-beam decode-ctc-beam-word \
+		kenlm-evaluate
 
 
 OBJFILES =

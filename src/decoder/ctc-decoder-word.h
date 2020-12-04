@@ -47,7 +47,6 @@ struct PrefixSeqWord {
 	}
 
 	void Reset() {
-		//prefix.resize(PREFIX_MAX_LEN, 0);
         prefix_bpe.clear();
         prefix_word.clear();
         prefix_bpe.reserve(PREFIX_BPE_MAX_LEN);
@@ -110,7 +109,7 @@ struct CTCDecoderWordUtil {
 	static bool compare_PrefixSeqWord_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
 		return a->logp > b->logp;
 	}
-    
+
 	static bool compare_PrefixSeqBpe_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
         KALDI_ASSERT(a->trie_node != NULL && b->trie_node != NULL);
 
@@ -143,7 +142,7 @@ struct CTCDecoderWordOptions {
 	std::string word2wordid_rxfilename;
 	std::string word2bpeid_rxfilename;
 
-	CTCDecoderWordOptions(): beam(5), word_beam(10), blank(0), am_topk(0),
+	CTCDecoderWordOptions(): beam(10), word_beam(10), blank(0), am_topk(0),
 					   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1),
 					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(true), vocab_size(7531),
 					   bpe2bpeid_rxfilename(""), word2wordid_rxfilename(""), word2bpeid_rxfilename("")
