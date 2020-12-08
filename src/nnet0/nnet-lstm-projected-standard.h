@@ -342,8 +342,7 @@ class LstmProjectedStandard : public UpdatableComponent {
       }
     }
 
-    if (ntruncated_bptt_size_ != ntruncated_bptt_size)
-    {
+    if (ntruncated_bptt_size_ != ntruncated_bptt_size) {
     	ntruncated_bptt_size_ = ntruncated_bptt_size;
     	KALDI_LOG << "Backpropagate Truncated BPTT size: " << ntruncated_bptt_size_;
     }
@@ -451,8 +450,8 @@ class LstmProjectedStandard : public UpdatableComponent {
       // c(t-1) -> c(t) via forget-gate
       y_c[t]->AddMatMatElements(1.0, *y_c[t-1], *y_f[t], 1.0);
 
-      y_c[t]->ApplyFloor(-clip_cell_);   // optional clipping of cell activation
-      y_c[t]->ApplyCeiling(clip_cell_);  // google paper Interspeech2014: LSTM for LVCSR
+      // y_c[t]->ApplyFloor(-clip_cell_);   // optional clipping of cell activation
+      // y_c[t]->ApplyCeiling(clip_cell_);  // google paper Interspeech2014: LSTM for LVCSR
 
       // h tanh squashing
       y_h[t]->Tanh(*y_c[t]);

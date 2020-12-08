@@ -257,7 +257,6 @@ void CTCDecoderWord::BeamMerge(std::vector<PrefixSeqWord*> &bpe_beam,
 	}
 
 
-
 	beam_union_.clear();
 	for (int i = 0; i < next_word_beam_size_; i++) {
 		n_preseq = &next_word_beam_[i];
