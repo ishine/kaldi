@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
         "Decode, reading log-likelihoods (CTC acoustic model output) as matrices.\n"
         "Note: you'll usually want decode-faster-ctc rather than this program for wfst framework.\n"
         "\n"
-        "Usage:   decode-ctc-beam-word [options] <lstm-language-model(optional)> <loglikes-rspecifier> <words-wspecifier>\n";
+        "Usage:   decode-ctc-beam-word [options] <loglikes-rspecifier> <words-wspecifier>\n";
 
     ParseOptions po(usage);
     bool binary = true;
@@ -45,6 +45,7 @@ int main(int argc, char *argv[]) {
     float blank_posterior_scale = -1.0;
     std::string word_syms_filename;
     std::string const_arpa_filename;
+    std::string rnnlm_filename;
     std::string sub_language_models;
     po.Register("binary", &binary, "Write output in binary mode");
     po.Register("search", &search, "search function(beam|greedy)");
@@ -52,7 +53,8 @@ int main(int argc, char *argv[]) {
     po.Register("blank-posterior-scale", &blank_posterior_scale, "For CTC decoding, "
     		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
     po.Register("const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
-    po.Register("sub-language-models", &sub_language_models, "Sub language models(model1:model2:...)");
+    po.Register("sub-language-models", &sub_language_models, "Sub arpa language models(model1:model2:...)");
+    po.Register("rnnlm", &rnnlm_filename, "Using rnnlm(lstm) language model (optional).");
 
     KaldiLstmlmWrapperOpts lstmlm_opts;
     CTCDecoderWordOptions decoder_opts;
@@ -61,21 +63,16 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    std::string  lstmlm_rxfilename = "",
-					loglikes_rspecifier,
+    std::string  loglikes_rspecifier,
 					words_wspecifier;
 
-    if (po.NumArgs() == 3) {
-        lstmlm_rxfilename = po.GetArg(1);
-        loglikes_rspecifier = po.GetArg(2);
-        words_wspecifier = po.GetArg(3);
-    } else if (po.NumArgs() == 2) {
-        loglikes_rspecifier = po.GetArg(1);
-        words_wspecifier = po.GetArg(2);
-    } else { 
+    if (po.NumArgs() != 2) {
 		po.PrintUsage();
 		exit(1);
     }
+
+    loglikes_rspecifier = po.GetArg(1);
+	words_wspecifier = po.GetArg(2);
 
     Int32VectorWriter words_writer(words_wspecifier);
 
@@ -90,8 +87,8 @@ int main(int argc, char *argv[]) {
 
     // Reads the language model.
 	KaldiLstmlmWrapper *lstmlm = NULL;
-	if (lstmlm_rxfilename != "")
-		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, "", lstmlm_rxfilename);
+	if (rnnlm_filename != "")
+		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, "", rnnlm_filename);
 
 	std::vector<std::string> sub_lm_filenames;
 	if (sub_language_models != "")
@@ -101,20 +98,23 @@ int main(int argc, char *argv[]) {
 #if HAVE_KENLM == 1
 	KenModel *ken_arpa = NULL;
 	std::vector<KenModel *> sub_ken_arpa;
+	int num_sub = sub_lm_filenames.size();
+	if (const_arpa_filename != "")
+		ken_arpa = new KenModel(const_arpa_filename.c_str());
+    sub_ken_arpa.resize(num_sub);
+	for (int i = 0; i < num_sub; i++)
+		sub_ken_arpa[i] = new KenModel(sub_lm_filenames[i].c_str());
 #endif
 
-	int num_sub = sub_lm_filenames.size();
+
 	// decoder
 	CTCDecoderWord *decoder;
-	if (const_arpa_filename != "" && decoder_opts.rnnlm_scale < 1.0 && decoder_opts.use_kenlm) {
 #if HAVE_KENLM == 1
-		ken_arpa = new KenModel(const_arpa_filename.c_str());
-        sub_ken_arpa.resize(num_sub);
-		for (int i = 0; i < num_sub; i++)
-			sub_ken_arpa[i] = new KenModel(sub_lm_filenames[i].c_str());
+	if (ken_arpa != NULL || lstmlm != NULL) {
 		decoder = new CTCDecoderWord(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa);
+	} else
 #endif
-	} else {
+	{
 		KALDI_ERR << "UnSupported ConstArpaLm " << const_arpa_filename;
     }
 

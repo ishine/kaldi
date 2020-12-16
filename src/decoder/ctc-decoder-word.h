@@ -90,7 +90,6 @@ struct PrefixSeqWord {
 	// rnn language model history
 	LstmlmHistroy *lmhis;
 	LstmlmHistroy *next_lmhis;
-	Vector<BaseFloat> *lmlogp;
 
 	// prefix tree for word dict
 	TrieNode *trie_node;
@@ -168,7 +167,6 @@ struct CTCDecoderWordOptions {
 };
 
 class CTCDecoderWord {
-	typedef Vector<BaseFloat> Pred;
 	public:
 
 #if HAVE_KENLM == 1
@@ -221,8 +219,13 @@ class CTCDecoderWord {
 		// rnn lm
 		std::vector<int> rd_;
 		std::vector<int> cd_;
-		std::vector<Vector<BaseFloat> > rnnlm_logp_;
 		std::vector<LstmlmHistroy> rnnlm_his_;
+		std::vector<int> in_words_;
+		std::vector<std::vector<int> > out_words_;
+		std::vector<std::vector<PrefixSeqWord*> > out_preseq_;
+		std::vector<std::vector<BaseFloat> > out_words_score_;
+		std::vector<LstmlmHistroy*> rnnlm_his_in_;
+		std::vector<LstmlmHistroy*> rnnlm_his_out_;
 
 		// beam search
 		Trie word_trie_;

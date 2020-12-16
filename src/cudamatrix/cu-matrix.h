@@ -801,6 +801,12 @@ class CuMatrixBase {
   Real AbsMax() const;
   Real Min() const;
 
+  /// *this = M*log(M)
+  void Entropy(const CuMatrixBase<Real> &A);
+
+  /// *this = target*log(posterior)
+  void CrossEntropy(const CuMatrixBase<Real> &posterior, const CuMatrixBase<Real> &target);
+
   /// Return the trace. If check_square = true, will crash if matrix is not square.
   Real Trace(bool check_square = true) const;
 

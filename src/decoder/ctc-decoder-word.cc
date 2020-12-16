@@ -114,15 +114,17 @@ void CTCDecoderWord::Initialize() {
 	cur_word_beam_size_ = 0;
 
 	// rnn lm
-    if (config_.rnnlm_scale > 0) {
+    if (config_.rnnlm_scale != 0) {
     	LstmlmHistroy his(rd_, cd_, kSetZero);
-    	rnnlm_his_.resize(2*config_.word_beam, his);
-    	rnnlm_logp_.resize(config_.word_beam);
+    	rnnlm_his_.resize(2*beam_size, his);
     	for (int i = 0; i < beam_size; i++) {
     		cur_beam_[i].lmhis = &rnnlm_his_[i];
     		cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size+i];
-    		cur_beam_[i].lmlogp = &rnnlm_logp_[i];
     	}
+    	out_words_.resize(beam_size);
+    	out_preseq_.resize(beam_size);
+    	out_words_score_.resize(beam_size);
+    	rnnlm_his_out_.resize(beam_size);
     }
 }
 
@@ -153,6 +155,14 @@ void CTCDecoderWord::InitDecoding(int topk) {
 	next_word_beam_size_ = 0;
 
     //beam_union_.reserve(beam_size*topk);
+
+	if (config_.rnnlm_scale != 0) {
+		for (int i = 0; i < beam_size; i++) {
+			out_words_[i].reserve(topk);
+			out_preseq_[i].reserve(topk);
+			out_words_score_[i].reserve(topk);
+		}
+	}
 
 #if HAVE_KENLM == 1
     if (kenlm_arpa_ != NULL)
@@ -321,24 +331,17 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 	std::vector<int> next_scene_bpes(vocab_size);
 	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
 	float ngram_logp = kLogZeroFloat, rnnlm_logp = kLogZeroFloat, sub_ngram_logp = kLogZeroFloat,
-			rscale = config_.rnnlm_scale,
-            blank_penalty = log(config_.blank_penalty);
+			rscale = config_.rnnlm_scale, blank_penalty = log(config_.blank_penalty);
 	int end_t, index, topk = likes_size/2, key, cur_his = 0, start = 0;
+	int beam_size = config_.beam + config_.word_beam;
     bool skip_blank = false, uselm;
     TrieNode *node, *next_node;
-
-    // rnnlm
-    std::vector<int> in_words;
-    std::vector<Vector<BaseFloat>*> nnet_out;
-    std::vector<LstmlmHistroy*> context_in, context_out;
 
 	InitDecoding(topk);
 
 	// decode one utterance
 	for (int n = start; n < nframe; n++) {
 		logp_b = loglikes(n, config_.blank);
-
-		// Lstm language model process, beam streams parallel.
 		uselm = false;
 		if (config_.lm_scale > 0.0) {
 		   if (config_.blank_threshold <= 0)
@@ -346,35 +349,6 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		   else if (config_.blank_threshold > 0 && Exp(logp_b) <= config_.blank_threshold)
 				uselm = true;
 		}
-
-		if (uselm && rscale != 0) {
-			in_words.clear();
-			nnet_out.clear();
-			context_in.clear();
-			context_out.clear();
-
-			// always padding to beam streams
-			int i = 0, bz = 0;
-			while (bz < config_.beam) {
-				preseq = &cur_beam_[i];
-				in_words.push_back(preseq->PrefixWordBack());
-				context_in.push_back(preseq->lmhis);
-				context_out.push_back(preseq->next_lmhis);
-				nnet_out.push_back(preseq->lmlogp);
-				bz++;
-				if (bz < cur_word_beam_size_) i++;
-			}
-
-			// beam streams parallel process
-			lstmlm_->ForwardMseq(in_words, context_in, nnet_out, context_out);
-
-			// get the valid streams
-			for (int i = 0; i < cur_word_beam_size_; i++) {
-				preseq = &cur_beam_[cur_bpe_beam_size_+i];
-				preseq->lmlogp->ApplyLog();
-			}
-		}
-
 
 		// blank pruning
 		// Only the probability of ending in blank gets updated.
@@ -494,10 +468,9 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					if (config_.lm_scale > 0.0) {
 						// rnn lm score
 						if (rscale != 0) {
-							rnnlm_logp = (*preseq->lmlogp)(key);
-							// rnnlm history
+							out_words_[i].push_back(word_id);
+							out_preseq_[i].push_back(n_preseq);
 							n_preseq->lmhis = preseq->next_lmhis;
-							// n_preseq->next_lmhis = preseq->lmhis;
 						}
 
 						// ngram lm score
@@ -567,6 +540,43 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 			}
 		}
 
+		// rnn lm score
+		if (uselm && rscale != 0) {
+			// always padding to beam streams
+			int i = 0, bz = 0, size = 0;
+			while (bz < config_.beam + config_.word_beam) {
+				preseq = &cur_beam_[i];
+				in_words_.push_back(preseq->PrefixWordBack());
+				rnnlm_his_in_.push_back(preseq->lmhis);
+				rnnlm_his_out_.push_back(preseq->next_lmhis);
+				bz++;
+				if (bz < cur_bpe_beam_size_+cur_word_beam_size_) i++;
+			}
+
+			lstmlm_->ForwardMseqClass(in_words_, rnnlm_his_in_,
+										rnnlm_his_out_, out_words_, out_words_score_);
+
+			for (int i = 0; i < out_words_.size(); i++) {
+				size = out_words_[i].size();
+				if (size == 0)
+					continue;
+
+				for (int j = 0; j < size; j++) {
+					rnnlm_logp = Log(out_words_score_[i][j]);
+					n_preseq = out_preseq_[i][j];
+					n_preseq->logp_lm += config_.lm_scale*rnnlm_logp;
+					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
+				}
+
+				out_words_[i].clear();
+				out_preseq_[i].clear();
+				out_words_score_[i].clear();
+			}
+			in_words_.clear();
+			rnnlm_his_in_.clear();
+			rnnlm_his_out_.clear();
+		}
+
 		std::vector<PrefixSeqWord*> bpe_beam;
 		std::vector<PrefixSeqWord*> word_beam;
 		BeamMerge(bpe_beam, word_beam, skip_blank);
@@ -576,10 +586,8 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		cur_bpe_beam_size_ = size >= config_.beam ? config_.beam : size;
 		for (int i = 0; i < cur_bpe_beam_size_; i++) {
 			cur_beam_[i] = *bpe_beam[i];
-			if (rscale != 0) {
-				cur_beam_[i].lmlogp = &rnnlm_logp_[i];
-				cur_beam_[i].next_lmhis = &rnnlm_his_[config_.beam*cur_his+i];
-            }
+			if (rscale != 0)
+				cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size*cur_his+i];
         }
 
 		std::sort(word_beam.begin(), word_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqWord_reverse);
@@ -587,6 +595,8 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		cur_word_beam_size_ = size >= config_.word_beam ? config_.word_beam : size;
 		for (int i = 0; i < cur_word_beam_size_; i++) {
 			cur_beam_[i+cur_bpe_beam_size_] = *word_beam[i];
+			if (rscale != 0)
+				cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size*cur_his+i+cur_bpe_beam_size_];
 		}
 
         if (kaldi::g_kaldi_verbose_level >= 1)

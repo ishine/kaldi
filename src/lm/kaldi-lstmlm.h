@@ -57,11 +57,14 @@ struct KaldiLstmlmWrapperOpts {
   std::string unk_symbol;
   std::string sos_symbol;
   std::string eos_symbol;
+  std::string class_boundary;
+  std::string class_constant;
   int num_stream;
   bool remove_head;
+  bool use_classlm;
 
   KaldiLstmlmWrapperOpts() : unk_symbol("<unk>"), sos_symbol("<s>"), eos_symbol("</s>"),
-		  num_stream(1), remove_head(false) {}
+		  num_stream(1), remove_head(false), use_classlm(false) {}
 
   void Register(OptionsItf *opts) {
     opts->Register("unk-symbol", &unk_symbol, "Symbol for out-of-vocabulary "
@@ -70,8 +73,12 @@ struct KaldiLstmlmWrapperOpts {
                    "neural network language model.");
     opts->Register("eos-symbol", &eos_symbol, "End of sentence symbol in "
                    "neural network language model.");
+    opts->Register("class-boundary", &class_boundary, "The fist index of each class(and final class class) in class based language model");
+    opts->Register("class-constant", &class_constant, "The constant zt<sum(exp(yi))> of each class(and final class class) in class based language model");
     opts->Register("num-stream", &num_stream, "Number of utterance process in parallel in "
                    "neural network language model.");
+    opts->Register("use_classlm", &use_classlm, "Whether is class neural lm.")
+
   }
 };
 
@@ -102,15 +109,26 @@ class KaldiLstmlmWrapper {
 		  	   Vector<BaseFloat> *nnet_out, LstmlmHistroy *context_out);
 
   void ForwardMseq(const std::vector<int> &in_words,
-		  	  	  	  	  	  	  	  	  const std::vector<LstmlmHistroy*> &context_in,
+		  	  	  	  	  	  	  	  	  std::vector<LstmlmHistroy*> &context_in,
 										  std::vector<Vector<BaseFloat>*> &nnet_out,
 										  std::vector<LstmlmHistroy*> &context_out);
+
+  void ForwardMseqClass(const std::vector<int> &in_words,
+		  	  	  	  	  std::vector<LstmlmHistroy*> &context_in,
+						  std::vector<LstmlmHistroy*> &context_out,
+						  std::vector<std::vector<int> > &out_words,
+						  std::vector<std::vector<BaseFloat> > &out_words_logprob);
 
   inline int GetWordId(int wid) { return label_to_lmwordid_[wid];}
   inline int GetWordId(std::string word) { return word_to_lmwordid_[word];}
 
+  void ResetStreams(int cur_stream);
+
  private:
   nnet0::Nnet nnlm_;
+  std::vector<int> word2class_;
+  std::vector<int> class_boundary_;
+  std::vector<BaseFloat> class_constant_;
   std::vector<std::string> label_to_word_;
   std::vector<int> label_to_lmwordid_;
   std::unordered_map<std::string, int> word_to_lmwordid_;
@@ -139,4 +157,4 @@ class KaldiLstmlmWrapper {
 
 }  // namespace kaldi
 
-#endif  // KALDI_LM_KALDI_NNLM_H_
+#endif  // KALDI_LM_KALDI_LSTMLM_H_
