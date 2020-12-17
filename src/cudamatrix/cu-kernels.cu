@@ -4336,10 +4336,15 @@ void cudaF_sum_mat_cols(int Gr, int Bl, float* result, const float* mat,
   _transform_reduce_mat_cols<<<Gr,Bl>>>(result,mat,d,
       TransReduceOp<SUM,float>());
 }
-void cudaF_add_col_sum_mat(int Gr, int Bl, float* result, const float* mat,
+void cudaF_add_row_sum_mat(float* result, const float* mat, void* scratch,
                            const MatrixDim d, const float alpha,
                            const float beta) {
-  _transform_reduce_mat_cols<<<Gr, Bl>>>(result, mat, d,
+  //_strided_reduction_fused(result, mat, scratch, d, alpha, beta);
+}
+void cudaF_add_col_sum_mat(int Gr, int Bl, float* result, const float* mat,
+                           const MatrixDim d, const float alpha,
+                           const float beta, cudaStream_t s) {
+  _transform_reduce_mat_cols<<<Gr, Bl,0,s>>>(result, mat, d,
       TransReduceOp<SUMAB, float>(alpha, beta));
 }
 
@@ -5067,10 +5072,15 @@ void cudaD_sum_mat_cols(int Gr, int Bl, double* result, const double* mat,
   _transform_reduce_mat_cols<<<Gr,Bl>>>(result,mat,d,
       TransReduceOp<SUM,double>());
 }
+void cudaD_add_row_sum_mat(double* result, const double* mat, void* scratch,
+                           const MatrixDim d, const double alpha,
+                           const double beta, cudaStream_t s) {
+  //_strided_reduction_fused(result, mat, scratch, d, alpha, beta);
+}
 void cudaD_add_col_sum_mat(int Gr, int Bl, double* result, const double* mat,
                            const MatrixDim d, const double alpha,
-                           const double beta) {
-  _transform_reduce_mat_cols<<<Gr, Bl>>>(result, mat, d,
+                           const double beta, cudaStream_t s) {
+  _transform_reduce_mat_cols<<<Gr, Bl,0,s>>>(result, mat, d,
       TransReduceOp<SUMAB, double>(alpha, beta));
 }
 

@@ -3266,7 +3266,7 @@ void CrossEntropyStreamed(std::vector<CuSubMatrix<Real>* > &xentropy,
 #endif
 	{
 		for (int32 i = 0; i < size; i++)
-			xentropy[i]->Mat().CrossEntropy(*nnetout[i], *target[i]);
+			xentropy[i]->Mat().CrossEntropy(nnetout[i]->Mat(), target[i]->Mat());
 	}
 }
 
@@ -3306,7 +3306,7 @@ void EntropyStreamed(std::vector<CuSubMatrix<Real>* > &entropy, const std::vecto
 #endif
 	{
 		for (int32 i = 0; i < size; i++)
-			entropy[i]->Mat().Entropy(*mat[i]);
+			entropy[i]->Mat().Entropy(mat[i]->Mat());
 	}
 }
 
@@ -4486,7 +4486,7 @@ void CuMatrixBase<Real>::Entropy(const CuMatrixBase<Real> &mat) {
   } else
 #endif
   {
-    Mat().Entropy(mat);
+    Mat().Entropy(mat.Mat());
   }
 }
 
@@ -4513,7 +4513,7 @@ void CuMatrixBase<Real>::CrossEntropy(const CuMatrixBase<Real> &posterior, const
   } else
 #endif
   {
-    Mat().CrossEntropy(posterior, target);
+    Mat().CrossEntropy(posterior.Mat(), target.Mat());
   }
 }
 

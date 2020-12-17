@@ -77,7 +77,7 @@ struct KaldiLstmlmWrapperOpts {
     opts->Register("class-constant", &class_constant, "The constant zt<sum(exp(yi))> of each class(and final class class) in class based language model");
     opts->Register("num-stream", &num_stream, "Number of utterance process in parallel in "
                    "neural network language model.");
-    opts->Register("use_classlm", &use_classlm, "Whether is class neural lm.")
+    opts->Register("use_classlm", &use_classlm, "Whether is class neural lm.");
 
   }
 };
@@ -109,12 +109,12 @@ class KaldiLstmlmWrapper {
 		  	   Vector<BaseFloat> *nnet_out, LstmlmHistroy *context_out);
 
   void ForwardMseq(const std::vector<int> &in_words,
-		  	  	  	  	  	  	  	  	  std::vector<LstmlmHistroy*> &context_in,
+		  	  	  	  	  	  	  	  	  const std::vector<LstmlmHistroy*> &context_in,
 										  std::vector<Vector<BaseFloat>*> &nnet_out,
 										  std::vector<LstmlmHistroy*> &context_out);
 
   void ForwardMseqClass(const std::vector<int> &in_words,
-		  	  	  	  	  std::vector<LstmlmHistroy*> &context_in,
+		  	  	  	  	  const std::vector<LstmlmHistroy*> &context_in,
 						  std::vector<LstmlmHistroy*> &context_out,
 						  std::vector<std::vector<int> > &out_words,
 						  std::vector<std::vector<BaseFloat> > &out_words_logprob);
@@ -129,7 +129,7 @@ class KaldiLstmlmWrapper {
   std::vector<int> word2class_;
   std::vector<int> class_boundary_;
   std::vector<BaseFloat> class_constant_;
-  std::vector<std::string> label_to_word_;
+  std::vector<std::string> symid_to_word_;
   std::vector<int> label_to_lmwordid_;
   std::unordered_map<std::string, int> word_to_lmwordid_;
   std::vector<int> recurrent_dim_;

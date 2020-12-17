@@ -307,6 +307,7 @@ void AddColSumMatStreamed(Real alpha, std::vector<CuSubVector<Real>* > &des_vec,
 			size_t dimGrid = src[i]->NumRows();
 
 			cuda_row_sum_reduce(dimGrid, dimBlock, alpha, des_vec[i]->Data(), src[i]->Data(), src[i]->Dim(), beta, des_vec[i]->GetLocalCudaStream());
+            // cuda_add_col_sum_mat(src[i]->NumRows(), CU1DBLOCK, des_vec[i]->Data(), src[i]->Data(), src[i]->Dim(), alpha, beta, des_vec[i]->GetLocalCudaStream());
 	    }
 	    CU_SAFE_CALL(cudaGetLastError());
 

@@ -171,8 +171,7 @@ class ClassAffineTransform : public UpdatableComponent {
     // multiply by weights^t
     // out->AddMatMat(1.0, in, kNoTrans, linearity_, kTrans, 1.0);
 
-    for (int p = 0; p < input_patches_.size(); p++)
-    {
+    for (int p = 0; p < input_patches_.size(); p++) {
         delete input_patches_[p];   
         delete output_patches_[p];  
     }
@@ -189,10 +188,8 @@ class ClassAffineTransform : public UpdatableComponent {
     updateclass_linearity_.clear();
     updateclass_bias_.clear();
 
-    for (int i = 1; i <= size; i++)
-    {
-    	if (i == size || sortedclass_id_[i] != sortedclass_id_[i-1])
-    	{
+    for (int i = 1; i <= size; i++) {
+    	if (i == size || sortedclass_id_[i] != sortedclass_id_[i-1]) {
     		cid = sortedclass_id_[i-1];
     		clen = class_boundary_[cid+1] - class_boundary_[cid];
     		input_patches_.push_back(new CuSubMatrix<BaseFloat>(input_sorted_.RowRange(beg, i-beg)));
@@ -202,12 +199,21 @@ class ClassAffineTransform : public UpdatableComponent {
     		beg = i;
     	}
     }
+
     // class
     clen = output_dim_ - class_boundary_.back();
     input_patches_.push_back(new CuSubMatrix<BaseFloat>(input_sorted_.RowRange(0, input_sorted_.NumRows())));
 	updateclass_linearity_.push_back(class_linearity_.back());
 	updateclass_bias_.push_back(class_bias_.back());
 	output_patches_.push_back(new CuSubMatrix<BaseFloat>(out->ColRange(class_boundary_.back(), clen)));
+
+    /*
+    size = output_patches_.size();
+    for (int i = 0; i < size; i++) {
+        output_patches_[i]->AddVecToRows(1.0, *updateclass_bias_[i], 0.0);
+        output_patches_[i]->AddMatMat(1.0, *input_patches_[i], kNoTrans, *updateclass_linearity_[i], kTrans, 1.0);
+    }
+    */
 
 #if HAVE_CUDA == 1
     SetStream(input_patches_, streamlist_);
@@ -264,6 +270,14 @@ class ClassAffineTransform : public UpdatableComponent {
 	    }
 
         updateclass_linearity_.resize(out_diff_patches_.size());
+
+        /*
+        size = in_diff_patches_.size();
+        for (int i = 0; i < size; i++) {
+	        in_diff_patches_[i]->AddMatMat(1.0, *out_diff_patches_[i], kNoTrans, *updateclass_linearity_[i], kNoTrans, 0.0);
+        }
+        */
+
 #if HAVE_CUDA == 1
 	    SetStream(in_diff_patches_, streamlist_);
 	    SetStream(out_diff_patches_, streamlist_);
@@ -297,8 +311,7 @@ class ClassAffineTransform : public UpdatableComponent {
 	    out_diff_patches_.push_back(out_diff_class);
   }
 
-  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
-  {
+  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
 	    // we use following hyperparameters from the option class
 	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
 	    const BaseFloat lr_bias = opts_.learn_rate * bias_learn_rate_coef_;
@@ -310,6 +323,19 @@ class ClassAffineTransform : public UpdatableComponent {
 		local_lrate = -lr;
 		local_lrate_bias = -lr_bias;
 
+/*
+        int size = updateclass_linearity_corr_.size();
+        for (int i = 0; i < size; i++) {
+            // compute gradient (incl. momentum)
+            updateclass_linearity_corr_[i]->AddMatMat(1.0, *out_diff_patches_[i], kTrans, *input_patches_[i], kNoTrans, mmt);
+            updateclass_bias_corr_[i]->AddRowSumMat(1.0, *out_diff_patches_[i], mmt);
+
+            // l2 regularization
+            if (l2 != 0.0) {
+                updateclass_linearity_[i]->AddMat(-lr*l2*num_frames, *updateclass_linearity_[i]);
+            }
+        }
+*/
 
 #if HAVE_CUDA == 1
 	    SetStream(updateclass_linearity_corr_, streamlist_);
@@ -337,11 +363,19 @@ class ClassAffineTransform : public UpdatableComponent {
 #endif
   }
 
-  void UpdateGradient()
-  {
-	    	// update
-	      //linearity_.AddMat(local_lrate, linearity_corr_);
-	      //bias_.AddVec(local_lrate_bias, bias_corr_);
+  void UpdateGradient() {
+	    // update
+	    //linearity_.AddMat(local_lrate, linearity_corr_);
+	    //bias_.AddVec(local_lrate_bias, bias_corr_);
+
+/*
+        int size = updateclass_linearity_.size();
+        for (int i = 0; i < size; i++) {
+            // compute gradient (incl. momentum)
+            updateclass_linearity_[i]->AddMat(local_lrate, *updateclass_linearity_corr_[i]);
+            updateclass_bias_[i]->AddVec(local_lrate_bias, *updateclass_bias_corr_[i]);
+        }
+*/
 
 #if HAVE_CUDA == 1
 	  	  SetStream(updateclass_linearity_, streamlist_);

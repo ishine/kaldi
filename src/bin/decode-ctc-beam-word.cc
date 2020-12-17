@@ -88,7 +88,7 @@ int main(int argc, char *argv[]) {
     // Reads the language model.
 	KaldiLstmlmWrapper *lstmlm = NULL;
 	if (rnnlm_filename != "")
-		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, "", rnnlm_filename);
+		lstmlm = new KaldiLstmlmWrapper(lstmlm_opts, word_syms_filename, word_syms_filename, rnnlm_filename);
 
 	std::vector<std::string> sub_lm_filenames;
 	if (sub_language_models != "")

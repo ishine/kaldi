@@ -119,8 +119,7 @@ private:
 				crossvalidate = opts->crossvalidate;
  	 		}
 
-	void monitor(Nnet *nnet, kaldi::int64 total_frames, int32 num_frames)
-	{
+	void monitor(Nnet *nnet, kaldi::int64 total_frames, int32 num_frames) {
         // 1st minibatch : show what happens in network
         if (kaldi::g_kaldi_verbose_level >= 1 && total_frames == 0) { // vlog-1
           KALDI_VLOG(1) << "### After " << total_frames << " frames,";
@@ -153,13 +152,11 @@ private:
 
 	    // Select the GPU
 	#if HAVE_CUDA == 1
-	    if (parallel_opts->num_procs > 1)
-	    {
+	    if (parallel_opts->num_procs > 1) {
 	    	//thread_idx = model_sync->GetThreadIdx();
 	    	KALDI_LOG << "MyId: " << parallel_opts->myid << "  ThreadId: " << thread_idx;
 	    	CuDevice::Instantiate().MPISelectGpu(model_sync->gpuinfo_, model_sync->win, thread_idx, this->num_threads);
-	    	for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++)
-	    	{
+	    	for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++) {
 	    		KALDI_LOG << model_sync->gpuinfo_[i].hostname << "  myid: " << model_sync->gpuinfo_[i].myid
 	    					<< "  gpuid: " << model_sync->gpuinfo_[i].gpuid;
 	    	}

@@ -91,10 +91,10 @@ KaldiLstmlmWrapper::KaldiLstmlmWrapper(
 	if (!(word_symbols = fst::SymbolTable::ReadText(word_symbol_table_rxfilename))) {
 		KALDI_ERR << "Could not read symbol table from file " << word_symbol_table_rxfilename;
 	}
-	label_to_word_.resize(word_symbols->NumSymbols());
+	symid_to_word_.resize(word_symbols->NumSymbols());
 	for (int32 i = 0; i < word_symbols->NumSymbols(); i++) {
-		label_to_word_[i] = word_symbols->Find(i);
-		if (label_to_word_[i] == "") {
+		symid_to_word_[i] = word_symbols->Find(i);
+		if (symid_to_word_[i] == "") {
 		  KALDI_ERR << "Could not find word for integer " << i << "in the word "
 			  << "symbol table, mismatched symbol table or you have discoutinuous "
 			  << "integers in your symbol table?";
@@ -131,9 +131,9 @@ KaldiLstmlmWrapper::KaldiLstmlmWrapper(
 
 		//map label id to language model word id
 		unk_ = word_to_lmwordid_[opts.unk_symbol];
-		label_to_lmwordid_.resize(label_to_word_.size());
-		for (int i = 0; i < label_to_word_.size(); i++) {
-			auto it = word_to_lmwordid_.find(label_to_word_[i]);
+		label_to_lmwordid_.resize(symid_to_word_.size());
+		for (int i = 0; i < symid_to_word_.size(); i++) {
+			auto it = word_to_lmwordid_.find(symid_to_word_[i]);
 			if (it != word_to_lmwordid_.end())
 			  label_to_lmwordid_[i] = it->second;
 			else
@@ -246,26 +246,25 @@ void KaldiLstmlmWrapper::ForwardMseq(const std::vector<int> &in_words,
 }
 
 void KaldiLstmlmWrapper::ForwardMseqClass(const std::vector<int> &in_words,
-				std::vector<LstmlmHistroy*> &context_in,
-				std::vector<LstmlmHistroy*> &context_out,
-				std::vector<std::vector<int> > &out_words,
-				std::vector<std::vector<BaseFloat> > &out_words_logprob) {
-	int i, j;
+				                        const std::vector<LstmlmHistroy*> &context_in,
+				                        std::vector<LstmlmHistroy*> &context_out,
+				                        std::vector<std::vector<int> > &out_words,
+				                        std::vector<std::vector<BaseFloat> > &out_words_logprob) {
 	int num_layers = context_in[0]->his_recurrent.size();
 	int cur_stream = in_words.size();
 
 	ResetStreams(cur_stream);
 
 	// restore history
-	for (i = 0; i < num_layers; i++) {
-		for (j = 0; j < num_stream_; j++) {
+	for (int i = 0; i < num_layers; i++) {
+		for (int j = 0; j < num_stream_; j++) {
 			his_recurrent_[i].Row(j).CopyFromVec(context_in[j]->his_recurrent[i]);
 			his_cell_[i].Row(j).CopyFromVec(context_in[j]->his_cell[i]);
 		}
 	}
 	nnlm_.RestoreContext(his_recurrent_, his_cell_);
 
-	for (i = 0; i < num_stream_; i++)
+	for (int i = 0; i < num_stream_; i++)
 		in_words_(i) = in_words[i];
 	in_words_mat_.CopyColFromVec(in_words_, 0);
 	words_.CopyFromMat(in_words_mat_);
@@ -275,8 +274,8 @@ void KaldiLstmlmWrapper::ForwardMseqClass(const std::vector<int> &in_words,
 
 	// save current words history
 	nnlm_.SaveContext(his_recurrent_, his_cell_);
-	for (i = 0; i < num_layers; i++) {
-		for (j = 0; j < num_stream_; j++) {
+	for (int i = 0; i < num_layers; i++) {
+		for (int j = 0; j < num_stream_; j++) {
 			if (context_out[j] != NULL) {
 				context_out[j]->his_recurrent[i] = his_recurrent_[i].Row(j);
 				context_out[j]->his_cell[i] = his_cell_[i].Row(j);
@@ -285,7 +284,8 @@ void KaldiLstmlmWrapper::ForwardMseqClass(const std::vector<int> &in_words,
 	}
 
 	// get word logprob
-	int wid, cid, size, prob, classprob;
+	int wid, cid, size;
+    BaseFloat prob, classprob, total_prob;
 	for (int i = 0; i < num_stream_; i++) {
 		size = out_words[i].size();
 		if (size <= 0)
@@ -299,7 +299,8 @@ void KaldiLstmlmWrapper::ForwardMseqClass(const std::vector<int> &in_words,
 			SubVector<BaseFloat> class_linear_vec(class_linearity_.Row(cid));
 			prob = VecVec(hidden_out_vec, linear_vec) + out_bias_(wid);
 			classprob = VecVec(hidden_out_vec, class_linear_vec) + class_bias_(cid);
-			out_words_logprob[i][j] = prob+classprob-class_constant_[cid]-class_constant_.back();
+			total_prob = prob+classprob-class_constant_[cid]-class_constant_.back();
+            out_words_logprob[i].push_back(prob+classprob);
 		}
 	}
 }
