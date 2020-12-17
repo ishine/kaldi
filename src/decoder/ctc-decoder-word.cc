@@ -117,14 +117,12 @@ void CTCDecoderWord::Initialize() {
     if (config_.rnnlm_scale != 0) {
     	LstmlmHistroy his(rd_, cd_, kSetZero);
     	rnnlm_his_.resize(2*beam_size, his);
-    	for (int i = 0; i < beam_size; i++) {
-    		cur_beam_[i].lmhis = &rnnlm_his_[i];
-    		cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size+i];
-    	}
     	out_words_.resize(beam_size);
     	out_preseq_.resize(beam_size);
     	out_words_score_.resize(beam_size);
-    	rnnlm_his_out_.resize(beam_size);
+    	in_words_.reserve(beam_size);
+    	rnnlm_his_in_.reserve(beam_size);
+    	rnnlm_his_out_.reserve(beam_size);
     }
 }
 
@@ -133,21 +131,21 @@ void CTCDecoderWord::InitDecoding(int topk) {
     // Elements in the beam are (prefix, (p_blank, p_no_blank))
     // Initialize the beam with the empty sequence, a probability of
     // 1 for ending in blank and zero for ending in non-blank (in log space).
+    int beam_size = config_.beam + config_.word_beam;
+    for (int i = 0; i < beam_size; i++) {
+    	cur_beam_[i].lmhis = &rnnlm_his_[i];
+    	cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size+i];
+    }
+
 	PrefixSeqWord *seq = &cur_beam_[0];
     seq->Reset();
 	seq->PrefixBpeAppend(config_.blank);
-	seq->PrefixWordAppend(config_.blank);
+	seq->PrefixWordAppend(config_.sos);
 	seq->logp_blank = 0.0;
 	cur_bpe_beam_size_ = 1;
 	cur_word_beam_size_ = 0;
 
-    if (config_.rnnlm_scale != 0) {
-    	// first input <s>
-    	seq->lmhis->SetZero();
-    }
-
 	// next beam buffer
-    int beam_size = config_.beam + config_.word_beam;
 	next_bpe_beam_.resize(beam_size*topk, PrefixSeqWord());
 	next_bpe_beam_size_ = 0;
 
@@ -157,6 +155,9 @@ void CTCDecoderWord::InitDecoding(int topk) {
     //beam_union_.reserve(beam_size*topk);
 
 	if (config_.rnnlm_scale != 0) {
+    	// first input <s>
+    	seq->lmhis->SetZero();
+
 		for (int i = 0; i < beam_size; i++) {
 			out_words_[i].reserve(topk);
 			out_preseq_[i].reserve(topk);
@@ -330,7 +331,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 	std::vector<float> next_words(vocab_size);
 	std::vector<int> next_scene_bpes(vocab_size);
 	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
-	float ngram_logp = kLogZeroFloat, rnnlm_logp = kLogZeroFloat, sub_ngram_logp = kLogZeroFloat,
+	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
 			rscale = config_.rnnlm_scale, blank_penalty = log(config_.blank_penalty);
 	int end_t, index, topk = likes_size/2, key, cur_his = 0, start = 0;
 	int beam_size = config_.beam + config_.word_beam;
@@ -491,10 +492,11 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 									//ngram_logp = std::max(ngram_logp, sub_ngram_logp);
 								}
 							}
+                            logp_lm = config_.lm_scale*ngram_logp;
 						#endif
 						}
 						// fusion score
-						logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
+						//logp_lm = config_.lm_scale*Log(rscale*Exp(rnnlm_logp) + (1.0-rscale)*Exp(ngram_logp));
 					}
 
 					n_preseq->PrefixBpeAppend(key);
@@ -562,7 +564,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					continue;
 
 				for (int j = 0; j < size; j++) {
-					rnnlm_logp = Log(out_words_score_[i][j]);
+					rnnlm_logp = out_words_score_[i][j];
 					n_preseq = out_preseq_[i][j];
 					n_preseq->logp_lm += config_.lm_scale*rnnlm_logp;
 					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
@@ -572,6 +574,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 				out_preseq_[i].clear();
 				out_words_score_[i].clear();
 			}
+
 			in_words_.clear();
 			rnnlm_his_in_.clear();
 			rnnlm_his_out_.clear();
@@ -596,7 +599,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		for (int i = 0; i < cur_word_beam_size_; i++) {
 			cur_beam_[i+cur_bpe_beam_size_] = *word_beam[i];
 			if (rscale != 0)
-				cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size*cur_his+i+cur_bpe_beam_size_];
+				cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size*cur_his+i+config_.beam];
 		}
 
         if (kaldi::g_kaldi_verbose_level >= 1)
