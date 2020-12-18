@@ -713,7 +713,6 @@ std::string CBXent::Report() {
      std::vector<double> buffer(class_zt_variance_.size());
 
      // zt variance
-	 oss << "]" << std::endl;
 	 for (int i = 0; i < buffer.size(); i++)
         buffer[i] = (class_frames_[i] == 0 ? 0 : class_zt_variance_[i]/class_frames_[i]);
 	 oss << "class zt variance: [ ";

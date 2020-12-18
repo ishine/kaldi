@@ -123,6 +123,7 @@ void CTCDecoderWord::Initialize() {
     	in_words_.reserve(beam_size);
     	rnnlm_his_in_.reserve(beam_size);
     	rnnlm_his_out_.reserve(beam_size);
+        rnnlm_his_table_.resize(2*beam_size, false);
     }
 }
 
@@ -132,9 +133,16 @@ void CTCDecoderWord::InitDecoding(int topk) {
     // Initialize the beam with the empty sequence, a probability of
     // 1 for ending in blank and zero for ending in non-blank (in log space).
     int beam_size = config_.beam + config_.word_beam;
-    for (int i = 0; i < beam_size; i++) {
-    	cur_beam_[i].lmhis = &rnnlm_his_[i];
-    	cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size+i];
+	if (config_.rnnlm_scale != 0) {
+        std::fill(rnnlm_his_table_.begin(), rnnlm_his_table_.end(), false);
+        for (int i = 0; i < beam_size; i++) {
+    	    cur_beam_[i].lmhis = &rnnlm_his_[i];
+    	    cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size+i];
+            cur_beam_[i].idx1 = i;
+            cur_beam_[i].idx2 = beam_size+i;
+            rnnlm_his_table_[i] = true;
+            rnnlm_his_table_[beam_size+i] = true;
+        }
     }
 
 	PrefixSeqWord *seq = &cur_beam_[0];
@@ -331,14 +339,15 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 	std::vector<float> next_words(vocab_size);
 	std::vector<int> next_scene_bpes(vocab_size);
 	float logp = 0, logp_b = 0, logp_lm = 0, n_p_b, n_p_nb;
-	float ngram_logp = 0, rnnlm_logp = 0, sub_ngram_logp = 0,
+	float ngram_logp = 0, sub_ngram_logp = 0,
 			rscale = config_.rnnlm_scale, blank_penalty = log(config_.blank_penalty);
 	int end_t, index, topk = likes_size/2, key, cur_his = 0, start = 0;
-	int beam_size = config_.beam + config_.word_beam;
+	int beam_size = config_.beam + config_.word_beam, cur_beam_size = 0;
     bool skip_blank = false, uselm;
     TrieNode *node, *next_node;
 
 	InitDecoding(topk);
+    cur_beam_size = cur_bpe_beam_size_+cur_word_beam_size_;
 
 	// decode one utterance
 	for (int n = start; n < nframe; n++) {
@@ -355,7 +364,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		// Only the probability of ending in blank gets updated.
 		if (config_.blank_threshold > 0 && Exp(logp_b) > config_.blank_threshold) {
 			logp = logp_b + blank_penalty; // -2.30259
-			for (int i = 0; i < cur_bpe_beam_size_+cur_word_beam_size_; i++) {
+			for (int i = 0; i < cur_beam_size; i++) {
 				preseq = &cur_beam_[i];
 				n_p_b = LogAdd(preseq->logp_blank+logp, preseq->logp_nblank+logp);
                 // n_p_b approximate 1, meanwhile n_p_nb = 0;
@@ -391,7 +400,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
         next_bpe_beam_size_ = 0;
         next_word_beam_size_ = 0;
         skip_blank = false;
-		for (int i = 0; i < cur_bpe_beam_size_+cur_word_beam_size_; i++) {
+		for (int i = 0; i < cur_beam_size; i++) {
 			preseq = &cur_beam_[i];
 			end_t = preseq->PrefixBpeBack();
             if (preseq->trie_node != NULL) {
@@ -430,7 +439,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 				continue;
 
 			// for each beam appending word key
-			for (int i = 0; i < cur_bpe_beam_size_+cur_word_beam_size_; i++) {
+			for (int i = 0; i < cur_beam_size; i++) {
 				preseq = &cur_beam_[i];
 				end_t = preseq->PrefixBpeBack();
 
@@ -472,6 +481,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 							out_words_[i].push_back(word_id);
 							out_preseq_[i].push_back(n_preseq);
 							n_preseq->lmhis = preseq->next_lmhis;
+                            n_preseq->idx1 = preseq->idx2;
 						}
 
 						// ngram lm score
@@ -492,7 +502,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 									//ngram_logp = std::max(ngram_logp, sub_ngram_logp);
 								}
 							}
-                            logp_lm = config_.lm_scale*ngram_logp;
+                            n_preseq->ngram_logp = ngram_logp;
 						#endif
 						}
 						// fusion score
@@ -502,7 +512,11 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->PrefixBpeAppend(key);
 					n_preseq->logp_blank = n_p_b;
 					n_preseq->logp_nblank = n_p_nb;
-					n_preseq->logp_lm += logp_lm;
+                    if (rscale == 0) {
+                        logp_lm = config_.lm_scale*n_preseq->ngram_logp;
+                        n_preseq->logp_lm += logp_lm;
+                    }
+					//n_preseq->logp_lm += logp_lm;
 					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 
 					n_preseq->PrefixWordAppend(word_id);
@@ -518,7 +532,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 						n_preseq->PrefixBpeAppend(key);
 						n_preseq->logp_blank = n_p_b;
 						n_preseq->logp_nblank = n_p_nb;
-						n_preseq->logp_lm += logp_lm;
+						//n_preseq->logp_lm += logp_lm;
 						n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 
 						n_preseq->trie_node = next_node;
@@ -533,7 +547,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					n_preseq->PrefixBpeAppend(key);
 					n_preseq->logp_blank = n_p_b;
 					n_preseq->logp_nblank = n_p_nb;
-					n_preseq->logp_lm += logp_lm;
+					//n_preseq->logp_lm += logp_lm;
 					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_p_b, n_p_nb);
 
 					n_preseq->trie_node = next_node;
@@ -546,13 +560,13 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		if (uselm && rscale != 0) {
 			// always padding to beam streams
 			int i = 0, bz = 0, size = 0;
-			while (bz < config_.beam + config_.word_beam) {
+			while (bz < beam_size) {
 				preseq = &cur_beam_[i];
 				in_words_.push_back(preseq->PrefixWordBack());
 				rnnlm_his_in_.push_back(preseq->lmhis);
 				rnnlm_his_out_.push_back(preseq->next_lmhis);
 				bz++;
-				if (bz < cur_bpe_beam_size_+cur_word_beam_size_) i++;
+				if (bz < cur_beam_size) i++;
 			}
 
 			lstmlm_->ForwardMseqClass(in_words_, rnnlm_his_in_,
@@ -564,9 +578,10 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 					continue;
 
 				for (int j = 0; j < size; j++) {
-					rnnlm_logp = out_words_score_[i][j];
 					n_preseq = out_preseq_[i][j];
-					n_preseq->logp_lm += config_.lm_scale*rnnlm_logp;
+					n_preseq->rnnlm_logp = out_words_score_[i][j];
+				    logp_lm = config_.lm_scale*Log(rscale*Exp(n_preseq->rnnlm_logp) + (1.0-rscale)*Exp(n_preseq->ngram_logp));
+					n_preseq->logp_lm += logp_lm;
 					n_preseq->logp = n_preseq->logp_lm +  LogAdd(n_preseq->logp_blank, n_preseq->logp_nblank);
 				}
 
@@ -587,28 +602,41 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqBpe_reverse);
 		int size = bpe_beam.size();
 		cur_bpe_beam_size_ = size >= config_.beam ? config_.beam : size;
-		for (int i = 0; i < cur_bpe_beam_size_; i++) {
+		for (int i = 0; i < cur_bpe_beam_size_; i++)
 			cur_beam_[i] = *bpe_beam[i];
-			if (rscale != 0)
-				cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size*cur_his+i];
-        }
 
 		std::sort(word_beam.begin(), word_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqWord_reverse);
 		size = word_beam.size();
 		cur_word_beam_size_ = size >= config_.word_beam ? config_.word_beam : size;
-		for (int i = 0; i < cur_word_beam_size_; i++) {
+		for (int i = 0; i < cur_word_beam_size_; i++)
 			cur_beam_[i+cur_bpe_beam_size_] = *word_beam[i];
-			if (rscale != 0)
-				cur_beam_[i].next_lmhis = &rnnlm_his_[beam_size*cur_his+i+config_.beam];
-		}
+
+        cur_beam_size = cur_bpe_beam_size_+cur_word_beam_size_;
+
+        // rearrange rnnlm history
+		if (uselm && rscale != 0) {
+            std::fill(rnnlm_his_table_.begin(), rnnlm_his_table_.end(), false);
+            for (int i = 0; i < cur_beam_size; i++)
+                rnnlm_his_table_[cur_beam_[i].idx1] = true;
+            int j = 0;
+            for (int i = 0; i < beam_size*2; i++) {
+                if (!rnnlm_his_table_[i]) {
+                    cur_beam_[j].idx2 = i;
+                    cur_beam_[j].next_lmhis = &rnnlm_his_[i];
+                    rnnlm_his_table_[i] = true;
+                    j++;
+                }
+               if (j >= cur_beam_size) break;
+            }
+        }
 
         if (kaldi::g_kaldi_verbose_level >= 1)
-            KALDI_VLOG(1) << DebugBeam(cur_beam_, cur_bpe_beam_size_+cur_word_beam_size_, n);
+            KALDI_VLOG(1) << DebugBeam(cur_beam_, cur_beam_size, n);
 
         cur_his = (cur_his+1)%2;
 	}
 
-	DeleteInWordBeam(cur_beam_, cur_bpe_beam_size_+cur_word_beam_size_);
+	DeleteInWordBeam(cur_beam_, cur_beam_size);
 }
 
 

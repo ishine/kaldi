@@ -300,7 +300,7 @@ void KaldiLstmlmWrapper::ForwardMseqClass(const std::vector<int> &in_words,
 			prob = VecVec(hidden_out_vec, linear_vec) + out_bias_(wid);
 			classprob = VecVec(hidden_out_vec, class_linear_vec) + class_bias_(cid);
 			total_prob = prob+classprob-class_constant_[cid]-class_constant_.back();
-            out_words_logprob[i].push_back(prob+classprob);
+            out_words_logprob[i].push_back(total_prob);
 		}
 	}
 }

@@ -53,6 +53,8 @@ struct PrefixSeqWord {
         prefix_word.reserve(PREFIX_WORD_MAX_LEN);
 		logp_blank = kLogZeroFloat;
 		logp_nblank = kLogZeroFloat;
+        ngram_logp = kLogZeroFloat;
+        rnnlm_logp = kLogZeroFloat;
 		logp_lm = 0;
 		logp = 0;
 		trie_node = NULL;
@@ -90,6 +92,8 @@ struct PrefixSeqWord {
 	// rnn language model history
 	LstmlmHistroy *lmhis;
 	LstmlmHistroy *next_lmhis;
+    int idx1;
+    int idx2;
 
 	// prefix tree for word dict
 	TrieNode *trie_node;
@@ -98,6 +102,8 @@ struct PrefixSeqWord {
 	// it ends in a blank and dose not end in a blank at this time step.
 	BaseFloat logp_blank;
 	BaseFloat logp_nblank;
+    BaseFloat ngram_logp;
+    BaseFloat rnnlm_logp;
     BaseFloat logp_lm;
     BaseFloat logp;
 
@@ -226,6 +232,7 @@ class CTCDecoderWord {
 		std::vector<std::vector<BaseFloat> > out_words_score_;
 		std::vector<LstmlmHistroy*> rnnlm_his_in_;
 		std::vector<LstmlmHistroy*> rnnlm_his_out_;
+        std::vector<bool> rnnlm_his_table_;
 
 		// beam search
 		Trie word_trie_;
