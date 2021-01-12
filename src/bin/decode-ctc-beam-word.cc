@@ -45,6 +45,7 @@ int main(int argc, char *argv[]) {
     float blank_posterior_scale = -1.0;
     std::string word_syms_filename;
     std::string const_arpa_filename;
+    std::string ranklm_filename;
     std::string rnnlm_filename;
     std::string sub_language_models;
     po.Register("binary", &binary, "Write output in binary mode");
@@ -54,6 +55,7 @@ int main(int argc, char *argv[]) {
     		"scale blank acoustic posterior by a constant value(e.g. 0.01), other label posteriors are directly used in decoding.");
     po.Register("const-arpa", &const_arpa_filename, "Fusion using const ngram arpa language model (optional).");
     po.Register("sub-language-models", &sub_language_models, "Sub arpa language models(model1:model2:...)");
+    po.Register("ranklm-arpa", &ranklm_filename, "language model for ranking in beam search (optional).");
     po.Register("rnnlm", &rnnlm_filename, "Using rnnlm(lstm) language model (optional).");
 
     KaldiLstmlmWrapperOpts lstmlm_opts;
@@ -104,6 +106,9 @@ int main(int argc, char *argv[]) {
     sub_ken_arpa.resize(num_sub);
 	for (int i = 0; i < num_sub; i++)
 		sub_ken_arpa[i] = new KenModel(sub_lm_filenames[i].c_str());
+    KenModel *rank_ken_arpa = NULL;
+	if (ranklm_filename != "")
+		rank_ken_arpa = new KenModel(ranklm_filename.c_str());
 #endif
 
 
@@ -111,7 +116,7 @@ int main(int argc, char *argv[]) {
 	CTCDecoderWord *decoder;
 #if HAVE_KENLM == 1
 	if (ken_arpa != NULL || lstmlm != NULL) {
-		decoder = new CTCDecoderWord(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa);
+		decoder = new CTCDecoderWord(decoder_opts, lstmlm, ken_arpa, sub_ken_arpa, rank_ken_arpa);
 	} else
 #endif
 	{

@@ -51,6 +51,10 @@ public:
 
 	}
 
+    static bool cmp(std::pair<BaseFloat, int> x1, std::pair<BaseFloat, int> x2) {
+        return x1.first > x2.first;
+    }
+
 	void TopKPerRow(Matrix<BaseFloat> &nnet_out, Matrix<BaseFloat> &out_topk, int32 topk) {
 		int nr = nnet_out.NumRows(), nc = nnet_out.NumCols(), key;
 		float logp, *row_data, *out_data;
@@ -62,6 +66,8 @@ public:
 
 		out_topk.Resize(nr, topk*2, kUndefined);
         std::vector<BaseFloat> row_buffer(nc);
+        std::vector<std::pair<BaseFloat, int> > vec;
+        vec.reserve(topk-1);
 		for (int n = 0; n < nr; n++) {
 			row_data = nnet_out.RowData(n);
 			out_data = out_topk.RowData(n);
@@ -85,6 +91,17 @@ public:
 				out_data[topk+key] = -1;
             }
 
+            // sort
+            for (int i = 1; i < topk; i++)
+                vec.push_back(std::make_pair(out_data[i], out_data[topk+i]));
+
+            std::stable_sort(vec.begin(), vec.end(), cmp);
+            for (int i = 1; i < topk; i++) {
+                out_data[i] = vec[i-1].first;
+                out_data[topk+i] = vec[i-1].second;
+            }
+            vec.clear();
+                
 		    //if (key != topk)
 	        //	KALDI_WARN << "topk: " << topk << " actually: " << key;
 		}

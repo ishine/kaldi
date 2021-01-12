@@ -55,6 +55,7 @@ struct PrefixSeqWord {
 		logp_nblank = kLogZeroFloat;
         ngram_logp = kLogZeroFloat;
         rnnlm_logp = kLogZeroFloat;
+        ranklm_logp = 0;
 		logp_lm = 0;
 		logp = 0;
 		trie_node = NULL;
@@ -104,6 +105,7 @@ struct PrefixSeqWord {
 	BaseFloat logp_nblank;
     BaseFloat ngram_logp;
     BaseFloat rnnlm_logp;
+    BaseFloat ranklm_logp;
     BaseFloat logp_lm;
     BaseFloat logp;
 
@@ -113,6 +115,10 @@ struct PrefixSeqWord {
 struct CTCDecoderWordUtil {
 	static bool compare_PrefixSeqWord_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
 		return a->logp > b->logp;
+	}
+
+	static bool compare_PrefixSeqRank_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
+		return a->ranklm_logp+LogAdd(a->logp_blank, a->logp_nblank) > b->ranklm_logp+LogAdd(b->logp_blank, b->logp_nblank);
 	}
 
 	static bool compare_PrefixSeqBpe_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
@@ -132,6 +138,7 @@ struct CTCDecoderWordUtil {
 
 struct CTCDecoderWordOptions {
 	int beam;
+	int py_beam;
 	int word_beam;
 	int blank;
 	int   am_topk;
@@ -146,12 +153,13 @@ struct CTCDecoderWordOptions {
     std::string bpe2bpeid_rxfilename;
 	std::string word2wordid_rxfilename;
 	std::string word2bpeid_rxfilename;
+    std::string pinyin2bpeid_rxfilename;
 
-	CTCDecoderWordOptions(): beam(10), word_beam(10), blank(0), am_topk(0),
+	CTCDecoderWordOptions(): beam(10), py_beam(10), word_beam(10), blank(0), am_topk(0),
 					   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1),
 					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(true), vocab_size(7531),
-					   bpe2bpeid_rxfilename(""), word2wordid_rxfilename(""), word2bpeid_rxfilename("")
-					   { }
+					   bpe2bpeid_rxfilename(""), word2wordid_rxfilename(""), word2bpeid_rxfilename(""),
+					   pinyin2bpeid_rxfilename("") {}
 
 	void Register(OptionsItf *opts) {
 		opts->Register("beam", &beam, "Decoding beam. sLarger->slower, more accurate.");
@@ -169,6 +177,7 @@ struct CTCDecoderWordOptions {
 		opts->Register("bpe2bpeid-table", &bpe2bpeid_rxfilename, "Map from bpe to bpe id table.");
 		opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
 		opts->Register("word2bpeid-table", &word2bpeid_rxfilename, "Map from word to bpe ids table");
+		opts->Register("pinyin2bpeid-table", &pinyin2bpeid_rxfilename, "Map from pinyin to bpe ids table");
 	}
 };
 
@@ -177,7 +186,7 @@ class CTCDecoderWord {
 
 #if HAVE_KENLM == 1
 		CTCDecoderWord(CTCDecoderWordOptions &config, KaldiLstmlmWrapper *lstmlm, KenModel *kenlm_arpa,
-				std::vector<KenModel *> &sub_kenlm_apra);
+				std::vector<KenModel *> &sub_kenlm_apra, KenModel *rank_kenlm_arpa = NULL);
 #endif
 
 		void GreedySearch(const Matrix<BaseFloat> &loglikes);
@@ -222,6 +231,10 @@ class CTCDecoderWord {
 		std::unordered_map<std::string, int> word_to_wordid_;
 		std::unordered_map<std::string, int> bpe_to_bpeid_;
 
+        // pinyin
+        bool use_pinyin_;
+		std::vector<std::vector<int> > pinyin_to_bpe_;
+
 		// rnn lm
 		std::vector<int> rd_;
 		std::vector<int> cd_;
@@ -250,6 +263,8 @@ class CTCDecoderWord {
 		std::vector<const KenVocab *> sub_kenlm_vocab_;
 		KenModel *kenlm_arpa_;
 		std::vector<KenModel *> sub_kenlm_apra_;
+		const KenVocab *rank_kenlm_vocab_;
+		KenModel *rank_kenlm_arpa_;
 #endif
 
 	KALDI_DISALLOW_COPY_AND_ASSIGN(CTCDecoderWord);

@@ -599,16 +599,16 @@ void Nnet::UpdateLstmStreamsState(const std::vector<int32> &stream_update_flag) 
 	if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
       LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
       comp.UpdateLstmStreamsState(stream_update_flag);
-    }
-	if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsResidual) {
+	} else if (GetComponent(c).GetType() == Component::kLstmProjectedStandard) {
+      LstmProjectedStandard& comp = dynamic_cast<LstmProjectedStandard&>(GetComponent(c));
+      comp.UpdateLstmStreamsState(stream_update_flag);
+    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsResidual) {
 		LstmProjectedStreamsResidual& comp = dynamic_cast<LstmProjectedStreamsResidual&>(GetComponent(c));
       comp.UpdateLstmStreamsState(stream_update_flag);
-    }
-	if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
+    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFixedPoint) {
       LstmProjectedStreamsFixedPoint& comp = dynamic_cast<LstmProjectedStreamsFixedPoint&>(GetComponent(c));
       comp.UpdateLstmStreamsState(stream_update_flag);
-    }
-	else if (GetComponent(c).GetType() == Component::kParallelComponentMultiTask) {
+    } else if (GetComponent(c).GetType() == Component::kParallelComponentMultiTask) {
 	  ParallelComponentMultiTask& comp = dynamic_cast<ParallelComponentMultiTask&>(GetComponent(c));
 	  comp.UpdateLstmStreamsState(stream_update_flag);
 	}
@@ -620,12 +620,10 @@ void Nnet::SetSeqLengths(const std::vector<int32> &sequence_lengths, int32 ntrun
     if (GetComponent(c).GetType() == Component::kBLstmProjectedStreams) {
       BLstmProjectedStreams& comp = dynamic_cast<BLstmProjectedStreams&>(GetComponent(c));
       comp.SetSeqLengths(sequence_lengths, ntruncated_bptt_size);
-    }
-    else if (GetComponent(c).GetType() == Component::kBLstmStreams) {
+    } else if (GetComponent(c).GetType() == Component::kBLstmStreams) {
         BLstmStreams& comp = dynamic_cast<BLstmStreams&>(GetComponent(c));
         comp.SetSeqLengths(sequence_lengths);
-	}
-    else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
+	} else if (GetComponent(c).GetType() == Component::kStatisticsPoolingComponent) {
     	StatisticsPoolingComponent& comp = dynamic_cast<StatisticsPoolingComponent&>(GetComponent(c));
     	comp.SetSeqLengths(sequence_lengths);
 	}
@@ -724,6 +722,11 @@ void Nnet::RestoreContext(const std::vector<Matrix<BaseFloat> > &recurrent,
 	      KALDI_ASSERT(idx < recurrent.size());
 	      comp.SetLstmContext(recurrent[idx], cell[idx]);
 	      idx++;
+	    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStandard) {
+	      LstmProjectedStandard& comp = dynamic_cast<LstmProjectedStandard&>(GetComponent(c));
+	      KALDI_ASSERT(idx < recurrent.size());
+	      comp.SetLstmContext(recurrent[idx], cell[idx]);
+	      idx++;
 	    }
 	}
 }
@@ -738,6 +741,11 @@ void Nnet::SaveContext(std::vector<Matrix<BaseFloat> > &recurrent,
 	      KALDI_ASSERT(idx < recurrent.size());
 	      comp.GetLstmContext(recurrent[idx], cell[idx]);
 	      idx++;
+	    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStandard) {
+	      LstmProjectedStandard& comp = dynamic_cast<LstmProjectedStandard&>(GetComponent(c));
+	      KALDI_ASSERT(idx < recurrent.size());
+	      comp.GetLstmContext(recurrent[idx], cell[idx]);
+	      idx++;
 	    }
 	}
 }
@@ -749,6 +757,11 @@ void Nnet::GetHiddenLstmLayerRCInfo(std::vector<int> &recurrent, std::vector<int
 	for (int32 c=0; c < NumComponents(); c++) {
 	    if (GetComponent(c).GetType() == Component::kLstmProjectedStreamsFast) {
 	      LstmProjectedStreamsFast& comp = dynamic_cast<LstmProjectedStreamsFast&>(GetComponent(c));
+	      comp.GetRCDim(rd, cd);
+          recurrent.push_back(rd);
+          cell.push_back(cd);
+	    } else if (GetComponent(c).GetType() == Component::kLstmProjectedStandard) {
+	      LstmProjectedStandard& comp = dynamic_cast<LstmProjectedStandard&>(GetComponent(c));
 	      comp.GetRCDim(rd, cd);
           recurrent.push_back(rd);
           cell.push_back(cd);

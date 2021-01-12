@@ -58,7 +58,7 @@ class LstmProjectedStandard : public UpdatableComponent {
     nrecur_(output_dim),
     nstream_(0),
     ntruncated_bptt_size_(0),
-    clip_gradient_(0.0), clip_cell_(50.0),
+    clip_gradient_(0.0), clip_cell_(0),
 	learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0)
     //, dropout_rate_(0.0)
   { }
@@ -190,7 +190,7 @@ class LstmProjectedStandard : public UpdatableComponent {
     WriteBasicType(os, binary, ncell_);
     WriteToken(os, binary, "<ClipGradient>");
     WriteBasicType(os, binary, clip_gradient_);
-    if (clip_cell_ != 50.0) {
+    if (clip_cell_ != 0) {
         WriteToken(os, binary, "<ClipCell>");
         WriteBasicType(os, binary, clip_cell_);
     }
@@ -450,8 +450,10 @@ class LstmProjectedStandard : public UpdatableComponent {
       // c(t-1) -> c(t) via forget-gate
       y_c[t]->AddMatMatElements(1.0, *y_c[t-1], *y_f[t], 1.0);
 
-      // y_c[t]->ApplyFloor(-clip_cell_);   // optional clipping of cell activation
-      // y_c[t]->ApplyCeiling(clip_cell_);  // google paper Interspeech2014: LSTM for LVCSR
+      if (clip_cell_ > 0.0) {
+        y_c[t]->ApplyFloor(-clip_cell_);   // optional clipping of cell activation
+        y_c[t]->ApplyCeiling(clip_cell_);  // google paper Interspeech2014: LSTM for LVCSR
+      }
 
       // h tanh squashing
       y_h[t]->Tanh(*y_c[t]);
