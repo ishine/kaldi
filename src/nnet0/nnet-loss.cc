@@ -533,8 +533,13 @@ void CBXent::Eval() {
   CuVector<BaseFloat> frame_zt;
   std::vector<BaseFloat> class_zt_sum;
   //Vector<BaseFloat> tmp(frame_zt_ptr_->Dim());
-
-
+  /*
+  int size = class_target_sum_.size();
+  for (int i = 0; i < size; i++) {
+    class_target_sum_[i]->AddColSumMat(1.0, *class_target_[i], 0.0);
+    class_target_sum_[i]->MulElements(*class_frame_weights_[i]);
+  }
+  */
   AddColSumMatStreamed(static_cast<BaseFloat>(1.0f), class_target_sum_, class_target_, static_cast<BaseFloat>(0.0f));
   MulElementsStreamed(class_target_sum_, class_frame_weights_);
 
@@ -543,8 +548,7 @@ void CBXent::Eval() {
   num_frames /= 2;
 
 
-  if (var_penalty_ != 0)
-  {
+  if (var_penalty_ != 0) {
 	  	KALDI_ASSERT(class_frame_zt_ptr_ != NULL);
 		// constant normalizing (for each class per frame), zt = sum(exp(y)), log(zt)
 		MulElementsStreamed(*class_frame_zt_ptr_, class_frame_weights_);
@@ -571,8 +575,7 @@ void CBXent::Eval() {
 
   // compute derivative wrt. activations of last layer of neurons,
   CopyFromMatStreamed(class_netout_, class_diff_);
-  if (var_penalty_ != 0)
-  {
+  if (var_penalty_ != 0) {
 	  // y*(2beta*(log(zt) - log(zt)/n)+1)
 	  MulRowsVecStreamed(class_diff_, *class_frame_zt_ptr_); // constant normalizing contain last class output
 
@@ -710,7 +713,6 @@ std::string CBXent::Report() {
      std::vector<double> buffer(class_zt_variance_.size());
 
      // zt variance
-	 oss << "]" << std::endl;
 	 for (int i = 0; i < buffer.size(); i++)
         buffer[i] = (class_frames_[i] == 0 ? 0 : class_zt_variance_[i]/class_frames_[i]);
 	 oss << "class zt variance: [ ";

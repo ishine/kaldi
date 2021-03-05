@@ -43,7 +43,7 @@ ADDLIBS = ../nnet0/kaldi-nnet0.a \
           ../matrix/kaldi-matrix.a ../base/kaldi-base.a 
 
 ifeq ($(USE_WARP_CTC), true)
-    ADDLIBS += ../warp-ctc/build/warpctc.a
+    ADDLIBS += ../lib/warpctc.so
 endif
 
 ifeq ($(USE_WARP_TRANSDUCER), true)

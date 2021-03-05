@@ -1817,7 +1817,36 @@ Real MatrixBase<Real>::Min() const {
   return ans;
 }
 
+template<typename Real>
+void MatrixBase<Real>::Entropy(const MatrixBase<Real> &M) {
+  KALDI_ASSERT(M.NumRows() == num_rows_ && M.NumCols() == num_cols_);
+  MatrixIndexT i;
+  MatrixIndexT j;
 
+  for (i = 0; i < num_rows_; i++) {
+	for (j = 0; j < num_cols_; j++) {
+	  (*this)(i, j) = M(i, j) + 1e-20;
+	  (*this)(i, j) = Log((*this)(i, j));
+	  (*this)(i, j) *= M(i, j);
+	}
+  }
+}
+
+template<typename Real>
+void MatrixBase<Real>::CrossEntropy(const MatrixBase<Real> &posterior, const MatrixBase<Real> &target) {
+  KALDI_ASSERT(posterior.NumRows() == num_rows_ && posterior.NumCols() == num_cols_);
+  KALDI_ASSERT(target.NumRows() == num_rows_ && target.NumCols() == num_cols_);
+  MatrixIndexT i;
+  MatrixIndexT j;
+
+  for (i = 0; i < num_rows_; i++) {
+	for (j = 0; j < num_cols_; j++) {
+	  (*this)(i, j) = posterior(i, j) + 1e-20;
+	  (*this)(i, j) = Log((*this)(i, j));
+	  (*this)(i, j) *= target(i, j);
+	}
+  }
+}
 
 template <typename Real>
 void MatrixBase<Real>::AddMatMatMat(Real alpha,

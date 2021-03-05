@@ -22,7 +22,7 @@
 
 #include <list>
 
-#include "../lm/kaldi-lstmlm.h"
+#include "lm/kaldi-lstmlm.h"
 #include "util/stl-utils.h"
 #include "itf/options-itf.h"
 #include "util/hash-list.h"

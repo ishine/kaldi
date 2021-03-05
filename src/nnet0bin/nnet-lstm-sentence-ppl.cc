@@ -34,6 +34,7 @@
 int main(int argc, char *argv[]) {
   using namespace kaldi;
   using namespace kaldi::nnet0;
+  typedef kaldi::int32 int32;
   try {
     const char *usage =
         "Compute log target posterior pass through Neural Network.\n"
@@ -44,25 +45,27 @@ int main(int argc, char *argv[]) {
 
     ParseOptions po(usage);
 
-    std::string classboundary_file = "";
-    po.Register("class-boundary", &classboundary_file, "The fist index of each class(and final class class) in class based language model");
-
     std::string use_gpu="no";
-    po.Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA"); 
-
-    LossOptions loss_opts;
-    loss_opts.Register(&po);
-
-    using namespace kaldi;
-    using namespace kaldi::nnet0;
-    typedef kaldi::int32 int32;
-
+    std::string classboundary_file = "";
+    BaseFloat var_penalty = 0;
+    std::string zt_mean_filename = "";
     int32 time_shift = 0;
     int32 batch_size = 15;
     int32 num_stream = 1;
     po.Register("time-shift", &time_shift, "LSTM : repeat last input frame N-times, discrad N initial output frames."); 
     po.Register("batch-size", &batch_size, "---LSTM--- BPTT batch size");
     po.Register("num-stream", &num_stream, "---LSTM--- BPTT multi-stream training");
+    po.Register("class-boundary", &classboundary_file, "The fist index of each class(and final class class) in class based language model");
+    po.Register("var-penalty", &var_penalty, "The penalty of the variance regularization approximation item");
+    po.Register("zt-mean-filename", &zt_mean_filename, "The (in/out) file name of penalty of the variance regularization approximation item");
+    po.Register("use-gpu", &use_gpu, "yes|no|optional, only has effect if compiled with CUDA"); 
+
+    CuAllocatorOptions cuallocator_opts;
+    cuallocator_opts.cache_memory = false;
+    cuallocator_opts.Register(&po);
+
+    LossOptions loss_opts;
+    loss_opts.Register(&po);
 
     po.Read(argc, argv);
 
@@ -78,17 +81,27 @@ int main(int argc, char *argv[]) {
     //Select the GPU
 #if HAVE_CUDA==1
     CuDevice::Instantiate().SelectGpuId(use_gpu);
+    CuDevice::Instantiate().SetCuAllocatorOptions(cuallocator_opts);
 #endif
 
     Nnet nnet;
     nnet.Read(model_filename);
 
+    // using activations directly: remove cbsoftmax, if use constant class zt
+    if (zt_mean_filename != "") {
+        if (nnet.GetComponent(nnet.NumComponents()-1).GetType() == kaldi::nnet0::Component::kCBSoftmax) {
+            KALDI_LOG << "Removing cbsoftmax from the nnet " << model_filename << ", for use const zt";
+            nnet.RemoveComponent(nnet.NumComponents()-1);
+        } else {
+          KALDI_LOG << "The nnet was without cbsoftmax " << model_filename;
+        }
+    }
+
     NnetLmUtil util;
     ClassAffineTransform *class_affine = NULL;
     //WordVectorTransform *word_transf = NULL;
     CBSoftmax *cb_softmax = NULL;
-    for (int32 c = 0; c < nnet.NumComponents(); c++)
-    {
+    for (int32 c = 0; c < nnet.NumComponents(); c++) {
     	if (nnet.GetComponent(c).GetType() == Component::kClassAffineTransform)
     		class_affine = &(dynamic_cast<ClassAffineTransform&>(nnet.GetComponent(c)));
     	/*else if (nnet.GetComponent(c).GetType() == Component::kWordVectorTransform)
@@ -98,8 +111,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::vector<int32> class_boundary, word2class;
-    if (classboundary_file != "")
-    {
+    if (classboundary_file != "") {
 	    Input in;
 	    Vector<BaseFloat> classinfo;
 	    in.OpenTextMode(classboundary_file);
@@ -108,15 +120,32 @@ int main(int argc, char *argv[]) {
 	    util.SetClassBoundary(classinfo, class_boundary, word2class);
     }
 
+    Vector<BaseFloat> class_zt;
+    if (zt_mean_filename != "") {
+        Input in;
+        in.OpenTextMode(zt_mean_filename);
+        class_zt.Read(in.Stream(), false);
+        in.Close();
+    }
+
     CBXent cbxent;
     Xent xent(loss_opts);
 
-    if (NULL != class_affine)
-    {
+    if (NULL != class_affine) {
 	    class_affine->SetClassBoundary(class_boundary);
-        cb_softmax->SetClassBoundary(class_boundary);
         cbxent.SetClassBoundary(class_boundary);
     }
+
+    if (NULL != cb_softmax) {
+        cb_softmax->SetClassBoundary(class_boundary);
+        cbxent.SetZt(cb_softmax->GetZt(), cb_softmax->GetZtPatches());
+    }
+
+    if (zt_mean_filename != "") {
+        cbxent.SetVarPenalty(var_penalty);
+        cbxent.SetConstClassZt(class_zt);
+    }
+        
 
     // disable dropout,
     nnet.SetDropoutRetention(1.0);
@@ -169,22 +198,19 @@ int main(int argc, char *argv[]) {
     	    {
     	    	 // loop over all streams, check if any stream reaches the end of its utterance,
     	    	 // if any, feed the exhausted stream with a new utterance, update book-keeping infos
-    	    	for (int s = 0; s < num_stream; s++)
-    	    	{
+    	    	for (int s = 0; s < num_stream; s++) {
     	    		// this stream still has valid frames
     	    		if (curt[s] < lent[s]) {
     	    			new_utt_flags[s] = 0;
     	    		    continue;
     	    		}
 
-    	    		if (utt_curt[s] > 0 && !utt_copied[s])
-    	    		{
+    	    		if (utt_curt[s] > 0 && !utt_copied[s]) {
     	    			feature_writer.Write(keys[s], utt_feats[s]);
     	    			utt_copied[s] = true;
     	    		}
 
-    	    		if(!feature_reader.Done())
-    	    		{
+    	    		if(!feature_reader.Done()) {
     	    			keys[s] = feature_reader.Key();
     	    	    	feats[s] = feature_reader.Value();
 
@@ -252,15 +278,16 @@ int main(int argc, char *argv[]) {
     			   // for streams with new utterance, history states need to be reset
     			   nnet.ResetLstmStreams(new_utt_flags);
 
-    		        if (NULL != class_affine)
-    		        {
+    		        if (NULL != class_affine) {
     			        // sort output class id
     		        	util.SortUpdateClass(target, sorted_target, sortedclass_target,
     			        		sortedclass_target_index, sortedclass_target_reindex, frame_mask, sorted_frame_mask, word2class);
     			        class_affine->SetUpdateClassId(sortedclass_target, sortedclass_target_index, sortedclass_target_reindex);
-    			        cb_softmax->SetUpdateClassId(sortedclass_target);
     		        }
 
+                    if (NULL != cb_softmax) {
+                        cb_softmax->SetUpdateClassId(sortedclass_target);
+                    }
 
     		        // forward pass
     		        featmat.CopyColFromVec(feat, 0);

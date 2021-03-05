@@ -54,8 +54,7 @@ struct LstmlmUpdateOptions : public nnet0::NnetLstmUpdateOptions {
                         LossOptions *loss_opts, const NnetParallelOptions *parallel_opts, const CuAllocatorOptions *cuallocator_opts = NULL)
     	: NnetLstmUpdateOptions(trn_opts, rnd_opts, NULL, loss_opts, parallel_opts, cuallocator_opts), class_boundary(""), num_class(0), var_penalty(0) { }
 
-  	  void Register(OptionsItf *po)
-  	  {
+  	  void Register(OptionsItf *po) {
   		  NnetLstmUpdateOptions::Register(po);
 
 	      //lm
@@ -75,8 +74,7 @@ struct LmStats: nnet0::NnetStats {
     LmStats(LossOptions &loss_opts):
             NnetStats(loss_opts), xent(loss_opts){}
 
-    void MergeStats(nnet0::NnetUpdateOptions *opts, int root)
-    {
+    void MergeStats(nnet0::NnetUpdateOptions *opts, int root) {
         int myid = opts->parallel_opts->myid;
         MPI_Barrier(MPI_COMM_WORLD);
 
@@ -94,18 +92,15 @@ struct LmStats: nnet0::NnetStats {
 
         if (opts->objective_function == "xent") {
                         xent.Merge(myid, 0);
-        }
-        else if (opts->objective_function == "cbxent") {
+        } else if (opts->objective_function == "cbxent") {
                         cbxent.Merge(myid, 0);
-        }
-        else {
+        } else {
         		KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
 
     }
 
-    void Print(nnet0::NnetUpdateOptions *opts, double time_now)
-    {
+    void Print(nnet0::NnetUpdateOptions *opts, double time_now) {
         KALDI_LOG << "Done " << num_done << " files, " << num_no_tgt_mat
                   << " with no tgt_mats, " << num_other_error
                   << " with other errors. "
@@ -116,33 +111,27 @@ struct LmStats: nnet0::NnetStats {
 
         if (opts->objective_function == "xent") {
                 KALDI_LOG << xent.Report();
-        }
-        else if (opts->objective_function == "cbxent") {
+        } else if (opts->objective_function == "cbxent") {
                 KALDI_LOG << cbxent.Report();
-        }
-        else {
+        } else {
         	KALDI_ERR << "Unknown objective function code : " << opts->objective_function;
         }
     }
 };
 
-typedef struct Word_
-{
+typedef struct Word_ {
 	  int32  idx;
 	  int32	 wordid;
 	  int32  classid;
-}Word;
+} Word;
 
-class TrainlmUtil
-{
+class TrainlmUtil {
 public:
-	static bool compare_classid(const Word &a, const Word &b)
-	{
+	static bool compare_classid(const Word &a, const Word &b) {
 		return a.classid < b.classid;
 	}
 
-	static bool compare_wordid(const Word &a, const Word &b)
-	{
+	static bool compare_wordid(const Word &a, const Word &b) {
 		return a.wordid < b.wordid;
 	}
 

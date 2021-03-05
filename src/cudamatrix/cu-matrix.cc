@@ -3242,8 +3242,7 @@ void CrossEntropyStreamed(std::vector<CuSubMatrix<Real>* > &xentropy,
 
 	  if (size == 0) return;
 
-	  for (int32 i = 0; i < size; i++)
-	  {
+	  for (int32 i = 0; i < size; i++) {
 		  KALDI_ASSERT(xentropy[i]->NumRows() == nnetout[i]->NumRows() && xentropy[i]->NumCols() == nnetout[i]->NumCols());
 		  KALDI_ASSERT(xentropy[i]->NumRows() == target[i]->NumRows() && xentropy[i]->NumCols() == target[i]->NumCols());
 	  }
@@ -3266,7 +3265,8 @@ void CrossEntropyStreamed(std::vector<CuSubMatrix<Real>* > &xentropy,
 	} else
 #endif
 	{
-		// not implemented for CPU yet
+		for (int32 i = 0; i < size; i++)
+			xentropy[i]->Mat().CrossEntropy(nnetout[i]->Mat(), target[i]->Mat());
 	}
 }
 
@@ -3305,7 +3305,8 @@ void EntropyStreamed(std::vector<CuSubMatrix<Real>* > &entropy, const std::vecto
 	} else
 #endif
 	{
-		// not implemented for CPU yet
+		for (int32 i = 0; i < size; i++)
+			entropy[i]->Mat().Entropy(mat[i]->Mat());
 	}
 }
 
@@ -4464,6 +4465,57 @@ Real CuMatrixBase<Real>::Min() const {
   }
 }
 
+template<typename Real>
+void CuMatrixBase<Real>::Entropy(const CuMatrixBase<Real> &mat) {
+	  KALDI_ASSERT(mat.NumRows() == num_rows_ && mat.NumCols() == num_cols_);
+	  if (num_rows_ == 0) return;
+
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+		CuTimer tim;
+
+		// This block dimension seems to work better than the
+		// one from GetBlockSizesForSimpleMatrixOperation().
+		dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+		dim3 dimGrid(n_blocks(NumCols(), CU2DBLOCK),
+				 n_blocks(NumRows(), CU2DBLOCK));
+
+		cuda_entropy(dimGrid, dimBlock, data_, mat.Data(), Dim(), mat.Stride());
+
+		CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    Mat().Entropy(mat.Mat());
+  }
+}
+
+template<typename Real>
+void CuMatrixBase<Real>::CrossEntropy(const CuMatrixBase<Real> &posterior, const CuMatrixBase<Real> &target) {
+	KALDI_ASSERT(posterior.NumRows() == num_rows_ && posterior.NumCols() == num_cols_);
+	KALDI_ASSERT(target.NumRows() == num_rows_ && target.NumCols() == num_cols_);
+	if (num_rows_ == 0) return;
+
+#if HAVE_CUDA == 1
+  if (CuDevice::Instantiate().Enabled()) {
+		CuTimer tim;
+
+		// This block dimension seems to work better than the
+		// one from GetBlockSizesForSimpleMatrixOperation().
+		dim3 dimBlock(CU2DBLOCK, CU2DBLOCK);
+		dim3 dimGrid(n_blocks(NumCols(), CU2DBLOCK),
+				 n_blocks(NumRows(), CU2DBLOCK));
+
+		cuda_cross_entropy(dimGrid, dimBlock, data_, posterior.Data(), target.Data(),
+							  Dim(), posterior.Stride(), target.Stride());
+
+		CuDevice::Instantiate().AccuProfile(__func__, tim);
+  } else
+#endif
+  {
+    Mat().CrossEntropy(posterior.Mat(), target.Mat());
+  }
+}
 
 template<typename Real>
 Real CuMatrixBase<Real>::Trace(bool check_square) const {

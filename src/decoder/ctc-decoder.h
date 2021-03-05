@@ -24,7 +24,7 @@
 #include "base/kaldi-common.h"
 #include "util/stl-utils.h"
 #include "itf/options-itf.h"
-#include "util/hash-list.h"
+#include "util/trie-tree.h"
 #include "lm/kaldi-lstmlm.h"
 #include "lm/const-arpa-lm.h"
 
@@ -48,6 +48,8 @@ struct PrefixSeq {
         logp_lm = 0;
         prefix_len = 1;
         logp = 0;
+        scene_node = NULL;
+        is_sence = false;
 	}
 
 	PrefixSeq(LstmlmHistroy *h, const std::vector<int> &words) {
@@ -58,6 +60,8 @@ struct PrefixSeq {
         logp_lm = 0;
         prefix_len = prefix.size();
         logp = 0;
+        scene_node = NULL;
+        is_sence = false;
 	}
 
 	PrefixSeq(const std::vector<int> &words) {
@@ -68,6 +72,8 @@ struct PrefixSeq {
         logp_lm = 0;
         prefix_len = prefix.size();
         logp = 0;
+        scene_node = NULL;
+        is_sence = false;
 	}
 
 	PrefixSeq() {
@@ -82,6 +88,8 @@ struct PrefixSeq {
 		logp_nblank = kLogZeroFloat;
 		logp_lm = 0;
 		logp = 0;
+		scene_node = NULL;
+        is_sence = false;
 	}
 
 	void PrefixAppend(int word) {
@@ -117,6 +125,8 @@ struct PrefixSeq {
         logp_lm = 0;
 		logp = 0;
 		sub_ken_state = sub_state;
+		scene_node = NULL;
+        is_sence = false;
 	}
 
 	KenState	ken_state;
@@ -130,6 +140,8 @@ struct PrefixSeq {
 	LstmlmHistroy *lmhis;
 	LstmlmHistroy *next_lmhis;
 	Vector<BaseFloat> *lmlogp;
+	TrieNode *scene_node;
+    bool is_sence;
 
 	// log probabilities for the prefix given that
 	// it ends in a blank and dose not end in a blank at this time step.
@@ -139,9 +151,7 @@ struct PrefixSeq {
     BaseFloat logp;
     int prefix_len;
 
-	std::string tostring() {
-		return "";
-	}
+	std::string ToStr();
 };
 
 struct CTCDecoderUtil {
@@ -167,6 +177,7 @@ struct CTCDecoderUtil {
 
 struct CTCDecoderOptions {
   int beam;
+  int scene_beam;
   int blank;
   int   am_topk;
   float lm_scale;
@@ -178,19 +189,22 @@ struct CTCDecoderOptions {
   int eos;
   bool use_kenlm;
   int vocab_size;
+  int scene_topk;
   std::string use_mode;
   std::string keywords;
   std::string pinyin2words_id_rxfilename;
   std::string word2wordid_rxfilename;
+  std::string scene_syms_filename;
 
-  CTCDecoderOptions(): beam(5), blank(0), am_topk(0),
+  CTCDecoderOptions(): beam(5), scene_beam(10), blank(0), am_topk(0),
 		  	  	  	   lm_scale(0.0), blank_threshold(0.0), blank_penalty(0.1), max_mem(50000),
-					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531),
+					   rnnlm_scale(1.0), sos(0), eos(0), use_kenlm(false), vocab_size(7531), scene_topk(0),
                        use_mode("normal"), keywords(""),
-					   pinyin2words_id_rxfilename(""), word2wordid_rxfilename("")
+					   pinyin2words_id_rxfilename(""), word2wordid_rxfilename(""), scene_syms_filename("")
                         { }
   void Register(OptionsItf *opts) {
 	opts->Register("beam", &beam, "Decoding beam.  Larger->slower, more accurate.");
+	opts->Register("scene-beam", &scene_beam, "Decoding scene beam.  Larger->slower, more accurate.");
 	opts->Register("blank", &blank, "CTC bank id.");
 	opts->Register("am-topk", &am_topk, "For each time step beam search, keep top K am output probability words.");
 	opts->Register("lm-scale", &lm_scale, "Process extend language model log probability.");
@@ -205,6 +219,8 @@ struct CTCDecoderOptions {
     opts->Register("use-mode", &use_mode, "Select beam search algorithm mode(normal|easy).");
     opts->Register("keywords", &keywords, "Cat the keywords before the utterance (keyword1+keyword2).");
 	opts->Register("word2wordid-table", &word2wordid_rxfilename, "Map from word to word id table.");
+	opts->Register("scene_syms_filename", &scene_syms_filename, "Symbol table for scene asr filename");
+	opts->Register("scene_topk", &scene_topk, "For each time step beam search, keep top K am output probability words in scene asr.");
   }
 };
 
@@ -239,7 +255,13 @@ class CTCDecoder {
 
 		bool GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat &logp_lm);
 
+		void BeamSearchEasySceneTopk(const Matrix<BaseFloat> &loglikes);
+
 	protected:
+        void DeleteSceneBeam(std::vector<PrefixSeq> &beam, int size);
+
+        std::string DebugBeam(std::vector<PrefixSeq> &beam, int size, int nframe);
+
         typedef unordered_map<std::vector<int>,
         		PrefixSeq*, VectorHasher<int> > BeamType;
         typedef unordered_map<std::vector<int>,
@@ -259,7 +281,8 @@ class CTCDecoder {
 		void CopyHis(LstmlmHistroy* his);
         void CleanBuffer();
 
-        void BeamMerge(std::vector<PrefixSeq*> &merge_beam, bool skip_blank = false);
+        void BeamMerge(std::vector<PrefixSeq*> &merge_beam,
+        		std::vector<PrefixSeq*> *scene_beam, bool skip_blank = false);
 
 
 		CTCDecoderOptions &config_;
@@ -280,17 +303,23 @@ class CTCDecoder {
 		std::vector<int> cd_;
 		std::vector<std::vector<int> > pinyin2words_;
 		std::vector<std::string> wordid_to_word_;
+		std::unordered_map<std::string, int> word_to_wordid_;
 		bool use_pinyin_;
 
 		// easy beam search
 		int cur_beam_size_;
+		int cur_scene_beam_size_;
 		int next_beam_size_;
+		int next_scene_beam_size_;
 		std::vector<PrefixSeq> beam_easy_;
 		std::vector<PrefixSeq> next_beam_easy_;
+		std::vector<PrefixSeq> next_scene_beam_;
 		std::vector<LstmlmHistroy> rnnlm_his_;
 		std::vector<Vector<BaseFloat> > rnnlm_logp_;
 		std::vector<std::vector<int> > keywords_;
 		std::vector<int> keyword_;
+		Trie scene_trie_;
+		bool in_scene_;
 
 #if HAVE_KENLM == 1
 		const KenVocab *kenlm_vocab_;

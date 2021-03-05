@@ -149,8 +149,7 @@ class WordVectorTransform : public UpdatableComponent {
     //in_diff->AddMatMat(1.0, out_diff, kNoTrans, linearity_, kNoTrans, 0.0);
   }
 
-  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff)
-  {
+  void Gradient(const CuMatrixBase<BaseFloat> &input, const CuMatrixBase<BaseFloat> &diff) {
 	    // we use following hyperparameters from the option class
 	    const BaseFloat lr = opts_.learn_rate * learn_rate_coef_;
 	    //const BaseFloat mmt = opts_.momentum;
@@ -163,11 +162,10 @@ class WordVectorTransform : public UpdatableComponent {
 	    // compute gradient (incl. momentum)
 
 
-		for (int p = 0; p < diff_patches_.size(); p++)
-    		{
-        		delete diff_patches_[p];   
-        		delete update_wordvector_patches_[p];  
-    		}
+		for (int p = 0; p < diff_patches_.size(); p++) {
+        	delete diff_patches_[p];   
+            delete update_wordvector_patches_[p];  
+        }
 		
 		// sort word vector error
 		wordvector_corr_.Resize(diff.NumRows(), diff.NumCols(), kUndefined);
@@ -180,10 +178,8 @@ class WordVectorTransform : public UpdatableComponent {
 	  	int size = sortedword_id_.size();
 	  	int beg = 0, wordid = 0;
 
-	  	for (int i = 1; i <= size; i++)
-	  	{
-	  		if (i == size || sortedword_id_[i] != sortedword_id_[i-1])
-	  		{
+	  	for (int i = 1; i <= size; i++) {
+	  		if (i == size || sortedword_id_[i] != sortedword_id_[i-1]) {
 	  			wordid = sortedword_id_[i-1];
 	  			diff_patches_.push_back(new CuSubMatrix<BaseFloat>(wordvector_corr_.RowRange(beg, i-beg)));
 	  			update_wordvector_patches_.push_back(new CuSubVector<BaseFloat>(wordvector_.Row(wordid)));
@@ -192,9 +188,14 @@ class WordVectorTransform : public UpdatableComponent {
 	  	}
   }
 
-  void UpdateGradient()
-  {
+  void UpdateGradient() {
 	    // update
+/*
+    int size = update_wordvector_patches_.size();
+    for (int i = 0; i < size; i++) {
+        update_wordvector_patches_[i]->AddRowSumMat(local_lrate, *diff_patches_[i], 1.0);
+    }
+*/
 #if HAVE_CUDA == 1
 	  	SetStream(update_wordvector_patches_, streamlist_);
 #endif

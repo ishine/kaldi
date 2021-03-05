@@ -64,6 +64,8 @@ class Component {
     kCudnnConvolutional2DComponent,
     kLstmProjectedStreams,
 	kLstmStreams,
+	kLstmStandard,
+	kLstmProjectedStandard,
 	kLstmProjectedStreamsFast,
 	kLstmProjectedStreamsFixedPoint,
 	kLstmProjectedStreamsSimple,

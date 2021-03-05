@@ -39,15 +39,25 @@
 
 namespace kaldi {
 
+inline void cuda_add_row_sum_mat(double* result, const double* mat,
+                                 void* scratch, const MatrixDim d,
+                                 const double alpha, const double beta, cudaStream_t s=NULL) {
+  cudaD_add_row_sum_mat(result, mat, scratch, d, alpha, beta, s);
+}
+inline void cuda_add_row_sum_mat(float* result, const float* mat,
+                                 void* scratch, const MatrixDim d,
+                                 const float alpha, const float beta, cudaStream_t s=NULL) {
+  cudaF_add_row_sum_mat(result, mat, scratch, d, alpha, beta, s);
+}
 inline void cuda_add_col_sum_mat(int Gr, int Bl, double* result,
                                  const double* mat, const MatrixDim d,
-                                 const double alpha, const double beta) {
-  cudaD_add_col_sum_mat(Gr, Bl, result, mat, d, alpha, beta);
+                                 const double alpha, const double beta, cudaStream_t s=NULL) {
+  cudaD_add_col_sum_mat(Gr, Bl, result, mat, d, alpha, beta, s);
 }
 inline void cuda_add_col_sum_mat(int Gr, int Bl, float* result,
                                  const float* mat, const MatrixDim d,
-                                 const float alpha, const float beta) {
-  cudaF_add_col_sum_mat(Gr, Bl, result, mat, d, alpha, beta);
+                                 const float alpha, const float beta, cudaStream_t s=NULL) {
+  cudaF_add_col_sum_mat(Gr, Bl, result, mat, d, alpha, beta, s);
 }
 inline void cuda_add_cols(dim3 Gr, dim3 Bl, double* dst, const double* src,
                           const MatrixIndexT_cuda* reorder, MatrixDim dst_dim,

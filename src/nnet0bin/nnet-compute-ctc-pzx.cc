@@ -103,8 +103,8 @@ int main(int argc, char *argv[]) {
         }
         
 		ctc->EvalParallel(num_utt_frame_in, cu_posterior, labels_utt, &nnet_diff, &pzx);
-        for (int i = 0; i < pzx.Dim(); i++)
-            pzx(i) = exp(-pzx(i));
+        //for (int i = 0; i < pzx.Dim(); i++)
+        //    pzx(i) = exp(-pzx(i));
 
 		pzx_writer.Write(utt, pzx);
         pzx_scores.push_back(pzx(0));

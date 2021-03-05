@@ -1,4 +1,4 @@
-// nnet0/nnet-lstm-projected-streams-fast.h
+// nnet0/nnet-lstm-projected-standard.h
 
 // Copyright 2014  Jiayu DU (Jerry), Wei Li
 // Copyright 2015  Shanghai Jiao Tong University (author: Wei Deng)
@@ -20,8 +20,8 @@
 
 
 
-#ifndef KALDI_NNET_NNET_LSTM_PROJECTED_STREAMS_FAST_H_
-#define KALDI_NNET_NNET_LSTM_PROJECTED_STREAMS_FAST_H_
+#ifndef KALDI_NNET_NNET_LSTM_PROJECTED_STANDARD_H_
+#define KALDI_NNET_NNET_LSTM_PROJECTED_STANDARD_H_
 
 #include "nnet0/nnet-component.h"
 #include "nnet0/nnet-utils.h"
@@ -48,26 +48,26 @@ class LmModelSync;
 
 namespace nnet0 {
 
-class LstmProjectedStreamsFast : public UpdatableComponent {
+class LstmProjectedStandard : public UpdatableComponent {
 	friend class NnetModelSync;
 	friend class lm::LmModelSync;
  public:
-  LstmProjectedStreamsFast(int32 input_dim, int32 output_dim) :
+  LstmProjectedStandard(int32 input_dim, int32 output_dim) :
     UpdatableComponent(input_dim, output_dim),
     ncell_(0),
     nrecur_(output_dim),
     nstream_(0),
     ntruncated_bptt_size_(0),
-    clip_gradient_(0.0), clip_cell_(50.0),
+    clip_gradient_(0.0), clip_cell_(0),
 	learn_rate_coef_(1.0), bias_learn_rate_coef_(1.0), max_norm_(0.0)
     //, dropout_rate_(0.0)
   { }
 
-  ~LstmProjectedStreamsFast()
+  ~LstmProjectedStandard()
   { }
 
-  Component* Copy() const { return new LstmProjectedStreamsFast(*this); }
-  ComponentType GetType() const { return kLstmProjectedStreamsFast; }
+  Component* Copy() const { return new LstmProjectedStandard(*this); }
+  ComponentType GetType() const { return kLstmProjectedStandard; }
 
   static void InitMatParam(CuMatrix<BaseFloat> &m, float scale) {
     m.SetRandUniform();  // uniform in [0, 1]
@@ -124,25 +124,14 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     InitMatParam(w_r_m_, param_scale);
 
     bias_.Resize(4*ncell_, kUndefined);
-    peephole_i_c_.Resize(ncell_, kUndefined);
-    peephole_f_c_.Resize(ncell_, kUndefined);
-    peephole_o_c_.Resize(ncell_, kUndefined);
 
     InitVecParam(bias_, param_scale);
     bias_.Range(2*ncell_,ncell_).Set(fgate_param_scale);
-
-    InitVecParam(peephole_i_c_, param_scale);
-    InitVecParam(peephole_f_c_, param_scale);
-    InitVecParam(peephole_o_c_, param_scale);
 
     // init delta buffers
     w_gifo_x_corr_.Resize(4*ncell_, input_dim_, kSetZero);
     w_gifo_r_corr_.Resize(4*ncell_, nrecur_, kSetZero);
     bias_corr_.Resize(4*ncell_, kSetZero);
-
-    peephole_i_c_corr_.Resize(ncell_, kSetZero);
-    peephole_f_c_corr_.Resize(ncell_, kSetZero);
-    peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
     w_r_m_corr_.Resize(nrecur_, ncell_, kSetZero);
 
@@ -179,20 +168,12 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     w_gifo_r_.Read(is, binary);
     bias_.Read(is, binary);
 
-    peephole_i_c_.Read(is, binary);
-    peephole_f_c_.Read(is, binary);
-    peephole_o_c_.Read(is, binary);
-
     w_r_m_.Read(is, binary);
 
     // init delta buffers
     w_gifo_x_corr_.Resize(4*ncell_, input_dim_, kSetZero);
     w_gifo_r_corr_.Resize(4*ncell_, nrecur_, kSetZero);
     bias_corr_.Resize(4*ncell_, kSetZero);
-
-    peephole_i_c_corr_.Resize(ncell_, kSetZero);
-    peephole_f_c_corr_.Resize(ncell_, kSetZero);
-    peephole_o_c_corr_.Resize(ncell_, kSetZero);
 
     w_r_m_corr_.Resize(nrecur_, ncell_, kSetZero);
   }
@@ -209,7 +190,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     WriteBasicType(os, binary, ncell_);
     WriteToken(os, binary, "<ClipGradient>");
     WriteBasicType(os, binary, clip_gradient_);
-    if (clip_cell_ != 50.0) {
+    if (clip_cell_ != 0) {
         WriteToken(os, binary, "<ClipCell>");
         WriteBasicType(os, binary, clip_cell_);
     }
@@ -220,10 +201,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     w_gifo_r_.Write(os, binary);
     bias_.Write(os, binary);
 
-    peephole_i_c_.Write(os, binary);
-    peephole_f_c_.Write(os, binary);
-    peephole_o_c_.Write(os, binary);
-
     w_r_m_.Write(os, binary);
   }
 
@@ -231,9 +208,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     return ( w_gifo_x_.NumRows() * w_gifo_x_.NumCols() +
          w_gifo_r_.NumRows() * w_gifo_r_.NumCols() +
          bias_.Dim() +
-         peephole_i_c_.Dim() +
-         peephole_f_c_.Dim() +
-         peephole_o_c_.Dim() +
          w_r_m_.NumRows() * w_r_m_.NumCols() );
   }
 
@@ -241,9 +215,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     return ( w_gifo_x_.SizeInBytes()/sizeof(BaseFloat) +
          w_gifo_r_.SizeInBytes()/sizeof(BaseFloat) +
          bias_.Dim() +
-         peephole_i_c_.Dim() +
-         peephole_f_c_.Dim() +
-         peephole_o_c_.Dim() +
          w_r_m_.SizeInBytes()/sizeof(BaseFloat) );
   }
 
@@ -261,15 +232,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     offset += len; len = bias_.Dim();
     wei_copy->Range(offset, len).CopyFromVec(bias_);
 
-    offset += len; len = peephole_i_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(peephole_i_c_);
-
-    offset += len; len = peephole_f_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(peephole_f_c_);
-
-    offset += len; len = peephole_o_c_.Dim();
-    wei_copy->Range(offset, len).CopyFromVec(peephole_o_c_);
-
     offset += len; len = w_r_m_.NumRows() * w_r_m_.NumCols();
     wei_copy->Range(offset, len).CopyRowsFromMat(w_r_m_);
 
@@ -281,9 +243,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       "\n  w_gifo_x_  "   + MomentStatistics(w_gifo_x_) +
       "\n  w_gifo_r_  "   + MomentStatistics(w_gifo_r_) +
       "\n  bias_  "     + MomentStatistics(bias_) +
-      "\n  peephole_i_c_  " + MomentStatistics(peephole_i_c_) +
-      "\n  peephole_f_c_  " + MomentStatistics(peephole_f_c_) +
-      "\n  peephole_o_c_  " + MomentStatistics(peephole_o_c_) +
       "\n  w_r_m_  "    + MomentStatistics(w_r_m_);
   }
 
@@ -313,9 +272,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       "\n  w_gifo_x_corr_  "   + MomentStatistics(w_gifo_x_corr_) +
       "\n  w_gifo_r_corr_  "   + MomentStatistics(w_gifo_r_corr_) +
       "\n  bias_corr_  "     + MomentStatistics(bias_corr_) +
-      "\n  peephole_i_c_corr_  " + MomentStatistics(peephole_i_c_corr_) +
-      "\n  peephole_f_c_corr_  " + MomentStatistics(peephole_f_c_corr_) +
-      "\n  peephole_o_c_corr_  " + MomentStatistics(peephole_o_c_corr_) +
       "\n  w_r_m_corr_  "    + MomentStatistics(w_r_m_corr_) +
       "\n  Forward-pass:" +
       "\n  YG  " + MomentStatistics(YG) +
@@ -386,8 +342,7 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       }
     }
 
-    if (ntruncated_bptt_size_ != ntruncated_bptt_size)
-    {
+    if (ntruncated_bptt_size_ != ntruncated_bptt_size) {
     	ntruncated_bptt_size_ = ntruncated_bptt_size;
     	KALDI_LOG << "Backpropagate Truncated BPTT size: " << ntruncated_bptt_size_;
     }
@@ -482,12 +437,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       // r(t-1) -> g, i, f, o
       y_gifo[t]->AddMatMat(1.0, *y_r[t-1], kNoTrans, w_gifo_r_, kTrans,  1.0);
 
-      // c(t-1) -> i(t) via peephole
-      y_i[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, peephole_i_c_, 1.0);
-
-      // c(t-1) -> f(t) via peephole
-      y_f[t]->AddMatDiagVec(1.0, *y_c[t-1], kNoTrans, peephole_f_c_, 1.0);
-
       // i, f sigmoid squashing
       y_i[t]->Sigmoid(*y_i[t]);
       y_f[t]->Sigmoid(*y_f[t]);
@@ -501,14 +450,13 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       // c(t-1) -> c(t) via forget-gate
       y_c[t]->AddMatMatElements(1.0, *y_c[t-1], *y_f[t], 1.0);
 
-      y_c[t]->ApplyFloor(-clip_cell_);   // optional clipping of cell activation
-      y_c[t]->ApplyCeiling(clip_cell_);  // google paper Interspeech2014: LSTM for LVCSR
+      if (clip_cell_ > 0.0) {
+        y_c[t]->ApplyFloor(-clip_cell_);   // optional clipping of cell activation
+        y_c[t]->ApplyCeiling(clip_cell_);  // google paper Interspeech2014: LSTM for LVCSR
+      }
 
       // h tanh squashing
       y_h[t]->Tanh(*y_c[t]);
-
-      // c(t) -> o(t) via peephole (non-recurrent) & o squashing
-      y_o[t]->AddMatDiagVec(1.0, *y_c[t], kNoTrans, peephole_o_c_, 1.0);
 
       // o sigmoid squashing
       y_o[t]->Sigmoid(*y_o[t]);
@@ -643,9 +591,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       // 5. diff from o(t)   (via peephole, not recurrent)
       d_c[t]->AddMat(1.0, *d_h[t]);
       d_c[t]->AddMatMatElements(bptt, *d_c[t+1], *y_f[t+1], 1.0);
-      d_c[t]->AddMatDiagVec(bptt, *d_i[t+1], kNoTrans, peephole_i_c_, 1.0);
-      d_c[t]->AddMatDiagVec(bptt, *d_f[t+1], kNoTrans, peephole_f_c_, 1.0);
-      d_c[t]->AddMatDiagVec(1.0, *d_o[t]  , kNoTrans, peephole_o_c_, 1.0);
 
       // f
       d_f[t]->AddMatMatElements(1.0, *d_c[t], *y_c[t-1], 0.0);
@@ -706,15 +651,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 	    // bias of g, i, f, o
 	    bias_corr_.AddRowSumMat(1.0, DGIFO->RowRange(1*S,T*S), mmt);
 
-	    // recurrent peephole c -> i
-	    peephole_i_c_corr_.AddDiagMatMat(1.0, DI->RowRange(1*S,T*S), kTrans,
-	                                          YC->RowRange(0*S,T*S), kNoTrans, mmt);
-	    // recurrent peephole c -> f
-	    peephole_f_c_corr_.AddDiagMatMat(1.0, DF->RowRange(1*S,T*S), kTrans,
-	                                          YC->RowRange(0*S,T*S), kNoTrans, mmt);
-	    // peephole c -> o
-	    peephole_o_c_corr_.AddDiagMatMat(1.0, DO->RowRange(1*S,T*S), kTrans,
-	                                          YC->RowRange(1*S,T*S), kNoTrans, mmt);
 
 	    w_r_m_corr_.AddMatMat(1.0, DR->RowRange(1*S,T*S), kTrans,
 	                               YM->RowRange(1*S,T*S), kNoTrans, mmt);
@@ -728,12 +664,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 	      bias_corr_.ApplyCeiling(clip_gradient_);
 	      w_r_m_corr_.ApplyFloor(-clip_gradient_);
 	      w_r_m_corr_.ApplyCeiling(clip_gradient_);
-	      peephole_i_c_corr_.ApplyFloor(-clip_gradient_);
-	      peephole_i_c_corr_.ApplyCeiling(clip_gradient_);
-	      peephole_f_c_corr_.ApplyFloor(-clip_gradient_);
-	      peephole_f_c_corr_.ApplyCeiling(clip_gradient_);
-	      peephole_o_c_corr_.ApplyFloor(-clip_gradient_);
-	      peephole_o_c_corr_.ApplyCeiling(clip_gradient_);
 	    }
 
 	    if (DEBUG) {
@@ -742,9 +672,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 	      std::cerr << "w_gifo_r_corr_ " << w_gifo_r_corr_;
 	      std::cerr << "bias_corr_ " << bias_corr_;
 	      std::cerr << "w_r_m_corr_ " << w_r_m_corr_;
-	      std::cerr << "peephole_i_c_corr_ " << peephole_i_c_corr_;
-	      std::cerr << "peephole_f_c_corr_ " << peephole_f_c_corr_;
-	      std::cerr << "peephole_o_c_corr_ " << peephole_o_c_corr_;
 	    }
 
 
@@ -764,20 +691,12 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 	    	w_gifo_r_.AddMat(-lr*l2*num_frames_, w_gifo_r_);
 	    	bias_.AddVec(-lr*l2*num_frames_, bias_);
 
-	    	peephole_i_c_.AddVec(-lr*l2*num_frames_, peephole_i_c_);
-	    	peephole_f_c_.AddVec(-lr*l2*num_frames_, peephole_f_c_);
-	    	peephole_o_c_.AddVec(-lr*l2*num_frames_, peephole_o_c_);
-
 	    	w_r_m_.AddMat(-lr*l2*num_frames_, w_r_m_);
 	    }
 
 	    w_gifo_x_.AddMat(-lr, w_gifo_x_corr_);
 	    w_gifo_r_.AddMat(-lr, w_gifo_r_corr_);
 	    bias_.AddVec(-lr_bias, bias_corr_, 1.0);
-
-	    peephole_i_c_.AddVec(-lr, peephole_i_c_corr_, 1.0);
-	    peephole_f_c_.AddVec(-lr, peephole_f_c_corr_, 1.0);
-	    peephole_o_c_.AddVec(-lr, peephole_o_c_corr_, 1.0);
 
 	    w_r_m_.AddMat(-lr, w_r_m_corr_);
 
@@ -791,12 +710,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
           bias_.ApplyCeiling(clip_cell_);
           w_r_m_.ApplyFloor(-clip_cell_);
           w_r_m_.ApplyCeiling(clip_cell_);
-          peephole_i_c_.ApplyFloor(-clip_cell_);
-          peephole_i_c_.ApplyCeiling(clip_cell_);
-          peephole_f_c_.ApplyFloor(-clip_cell_);
-          peephole_f_c_.ApplyCeiling(clip_cell_);
-          peephole_o_c_.ApplyFloor(-clip_cell_);
-          peephole_o_c_.ApplyCeiling(clip_cell_);
         }*/
   }
 
@@ -805,9 +718,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       w_gifo_x_corr_.SetZero();
       w_gifo_r_corr_.SetZero();
       bias_corr_.SetZero();
-      peephole_i_c_corr_.SetZero();
-      peephole_f_c_corr_.SetZero();
-      peephole_o_c_corr_.SetZero();
       w_r_m_corr_.SetZero();
   }
 
@@ -866,24 +776,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
 		cudaMemcpy(dst, src, size, kind);
 		pos += size;
 
-		size = peephole_i_c_.Dim()*sizeof(BaseFloat);
-		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)peephole_i_c_.Data());
-		src = (void*) (direction==0 ? (char *)peephole_i_c_.Data() : ((char *)host+pos));
-		cudaMemcpy(dst, src, size, kind);
-		pos += size;
-
-		size = peephole_f_c_.Dim()*sizeof(BaseFloat);
-		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)peephole_f_c_.Data());
-		src = (void*) (direction==0 ? (char *)peephole_f_c_.Data() : ((char *)host+pos));
-		cudaMemcpy(dst, src, size, kind);
-		pos += size;
-
-		size = peephole_o_c_.Dim()*sizeof(BaseFloat);
-		dst = (void*) (direction==0 ? ((char *)host+pos) : (char *)peephole_o_c_.Data());
-		src = (void*) (direction==0 ? (char *)peephole_o_c_.Data() : ((char *)host+pos));
-		cudaMemcpy(dst, src, size, kind);
-		pos += size;
-
 		dim = w_r_m_.Dim();
 		src_pitch = dim.stride*sizeof(BaseFloat);
 		dst_pitch = src_pitch;
@@ -931,16 +823,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
     // bias of g, i, f, o
     bias_corr_.AddRowSumMat(1.0, DGIFO->RowRange(1*S,T*S), mmt);
 
-    // recurrent peephole c -> i
-    peephole_i_c_corr_.AddDiagMatMat(1.0, DI->RowRange(1*S,T*S), kTrans,
-                                          YC->RowRange(0*S,T*S), kNoTrans, mmt);
-    // recurrent peephole c -> f
-    peephole_f_c_corr_.AddDiagMatMat(1.0, DF->RowRange(1*S,T*S), kTrans,
-                                          YC->RowRange(0*S,T*S), kNoTrans, mmt);
-    // peephole c -> o
-    peephole_o_c_corr_.AddDiagMatMat(1.0, DO->RowRange(1*S,T*S), kTrans,
-                                          YC->RowRange(1*S,T*S), kNoTrans, mmt);
-
     w_r_m_corr_.AddMatMat(1.0, DR->RowRange(1*S,T*S), kTrans,
                                YM->RowRange(1*S,T*S), kNoTrans, mmt);
 
@@ -953,12 +835,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       bias_corr_.ApplyCeiling(clip_gradient_);
       w_r_m_corr_.ApplyFloor(-clip_gradient_);
       w_r_m_corr_.ApplyCeiling(clip_gradient_);
-      peephole_i_c_corr_.ApplyFloor(-clip_gradient_);
-      peephole_i_c_corr_.ApplyCeiling(clip_gradient_);
-      peephole_f_c_corr_.ApplyFloor(-clip_gradient_);
-      peephole_f_c_corr_.ApplyCeiling(clip_gradient_);
-      peephole_o_c_corr_.ApplyFloor(-clip_gradient_);
-      peephole_o_c_corr_.ApplyCeiling(clip_gradient_);
     }
 
     if (DEBUG) {
@@ -967,18 +843,11 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
       std::cerr << "w_gifo_r_corr_ " << w_gifo_r_corr_;
       std::cerr << "bias_corr_ " << bias_corr_;
       std::cerr << "w_r_m_corr_ " << w_r_m_corr_;
-      std::cerr << "peephole_i_c_corr_ " << peephole_i_c_corr_;
-      std::cerr << "peephole_f_c_corr_ " << peephole_f_c_corr_;
-      std::cerr << "peephole_o_c_corr_ " << peephole_o_c_corr_;
     }
 
     w_gifo_x_.AddMat(-lr, w_gifo_x_corr_);
     w_gifo_r_.AddMat(-lr, w_gifo_r_corr_);
     bias_.AddVec(-lr, bias_corr_, 1.0);
-
-    peephole_i_c_.AddVec(-lr, peephole_i_c_corr_, 1.0);
-    peephole_f_c_.AddVec(-lr, peephole_f_c_corr_, 1.0);
-    peephole_o_c_.AddVec(-lr, peephole_o_c_corr_, 1.0);
 
     w_r_m_.AddMat(-lr, w_r_m_corr_);
 
@@ -1109,16 +978,6 @@ class LstmProjectedStreamsFast : public UpdatableComponent {
   // biases of [g, i, f, o]
   CuVector<BaseFloat> bias_;
   CuVector<BaseFloat> bias_corr_;
-
-  // peephole from c to i, f, g
-  // peephole connections are block-internal, so we use vector form
-  CuVector<BaseFloat> peephole_i_c_;
-  CuVector<BaseFloat> peephole_f_c_;
-  CuVector<BaseFloat> peephole_o_c_;
-
-  CuVector<BaseFloat> peephole_i_c_corr_;
-  CuVector<BaseFloat> peephole_f_c_corr_;
-  CuVector<BaseFloat> peephole_o_c_corr_;
 
   // projection layer r: from m to r
   CuMatrix<BaseFloat> w_r_m_;

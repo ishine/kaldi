@@ -234,6 +234,12 @@ class MatrixBase {
   /// Returns minimum element of matrix.
   Real Min() const;
 
+  /// *this = M*log(M)
+  void Entropy(const MatrixBase<Real> &M);
+
+  /// *this = target*log(posterior)
+  void CrossEntropy(const MatrixBase<Real> &posterior, const MatrixBase<Real> &target);
+
   /// Element by element multiplication with a given matrix.
   void MulElements(const MatrixBase<Real> &A);
 

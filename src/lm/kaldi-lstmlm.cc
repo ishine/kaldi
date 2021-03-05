@@ -32,58 +32,138 @@ KaldiLstmlmWrapper::KaldiLstmlmWrapper(
 	const std::string &lm_word_symbol_table_rxfilename,
     const std::string &nnlm_rxfilename) {
 
+	if (opts.use_classlm) {
+		// class boundary
+		if (opts.class_boundary == "")
+			KALDI_ERR<< "The lm class boundary file '" << opts.class_boundary << "' is empty.";
+		Input in;
+		Vector<BaseFloat> classinfo;
+		in.OpenTextMode(opts.class_boundary);
+		classinfo.Read(in.Stream(), false);
+		in.Close();
+		class_boundary_.resize(classinfo.Dim());
+		for (int i = 0; i < classinfo.Dim(); i++)
+		  class_boundary_[i] = classinfo(i);
+
+		// log(zt) class constant
+		if (opts.class_constant == "")
+			KALDI_ERR<< "The lm class constant file '" << opts.class_constant << "' is empty.";
+		Vector<BaseFloat> constantinfo;
+		in.OpenTextMode(opts.class_constant);
+		constantinfo.Read(in.Stream(), false);
+		in.Close();
+		class_constant_.resize(constantinfo.Dim());
+		for (int i = 0; i < constantinfo.Dim(); i++)
+		class_constant_[i] = constantinfo(i);
+
+		// word id to class id
+		word2class_.resize(class_boundary_.back());
+		int j = 0;
+		for (int i = 0; i < class_boundary_.back(); i++) {
+		  if (i >= class_boundary_[j] && i < class_boundary_[j+1])
+			  word2class_[i] = j;
+		  else
+			  word2class_[i] = ++j;
+		}
+	}
+
+	// load lstm lm
+	nnlm_.Read(nnlm_rxfilename);
+
+	// get rc information
+	nnlm_.GetHiddenLstmLayerRCInfo(recurrent_dim_, cell_dim_);
+
+	if (opts.use_classlm) {
+		// split net to lstm hidden part and output part
+		nnlm_.SplitLstmLm(out_linearity_, out_bias_,
+				  class_linearity_, class_bias_, class_boundary_.size()-1);
+	} else {
+		// split net to lstm hidden part and output part
+		nnlm_.SplitLstmLm(out_linearity_, out_bias_, opts.remove_head);
+	}
+
+	// nstream utterance parallelization
+	num_stream_ = opts.num_stream;
+	ResetStreams(num_stream_);
+
 	// Reads symbol table.
 	fst::SymbolTable *word_symbols = NULL;
 	if (!(word_symbols = fst::SymbolTable::ReadText(word_symbol_table_rxfilename))) {
 		KALDI_ERR << "Could not read symbol table from file " << word_symbol_table_rxfilename;
 	}
-
-	// load lstm lm
-	nnlm_.Read(nnlm_rxfilename);
-	KALDI_ASSERT(word_symbols->NumSymbols() == nnlm_.OutputDim());
-
-	// get rc information
-	nnlm_.GetHiddenLstmLayerRCInfo(recurrent_dim_, cell_dim_);
-	// split net to lstm hidden part and output part
-	nnlm_.SplitLstmLm(out_linearity_, out_bias_, opts.remove_head);
-
-	// nstream utterance parallelization
-	num_stream_ = opts.num_stream;
-	std::vector<int> new_utt_flags(num_stream_, 0);
-	nnlm_.ResetLstmStreams(new_utt_flags);
-
-	// init rc context buffer
-	his_recurrent_.resize(recurrent_dim_.size());
-	for (int i = 0; i < recurrent_dim_.size(); i++)
-	his_recurrent_[i].Resize(num_stream_, recurrent_dim_[i], kUndefined);
-	his_cell_.resize(cell_dim_.size());
-	for (int i = 0; i < cell_dim_.size(); i++)
-	his_cell_[i].Resize(num_stream_, cell_dim_[i], kUndefined);
-
-	/// symbols
-	label_to_word_.resize(word_symbols->NumSymbols());
+	symid_to_word_.resize(word_symbols->NumSymbols());
 	for (int32 i = 0; i < word_symbols->NumSymbols(); i++) {
-		label_to_word_[i] = word_symbols->Find(i);
-		if (label_to_word_[i] == "") {
+		symid_to_word_[i] = word_symbols->Find(i);
+		if (symid_to_word_[i] == "") {
 		  KALDI_ERR << "Could not find word for integer " << i << "in the word "
 			  << "symbol table, mismatched symbol table or you have discoutinuous "
 			  << "integers in your symbol table?";
 		}
 	}
 
-	// Reads lstm lm symbol table.
-	fst::SymbolTable *lm_word_symbols = word_symbols;
-	if (lm_word_symbol_table_rxfilename != "") {
-	    if (!(lm_word_symbols = fst::SymbolTable::ReadText(lm_word_symbol_table_rxfilename))) {
-	        KALDI_ERR << "Could not read symbol table from file " << lm_word_symbol_table_rxfilename;
-	    }
-	}
+	if (opts.use_classlm) {
+		// Reads lstm lm symbol table.
+		fst::SymbolTable *lm_word_symbols = NULL;
+		if (!(lm_word_symbols = fst::SymbolTable::ReadText(lm_word_symbol_table_rxfilename))) {
+			KALDI_ERR << "Could not read symbol table from file " << lm_word_symbol_table_rxfilename;
+		}
 
-	unk_ = eos_ = sos_ = 0;
+		for (int i = 0; i < lm_word_symbols->NumSymbols(); i++)
+			word_to_lmwordid_[lm_word_symbols->Find(i)] = i;
+
+		auto it = word_to_lmwordid_.find(opts.unk_symbol);
+		if (it == word_to_lmwordid_.end())
+		  KALDI_WARN << "Could not find symbol " << opts.unk_symbol
+					  << " for out-of-vocabulary " << lm_word_symbol_table_rxfilename;
+
+		it = word_to_lmwordid_.find(opts.sos_symbol);
+		if (it == word_to_lmwordid_.end()) {
+			KALDI_ERR << "Could not find start of sentence symbol " << opts.sos_symbol
+					  << " in " << lm_word_symbol_table_rxfilename;
+		}
+		sos_ = it->second;
+		it = word_to_lmwordid_.find(opts.eos_symbol);
+		if (it == word_to_lmwordid_.end()) {
+			KALDI_ERR << "Could not find end of sentence symbol " << opts.eos_symbol
+						  << " in " << lm_word_symbol_table_rxfilename;
+		}
+		eos_ = it->second;
+
+		//map label id to language model word id
+		unk_ = word_to_lmwordid_[opts.unk_symbol];
+		label_to_lmwordid_.resize(symid_to_word_.size());
+		for (int i = 0; i < symid_to_word_.size(); i++) {
+			auto it = word_to_lmwordid_.find(symid_to_word_[i]);
+			if (it != word_to_lmwordid_.end())
+			  label_to_lmwordid_[i] = it->second;
+			else
+			  label_to_lmwordid_[i] = unk_;
+		}
+	}
+}
+
+
+void KaldiLstmlmWrapper::ResetStreams(int cur_stream) {
+	if (cur_stream == num_stream_)
+		return;
+
+	num_stream_ = cur_stream;
+	KALDI_LOG << "Reset lstm lm with " << num_stream_ << " streams.";
+
+    // init rc context buffer
+    his_recurrent_.resize(recurrent_dim_.size());
+    for (int i = 0; i < recurrent_dim_.size(); i++)
+        his_recurrent_[i].Resize(num_stream_, recurrent_dim_[i], kUndefined);
+    his_cell_.resize(cell_dim_.size());
+    for (int i = 0; i < cell_dim_.size(); i++)
+        his_cell_[i].Resize(num_stream_, cell_dim_[i], kUndefined);
+
 	in_words_.Resize(num_stream_, kUndefined);
 	in_words_mat_.Resize(num_stream_, 1, kUndefined);
 	words_.Resize(num_stream_, kUndefined);
 	hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
+	std::vector<int> new_utt_flags(num_stream_, 0);
+	nnlm_.ResetLstmStreams(new_utt_flags);
 }
 
 void KaldiLstmlmWrapper::Forward(int words_in, LstmlmHistroy& context_in,
@@ -127,31 +207,13 @@ void KaldiLstmlmWrapper::ForwardMseq(const std::vector<int> &in_words,
 	int num_layers = context_in[0]->his_recurrent.size();
 	int cur_stream = in_words.size();
 
-	if (cur_stream != num_stream_) {
-		num_stream_ = cur_stream;
-		KALDI_LOG << "Reset lstm lm with " << num_stream_ << " streams.";
-
-        // init rc context buffer
-        his_recurrent_.resize(recurrent_dim_.size());
-        for (int i = 0; i < recurrent_dim_.size(); i++)
-            his_recurrent_[i].Resize(num_stream_, recurrent_dim_[i], kUndefined);
-        his_cell_.resize(cell_dim_.size());
-        for (int i = 0; i < cell_dim_.size(); i++)
-            his_cell_[i].Resize(num_stream_, cell_dim_[i], kUndefined);
-
-		in_words_.Resize(num_stream_, kUndefined);
-		in_words_mat_.Resize(num_stream_, 1, kUndefined);
-		words_.Resize(num_stream_, kUndefined);
-		hidden_out_.Resize(num_stream_, nnlm_.OutputDim(), kUndefined);
-		std::vector<int> new_utt_flags(num_stream_, 0);
-		nnlm_.ResetLstmStreams(new_utt_flags);
-	}
+	ResetStreams(cur_stream);
 
 	// restore history
 	for (i = 0; i < num_layers; i++) {
 		for (j = 0; j < num_stream_; j++) {
-		his_recurrent_[i].Row(j).CopyFromVec(context_in[j]->his_recurrent[i]);
-		his_cell_[i].Row(j).CopyFromVec(context_in[j]->his_cell[i]);
+			his_recurrent_[i].Row(j).CopyFromVec(context_in[j]->his_recurrent[i]);
+			his_cell_[i].Row(j).CopyFromVec(context_in[j]->his_cell[i]);
 		}
 	}
 	nnlm_.RestoreContext(his_recurrent_, his_cell_);
@@ -179,6 +241,66 @@ void KaldiLstmlmWrapper::ForwardMseq(const std::vector<int> &in_words,
 		if (nnet_out[j] != NULL) {
 			nnet_out[j]->Resize(hidden_out_.NumCols(), kUndefined);
 			hidden_out_.Row(j).CopyToVec(nnet_out[j]);
+		}
+	}
+}
+
+void KaldiLstmlmWrapper::ForwardMseqClass(const std::vector<int> &in_words,
+				                        const std::vector<LstmlmHistroy*> &context_in,
+				                        std::vector<LstmlmHistroy*> &context_out,
+				                        std::vector<std::vector<int> > &out_words,
+				                        std::vector<std::vector<BaseFloat> > &out_words_logprob) {
+	int num_layers = context_in[0]->his_recurrent.size();
+	int cur_stream = in_words.size();
+
+	ResetStreams(cur_stream);
+
+	// restore history
+	for (int i = 0; i < num_layers; i++) {
+		for (int j = 0; j < num_stream_; j++) {
+			his_recurrent_[i].Row(j).CopyFromVec(context_in[j]->his_recurrent[i]);
+			his_cell_[i].Row(j).CopyFromVec(context_in[j]->his_cell[i]);
+		}
+	}
+	nnlm_.RestoreContext(his_recurrent_, his_cell_);
+
+	for (int i = 0; i < num_stream_; i++)
+		in_words_(i) = in_words[i];
+	in_words_mat_.CopyColFromVec(in_words_, 0);
+	words_.CopyFromMat(in_words_mat_);
+
+	// forward propagate
+	nnlm_.Propagate(words_, &hidden_out_);
+
+	// save current words history
+	nnlm_.SaveContext(his_recurrent_, his_cell_);
+	for (int i = 0; i < num_layers; i++) {
+		for (int j = 0; j < num_stream_; j++) {
+			if (context_out[j] != NULL) {
+				context_out[j]->his_recurrent[i] = his_recurrent_[i].Row(j);
+				context_out[j]->his_cell[i] = his_cell_[i].Row(j);
+			}
+		}
+	}
+
+	// get word logprob
+	int wid, cid, size;
+    BaseFloat prob, classprob, total_prob;
+	for (int i = 0; i < num_stream_; i++) {
+		size = out_words[i].size();
+		if (size <= 0)
+			continue;
+
+		Vector<BaseFloat> &hidden_out_vec = context_out[i]->his_recurrent.back();
+		for (int j = 0; j < size; j++) {
+			wid = out_words[i][j];
+			cid = word2class_[wid];
+			SubVector<BaseFloat> linear_vec(out_linearity_.Row(wid));
+			SubVector<BaseFloat> class_linear_vec(class_linearity_.Row(cid));
+			prob = VecVec(hidden_out_vec, linear_vec) + out_bias_(wid);
+			classprob = VecVec(hidden_out_vec, class_linear_vec) + class_bias_(cid);
+			total_prob = prob+classprob-class_constant_[cid]-class_constant_.back();
+            out_words_logprob[i].push_back(total_prob);
 		}
 	}
 }
@@ -266,7 +388,5 @@ BaseFloat KaldiLstmlmWrapper::GetLogProb(int32 curt_word,
 	}
 	return logprob;
 }
-
-
 
 }  // namespace kaldi

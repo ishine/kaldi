@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
     const char *usage =
         "Perform one iteration of Neural Network training by mini-batch Stochastic Gradient Descent.\n"
         "This version use for lstm language model training.\n"
-        "Usage:  nnet-train-lstm-lm-parallel [options] <feature-rspecifier> <model-in> [<model-out>]\n"
+        "Usage:  lm-train-lstm-parallel [options] <feature-rspecifier> <model-in> [<model-out>]\n"
         "e.g.: \n"
         " lm-train-lstm-parallel scp:feature.scp nnet.init nnet.iter1\n";
 
@@ -70,11 +70,11 @@ int main(int argc, char *argv[]) {
     }
 
     std::string feature_rspecifier = po.GetArg(1),
-      model_filename = po.GetArg(2);
+                    model_filename = po.GetArg(2);
         
     std::string target_model_filename;
     if (!opts.crossvalidate) {
-      target_model_filename = po.GetArg(3);
+        target_model_filename = po.GetArg(3);
     }
 
     using namespace kaldi;

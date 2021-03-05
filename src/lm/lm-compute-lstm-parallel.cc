@@ -119,8 +119,7 @@ private:
 				crossvalidate = opts->crossvalidate;
  	 		}
 
-	void monitor(Nnet *nnet, kaldi::int64 total_frames, int32 num_frames)
-	{
+	void monitor(Nnet *nnet, kaldi::int64 total_frames, int32 num_frames) {
         // 1st minibatch : show what happens in network
         if (kaldi::g_kaldi_verbose_level >= 1 && total_frames == 0) { // vlog-1
           KALDI_VLOG(1) << "### After " << total_frames << " frames,";
@@ -153,19 +152,19 @@ private:
 
 	    // Select the GPU
 	#if HAVE_CUDA == 1
-	    if (parallel_opts->num_procs > 1)
-	    {
+	    if (parallel_opts->num_procs > 1) {
 	    	//thread_idx = model_sync->GetThreadIdx();
 	    	KALDI_LOG << "MyId: " << parallel_opts->myid << "  ThreadId: " << thread_idx;
 	    	CuDevice::Instantiate().MPISelectGpu(model_sync->gpuinfo_, model_sync->win, thread_idx, this->num_threads);
-	    	for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++)
-	    	{
+	    	for (int i = 0; i< this->num_threads*parallel_opts->num_procs; i++) {
 	    		KALDI_LOG << model_sync->gpuinfo_[i].hostname << "  myid: " << model_sync->gpuinfo_[i].myid
 	    					<< "  gpuid: " << model_sync->gpuinfo_[i].gpuid;
 	    	}
 	    }
-	    else
+	    else {
 	    	CuDevice::Instantiate().SelectGpu();
+        }
+        CuDevice::Instantiate().SetCuAllocatorOptions(*opts->cuallocator_opts);
 
 	    //CuDevice::Instantiate().DisableCaching();
 	#endif
@@ -226,15 +225,16 @@ private:
 	      nnet_transf.SetDropoutRetention(opts->dropout_retention);
 	      nnet.SetDropoutRetention(opts->dropout_retention);
 	    }
+
 	    if (crossvalidate) {
 	      nnet_transf.SetDropoutRetention(1.0);
 	      nnet.SetDropoutRetention(1.0);
 	    }
 
 	    Nnet si_nnet;
-	    if (this->kld_scale > 0) {
+	    bool use_kld = (this->kld_scale > 0 && si_model_filename != "") ? true : false;
+	    if (use_kld)
 	    	si_nnet.Read(si_model_filename);
-	    }
 
 	    model_sync->Initialize(&nnet, this->thread_id_);
 
@@ -360,14 +360,13 @@ private:
 
 			num_frames = feat.Dim();
 			// report the speed
-			if (num_done % 5000 == 0)
-			{
-			  time_now = time.Elapsed();
-			  KALDI_LOG << "After " << num_done << " utterances: time elapsed = "
+			if (num_done % 5000 == 0) {
+			    time_now = time.Elapsed();
+			    KALDI_LOG << "After " << num_done << " utterances: time elapsed = "
 							<< time_now/60 << " min; processed " << total_frames/time_now
 							<< " frames per second.";
 			}
-    
+
 	        // for streams with new utterance, history states need to be reset
 	        nnet.ResetLstmStreams(new_utt_flags);
 
@@ -403,7 +402,6 @@ private:
 
 			// backward pass
 			if (!crossvalidate) {
-
 				// backpropagate
 				nnet.Backpropagate(nnet_diff, NULL, true);
 				update_frames += num_frames;
@@ -431,16 +429,13 @@ private:
 				}
 			}
 			monitor(&nnet, total_frames, num_frames);
-
 			// increase time counter
 			total_frames += num_frames;
 
 			// track training process
-			if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0)
-			{
+			if (!crossvalidate && this->thread_id_ == 0 && parallel_opts->myid == 0 && opts->dump_time > 0) {
 				int num_procs = parallel_opts->num_procs > 1 ? parallel_opts->num_procs : 1;
-				if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump)
-				{
+				if ((total_frames*parallel_opts->num_threads*num_procs)/(3600*100*opts->dump_time) > num_dump) {
 					char name[512];
 					num_dump++;
 					sprintf(name, "%s_%d_%ld", model_filename.c_str(), num_dump, total_frames);
@@ -457,25 +452,24 @@ private:
 		stats_->total_frames += total_frames;
 		stats_->num_done += num_done;
 
-		if (objective_function == "xent"){
+		if (objective_function == "xent") {
 			//KALDI_LOG << xent.Report();
 			stats_->xent.Add(&xent);
-		 }else if (objective_function == "cbxent"){
+		} else if (objective_function == "cbxent") {
 			//KALDI_LOG << xent.Report();
 			stats_->cbxent.Add(&cbxent);
-		 }else if (objective_function == "mse"){
+		} else if (objective_function == "mse") {
 			//KALDI_LOG << mse.Report();
 			stats_->mse.Add(&mse);
-		 }else {
-			 KALDI_ERR<< "Unknown objective function code : " << objective_function;
-		 }
+		} else {
+			KALDI_ERR<< "Unknown objective function code : " << objective_function;
+		}
 
 		model_sync->UnlockStates();
 
 		//last merge
-		if (!crossvalidate){
-			if (parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1)
-			{
+		if (!crossvalidate) {
+			if (parallel_opts->num_threads > 1 || parallel_opts->num_procs > 1) {
 				// upload current model
 				model_sync->GetWeight(&nnet, this->thread_id_, this->thread_id_);
 
@@ -488,12 +482,14 @@ private:
 				KALDI_VLOG(1) << "Thread " << thread_id_ << " merge NO."
 								<< parallel_opts->num_merge - model_sync->leftMerge()
 									<< " Current mergesize = " << update_frames << " frames.";
+			} else if (parallel_opts->num_threads == 1) {
+				// upload current model
+				model_sync->GetWeight(&nnet, this->thread_id_);
 			}
 
-			if (this->thread_id_ == 0)
-			{
-				model_sync->CopyToHost(&nnet);
+			if (this->thread_id_ == 0 && parallel_opts->myid == 0) {
 				KALDI_VLOG(1) << "Last thread upload model to host.";
+				nnet.Write(target_model_filename, opts->binary);
 			}
 		}
 	}
@@ -616,7 +612,7 @@ void LstmlmUpdateParallel(const LstmlmUpdateOptions *opts,
 }
 
 
-} // namespace nnet
+} // namespace lm
 } // namespace kaldi
 
 

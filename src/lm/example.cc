@@ -273,8 +273,6 @@ bool RNNTExample::PrepareData(std::vector<Example*> &examples) {
     		sweep_frames[i] = i;
     }
 
-    examples.resize(sweep_frames.size());
-
     RNNTExample *example = NULL;
     int32 lent, feat_lent, cur,
 		utt_len = input_frames.NumRows();
@@ -300,6 +298,18 @@ bool RNNTExample::PrepareData(std::vector<Example*> &examples) {
     	}
 
     	examples.push_back(example);
+
+    	// spectrum augmentation
+    	if (opts->use_specaug) {
+    		if (this->spec_aug_reader == NULL || (this->spec_aug_reader != NULL && this->spec_aug_reader->HasKey(utt))) {
+    	        RNNTExample *spec_example = new RNNTExample(feature_reader,
+    			                                si_feature_reader, spec_aug_reader, wordid_reader, stats, opts);
+				*spec_example = *example;
+				spec_example->input_frames.SpecAugment(opts->spec_opts->num_time_mask, opts->spec_opts->max_time_mask,
+								opts->spec_opts->time_mask_ratio, opts->spec_opts->num_freq_mask, opts->spec_opts->max_freq_mask);
+				examples.push_back(spec_example);
+    		}
+    	}
     }
 
     return true;

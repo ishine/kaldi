@@ -40,12 +40,18 @@ typedef float   BaseFloat;
 #endif
 
 
+void cudaD_add_row_sum_mat(double* result, const double* mat, void* scratch,
+                           const MatrixDim d, const double alpha,
+                           const double beta, cudaStream_t s=NULL);
+void cudaF_add_row_sum_mat(float* result, const float* mat, void* scratch,
+                           const MatrixDim d, const float alpha,
+                           const float beta, cudaStream_t s=NULL);
 void cudaD_add_col_sum_mat(int Gr, int Bl, double* result, const double* mat,
                            const MatrixDim d, const double alpha,
-                           const double beta);
+                           const double beta, cudaStream_t s=NULL);
 void cudaF_add_col_sum_mat(int Gr, int Bl, float* result, const float* mat,
                            const MatrixDim d, const float alpha,
-                           const float beta);
+                           const float beta, cudaStream_t s=NULL);
 void cudaD_add_cols(dim3 Gr, dim3 Bl, double* dst, const double* src,
                     const MatrixIndexT_cuda* reorder, MatrixDim dst_dim,
                     int src_stride);
