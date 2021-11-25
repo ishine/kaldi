@@ -5,8 +5,8 @@ include ../kaldi.mk
 include ../speechlab.mk
 
 ifeq ($(USE_KENLM), true)
-    LDLIBS += -L../../tools/kenlm/build/lib -lkenlm_util -lkenlm -lkenlm_builder -lkenlm_filter -lkenlm_interpolate -lkenlm_util -lbz2 -lz
-	CXXFLAGS += -DHAVE_KENLM -I/aifs/users/wd007/speaker/data/tools/kaldi-debug/src/kenlm
+    	LDLIBS += -L../../tools/kenlm/build/lib -lkenlm_util -lkenlm -lkenlm_builder -lkenlm_filter -lkenlm_util -lbz2 -lz
+    	CXXFLAGS += -DHAVE_KENLM -DKENLM_MAX_ORDER=5 -I/asrfs/users/wd007/asr/tools/src/kaldi-develop/tools/kenlm
 endif
 
 
