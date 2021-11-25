@@ -33,7 +33,7 @@ ADDLIBS = ../util/kaldi-util.a ../matrix/kaldi-matrix.a ../base/kaldi-base.a \
           ../tfnet/kaldi-tfnet.a
 
 LDLIBS +=  -lz -ldl -fPIC -lrt
-LDLIBS += -L$(TENSORFLOW)/lib -ltensorflow_cc -ltensorflow_framework
+LDLIBS += -L$(TENSORFLOW)/lib -lmklml_intel -ltensorflow_cc -ltensorflow_framework
 
 LDFLAGS += -Wl,-rpath=$(TENSORFLOW)
 

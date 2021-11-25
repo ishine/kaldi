@@ -59,16 +59,12 @@ int main(int argc, char *argv[]) {
     SequentialBaseFloatMatrixReader feature_reader(feature_rspecifier);
     BaseFloatMatrixWriter feature_writer(feature_wspecifier);
 
-    CuMatrix<BaseFloat> feats, feats_transf, nnet_out;
-    Matrix<BaseFloat> nnet_out_host;
-
     std::vector<Matrix<BaseFloat> > input_features;
     std::vector<Matrix<BaseFloat> > loglikes;
     std::vector<std::string> keys;
     bool isfinished = false;
     int batch_size = tfnet_opts.batch_size;
     int max_feature_length = tfnet_opts.max_feature_length;
-    int ret;
 
     Timer time;
     double time_now = 0;
@@ -84,6 +80,9 @@ int main(int argc, char *argv[]) {
     		// read
     		keys.push_back(feature_reader.Key());
     		input_features.push_back(feature_reader.Value());
+            if (input_features[batch].NumRows() > max_feature_length)
+                KALDI_WARN << keys[batch] << " feature length " << input_features[batch].NumRows()
+                            << " exceed model max input feature length " << max_feature_length;
     		feature_reader.Next();
     		batch++;
     	}
@@ -94,7 +93,7 @@ int main(int argc, char *argv[]) {
     	if (input_features.size() == 0)
     		break;
 
-    	ret = tfnet.Forward(input_features, loglikes);
+    	tfnet.Forward(input_features, loglikes);
 
     	for (int i = 0; i < loglikes.size(); i++) {
     		feature_writer.Write(keys[i], loglikes[i]);
@@ -103,6 +102,7 @@ int main(int argc, char *argv[]) {
     	}
 
     	input_features.clear();
+        keys.clear();
     	batch = 0;
 
     	// progress log

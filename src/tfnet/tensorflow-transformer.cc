@@ -36,25 +36,25 @@ void TFTransformerWrapper::LoadTFModel(const std::string &tf_model_path, int num
     // gpu option
     config.mutable_gpu_options()->set_allow_growth(true);
 
-	std::cout << "starting initalize session" << "\n";
+	KALDI_LOG << "starting initalize session";
 	Status status = tensorflow::NewSession(sess_options, &session_);
 
 	GraphDef graphdef;
     //tensorflow::graph::SetDefaultDevice("/gpu:0", &graph_def);
     Status status_load = ReadBinaryProto(Env::Default(), tf_model_path, &graphdef); //从pb文件中读取图模型;
     if (!status_load.ok()) {
-        std::cerr << "ERROR: Loading model failed..." << tf_model_path << std::endl;
-        std::cerr << status_load.ToString() << "\n";
+        KALDI_ERR << "ERROR: Loading model failed..." << tf_model_path;
+        KALDI_ERR << status_load.ToString();
         return ;
     }
-    std::cout << "loading acoustic model: " << tf_model_path << " successfully."<< std::endl;
+    KALDI_LOG << "loading acoustic model: " << tf_model_path << " successfully.";
 
     Status status_create = session_->Create(graphdef); //将模型导入会话Session中;
     if (!status_create.ok()) {
-        std::cerr << "ERROR: Creating graph in session failed..." << status_create.ToString() << std::endl;
+        KALDI_ERR << "ERROR: Creating graph in session failed..." << status_create.ToString();
         return ;
     }
-    std::cout << "session create successfully."<< std::endl;
+    KALDI_LOG << "session create successfully.";
 }
 
 void TFTransformerWrapper::AcquireInitialTensors(int batch_size) {

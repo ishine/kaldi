@@ -48,10 +48,10 @@ struct TFTransformerWrapperOpts {
 			max_feature_length(960), num_threads(1), ntopk(35) {}
 
 	void Register(OptionsItf *opts) {
-		opts->Register("batch_size", &batch_size, "Forward batch size;");
-		opts->Register("feature_dim", &feature_dim, "TF model input feature dim;");
-		opts->Register("max_feature_length", &max_feature_length, "TF model input feature length;");
-		opts->Register("num_threads", &num_threads, "Number of threads for TF computation in cpu; "
+		opts->Register("batch-size", &batch_size, "Forward batch size;");
+		opts->Register("feature-dim", &feature_dim, "TF model input feature dim;");
+		opts->Register("max-feature-length", &max_feature_length, "TF model input feature length;");
+		opts->Register("num-threads", &num_threads, "Number of threads for TF computation in cpu; "
 	                   "0 means unlimited.");
 		opts->Register("ntopk", &ntopk, "TF model topk output;");
 	}
