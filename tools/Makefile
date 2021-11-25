@@ -72,12 +72,14 @@ else ifeq ($(OS),Windows_NT)
   # This new OS path is confirmed working on Windows 10 / Cygwin64.
   openfst_add_CXXFLAGS = -O -Wa,-mbig-obj
 else
-  openfst_add_CXXFLAGS =
+  openfst_add_CXXFLAGS = -D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11
 endif
+
+CFLAGS = -D_GLIBCXX_USE_CXX11_ABI=0 -std=c++11
 
 openfst-$(OPENFST_VERSION)/Makefile: openfst-$(OPENFST_VERSION) | check_required_programs
 	cd openfst-$(OPENFST_VERSION)/ && \
-	./configure --prefix=`pwd` $(OPENFST_CONFIGURE) CXX="$(CXX)" CXXFLAGS="$(CXXFLAGS) $(openfst_add_CXXFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="-ldl"
+	./configure --prefix=`pwd` $(OPENFST_CONFIGURE) CXX="$(CXX)" CXXFLAGS="$(CXXFLAGS) $(openfst_add_CXXFLAGS)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" LIBS="-ldl"
 
 
 openfst-$(OPENFST_VERSION): openfst-$(OPENFST_VERSION).tar.gz
