@@ -202,7 +202,6 @@ void LatticeBiglmFasterBucketDecoderTpl<FST, Token>::InitDecoding() {
 
   // clean up from last time:
   cost_offsets_.clear();
-  CleanBucket();
   ClearActiveTokens();  // num_toks_ is set to 0
 
   warned_ = false;
