@@ -10,12 +10,12 @@
 # cd ../tfnetbin/
 # make
 
-TENSORFLOW = /asrfs/users/wd007/asr/tools/src/opensource/tensorflow/tensorflow-gpu-1.14.0/build
+#TENSORFLOW = /asrfs/users/wd007/asr/tools/src/opensource/tensorflow/tensorflow-gpu-1.14.0/build
+TENSORFLOW = /asrfs/users/wd007/tools/tensorflow_cc/tf14cuda101xla/build
 
 all:
 
 EXTRA_CXXFLAGS = -Wno-sign-compare \
-				 -I/asrfs/users/wd007/tools/protobuf-3.7.0/src \
                  -I$(TENSORFLOW)/bazel-genfiles -I$(TENSORFLOW) \
                  -I$(TENSORFLOW)/tensorflow/contrib/makefile/downloads/absl \
                  -I$(TENSORFLOW)/tensorflow/contrib/makefile/downloads/eigen \
@@ -33,8 +33,8 @@ ADDLIBS = ../util/kaldi-util.a ../matrix/kaldi-matrix.a ../base/kaldi-base.a \
           ../tfnet/kaldi-tfnet.a
 
 LDLIBS +=  -lz -ldl -fPIC -lrt
-LDLIBS += -L$(TENSORFLOW)/lib -lmklml_intel -ltensorflow_cc -ltensorflow_framework
+LDLIBS += -L$(TENSORFLOW)/lib -lmklml_intel -ltf_fastertransformer -ltensorflow_cc -ltensorflow_framework
 
-LDFLAGS += -Wl,-rpath=$(TENSORFLOW)
+LDFLAGS += -Wl,-rpath=$(TENSORFLOW)/lib
 
 include ../makefiles/default_rules.mk
