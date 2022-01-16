@@ -642,8 +642,9 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
 		std::vector<PrefixSeqWord*> word_beam;
 		BeamMerge(bpe_beam, word_beam, skip_blank);
 		// select best TopN beam
-		std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqBpe_reverse);
 		//std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqRank_reverse);
+		//std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqBpe_reverse);
+		std::sort(bpe_beam.begin(), bpe_beam.end(), CTCDecoderWordUtil::compare_PrefixSeqWord_reverse);
 		size = bpe_beam.size();
 		cur_bpe_beam_size_ = size >= config_.beam ? config_.beam : size;
 		for (int i = 0; i < cur_bpe_beam_size_; i++)

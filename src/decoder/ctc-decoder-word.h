@@ -114,7 +114,20 @@ struct PrefixSeqWord {
 
 struct CTCDecoderWordUtil {
 	static bool compare_PrefixSeqWord_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
-		return a->logp > b->logp;
+		//return a->logp > b->logp;
+        float logp_lm_a, logp_lm_b, wlen_a, wlen_b, len;
+       
+        wlen_a = a->prefix_word.size()-1; 
+        wlen_b = b->prefix_word.size()-1; 
+
+        if (wlen_a == 0 || wlen_b == 0)
+           return a->logp > b->logp; 
+
+        len = wlen_a < wlen_b ? wlen_a : wlen_b; 
+        logp_lm_a = a->logp_lm + log(wlen_a/len)*wlen_a*0.6;
+        logp_lm_b = b->logp_lm + log(wlen_b/len)*wlen_b*0.6;
+
+		return logp_lm_a+LogAdd(a->logp_blank, a->logp_nblank) > logp_lm_b+LogAdd(b->logp_blank, b->logp_nblank);
 	}
 
 	static bool compare_PrefixSeqRank_reverse(const PrefixSeqWord *a, const PrefixSeqWord *b) {
