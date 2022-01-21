@@ -199,7 +199,7 @@ void CTCDecoderWord::InitDecoding(int topk) {
 }
 
 bool CTCDecoderWord::GetBestPath(std::vector<int> &words, BaseFloat &logp, BaseFloat &logp_lm) {
-    PrefixSeqWord *seq = &cur_beam_[0];
+    PrefixSeqWord *seq = &cur_beam_[cur_bpe_beam_size_];
 
 	if (seq == NULL) return false;
 
@@ -224,7 +224,7 @@ void CTCDecoderWord::GreedySearch(const Matrix<BaseFloat> &loglikes) {
 
     InitDecoding(topk);
     // decode one utterance
-    pre_seq = &cur_beam_[0];
+    pre_seq = &cur_beam_[cur_bpe_beam_size_];
     for (int n = 0; n < nframe; n++) {
         logp = loglikes.Row(n).Range(0, topk).Max(&k);
         k = loglikes(n, topk+k);
@@ -272,7 +272,7 @@ void CTCDecoderWord::BeamMerge(std::vector<PrefixSeqWord*> &bpe_beam,
 	for (int i = 0; i < next_bpe_beam_size_; i++) {
 		n_preseq = &next_bpe_beam_[i];
         prefix_key.clear();
-        prefix_key.insert(prefix_key.begin(), n_preseq->prefix_bpe.begin(), n_preseq->prefix_bpe.end());
+        prefix_key.insert(prefix_key.end(), n_preseq->prefix_bpe.begin(), n_preseq->prefix_bpe.end());
         prefix_key.insert(prefix_key.end(), n_preseq->prefix_word.begin(), n_preseq->prefix_word.end());
 		auto it = beam_union_.find(prefix_key);
 	    if (it != beam_union_.end()) {
@@ -681,7 +681,7 @@ void CTCDecoderWord::BeamSearchTopk(const Matrix<BaseFloat> &loglikes) {
         cur_his = (cur_his+1)%2;
 	}
 
-	DeleteInWordBeam(cur_beam_, cur_beam_size);
+	//DeleteInWordBeam(cur_beam_, cur_beam_size);
 }
 
 
