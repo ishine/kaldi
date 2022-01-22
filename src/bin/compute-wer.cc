@@ -51,6 +51,8 @@ int main(int argc, char *argv[]) {
     
     bool dummy = false;
     po.Register("text", &dummy, "Deprecated option! Keeping for compatibility reasons.");
+    bool per_utt = false;
+    po.Register("per-utt", &per_utt, "detail score for uttence.");
 
     po.Read(argc, argv);
 
@@ -73,6 +75,7 @@ int main(int argc, char *argv[]) {
     // Both text and integers are loaded as vector of strings,
     SequentialTokenVectorReader ref_reader(ref_rspecifier);
     RandomAccessTokenVectorReader hyp_reader(hyp_rspecifier);
+    std::cout.precision(2); 
     
     // Main loop, accumulate WER stats,
     for (; !ref_reader.Done(); ref_reader.Next()) {
@@ -90,11 +93,17 @@ int main(int argc, char *argv[]) {
         hyp_sent = hyp_reader.Value(key);
       }
       num_words += ref_sent.size();
-      int32 ins, del, sub;
-      word_errs += LevenshteinEditDistance(ref_sent, hyp_sent, &ins, &del, &sub);
+      int32 errs, ins, del, sub;
+      errs = LevenshteinEditDistance(ref_sent, hyp_sent, &ins, &del, &sub);
+      word_errs += errs;
       num_ins += ins;
       num_del += del;
       num_sub += sub;
+      if (per_utt) {
+            std::cout << key << " " << std::fixed << errs*1.0/ref_sent.size()
+                         << " " << ins << " " << del << " " << sub << std::endl; 
+      }
+
 
       num_sent++;
       sent_errs += (ref_sent != hyp_sent);
