@@ -134,9 +134,9 @@ fi
 
 if ! $skip_scoring ; then
   [ ! -x local/score.sh ] && \
-    echo "$0: Not scoring because local/score.sh does not exist or not executable." && exit 1;
-  local/score.sh --cmd "$cmd" $scoring_opts $data $graphdir $dir ||
-    { echo "$0: Error: scoring failed. (ignore by '--skip-scoring true')"; exit 1; }
+    echo "Not scoring because local/score.sh does not exist or not executable." && exit 1;
+  local/score_sogou.sh --cmd "$cmd" $scoring_opts $data $graphdir $dir ||
+    { echo "$0: Scoring failed. (ignore by '--skip-scoring true')"; exit 1; }
 fi
 
 exit 0;

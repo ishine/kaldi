@@ -56,10 +56,12 @@ class NnetChainTrainer {
  public:
   NnetChainTrainer(const NnetChainTrainingOptions &config,
                    const fst::StdVectorFst &den_fst,
-                   Nnet *nnet);
+                   Nnet *nnet,
+				   Nnet *t_nnet);
 
   // train on one minibatch.
   void Train(const NnetChainExample &eg);
+  void TrainTS(const NnetChainExample &eg);
 
   // Prints out the final stats, and return true if there was a nonzero count.
   bool PrintTotalStats() const;
@@ -74,6 +76,10 @@ class NnetChainTrainer {
   void TrainInternal(const NnetChainExample &eg,
                      const NnetComputation &computation);
 
+  // The internal function for doing one step of teacher-student training.
+  void TrainInternalTS(const NnetChainExample &eg,
+					   const NnetComputation &s_computation, const NnetComputation &t_computation);
+
   // The internal function for doing one step of backstitch training. Depending
   // on whether is_backstitch_step1 is true, It could be either the first
   // (backward) step, or the second (forward) step of backstitch.
@@ -84,16 +90,21 @@ class NnetChainTrainer {
   void ProcessOutputs(bool is_backstitch_step2, const NnetChainExample &eg,
                       NnetComputer *computer);
 
+  void ProcessTSOutputs(bool is_backstitch_step2, const NnetChainExample &eg,
+                        NnetComputer *s_computer, NnetComputer *t_computer);
+
   const NnetChainTrainingOptions opts_;
 
   chain::DenominatorGraph den_graph_;
-  Nnet *nnet_;
-  Nnet *delta_nnet_;  // Only used if momentum != 0.0 or max-param-change !=
+  Nnet *nnet_, *t_nnet_;
+  Nnet *delta_nnet_, *t_delta_nnet_;  // Only used if momentum != 0.0 or max-param-change !=
                       // 0.0.  nnet representing accumulated parameter-change
                       // (we'd call this gradient_nnet_, but due to
                       // natural-gradient update, it's better to consider it as
                       // a delta-parameter nnet.
   CachingOptimizingCompiler compiler_;
+  CachingOptimizingCompiler t_compiler_;    // for T-S training, we use 2 compiler for the case that t_nnet and nnet are different,
+                                            // and later maybe we can put the two nnets into one compiler for efficiency.
 
   // This code supports multiple output layers, even though in the
   // normal case there will be just one output layer named "output".

@@ -215,6 +215,17 @@ void GetChainComputationRequest(const Nnet &nnet,
                                 bool use_xent_derivative,
                                 ComputationRequest *computation_request);
 
+// this function is the teacher-student version of GetChainComputationRequest
+void GetTSChainComputationRequest(const Nnet &nnet,
+								const Nnet &t_nnet,
+                                const NnetChainExample &eg,
+                                bool need_model_derivative,
+                                bool store_component_stats,
+                                bool use_xent_regularization,
+                                bool use_xent_derivative,
+                                ComputationRequest *computation_request,
+								ComputationRequest *t_computation_request);
+
 
 
 typedef TableWriter<KaldiObjectHolder<NnetChainExample > > NnetChainExampleWriter;

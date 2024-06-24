@@ -244,6 +244,138 @@ void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
   }
 }
 
+void ComputeTSObjfAndDeriv(const ChainTrainingOptions &opts,
+                              const DenominatorGraph &den_graph,
+                              const Supervision &supervision,
+							  const GeneralMatrix &posterior,
+                              const CuMatrixBase<BaseFloat> &s_nnet_output,
+							  const CuMatrixBase<BaseFloat> &t_nnet_output,
+                              BaseFloat *objf,
+                              BaseFloat *l2_term,
+                              BaseFloat *weight,
+                              CuMatrixBase<BaseFloat> *s_nnet_output_deriv,
+							  CuMatrixBase<BaseFloat> *t_nnet_output_deriv,
+                              CuMatrix<BaseFloat> *xent_output_deriv) {
+ 
+/** Not support e2e training now, add it manually if need
+  if (!supervision.e2e_fsts.empty()) {
+    ComputeChainObjfAndDerivE2e(opts, den_graph, supervision,
+                                nnet_output, objf, l2_term,
+                                weight, nnet_output_deriv, xent_output_deriv);
+    return;
+  }
+**/
+
+  BaseFloat num_logprob_weighted, den_logprob_weighted;
+  bool ok = true;
+  if (s_nnet_output_deriv != NULL)
+    s_nnet_output_deriv->SetZero();
+
+  { // Doing the denominator first helps to reduce the maximum
+    // memory use, as we can set 'xent_deriv' to nonempty after
+    // we've freed the memory in this object.
+    DenominatorComputation denominator(opts, den_graph,
+                                       supervision.num_sequences,
+                                       t_nnet_output);
+
+    den_logprob_weighted = supervision.weight * denominator.Forward();  // we compute denominator.Forward() for the objf computation,
+	                                                                    // it can be removed if you don't need the objf results. --wangzhichao
+  }
+/*
+  if (xent_output_deriv != NULL) {
+    // the reason for kStrideEqualNumCols is so that we can share the memory
+    // block with the memory that was used for exp_nnet_output_transposed_ from
+    // chain-denominator.cc, which has just been freed; it also uses the
+    // kStrideEqualNumCols arg (its shape is the transpose of this matrix's
+    // shape).
+    xent_output_deriv->Resize(t_nnet_output.NumRows(), t_nnet_output.NumCols(),
+                              kSetZero, kStrideEqualNumCols);
+	      // objective is x * y.
+	switch (posterior.Type()) {   
+	  case kSparseMatrix: {
+		const SparseMatrix<BaseFloat> &post = posterior.GetSparseMatrix();
+        CuSparseMatrix<BaseFloat> cu_post(post);
+        // The cross-entropy objective is computed by a simple dot product,
+        // because after the LogSoftmaxLayer, the output is already in the form
+        // of log-likelihoods that are normalized to sum to one.
+		cu_post.CopyToMat(xent_output_deriv);
+        break;
+      }
+      case kFullMatrix: {
+        // there is a redundant matrix copy in here if we're not using a GPU
+        // but we don't anticipate this code branch being used in many cases.
+		CuMatrix<BaseFloat> cu_post(posterior.GetFullMatrix());
+		xent_output_deriv->AddMat(1.0, cu_post);
+        break;
+      }
+      case kCompressedMatrix: {
+        Matrix<BaseFloat> post;
+        posterior.GetMatrix(&post);
+		xent_output_deriv->Swap(&post);
+        break;
+        }
+    }
+  }
+  */
+
+  {
+    NumeratorComputation numerator(supervision, t_nnet_output);
+    // note: supervision.weight is included as a factor in the derivative from
+    // the numerator object, as well as the returned logprob.
+    num_logprob_weighted = numerator.Forward();
+
+    if (s_nnet_output_deriv) {
+      numerator.Backward(s_nnet_output_deriv);
+    }
+  }
+
+  *objf = num_logprob_weighted - den_logprob_weighted;
+  *weight = supervision.weight * supervision.num_sequences *
+      supervision.frames_per_sequence;
+  if (!((*objf) - (*objf) == 0) || !ok) {
+    // inf or NaN detected, or denominator computation returned false.
+    if (s_nnet_output_deriv)
+      s_nnet_output_deriv->SetZero();
+    if (xent_output_deriv)
+      xent_output_deriv->SetZero();
+    BaseFloat default_objf = -10;
+    KALDI_WARN << "Objective function is " << (*objf)
+               << " and denominator computation (if done) returned "
+               << std::boolalpha << ok
+               << ", setting objective function to " << default_objf
+               << " per frame.";
+    *objf  = default_objf * *weight;
+  }
+
+  // This code helps us see how big the derivatives are, on average,
+  // for different frames of the sequences.  As expected, they are
+  // smaller towards the edges of the sequences (due to the penalization
+  // of 'incorrect' pdf-ids.
+  if (GetVerboseLevel() >= 1 && s_nnet_output_deriv != NULL && RandInt(0, 10) == 0) {
+    int32 tot_frames = s_nnet_output_deriv->NumRows(),
+ frames_per_sequence = supervision.frames_per_sequence,
+       num_sequences = supervision.num_sequences;
+    CuVector<BaseFloat> row_products(tot_frames);
+    row_products.AddDiagMat2(1.0, *s_nnet_output_deriv, kNoTrans, 0.0);
+    Vector<BaseFloat> row_products_cpu(row_products);
+    Vector<BaseFloat> row_products_per_frame(frames_per_sequence);
+    for (int32 i = 0; i < tot_frames; i++)
+      row_products_per_frame(i / num_sequences) += row_products_cpu(i);
+    KALDI_LOG << "Derivs per frame are " << row_products_per_frame;
+  }
+
+  if (opts.l2_regularize == 0.0) {
+    *l2_term = 0.0;
+  } else {
+    // compute the l2 penalty term and its derivative
+    BaseFloat scale = supervision.weight * opts.l2_regularize;
+    *l2_term = -0.5 * scale * TraceMatMat(s_nnet_output, s_nnet_output, kTrans);
+    if (s_nnet_output_deriv)
+      s_nnet_output_deriv->AddMat(-1.0 * scale, s_nnet_output);
+  }
+}
+
+
 
 }  // namespace chain
 }  // namespace kaldi

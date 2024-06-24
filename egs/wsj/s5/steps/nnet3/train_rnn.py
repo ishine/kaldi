@@ -339,13 +339,13 @@ def train(args, run_opts):
     # use during decoding
     common_train_lib.copy_egs_properties_to_exp_dir(egs_dir, args.dir)
 
-    if args.stage <= -3 and (args.input_model is None):
-        logger.info('Computing the preconditioning matrix for input features')
+#    if args.stage <= -3 and (args.input_model is None):
+#        logger.info('Computing the preconditioning matrix for input features')
 
-        train_lib.common.compute_preconditioning_matrix(
-            args.dir, egs_dir, num_archives, run_opts,
-            max_lda_jobs=args.max_lda_jobs,
-            rand_prune=args.rand_prune)
+#        train_lib.common.compute_preconditioning_matrix(
+#            args.dir, egs_dir, num_archives, run_opts,
+#            max_lda_jobs=args.max_lda_jobs,
+#            rand_prune=args.rand_prune)
 
     if args.stage <= -2 and (args.input_model is None):
         logger.info("Computing initial vector for FixedScaleComponent before"

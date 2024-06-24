@@ -126,6 +126,19 @@ void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                               CuMatrixBase<BaseFloat> *nnet_output_deriv,
                               CuMatrix<BaseFloat> *xent_output_deriv = NULL);
 
+void ComputeTSObjfAndDeriv(const ChainTrainingOptions &opts,
+                              const DenominatorGraph &den_graph,
+                              const Supervision &supervision,
+							  const GeneralMatrix &posterior,
+                              const CuMatrixBase<BaseFloat> &s_nnet_output,
+							  const CuMatrixBase<BaseFloat> &t_nnet_output,
+                              BaseFloat *objf,
+                              BaseFloat *l2_term,
+                              BaseFloat *weight,
+                              CuMatrixBase<BaseFloat> *s_nnet_output_deriv,
+							  CuMatrixBase<BaseFloat> *t_nnet_output_deriv,
+                              CuMatrix<BaseFloat> *xent_output_deriv = NULL);
+
 
 
 }  // namespace chain

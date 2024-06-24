@@ -19,7 +19,7 @@ acwt=0.1   # note: only really affects adaptation and pruning (scoring is on
 post_decode_acwt=1.0  # can be used in 'chain' systems to scale acoustics by 10 so the
                       # regular scoring script works.
 per_utt=false
-online=true  # only relevant to non-threaded decoder.
+online=false  # only relevant to non-threaded decoder.
 do_endpointing=false
 do_speex_compressing=false
 scoring_opts=
@@ -145,7 +145,7 @@ fi
 if ! $skip_scoring ; then
   [ ! -x local/score.sh ] && \
     echo "Not scoring because local/score.sh does not exist or not executable." && exit 1;
-  local/score.sh --cmd "$cmd" $scoring_opts $data $graphdir $dir
+  local/score_sogou.sh --cmd "$cmd" $scoring_opts $data $graphdir $dir
 fi
 
 exit 0;

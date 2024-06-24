@@ -304,6 +304,7 @@ void GetChainComputationRequest(const Nnet &nnet,
     const NnetIo &io = eg.inputs[i];
     const std::string &name = io.name;
     int32 node_index = nnet.GetNodeIndex(name);
+
     if (node_index == -1 ||
         !nnet.IsInputNode(node_index))
       KALDI_ERR << "Nnet example has input named '" << name
@@ -349,6 +350,140 @@ void GetChainComputationRequest(const Nnet &nnet,
   if (request->outputs.empty())
     KALDI_ERR << "No outputs in computation request.";
 }
+
+void GetTSChainComputationRequest(const Nnet &nnet,
+								const Nnet &t_nnet,
+                                const NnetChainExample &eg,
+                                bool need_model_derivative,
+                                bool store_component_stats,
+                                bool use_xent_regularization,
+                                bool use_xent_derivative,
+                                ComputationRequest *request,
+								ComputationRequest *t_request) {
+  request->inputs.clear();
+  request->inputs.reserve(eg.inputs.size());
+  request->outputs.clear();
+  request->outputs.reserve(eg.outputs.size() * 2);
+  request->need_model_derivative = need_model_derivative;
+  request->store_component_stats = store_component_stats;
+
+  t_request->inputs.clear();
+  t_request->inputs.reserve(eg.inputs.size());
+  t_request->outputs.clear();
+  t_request->outputs.reserve(eg.outputs.size() * 2);
+  t_request->need_model_derivative = false;   // hard code for now, as we usually don't need to update teacher_nnet
+  t_request->store_component_stats = false;
+  for (size_t i = 0; i < eg.inputs.size(); i++) {
+    const NnetIo &io = eg.inputs[i];
+    const std::string &name = io.name;
+    int32 node_index = nnet.GetNodeIndex(name);
+
+	if (name == "input-teacher" || name == "ivector-teacher" || name=="output-post") {
+	  continue;
+	}else if (node_index == -1 ||
+        !nnet.IsInputNode(node_index))
+      KALDI_ERR << "Nnet example has input named '" << name
+                << "', but no such input node is in the network.";
+
+    request->inputs.resize(request->inputs.size() + 1);
+    IoSpecification &io_spec = request->inputs.back();
+    io_spec.name = name;
+    io_spec.indexes = io.indexes;
+    io_spec.has_deriv = false;
+  }
+  for (size_t i = 0; i < eg.outputs.size(); i++) {
+    // there will normally be exactly one output , named "output"
+    const NnetChainSupervision &sup = eg.outputs[i];
+    const std::string &name = sup.name;
+    int32 node_index = nnet.GetNodeIndex(name);
+    if (node_index == -1 &&
+        !nnet.IsOutputNode(node_index))
+      KALDI_ERR << "Nnet example has output named '" << name
+                << "', but no such output node is in the network.";
+    request->outputs.resize(request->outputs.size() + 1);
+    IoSpecification &io_spec = request->outputs.back();
+    io_spec.name = name;
+    io_spec.indexes = sup.indexes;
+    io_spec.has_deriv = need_model_derivative;
+
+    if (use_xent_regularization) {
+      size_t cur_size = request->outputs.size();
+      request->outputs.resize(cur_size + 1);
+      IoSpecification &io_spec = request->outputs[cur_size - 1],
+          &io_spec_xent = request->outputs[cur_size];
+      // the IoSpecification for the -xent output is the same
+      // as for the regular output, except for its name which has
+      // the -xent suffix (and the has_deriv member may differ).
+      io_spec_xent = io_spec;
+      io_spec_xent.name = name + "-xent";
+      io_spec_xent.has_deriv = use_xent_derivative;
+    }
+  }
+
+  // now prepare the t_requeset
+  for (size_t i = 0; i < eg.inputs.size(); i++) {
+    const NnetIo &io = eg.inputs[i];
+    const std::string &name = io.name;
+	std::string t_name;
+    
+	// for T-S, the following code is not general, can be improved later 
+    if (name == "input-teacher" || name == "ivector-teacher") {
+	  if (name == "input-teacher") {
+	    t_name = "input";
+	  }else {
+	    t_name = "ivector";
+	  }
+	  int32 node_index = t_nnet.GetNodeIndex(t_name);
+	  if (node_index == -1 ||
+        !t_nnet.IsInputNode(node_index))
+      KALDI_ERR << "Teacher-nnet example has input named '" << t_name
+                << "', but no such input node is in the network.";
+
+    t_request->inputs.resize(t_request->inputs.size() + 1);
+    IoSpecification &io_spec = t_request->inputs.back();
+    io_spec.name = t_name;
+    io_spec.indexes = io.indexes;
+    io_spec.has_deriv = false;
+  }
+  }
+  for (size_t i = 0; i < eg.outputs.size(); i++) {
+    // there will normally be exactly one output , named "output"
+    const NnetChainSupervision &sup = eg.outputs[i];
+    const std::string &name = sup.name;
+    int32 node_index = nnet.GetNodeIndex(name);
+    if (node_index == -1 &&
+        !nnet.IsOutputNode(node_index))
+      KALDI_ERR << "Nnet example has output named '" << name
+                << "', but no such output node is in the network.";
+    t_request->outputs.resize(t_request->outputs.size() + 1);
+    IoSpecification &io_spec = t_request->outputs.back();
+    io_spec.name = name;
+    io_spec.indexes = sup.indexes;
+    io_spec.has_deriv = false;
+
+    /*
+	if (use_xent_regularization) {
+      size_t cur_size = t_request->outputs.size();
+      t_request->outputs.resize(cur_size + 1);
+      IoSpecification &io_spec = t_request->outputs[cur_size - 1],
+          &io_spec_xent = t_request->outputs[cur_size];
+      // the IoSpecification for the -xent output is the same
+      // as for the regular output, except for its name which has
+      // the -xent suffix (and the has_deriv member may differ).
+      io_spec_xent = io_spec;
+      io_spec_xent.name = name + "-xent";
+      io_spec_xent.has_deriv = false;
+    }
+	*/
+  }
+
+  // check to see if something went wrong.
+  if (request->inputs.empty() && t_request->inputs.empty())
+    KALDI_ERR << "No inputs in computation request.";
+  if (request->outputs.empty() && t_request->outputs.empty())
+    KALDI_ERR << "No outputs in computation request.";
+}
+
 
 void ShiftChainExampleTimes(int32 frame_shift,
                             const std::vector<std::string> &exclude_names,

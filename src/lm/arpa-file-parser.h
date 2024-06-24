@@ -130,7 +130,7 @@ class ArpaFileParser {
   bool ShouldWarn();
 
   /// N-gram counts. Valid from the point when HeaderAvailable() is called.
-  const std::vector<int32>& NgramCounts() const { return ngram_counts_; }
+  const std::vector<int64>& NgramCounts() const { return ngram_counts_; }
 
  private:
   ArpaParseOptions options_;
@@ -138,7 +138,7 @@ class ArpaFileParser {
   int32 line_number_;
   uint32 warning_count_;
   std::string current_line_;
-  std::vector<int32> ngram_counts_;
+  std::vector<int64> ngram_counts_;
 };
 
 }  // namespace kaldi

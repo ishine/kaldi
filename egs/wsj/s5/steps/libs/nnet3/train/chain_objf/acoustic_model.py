@@ -167,7 +167,7 @@ def train_new_models(dir, iter, srand, num_jobs,
         # work out the 1-based archive index.
         archive_index = (k % num_archives) + 1
         # previous : frame_shift = (k/num_archives) % frame_subsampling_factor
-        frame_shift = ((archive_index + k//num_archives)
+        frame_shift = ((archive_index + k/num_archives)
                        % frame_subsampling_factor)
 
         multitask_egs_opts = common_train_lib.get_multitask_egs_opts(
@@ -195,7 +195,7 @@ def train_new_models(dir, iter, srand, num_jobs,
                     --backstitch-training-interval={backstitch_training_interval} \
                     --l2-regularize-factor={l2_regularize_factor} {train_opts} \
                     --srand={srand} \
-                    "{raw_model}" {dir}/den.fst \
+                    {dir}/teacher.raw "{raw_model}" {dir}/den.fst \
                     "ark,bg:nnet3-chain-copy-egs {multitask_egs_opts} \
                         --frame-shift={fr_shft} \
                         {scp_or_ark}:{egs_dir}/cegs.{archive_index}.{scp_or_ark} ark:- | \

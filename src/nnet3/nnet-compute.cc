@@ -672,6 +672,37 @@ void NnetComputer::AcceptInputs(const Nnet &nnet,
   }
 }
 
+void NnetComputer::AcceptTSInputs(const Nnet &nnet,
+                                  const std::vector<NnetIo> &io_vec,
+								  bool is_teacher) {
+  for (size_t i = 0; i < io_vec.size(); i++) {
+    const NnetIo &io = io_vec[i];
+	std::string name = io.name;
+	if (is_teacher) {
+	  if (name == "input-teacher") {
+		name = "input";
+	  }else if (name == "ivector-teacher") {
+	    name = "ivector";
+	  }else {
+		continue;
+	  }
+	}else {
+	  if (name == "input-teacher" || name == "ivector-teacher" || name == "output-post")
+		continue;
+	}
+    int32 node_index = nnet.GetNodeIndex(name);
+    if (node_index == -1)
+      KALDI_ERR << "No node named '" << name << "' in nnet.";
+    if (nnet.IsInputNode(node_index)) {
+      CuMatrix<BaseFloat> cu_input(io.features.NumRows(),
+                                   io.features.NumCols(),
+                                   kUndefined);
+      cu_input.CopyFromGeneralMat(io.features);
+      this->AcceptInput(name, &cu_input);
+    }
+  }
+}
+
 NnetComputer::~NnetComputer() {
   // Delete any pointers that are present in compressed_matrices_.  Actually
   // they should all already have been deallocated and set to NULL if the
